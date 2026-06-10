@@ -902,6 +902,12 @@ class _ContactsScreenState extends State<ContactsScreen>
         break;
     }
 
+    // Favorites pinned to the top, keeping the selected sort order within each group.
+    final favorites = filtered.where((c) => c.isFavorite).toList();
+    if (favorites.isNotEmpty && favorites.length < filtered.length) {
+      filtered = [...favorites, ...filtered.where((c) => !c.isFavorite)];
+    }
+
     return filtered;
   }
 

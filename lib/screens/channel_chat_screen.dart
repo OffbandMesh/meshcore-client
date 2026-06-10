@@ -422,6 +422,16 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                             final isUnreadAnchor =
                                 _unreadDividerMessageId != null &&
                                 message.messageId == _unreadDividerMessageId;
+                            // Day divider above the first message of each
+                            // calendar day. List is reversed, so the older
+                            // neighbour is at index+1.
+                            final olderIdx = messageIndex + 1;
+                            final showDayDivider =
+                                olderIdx >= reversedMessages.length ||
+                                !_isSameDay(
+                                  message.timestamp,
+                                  reversedMessages[olderIdx].timestamp,
+                                );
                             return Container(
                               key: _messageKeys[message.messageId]!,
                               child: Builder(
@@ -434,13 +444,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                     message,
                                     textScale,
                                   );
-                                  if (isUnreadAnchor) {
-                                    return Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [const UnreadDivider(), bubble],
-                                    );
+                                  if (!showDayDivider && !isUnreadAnchor) {
+                                    return bubble;
                                   }
-                                  return bubble;
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (showDayDivider)
+                                        _buildDayDivider(
+                                          context,
+                                          message.timestamp,
+                                        ),
+                                      if (isUnreadAnchor) const UnreadDivider(),
+                                      bubble,
+                                    ],
+                                  );
                                 },
                               ),
                             );
@@ -702,7 +720,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                 _formatTime(context, message.timestamp),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey[600],
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
                                 ),
                               ),
                               if (message.repeatCount > 0) ...[
@@ -1360,22 +1382,59 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
-  String _formatTime(BuildContext context, DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
+  void _ensureDateFormats(BuildContext context) {
     final locale = Localizations.localeOf(context).toString();
     if (locale != _cachedFormatLocale) {
       _cachedFormatLocale = locale;
       _hmFormat = DateFormat.Hm(locale);
       _mdFormat = DateFormat.Md(locale);
     }
-    final hm = _hmFormat.format(time);
+  }
 
-    if (diff.inDays > 0) {
-      return '${_mdFormat.format(time)} $hm';
-    } else {
-      return hm;
-    }
+  String _formatTime(BuildContext context, DateTime time) {
+    _ensureDateFormats(context);
+    // Always show absolute HH:mm; the calendar date is shown via day dividers.
+    return _hmFormat.format(time);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Date header rendered above the first message of each calendar day.
+  Widget _buildDayDivider(BuildContext context, DateTime time) {
+    _ensureDateFormats(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysAgo =
+        today.difference(DateTime(time.year, time.month, time.day)).inDays;
+    final label = daysAgo == 0
+        ? 'Today'
+        : daysAgo == 1
+        ? 'Yesterday'
+        : _mdFormat.format(time);
+    final color = Theme.of(context).brightness == Brightness.dark
+        ? Colors.grey[400]
+        : Colors.grey[700];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: color?.withValues(alpha: 0.25))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: color?.withValues(alpha: 0.25))),
+        ],
+      ),
+    );
   }
 
   void _showMessagePathInfo(ChannelMessage message) {
