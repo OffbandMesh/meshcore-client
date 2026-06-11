@@ -88,6 +88,24 @@ class ChannelMessage {
   String? get senderKeyHex =>
       senderKey != null ? pubKeyToHex(senderKey!) : null;
 
+  /// Hop count decoded from the firmware path-length byte (low 6 bits).
+  /// The raw byte also packs hash width in its high 2 bits, so the stored
+  /// pathLength is NOT the hop count — use this getter for display.
+  /// Returns null when unknown; a negative (flood) sentinel is preserved.
+  int? get hopCount {
+    final pl = pathLength;
+    if (pl == null) return null;
+    if (pl < 0) return pl;
+    return pathHopCount(pl);
+  }
+
+  /// Bytes per hop hash, decoded from the path-length byte (high 2 bits -> 1..3).
+  int get pathHashSize {
+    final pl = pathLength;
+    if (pl == null || pl < 0) return 1;
+    return pathHashSizeBytes(pl);
+  }
+
   ChannelMessage copyWith({
     ChannelMessageStatus? status,
     List<Repeat>? repeats,

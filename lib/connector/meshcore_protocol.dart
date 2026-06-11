@@ -445,6 +445,12 @@ int readInt32LE(Uint8List data, int offset) {
   return val;
 }
 
+// Path-length byte: firmware packs hop count + hash width into one byte.
+// Low 6 bits = hop count (0-63); high 2 bits = hash-size mode 0..2 -> 1..3 bytes/hop.
+// TX counterpart: buildSetPathHashModeFrame (CMD_SET_PATH_HASH_MODE).
+int pathHopCount(int pathLenRaw) => pathLenRaw & 0x3F;
+int pathHashSizeBytes(int pathLenRaw) => ((pathLenRaw >> 6) & 0x03) + 1;
+
 // Helper to convert uint32 to hex string
 String ackHashToHex(int ackHash) {
   return ackHash.toRadixString(16).padLeft(8, '0');

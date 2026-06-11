@@ -686,6 +686,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                             ],
                           ],
                         ),
+                      if (message.hopCount != null && message.hopCount! > 0) ...[
+                        const SizedBox(height: 4),
+                        _buildHopBadge(context, message),
+                      ],
                       if (enableTracing) ...[
                         if (displayPath.isNotEmpty) ...[
                           const SizedBox(height: 4),
@@ -695,7 +699,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                 : EdgeInsets.zero,
                             child: Text(
                               context.l10n.channels_via(
-                                _formatPathPrefixes(displayPath),
+                                _formatPathPrefixes(
+                                  displayPath,
+                                  message.pathHashSize,
+                                ),
                               ),
                               style: TextStyle(
                                 fontSize: 11,
@@ -1437,6 +1444,31 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  Widget _buildHopBadge(BuildContext context, ChannelMessage message) {
+    final hops = message.hopCount ?? 0;
+    final color = Theme.of(context).brightness == Brightness.dark
+        ? Colors.grey[400]
+        : Colors.grey[600];
+    return InkWell(
+      onTap: () => _showMessagePathInfo(message),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.route, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(
+              context.l10n.chat_hopsCount(hops),
+              style: TextStyle(fontSize: 11, color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showMessagePathInfo(ChannelMessage message) {
     Navigator.push(
       context,
@@ -1584,10 +1616,19 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
-  String _formatPathPrefixes(Uint8List pathBytes) {
-    return pathBytes
-        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-        .join(',');
+  String _formatPathPrefixes(Uint8List pathBytes, int hashWidth) {
+    final w = hashWidth < 1 ? 1 : hashWidth;
+    final hops = <String>[];
+    for (var i = 0; i < pathBytes.length; i += w) {
+      final end = (i + w <= pathBytes.length) ? i + w : pathBytes.length;
+      hops.add(
+        pathBytes
+            .sublist(i, end)
+            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+            .join(),
+      );
+    }
+    return hops.join(',');
   }
 }
 
