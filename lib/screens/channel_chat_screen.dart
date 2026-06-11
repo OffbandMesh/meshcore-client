@@ -26,7 +26,7 @@ import '../services/app_settings_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
-import '../widgets/byte_count_input.dart';
+import '../widgets/mention_autocomplete.dart';
 import '../widgets/chat_zoom_wrapper.dart';
 import '../widgets/emoji_picker.dart';
 import '../widgets/gif_message.dart';
@@ -1243,10 +1243,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                         ),
                       );
                     }
-                    return ByteCountedTextField(
+                    return MentionAutocompleteField(
                       maxBytes: maxBytes,
                       controller: _textController,
                       focusNode: _textFieldFocusNode,
+                      candidates: _buildMentionCandidates(connector),
                       hintText: context.l10n.chat_typeMessage,
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
@@ -1291,6 +1292,36 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         ),
       ],
     );
+  }
+
+  List<MentionCandidate> _buildMentionCandidates(MeshCoreConnector connector) {
+    final candidates = <MentionCandidate>[];
+    final seen = <String>{};
+
+    // Recent senders in this channel, keyed to their most recent timestamp.
+    final recentTime = <String, DateTime>{};
+    for (final message in connector.getChannelMessages(widget.channel)) {
+      if (message.isOutgoing) continue;
+      final name = message.senderName.trim();
+      if (name.isEmpty || name == 'Unknown') continue;
+      final existing = recentTime[name];
+      if (existing == null || message.timestamp.isAfter(existing)) {
+        recentTime[name] = message.timestamp;
+      }
+    }
+    recentTime.forEach((name, time) {
+      candidates.add(MentionCandidate(name: name, recent: true, lastSeen: time));
+      seen.add(name.toLowerCase());
+    });
+
+    // Known contacts not already present as a recent sender.
+    for (final contact in connector.allContacts) {
+      final name = contact.name.trim();
+      if (name.isEmpty) continue;
+      if (!seen.add(name.toLowerCase())) continue;
+      candidates.add(MentionCandidate(name: name, recent: false));
+    }
+    return candidates;
   }
 
   Future<void> _showTranslationOptions() async {
