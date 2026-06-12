@@ -30,7 +30,8 @@ import '../services/path_history_service.dart';
 import '../services/translation_service.dart';
 import '../widgets/chat_zoom_wrapper.dart';
 import '../widgets/elements_ui.dart';
-import '../widgets/byte_count_input.dart';
+import '../widgets/mention_autocomplete.dart';
+import '../helpers/emoji_shortcodes.dart';
 import 'channel_message_path_screen.dart';
 import 'map_screen.dart';
 import '../utils/emoji_utils.dart';
@@ -621,10 +622,12 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     );
                   }
-                  return ByteCountedTextField(
+                  return MentionAutocompleteField(
                     maxBytes: maxBytes,
                     controller: _textController,
                     focusNode: _textFieldFocusNode,
+                    candidates: const [],
+                    emojiShortcodes: emojiShortcodes,
                     hintText: context.l10n.chat_typeMessage,
                     onSubmitted: (_) => _sendMessage(connector),
                     encoder:

@@ -20,19 +20,33 @@ class MentionCandidate {
   });
 }
 
-/// Wraps [ByteCountedTextField] with an `@`-mention autocomplete dropdown.
+/// One row in the autocomplete dropdown.
+class _Entry {
+  final String label;
+  final String? emoji; // leading glyph (emoji rows)
+  final IconData? icon; // leading icon (mention rows)
+  final String insert; // replacement text for the trigger token
+  const _Entry({required this.label, this.emoji, this.icon, required this.insert});
+}
+
+/// Wraps [ByteCountedTextField] with autocomplete for `@`-mentions and
+/// `:emoji:` shortcodes.
 ///
-/// Typing `@` at the start of a word opens a dropdown above the field listing
-/// matching [candidates]. Recent channel senders sit at the bottom (most recent
-/// closest to the input and auto-highlighted); other contacts stack above in
-/// alpha order with A nearest the input. Up/Down move the highlight, Tab or
-/// click selects, Esc dismisses, Enter sends. Selecting replaces the `@query`
-/// with `@[ExactName] ` at the cursor.
+/// - Typing `@` at the start of a word lists matching [candidates] (recent
+///   senders at the bottom, contacts above) and inserts `@[ExactName] `.
+/// - Typing `:` at the start of a word lists matching [emojiShortcodes] and
+///   inserts the emoji character. Typing a full `:name:` auto-converts it.
+///
+/// Up/Down move the highlight, Tab or click selects, Esc dismisses. Enter
+/// sends, and first completes an unambiguous emoji (single or exact shortcode
+/// match) so it ships the glyph rather than the literal text. Either feature
+/// is disabled by leaving its data empty/null.
 class MentionAutocompleteField extends StatefulWidget {
   final int maxBytes;
   final TextEditingController controller;
   final FocusNode focusNode;
   final List<MentionCandidate> candidates;
+  final Map<String, String>? emojiShortcodes;
   final String? hintText;
   final ValueChanged<String>? onSubmitted;
   final String Function(String)? encoder;
@@ -43,7 +57,8 @@ class MentionAutocompleteField extends StatefulWidget {
     required this.maxBytes,
     required this.controller,
     required this.focusNode,
-    required this.candidates,
+    this.candidates = const [],
+    this.emojiShortcodes,
     this.hintText,
     this.onSubmitted,
     this.encoder,
@@ -59,17 +74,14 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
   final LayerLink _link = LayerLink();
   OverlayEntry? _overlay;
 
-  /// Match list ordered top-to-bottom: contacts (Z..A) then recent (old..new).
-  List<MentionCandidate> _matches = const [];
-
-  /// Index in [_matches] where the recent section begins.
+  List<_Entry> _matches = const [];
   int _recentStart = 0;
-
-  /// Currently highlighted index (bottom-most by default).
   int _highlighted = -1;
+  int _tokenStart = -1;
 
-  /// Index of the triggering `@` in the controller text.
-  int _atIndex = -1;
+  /// Active emoji query while the dropdown shows emoji matches (null for
+  /// mentions or when closed). Lets Enter complete an unambiguous emoji + send.
+  String? _emojiQuery;
 
   @override
   void initState() {
@@ -94,7 +106,30 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     if (!widget.focusNode.hasFocus) _close();
   }
 
+  /// A "word" char (ASCII letter/digit). A trigger is only suppressed when it
+  /// sits immediately after one of these (e.g. `http://`, `3:30`), so a colon
+  /// right after an emoji or punctuation still opens the picker.
+  static bool _isWordChar(String c) {
+    final u = c.codeUnitAt(0);
+    return (u >= 0x61 && u <= 0x7a) || // a-z
+        (u >= 0x41 && u <= 0x5a) || // A-Z
+        (u >= 0x30 && u <= 0x39); // 0-9
+  }
+
+  static bool _isShortcodeChar(String c) {
+    final u = c.codeUnitAt(0);
+    return (u >= 0x61 && u <= 0x7a) || // a-z
+        (u >= 0x30 && u <= 0x39) || // 0-9
+        c == '_' ||
+        c == '+' ||
+        c == '-';
+  }
+
   void _onChanged() {
+    // Cursor-driven trigger detection (same shape as multi_trigger_autocomplete's
+    // invokingTrigger). It does not special-case the IME composing region —
+    // fine for hardware keyboards; a known limitation for CJK/IME input, which
+    // the reference package doesn't handle either.
     final value = widget.controller.value;
     final sel = value.selection;
     final text = value.text;
@@ -107,35 +142,75 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       _close();
       return;
     }
-    // Walk back from the caret to an `@` that begins a word, with no
-    // whitespace (or a `]`, which would break the bracket form) in between.
+
+    // Auto-convert a completed :name: when the closing colon is typed.
+    final shortcodes = widget.emojiShortcodes;
+    if (shortcodes != null && caret >= 2 && text[caret - 1] == ':') {
+      int j = caret - 2;
+      while (j >= 0 && _isShortcodeChar(text[j])) {
+        j--;
+      }
+      if (j >= 0 && text[j] == ':' && (j == 0 || !_isWordChar(text[j - 1]))) {
+        final name = text.substring(j + 1, caret - 1);
+        final glyph = shortcodes[name];
+        if (name.isNotEmpty && glyph != null) {
+          final newText = text.substring(0, j) + glyph + text.substring(caret);
+          widget.controller.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: j + glyph.length),
+          );
+          _close();
+          return;
+        }
+      }
+    }
+
+    // Walk back to a trigger char (@ or :) that begins a word.
     int i = caret - 1;
+    String? trigger;
     while (i >= 0) {
       final ch = text[i];
-      if (ch == '@') break;
+      if (ch == '@') {
+        trigger = '@';
+        break;
+      }
+      if (ch == ':') {
+        trigger = ':';
+        break;
+      }
       if (ch == ' ' || ch == '\n' || ch == '\t' || ch == ']') {
-        _close();
-        return;
+        break;
       }
       i--;
     }
-    if (i < 0 || text[i] != '@') {
+    if (trigger == null || i < 0) {
       _close();
       return;
     }
-    // `@` must begin a word: preceded by start-of-text or whitespace.
-    if (i > 0) {
-      final prev = text[i - 1];
-      if (prev != ' ' && prev != '\n' && prev != '\t') {
-        _close();
-        return;
-      }
+    if (i > 0 && _isWordChar(text[i - 1])) {
+      _close();
+      return;
     }
-    _atIndex = i;
-    _filter(text.substring(i + 1, caret));
+    final query = text.substring(i + 1, caret);
+    // No real shortcode or name is this long; avoid pathological scans.
+    if (query.length > 64) {
+      _close();
+      return;
+    }
+    _tokenStart = i;
+    if (trigger == '@') {
+      _filterMentions(query);
+    } else {
+      _filterEmoji(query);
+    }
   }
 
-  void _filter(String query) {
+  void _filterMentions(String query) {
+    _emojiQuery = null;
+    if (widget.candidates.isEmpty) {
+      _close();
+      return;
+    }
     final q = query.toLowerCase();
     final matched = widget.candidates.where(
       (c) => c.name.toLowerCase().startsWith(q),
@@ -152,12 +227,9 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       }
     }
     final recent = recentByName.values.toList();
-
-    // Contacts: alpha with Z at top, A at bottom (descending).
     contacts.sort(
       (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
     );
-    // Recent: oldest at top, most recent at bottom.
     recent.sort((a, b) {
       final ta = a.lastSeen;
       final tb = b.lastSeen;
@@ -174,9 +246,52 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       _close();
       return;
     }
-    _matches = combined;
+    _matches = combined
+        .map(
+          (c) => _Entry(
+            label: c.name,
+            icon: c.recent ? Icons.history : Icons.person_outline,
+            insert: '@[${c.name}] ',
+          ),
+        )
+        .toList();
     _recentStart = contacts.length;
-    _highlighted = combined.length - 1;
+    _highlighted = _matches.length - 1;
+    _show();
+  }
+
+  void _filterEmoji(String query) {
+    final shortcodes = widget.emojiShortcodes;
+    if (shortcodes == null || query.isEmpty) {
+      _close();
+      return;
+    }
+    for (final ch in query.split('')) {
+      if (!_isShortcodeChar(ch)) {
+        _close();
+        return;
+      }
+    }
+    final names = shortcodes.keys.where((k) => k.startsWith(query)).toList();
+    if (names.isEmpty) {
+      _close();
+      return;
+    }
+    names.sort((a, b) {
+      if (a == query && b != query) return -1;
+      if (b == query && a != query) return 1;
+      final byLen = a.length.compareTo(b.length);
+      if (byLen != 0) return byLen;
+      return a.compareTo(b);
+    });
+    // Best 8, then reversed so the best sits at the bottom (nearest the input).
+    final top = names.take(8).toList().reversed.toList();
+    _matches = top
+        .map((k) => _Entry(label: ':$k:', emoji: shortcodes[k], insert: shortcodes[k]!))
+        .toList();
+    _recentStart = _matches.length; // no divider for emoji
+    _highlighted = _matches.length - 1;
+    _emojiQuery = query;
     _show();
   }
 
@@ -199,7 +314,8 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       _remove();
       _matches = const [];
       _highlighted = -1;
-      _atIndex = -1;
+      _tokenStart = -1;
+      _emojiQuery = null;
     }
   }
 
@@ -227,25 +343,38 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
+      // For an unambiguous emoji shortcode (a single match, or the exact name),
+      // Enter completes the glyph first, then sends — so `:rofl` + Enter ships
+      // the emoji, not the literal text. Ambiguous matches still send raw; use
+      // Tab to pick one deliberately.
+      final q = _emojiQuery;
+      if (q != null && _matches.isNotEmpty) {
+        final best = _matches[_highlighted];
+        if (_matches.length == 1 || best.label == ':$q:') {
+          _select(best); // inserts the glyph and closes the dropdown
+          widget.onSubmitted?.call(widget.controller.text);
+          return KeyEventResult.handled;
+        }
+      }
       final text = widget.controller.text;
       _close();
       widget.onSubmitted?.call(text);
       return KeyEventResult.handled;
     }
+
     return KeyEventResult.ignored;
   }
 
-  void _select(MentionCandidate c) {
+  void _select(_Entry entry) {
     final text = widget.controller.text;
     final caret = widget.controller.selection.baseOffset;
-    if (_atIndex < 0 || caret < _atIndex || caret > text.length) {
+    if (_tokenStart < 0 || caret < _tokenStart || caret > text.length) {
       _close();
       return;
     }
-    final insertion = '@[${c.name}] ';
     final newText =
-        text.substring(0, _atIndex) + insertion + text.substring(caret);
-    final cursor = _atIndex + insertion.length;
+        text.substring(0, _tokenStart) + entry.insert + text.substring(caret);
+    final cursor = _tokenStart + entry.insert.length;
     widget.controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: cursor),
@@ -264,11 +393,11 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       if (i == _recentStart && _recentStart > 0 && _recentStart < _matches.length) {
         children.add(_recentDivider(theme));
       }
-      final c = _matches[i];
+      final e = _matches[i];
       final selected = i == _highlighted;
       children.add(
         InkWell(
-          onTap: () => _select(c),
+          onTap: () => _select(e),
           child: Container(
             width: double.infinity,
             color: selected
@@ -277,15 +406,18 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                Icon(
-                  c.recent ? Icons.history : Icons.person_outline,
-                  size: 15,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                if (e.emoji != null)
+                  Text(e.emoji!, style: const TextStyle(fontSize: 16))
+                else
+                  Icon(
+                    e.icon,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    c.name,
+                    e.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -319,7 +451,10 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
               constraints: const BoxConstraints(maxHeight: 220),
               child: SingleChildScrollView(
                 reverse: true,
-                child: Column(mainAxisSize: MainAxisSize.min, children: children),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
               ),
             ),
           ),

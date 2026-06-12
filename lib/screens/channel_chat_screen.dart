@@ -27,6 +27,7 @@ import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
 import '../widgets/mention_autocomplete.dart';
+import '../helpers/emoji_shortcodes.dart';
 import '../widgets/chat_zoom_wrapper.dart';
 import '../widgets/emoji_picker.dart';
 import '../widgets/gif_message.dart';
@@ -1248,6 +1249,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       controller: _textController,
                       focusNode: _textFieldFocusNode,
                       candidates: _buildMentionCandidates(connector),
+                      emojiShortcodes: emojiShortcodes,
                       hintText: context.l10n.chat_typeMessage,
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
