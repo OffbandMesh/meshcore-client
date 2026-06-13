@@ -1,0 +1,9 @@
+# Known benign gitleaks findings (see #16, #13) — all in upstream commits, already public.
+# 5x generic-api-key FALSE POSITIVES in lib/l10n/app_pl.arb (Polish translation strings).
+# 1x Giphy public beta/demo key in gif_picker.dart (replaced by --dart-define injection, #15).
+7eff1df6e21c8e24c0738c07ccbc8b4c47babc09:lib/l10n/app_pl.arb:generic-api-key:1146
+53cd3f4461a179269e043c71df31dd67a6606cb8:lib/l10n/app_pl.arb:generic-api-key:1136
+38d40ca0a46036becf113ab089e6bb9ce48ccbf8:lib/l10n/app_pl.arb:generic-api-key:1135
+44c0670dae1845e67604a1658e2df094fa565e9c:lib/l10n/app_pl.arb:generic-api-key:1135
+b2ce82fe7ee72d736f0a457cc3dc79bf2a027fdb:lib/l10n/app_pl.arb:generic-api-key:1117
+e7a5b9e20938977bc8d93b870e044098ab4ab2c6:lib/widgets/gif_picker.dart:generic-api-key:26
