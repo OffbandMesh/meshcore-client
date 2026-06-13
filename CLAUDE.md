@@ -1,6 +1,8 @@
-# MeshCore Open - Flutter Client
+# Offband Meshcore - Flutter Client
 
-Open-source Flutter client for MeshCore LoRa mesh networking devices. Connects to MeshCore-compatible radios over **BLE, TCP, or USB serial** and provides direct/channel chat, contact and channel management, on-map node tracking, repeater administration, and on-device message translation.
+**Offband Meshcore** is an open-source Flutter client for MeshCore LoRa mesh networking devices. Connects to MeshCore-compatible radios over **BLE, TCP, or USB serial** and provides direct/channel chat, contact and channel management, on-map node tracking, repeater administration, and on-device message translation.
+
+> Offband Meshcore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by zjs81, used under the MIT License. See [LICENSE](LICENSE) and the README Credits section.
 
 ## Build Commands
 
@@ -194,7 +196,7 @@ enum MeshCoreConnectionState {
 
 ## Dependencies
 
-App version: `8.0.0+11` — Dart SDK constraint: `^3.9.2`
+App version: `9.1.0+14` — Dart SDK constraint: `^3.9.2`
 
 **Connectivity**
 
@@ -284,7 +286,7 @@ App version: `8.0.0+11` — Dart SDK constraint: `^3.9.2`
 
 `flutter_foreground_task` registers a `ForegroundService` with `foregroundServiceType="connectedDevice"` and `stopWithTask="false"`.
 
-**Build config (`android/app/build.gradle.kts`)**: `applicationId = com.meshcore.meshcore_open`, NDK `29.0.14206865`, Java 8 core-library desugaring (`desugar_jdk_libs:2.1.4`), release signing via `key.properties` (debug fallback).
+**Build config (`android/app/build.gradle.kts`)**: `applicationId = app.offband.meshcore`, NDK `29.0.14206865`, Java 8 core-library desugaring (`desugar_jdk_libs:2.1.4`), release signing via `key.properties` (debug fallback).
 
 ### iOS (`ios/Runner/Info.plist`)
 - `NSBluetoothAlwaysUsageDescription`, `NSBluetoothPeripheralUsageDescription`
@@ -333,4 +335,4 @@ PWA scaffold present but boilerplate (`manifest.json` and `index.html` are unmod
 | `lib/services/translation_service.dart` | On-device LLM translation (llamadart) |
 | `lib/storage/prefs_manager.dart` | SharedPreferences singleton initialized in `main()` |
 | `lib/screens/scanner_screen.dart` | Home screen — BLE scan and connect |
-| `pubspec.yaml` | Dependencies and project metadata (current version `8.0.0+11`) |
+| `pubspec.yaml` | Dependencies and project metadata (current version `9.1.0+14`) |
