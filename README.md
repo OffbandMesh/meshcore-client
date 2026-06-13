@@ -1,16 +1,12 @@
-# MeshCore Open
+# Offband Meshcore
 
 Open-source Flutter client for MeshCore LoRa mesh networking devices.
 
+> **Offband Meshcore** is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by [zjs81](https://github.com/zjs81), used under the MIT License. Full credit to the original project — see [Credits](#credits).
+
 ## Overview
 
-MeshCore Open is a cross-platform mobile application for communicating with MeshCore LoRa mesh network devices via Bluetooth Low Energy (BLE). The app enables long-range, off-grid communication through peer-to-peer messaging, public channels, and mesh networking capabilities.
-
-**Website:** [meshcoreopen.org](https://meshcoreopen.org/)
-
-<a href="http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/zjs81/meshcore-open">
-        <img src="assets/badges/badge_obtainium.png" height="80" align="center" alt="Get it on Obtainium"/>
-</a>
+Offband Meshcore is a cross-platform mobile application for communicating with MeshCore LoRa mesh network devices via Bluetooth Low Energy (BLE). The app enables long-range, off-grid communication through peer-to-peer messaging, public channels, and mesh networking capabilities.
 
 ## Screenshots
 
@@ -115,7 +111,7 @@ MeshCore Open is a cross-platform mobile application for communicating with Mesh
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/zjs81/meshcore-open.git
+   git clone https://github.com/Strycher/meshcore-open.git
    cd meshcore-open
    ```
 
@@ -242,22 +238,11 @@ This is an open-source project. Contributions are welcome!
 ## Support
 
 For issues, questions, or feature requests, please open an issue on GitHub:
-<https://github.com/zjs81/meshcore-open/issues>
+<https://github.com/Strycher/meshcore-open/issues>
 
-## Donate
+## Credits
 
-If you find MeshCore Open useful and would like to support development, you can donate Solana or other Solana tokens:
-
-**Solana Address:** `F15YanjZj96YTBtKJYgNa8RLQLCZkx5CEwogPWkqXeoQ`
-
-
-**Monero Address:** `453TxnpUqjkJtXxzdjMsrgERNkBRXEGamPbpC45ENrvKAk9tH7kZbxWF82Hz66etgDZyXFPEBU2JUEqhLeJyWt9kBvTVy5m`
-
-**Bitcoin Address:** `bc1qh45x28v8dslcg4v4upmqd9g0mvc3lnyffmyzr5`
-
-Your support helps maintain and improve this open-source project!
-
-## Acknowledgments
+Offband Meshcore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by **zjs81**, used under the MIT License. The original copyright and license are retained in [LICENSE](LICENSE). Deep thanks to zjs81 and the upstream contributors.
 
 - Built with [Flutter](https://flutter.dev/)
 - Map tiles from [OpenStreetMap](https://www.openstreetmap.org/)

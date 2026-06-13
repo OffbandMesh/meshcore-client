@@ -69,7 +69,7 @@ An optional per-contact and per-channel text compression feature using the SMAZ 
 ### How It Works
 - When enabled, compression is applied using a "compress only if smaller" strategy — the message is only transmitted compressed if the encoded result is actually shorter than the original. Otherwise, the original text is sent uncompressed
 - Compressed messages are transmitted with a `s:` prefix followed by base64-encoded data
-- Recipients using MeshCore Open will decompress automatically. **Recipients using other software** that is not SMAZ-aware will see garbled `s:...` text
+- Recipients using Offband Meshcore will decompress automatically. **Recipients using other software** that is not SMAZ-aware will see garbled `s:...` text
 - The codec operates on ASCII. Non-ASCII / non-English text generally does not benefit from compression and may even expand. Best suited for short English messages
 - Disabled by default
 
@@ -214,7 +214,7 @@ An emoji picker inline with common reactions. Selected reactions appear below th
 
 ### How It Works
 - Implemented via `emoji_picker.dart` and `reaction_helper.dart`
-- Reactions are transmitted as a special message type visible to all participants with MeshCore Open
+- Reactions are transmitted as a special message type visible to all participants with Offband Meshcore
 
 ---
 

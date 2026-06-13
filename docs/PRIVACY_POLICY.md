@@ -1,16 +1,16 @@
-# Privacy Policy for MeshCore Open
+# Privacy Policy for Offband Meshcore
 
 **Last Updated:** January 11, 2026
 
 ## Introduction
 
-MeshCore Open ("the App") is an open-source Flutter application for communicating with MeshCore LoRa mesh networking devices. This Privacy Policy explains how the App handles your information.
+Offband Meshcore ("the App") is an open-source Flutter application for communicating with MeshCore LoRa mesh networking devices. This Privacy Policy explains how the App handles your information.
 
 ## Data Collection
 
 ### Data We Do NOT Collect
 
-MeshCore Open does **not**:
+Offband Meshcore does **not**:
 - Collect personal information
 - Send data to external servers (except map tile requests)
 - Track your usage or behavior
@@ -89,7 +89,7 @@ The App does not knowingly collect any personal information from children under 
 
 ## Open Source
 
-MeshCore Open is open-source software. You can review the complete source code to verify these privacy practices at [the project repository].
+Offband Meshcore is open-source software. You can review the complete source code to verify these privacy practices at [the project repository].
 
 ## Changes to This Policy
 
@@ -101,4 +101,4 @@ If you have questions about this Privacy Policy or the App's privacy practices, 
 
 ---
 
-**Summary**: MeshCore Open is a privacy-respecting app that stores all data locally on your device. We do not collect, track, or share your personal information.
+**Summary**: Offband Meshcore is a privacy-respecting app that stores all data locally on your device. We do not collect, track, or share your personal information.
