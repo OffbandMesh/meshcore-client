@@ -91,3 +91,6 @@ keystore.properties
 
 # Cloudflare Wrangler
 .wrangler
+
+# Local build secrets (Giphy etc.) — injected via --dart-define-from-file
+dart_defines.json

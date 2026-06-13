@@ -19,9 +19,11 @@ class _GifPickerState extends State<GifPicker> {
   bool _isLoading = false;
   String? _error;
 
-  // Giphy API key - Using public beta key (limited usage)
-  // For production, replace with your own Giphy API key from developers.giphy.com
-  static const String _giphyApiKey = 'sXpGFDGZs0Dv1mmNFvYaGUvYwKX0PWIh';
+  // Giphy API key — injected at build time, never hardcoded. Provide it via:
+  //   flutter build ... --dart-define-from-file=dart_defines.json
+  // (or --dart-define=GIPHY_API_KEY=<key>). Empty when unset → the picker shows a hint.
+  static const String _giphyApiKey =
+      String.fromEnvironment('GIPHY_API_KEY');
 
   @override
   void initState() {
@@ -36,6 +38,11 @@ class _GifPickerState extends State<GifPicker> {
   }
 
   Future<void> _loadTrendingGifs() async {
+    if (_giphyApiKey.isEmpty) {
+      setState(() => _error =
+          'GIF picker needs a Giphy API key (build with --dart-define=GIPHY_API_KEY=<key>).');
+      return;
+    }
     setState(() {
       _isLoading = true;
       _error = null;
