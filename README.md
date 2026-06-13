@@ -111,8 +111,8 @@ Offband Meshcore is a cross-platform mobile application for communicating with M
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/Strycher/meshcore-open.git
-   cd meshcore-open
+   git clone https://github.com/OffbandMesh/meshcore-client.git
+   cd meshcore-client
    ```
 
 2. **Install dependencies**
@@ -238,7 +238,7 @@ This is an open-source project. Contributions are welcome!
 ## Support
 
 For issues, questions, or feature requests, please open an issue on GitHub:
-<https://github.com/Strycher/meshcore-open/issues>
+<https://github.com/OffbandMesh/meshcore-client/issues>
 
 ## Credits
 

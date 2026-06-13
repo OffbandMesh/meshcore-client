@@ -241,4 +241,4 @@ Distribution:
 For issues with:
 - **App Store Process**: [Apple Developer Support](https://developer.apple.com/contact/)
 - **Flutter Build Issues**: [Flutter GitHub](https://github.com/flutter/flutter/issues)
-- **Offband Meshcore App**: [GitHub Issues](https://github.com/Strycher/meshcore-open/issues)
+- **Offband Meshcore App**: [GitHub Issues](https://github.com/OffbandMesh/meshcore-client/issues)
