@@ -1,1 +1,86 @@
-{}
+{
+  "bg": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "de": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "es": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "fr": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "hu": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "it": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "ja": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "ko": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "nl": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "pl": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "pt": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "ru": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "sk": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "sl": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "sv": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "uk": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ],
+
+  "zh": [
+    "settings_messageSettings",
+    "settings_messageSettingsSubtitle"
+  ]
+}

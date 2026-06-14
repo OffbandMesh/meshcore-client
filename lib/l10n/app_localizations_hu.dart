@@ -320,6 +320,13 @@ class AppLocalizationsHu extends AppLocalizations {
       'Értesítések, üzenetküldés és térképi beállítások';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Műközép beállítások';
 
   @override

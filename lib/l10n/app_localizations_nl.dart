@@ -319,6 +319,13 @@ class AppLocalizationsNl extends AppLocalizations {
       'Notificaties, berichten en kaartinstellingen';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Node Instellingen';
 
   @override

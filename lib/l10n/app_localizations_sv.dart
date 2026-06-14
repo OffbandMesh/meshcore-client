@@ -318,6 +318,13 @@ class AppLocalizationsSv extends AppLocalizations {
       'Meddelanden, notiser och kartinställningar';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Nodinställningar';
 
   @override
