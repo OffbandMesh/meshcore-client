@@ -760,9 +760,14 @@ class MeshCoreConnector extends ChangeNotifier {
     if (channel != null) {
       channel.unreadCount = count;
       unawaited(
-        _channelStore.saveChannels(
-          _channels.isNotEmpty ? _channels : _cachedChannels,
-        ),
+        _channelStore
+            .saveChannels(_channels.isNotEmpty ? _channels : _cachedChannels)
+            .catchError((Object e) {
+              _appDebugLogService?.error(
+                'Failed to persist channel unread count: $e',
+                tag: 'ChannelStore',
+              );
+            }),
       );
       notifyListeners();
     }
@@ -2665,7 +2670,12 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!supportsCompanionRadioStats) return;
     try {
       await sendFrame(buildGetStatsFrame(statsTypeRadio));
-    } catch (_) {}
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Failed to request radio stats: $e',
+        tag: 'RadioStats',
+      );
+    }
   }
 
   Future<void> setPathHashMode(int mode) async {
