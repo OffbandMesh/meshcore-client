@@ -138,21 +138,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.radio),
-                title: Text(l10n.settings_radioSettings),
-                subtitle: Text(l10n.settings_radioSettingsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showRadioSettings(context, connector),
-              ),
-              const Divider(height: 1),
-              _PathHashSizeTile(connector: connector),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.settings_radioSettings,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _RadioSettingsForm(
+                  key: ValueKey(
+                    '${connector.currentFreqHz}-${connector.currentBwHz}-'
+                    '${connector.currentSf}-${connector.currentCr}-'
+                    '${connector.currentTxPower}-${connector.clientRepeat}',
+                  ),
+                  connector: connector,
+                ),
+              ],
+            ),
           ),
         ),
+        const SizedBox(height: 16),
+        Card(child: _PathHashSizeTile(connector: connector)),
       ],
     );
   }
@@ -660,13 +672,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showRadioSettings(BuildContext context, MeshCoreConnector connector) {
-    showDialog(
-      context: context,
-      builder: (context) => _RadioSettingsDialog(connector: connector),
     );
   }
 
@@ -1367,16 +1372,16 @@ class _AutoAddSectionState extends State<_AutoAddSection> {
   }
 }
 
-class _RadioSettingsDialog extends StatefulWidget {
+class _RadioSettingsForm extends StatefulWidget {
   final MeshCoreConnector connector;
 
-  const _RadioSettingsDialog({required this.connector});
+  const _RadioSettingsForm({super.key, required this.connector});
 
   @override
-  State<_RadioSettingsDialog> createState() => _RadioSettingsDialogState();
+  State<_RadioSettingsForm> createState() => _RadioSettingsFormState();
 }
 
-class _RadioSettingsDialogState extends State<_RadioSettingsDialog> {
+class _RadioSettingsFormState extends State<_RadioSettingsForm> {
   final _frequencyController = TextEditingController();
   LoRaBandwidth _bandwidth = LoRaBandwidth.bw125;
   LoRaSpreadingFactor _spreadingFactor = LoRaSpreadingFactor.sf7;
@@ -1763,7 +1768,6 @@ class _RadioSettingsDialogState extends State<_RadioSettingsDialog> {
         content: Text(l10n.settings_error(e.toString())),
       );
     }
-    Navigator.pop(context);
   }
 
   String _presetLabel(int? index) {
@@ -1803,146 +1807,133 @@ class _RadioSettingsDialogState extends State<_RadioSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return AlertDialog(
-      title: Text(l10n.settings_radioSettings),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<int>(
-              key: ValueKey<int?>(_selectedPresetIndex),
-              initialValue: _selectedPresetIndex,
-              decoration: InputDecoration(
-                labelText: l10n.settings_presets,
-                border: const OutlineInputBorder(),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<int>(
+          key: ValueKey<int?>(_selectedPresetIndex),
+          initialValue: _selectedPresetIndex,
+          decoration: InputDecoration(
+            labelText: l10n.settings_presets,
+            border: const OutlineInputBorder(),
+          ),
+          items: [
+            for (final i in _visiblePresetIndexes())
+              DropdownMenuItem(
+                value: i,
+                child: Text(RadioSettings.presets[i].$1),
               ),
-              items: [
-                for (final i in _visiblePresetIndexes())
-                  DropdownMenuItem(
-                    value: i,
-                    child: Text(RadioSettings.presets[i].$1),
-                  ),
-              ],
-              onChanged: (index) {
-                if (index != null) {
-                  _applyPreset(index);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _frequencyController,
-              onChanged: (_) => _handleManualSettingsChanged('frequency'),
-              decoration: InputDecoration(
-                labelText: l10n.settings_frequency,
-                border: const OutlineInputBorder(),
-                helperText: l10n.settings_frequencyHelper,
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<LoRaBandwidth>(
-              initialValue: _bandwidth,
-              decoration: InputDecoration(
-                labelText: l10n.settings_bandwidth,
-                border: const OutlineInputBorder(),
-              ),
-              items: LoRaBandwidth.values
-                  .map(
-                    (bw) => DropdownMenuItem(value: bw, child: Text(bw.label)),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _bandwidth = value;
-                    _syncPresetSelection();
-                  });
-                  _logRadioSettingsState('Manual settings edit: bandwidth');
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<LoRaSpreadingFactor>(
-              initialValue: _spreadingFactor,
-              decoration: InputDecoration(
-                labelText: l10n.settings_spreadingFactor,
-                border: const OutlineInputBorder(),
-              ),
-              items: LoRaSpreadingFactor.values
-                  .map(
-                    (sf) => DropdownMenuItem(value: sf, child: Text(sf.label)),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _spreadingFactor = value;
-                    _syncPresetSelection();
-                  });
-                  _logRadioSettingsState(
-                    'Manual settings edit: spreading factor',
-                  );
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<LoRaCodingRate>(
-              initialValue: _codingRate,
-              decoration: InputDecoration(
-                labelText: l10n.settings_codingRate,
-                border: const OutlineInputBorder(),
-              ),
-              items: LoRaCodingRate.values
-                  .map(
-                    (cr) => DropdownMenuItem(value: cr, child: Text(cr.label)),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _codingRate = value;
-                    _syncPresetSelection();
-                  });
-                  _logRadioSettingsState('Manual settings edit: coding rate');
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _txPowerController,
-              onChanged: (_) => _handleManualSettingsChanged('tx power'),
-              decoration: InputDecoration(
-                labelText: l10n.settings_txPower,
-                border: const OutlineInputBorder(),
-                helperText: widget.connector.maxTxPower != null
-                    ? '${l10n.settings_txPowerHelper} (max: ${widget.connector.maxTxPower} dBm)'
-                    : l10n.settings_txPowerHelper,
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            if (widget.connector.clientRepeat != null) ...[
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: Text(l10n.settings_clientRepeat),
-                subtitle: Text(l10n.settings_clientRepeatSubtitle),
-                value: _clientRepeat,
-                onChanged: _handleClientRepeatChanged,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
           ],
+          onChanged: (index) {
+            if (index != null) {
+              _applyPreset(index);
+            }
+          },
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.common_cancel),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _frequencyController,
+          onChanged: (_) => _handleManualSettingsChanged('frequency'),
+          decoration: InputDecoration(
+            labelText: l10n.settings_frequency,
+            border: const OutlineInputBorder(),
+            helperText: l10n.settings_frequencyHelper,
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
         ),
-        FilledButton(onPressed: _saveSettings, child: Text(l10n.common_save)),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<LoRaBandwidth>(
+          initialValue: _bandwidth,
+          decoration: InputDecoration(
+            labelText: l10n.settings_bandwidth,
+            border: const OutlineInputBorder(),
+          ),
+          items: LoRaBandwidth.values
+              .map((bw) => DropdownMenuItem(value: bw, child: Text(bw.label)))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                _bandwidth = value;
+                _syncPresetSelection();
+              });
+              _logRadioSettingsState('Manual settings edit: bandwidth');
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<LoRaSpreadingFactor>(
+          initialValue: _spreadingFactor,
+          decoration: InputDecoration(
+            labelText: l10n.settings_spreadingFactor,
+            border: const OutlineInputBorder(),
+          ),
+          items: LoRaSpreadingFactor.values
+              .map((sf) => DropdownMenuItem(value: sf, child: Text(sf.label)))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                _spreadingFactor = value;
+                _syncPresetSelection();
+              });
+              _logRadioSettingsState('Manual settings edit: spreading factor');
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<LoRaCodingRate>(
+          initialValue: _codingRate,
+          decoration: InputDecoration(
+            labelText: l10n.settings_codingRate,
+            border: const OutlineInputBorder(),
+          ),
+          items: LoRaCodingRate.values
+              .map((cr) => DropdownMenuItem(value: cr, child: Text(cr.label)))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                _codingRate = value;
+                _syncPresetSelection();
+              });
+              _logRadioSettingsState('Manual settings edit: coding rate');
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _txPowerController,
+          onChanged: (_) => _handleManualSettingsChanged('tx power'),
+          decoration: InputDecoration(
+            labelText: l10n.settings_txPower,
+            border: const OutlineInputBorder(),
+            helperText: widget.connector.maxTxPower != null
+                ? '${l10n.settings_txPowerHelper} (max: ${widget.connector.maxTxPower} dBm)'
+                : l10n.settings_txPowerHelper,
+          ),
+          keyboardType: TextInputType.number,
+        ),
+        if (widget.connector.clientRepeat != null) ...[
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: Text(l10n.settings_clientRepeat),
+            subtitle: Text(l10n.settings_clientRepeatSubtitle),
+            value: _clientRepeat,
+            onChanged: _handleClientRepeatChanged,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _saveSettings,
+            icon: const Icon(Icons.save_outlined),
+            label: Text(l10n.common_save),
+          ),
+        ),
       ],
     );
   }
