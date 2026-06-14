@@ -10,8 +10,8 @@ import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
-import '../widgets/app_bar.dart';
 import '../helpers/snack_bar_builder.dart';
+import 'settings/settings_shell.dart';
 import 'app_settings_screen.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
@@ -61,40 +61,226 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
-      appBar: AppBar(
-        title: AppBarTitle(
-          l10n.settings_title,
-          indicators: false,
-          subtitle: false,
-        ),
-        bottom: const SyncProgressAppBarBottom(),
+    return SettingsShell(
+      title: l10n.settings_title,
+      appBarBottom: const SyncProgressAppBarBottom(),
+      categories: _categories(context),
+    );
+  }
+
+  List<SettingsCategory> _categories(BuildContext context) {
+    final l10n = context.l10n;
+    return [
+      SettingsCategory(
+        icon: Icons.settings_input_antenna,
+        title: l10n.settings_radioSettings,
+        subtitle: l10n.settings_radioSettingsSubtitle,
+        builder: _radioRangePane,
       ),
-      body: SafeArea(
-        top: false,
-        child: Consumer<MeshCoreConnector>(
-          builder: (context, connector, child) {
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildDeviceInfoCard(context, connector),
-                const SizedBox(height: 16),
-                _buildAppSettingsCard(context),
-                const SizedBox(height: 16),
-                _buildNodeSettingsCard(context, connector),
-                const SizedBox(height: 16),
-                _buildActionsCard(context, connector),
-                const SizedBox(height: 16),
-                _buildDebugCard(context),
-                const SizedBox(height: 16),
-                _buildExportCard(connector),
-                const SizedBox(height: 16),
-                _buildAboutCard(context),
+      SettingsCategory(
+        icon: Icons.badge_outlined,
+        title: l10n.settings_nodeSettings,
+        builder: _identityPane,
+      ),
+      SettingsCategory(
+        icon: Icons.shield_outlined,
+        title: l10n.settings_privacy,
+        subtitle: l10n.settings_privacySubtitle,
+        builder: _privacyPane,
+      ),
+      SettingsCategory(
+        icon: Icons.forum_outlined,
+        title: l10n.settings_contactSettings,
+        subtitle: l10n.settings_contactSettingsSubtitle,
+        builder: _messagesContactsPane,
+      ),
+      SettingsCategory(
+        icon: Icons.info_outline,
+        title: l10n.settings_deviceInfo,
+        builder: _devicePane,
+      ),
+      SettingsCategory(
+        icon: Icons.tune,
+        title: l10n.settings_appSettings,
+        subtitle: l10n.settings_appSettingsSubtitle,
+        builder: _appPane,
+      ),
+      SettingsCategory(
+        icon: Icons.bolt_outlined,
+        title: l10n.settings_actions,
+        builder: _actionsPane,
+      ),
+      SettingsCategory(
+        icon: Icons.build_outlined,
+        title: l10n.settings_debug,
+        builder: _diagnosticsPane,
+      ),
+    ];
+  }
+
+  Widget _radioRangePane(BuildContext context) {
+    final l10n = context.l10n;
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.radio),
+                title: Text(l10n.settings_radioSettings),
+                subtitle: Text(l10n.settings_radioSettingsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showRadioSettings(context, connector),
+              ),
+              const Divider(height: 1),
+              _PathHashSizeTile(connector: connector),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.sensors_outlined),
+                title: Text(l10n.radioStats_settingsTile),
+                subtitle: Text(l10n.radioStats_settingsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                enabled: connector.isConnected &&
+                    connector.supportsCompanionRadioStats,
+                onTap: () => pushCompanionRadioStatsScreen(context),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _identityPane(BuildContext context) {
+    final l10n = context.l10n;
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(l10n.settings_nodeName),
+                subtitle:
+                    Text(connector.selfName ?? l10n.settings_nodeNameNotSet),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _editNodeName(context, connector),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.location_on_outlined),
+                title: Text(l10n.settings_location),
+                subtitle: Text(l10n.settings_locationSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _editLocation(context, connector),
+              ),
+              if (connector.currentCustomVars?.containsKey('gps') ?? false) ...[
+                const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.gps_fixed),
+                  title: Text(l10n.settings_locationGPSEnable),
+                  subtitle: Text(l10n.settings_locationGPSEnableSubtitle),
+                  value: connector.currentCustomVars?['gps'] == '1',
+                  onChanged: (value) async {
+                    await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
+                  },
+                ),
               ],
-            );
-          },
+              if (connector.selfPublicKey != null) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: _buildInfoRow(
+                    l10n.settings_infoPublicKey,
+                    '${pubKeyToHex(connector.selfPublicKey!).substring(0, 16)}...',
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _privacyPane(BuildContext context) {
+    final l10n = context.l10n;
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.visibility_off_outlined),
+            title: Text(l10n.settings_privacy),
+            subtitle: Text(l10n.settings_privacySubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _privacySettings(context, connector),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _messagesContactsPane(BuildContext context) {
+    final l10n = context.l10n;
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.group_add_outlined),
+            title: Text(l10n.settings_contactSettings),
+            subtitle: Text(l10n.settings_contactSettingsSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _editAutoAddConfig(context, connector),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _devicePane(BuildContext context) {
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [_buildDeviceInfoCard(context, connector)],
+    );
+  }
+
+  Widget _appPane(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [_buildAppSettingsCard(context)],
+    );
+  }
+
+  Widget _actionsPane(BuildContext context) {
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [_buildActionsCard(context, connector)],
+    );
+  }
+
+  Widget _diagnosticsPane(BuildContext context) {
+    final connector = context.watch<MeshCoreConnector>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildDebugCard(context),
+        const SizedBox(height: 16),
+        _buildExportCard(connector),
+        const SizedBox(height: 16),
+        _buildAboutCard(context),
+      ],
     );
   }
 
@@ -254,88 +440,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             MaterialPageRoute(builder: (context) => const AppSettingsScreen()),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildNodeSettingsCard(
-    BuildContext context,
-    MeshCoreConnector connector,
-  ) {
-    final l10n = context.l10n;
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              l10n.settings_nodeSettings,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(l10n.settings_nodeName),
-            subtitle: Text(connector.selfName ?? l10n.settings_nodeNameNotSet),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _editNodeName(context, connector),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.radio),
-            title: Text(l10n.settings_radioSettings),
-            subtitle: Text(l10n.settings_radioSettingsSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showRadioSettings(context, connector),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.sensors_outlined),
-            title: Text(l10n.radioStats_settingsTile),
-            subtitle: Text(l10n.radioStats_settingsSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            enabled:
-                connector.isConnected && connector.supportsCompanionRadioStats,
-            onTap: () => pushCompanionRadioStatsScreen(context),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: Text(l10n.settings_location),
-            subtitle: Text(l10n.settings_locationSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _editLocation(context, connector),
-          ),
-          if (connector.currentCustomVars?.containsKey('gps') ?? false) ...[
-            const Divider(height: 1),
-            SwitchListTile(
-              secondary: const Icon(Icons.gps_fixed),
-              title: Text(l10n.settings_locationGPSEnable),
-              subtitle: Text(l10n.settings_locationGPSEnableSubtitle),
-              value: connector.currentCustomVars?['gps'] == '1',
-              onChanged: (value) async {
-                await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
-              },
-            ),
-          ],
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.group_add_outlined),
-            title: Text(l10n.settings_contactSettings),
-            subtitle: Text(l10n.settings_contactSettingsSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _editAutoAddConfig(context, connector),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.visibility_off_outlined),
-            title: Text(l10n.settings_privacy),
-            subtitle: Text(l10n.settings_privacySubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _privacySettings(context, connector),
-          ),
-        ],
       ),
     );
   }
@@ -1106,6 +1210,69 @@ void _privacySettings(BuildContext context, MeshCoreConnector connector) {
       ),
     ),
   );
+}
+
+/// Inline path-hash size selector for the connected device.
+///
+/// 1/2/3-byte hop hashes trade repeater-ID space against the maximum hop
+/// count. The width a region standardises on (commonly 2-byte) belongs here
+/// in Radio & range, not buried under "experimental". Reads the current width
+/// from device info and writes via [MeshCoreConnector.setPathHashMode].
+class _PathHashSizeTile extends StatefulWidget {
+  final MeshCoreConnector connector;
+
+  const _PathHashSizeTile({required this.connector});
+
+  @override
+  State<_PathHashSizeTile> createState() => _PathHashSizeTileState();
+}
+
+class _PathHashSizeTileState extends State<_PathHashSizeTile> {
+  // Hop ceilings per hash width (1/2/3 bytes), from the firmware path-hash spec.
+  static const List<int> _maxHopsPerWidth = [64, 32, 21];
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final connector = widget.connector;
+    final mode = (connector.pathHashByteWidth - 1).clamp(0, 2);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey<int>(mode),
+        initialValue: mode,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: l10n.repeater_pathHashMode,
+          helperText: l10n.repeater_pathHashModeHelper,
+          helperMaxLines: 5,
+          prefixIcon: const Icon(Icons.alt_route),
+          border: const OutlineInputBorder(),
+        ),
+        items: [
+          for (var m = 0; m < 3; m++)
+            DropdownMenuItem<int>(
+              value: m,
+              child: Text('${m + 1}-byte · max ${_maxHopsPerWidth[m]} hops'),
+            ),
+        ],
+        onChanged: connector.isConnected
+            ? (value) async {
+                if (value == null) return;
+                await connector.setPathHashMode(value);
+                await connector.refreshDeviceInfo();
+                if (!context.mounted) return;
+                showDismissibleSnackBar(
+                  context,
+                  content: Text(
+                    '${l10n.repeater_pathHashMode}: ${value + 1}-byte',
+                  ),
+                );
+              }
+            : null,
+      ),
+    );
+  }
 }
 
 class _RadioSettingsDialog extends StatefulWidget {
