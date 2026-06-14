@@ -1,18 +1,37 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/models/companion_radio_stats.dart';
 import 'package:meshcore_open/l10n/l10n.dart';
 import 'package:provider/provider.dart';
 
-class CompanionRadioStatsScreen extends StatefulWidget {
+class CompanionRadioStatsScreen extends StatelessWidget {
   const CompanionRadioStatsScreen({super.key});
 
   @override
-  State<CompanionRadioStatsScreen> createState() =>
-      _CompanionRadioStatsScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(context.l10n.radioStats_screenTitle),
+        centerTitle: true,
+      ),
+      body: const CompanionRadioStatsBody(),
+    );
+  }
 }
 
-class _CompanionRadioStatsScreenState extends State<CompanionRadioStatsScreen> {
+/// Embeddable Radio Stats content (no Scaffold) — used by both
+/// [CompanionRadioStatsScreen] and the settings shell's Radio Stats pane.
+/// Acquires 1 s radio-stats polling while mounted and releases it on dispose.
+class CompanionRadioStatsBody extends StatefulWidget {
+  const CompanionRadioStatsBody({super.key});
+
+  @override
+  State<CompanionRadioStatsBody> createState() =>
+      _CompanionRadioStatsBodyState();
+}
+
+class _CompanionRadioStatsBodyState extends State<CompanionRadioStatsBody> {
   final List<double> _noiseHistory = [];
   static const int _maxSamples = 120;
   MeshCoreConnector? _connector;
@@ -52,83 +71,71 @@ class _CompanionRadioStatsScreenState extends State<CompanionRadioStatsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.radioStats_screenTitle),
-        centerTitle: true,
-      ),
-      body: Selector<MeshCoreConnector, ({bool connected, bool supported})>(
-        selector: (_, c) => (
-          connected: c.isConnected,
-          supported: c.supportsCompanionRadioStats,
-        ),
-        builder: (context, state, _) {
-          if (!state.connected) {
-            return Center(child: Text(l10n.radioStats_notConnected));
-          }
-          if (!state.supported) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  l10n.radioStats_firmwareTooOld,
-                  textAlign: TextAlign.center,
-                ),
+    return Selector<MeshCoreConnector, ({bool connected, bool supported})>(
+      selector: (_, c) =>
+          (connected: c.isConnected, supported: c.supportsCompanionRadioStats),
+      builder: (context, state, _) {
+        if (!state.connected) {
+          return Center(child: Text(l10n.radioStats_notConnected));
+        }
+        if (!state.supported) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                l10n.radioStats_firmwareTooOld,
+                textAlign: TextAlign.center,
               ),
-            );
-          }
-          final connector = context.read<MeshCoreConnector>();
-          final scheme = Theme.of(context).colorScheme;
-          final tt = Theme.of(context).textTheme;
-
-          return ValueListenableBuilder<CompanionRadioStats?>(
-            valueListenable: connector.radioStatsNotifier,
-            builder: (context, stats, _) {
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (stats != null) ...[
-                    Text(
-                      l10n.radioStats_noiseFloor(stats.noiseFloorDbm),
-                      style: tt.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(l10n.radioStats_lastRssi(stats.lastRssiDbm)),
-                    Text(
-                      l10n.radioStats_lastSnr(
-                        stats.lastSnrDb.toStringAsFixed(1),
-                      ),
-                    ),
-                    Text(l10n.radioStats_txAir(stats.txAirSecs)),
-                    Text(l10n.radioStats_rxAir(stats.rxAirSecs)),
-                    const SizedBox(height: 16),
-                  ] else
-                    Text(l10n.radioStats_waiting),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 200,
-                    child: CustomPaint(
-                      painter: _NoiseChartPainter(
-                        samples: List<double>.from(_noiseHistory),
-                        colorScheme: scheme,
-                        textTheme: tt,
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l10n.radioStats_chartCaption,
-                    style: tt.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              );
-            },
+            ),
           );
-        },
-      ),
+        }
+        final connector = context.read<MeshCoreConnector>();
+        final scheme = Theme.of(context).colorScheme;
+        final tt = Theme.of(context).textTheme;
+
+        return ValueListenableBuilder<CompanionRadioStats?>(
+          valueListenable: connector.radioStatsNotifier,
+          builder: (context, stats, _) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (stats != null) ...[
+                  Text(
+                    l10n.radioStats_noiseFloor(stats.noiseFloorDbm),
+                    style: tt.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(l10n.radioStats_lastRssi(stats.lastRssiDbm)),
+                  Text(
+                    l10n.radioStats_lastSnr(stats.lastSnrDb.toStringAsFixed(1)),
+                  ),
+                  Text(l10n.radioStats_txAir(stats.txAirSecs)),
+                  Text(l10n.radioStats_rxAir(stats.rxAirSecs)),
+                  const SizedBox(height: 16),
+                ] else
+                  Text(l10n.radioStats_waiting),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 200,
+                  child: CustomPaint(
+                    painter: _NoiseChartPainter(
+                      samples: List<double>.from(_noiseHistory),
+                      colorScheme: scheme,
+                      textTheme: tt,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.radioStats_chartCaption,
+                  style: tt.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -233,8 +240,8 @@ class _NoiseChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _NoiseChartPainter oldDelegate) {
-    return oldDelegate.samples.length != samples.length ||
-        oldDelegate.colorScheme != colorScheme;
+    return oldDelegate.colorScheme != colorScheme ||
+        !listEquals(oldDelegate.samples, samples);
   }
 
   TextPainter _yAxisLabel(double v) {

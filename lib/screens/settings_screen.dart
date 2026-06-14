@@ -16,7 +16,7 @@ import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
-import '../widgets/radio_stats_entry.dart';
+import 'companion_radio_stats_screen.dart';
 import '../widgets/sync_progress_overlay.dart';
 
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
@@ -79,6 +79,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _radioRangePane,
       ),
       SettingsCategory(
+        icon: Icons.sensors_outlined,
+        title: l10n.radioStats_settingsTile,
+        subtitle: l10n.radioStats_settingsSubtitle,
+        builder: _radioStatsPane,
+      ),
+      SettingsCategory(
         icon: Icons.badge_outlined,
         title: l10n.settings_nodeSettings,
         builder: _identityPane,
@@ -90,10 +96,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _privacyPane,
       ),
       SettingsCategory(
-        icon: Icons.forum_outlined,
-        title: l10n.settings_contactSettings,
+        icon: Icons.contacts_outlined,
+        title: l10n.contacts_title,
         subtitle: l10n.settings_contactSettingsSubtitle,
-        builder: _messagesContactsPane,
+        builder: _contactsPane,
       ),
       SettingsCategory(
         icon: Icons.sms_outlined,
@@ -144,23 +150,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 1),
               _PathHashSizeTile(connector: connector),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.sensors_outlined),
-                title: Text(l10n.radioStats_settingsTile),
-                subtitle: Text(l10n.radioStats_settingsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                enabled:
-                    connector.isConnected &&
-                    connector.supportsCompanionRadioStats,
-                onTap: () => pushCompanionRadioStatsScreen(context),
-              ),
             ],
           ),
         ),
       ],
     );
   }
+
+  Widget _radioStatsPane(BuildContext context) =>
+      const CompanionRadioStatsBody();
 
   Widget _identityPane(BuildContext context) {
     final l10n = context.l10n;
@@ -237,7 +235,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _messagesContactsPane(BuildContext context) {
+  Widget _contactsPane(BuildContext context) {
     final l10n = context.l10n;
     final connector = context.watch<MeshCoreConnector>();
     return ListView(
