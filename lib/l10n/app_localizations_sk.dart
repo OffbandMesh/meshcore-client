@@ -321,6 +321,13 @@ class AppLocalizationsSk extends AppLocalizations {
       'Upozornenia, správy a nastavenia mapy';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Nastavenia uzla';
 
   @override

@@ -321,6 +321,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Notificaciones, mensajes y preferencias de mapa';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Configuración del Nodo';
 
   @override

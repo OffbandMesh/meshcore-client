@@ -143,6 +143,14 @@
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",
   "settings_appSettingsSubtitle": "Notifications, messaging, and map preferences",
+  "settings_messageSettings": "Message Settings",
+  "@settings_messageSettings": {
+    "description": "Settings category title for notification and message-handling preferences"
+  },
+  "settings_messageSettingsSubtitle": "Notifications and message handling",
+  "@settings_messageSettingsSubtitle": {
+    "description": "Settings category subtitle for the message settings pane"
+  },
   "settings_nodeSettings": "Node Settings",
   "settings_nodeName": "Node Name",
   "settings_nodeNameNotSet": "Not set",

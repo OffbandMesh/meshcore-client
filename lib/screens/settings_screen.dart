@@ -12,7 +12,8 @@ import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'settings/settings_shell.dart';
-import 'app_settings_screen.dart';
+import 'settings/app_settings_view.dart';
+import 'settings/message_settings_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
 import '../widgets/radio_stats_entry.dart';
@@ -93,6 +94,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_contactSettings,
         subtitle: l10n.settings_contactSettingsSubtitle,
         builder: _messagesContactsPane,
+      ),
+      SettingsCategory(
+        icon: Icons.sms_outlined,
+        title: l10n.settings_messageSettings,
+        subtitle: l10n.settings_messageSettingsSubtitle,
+        builder: _messageSettingsPane,
       ),
       SettingsCategory(
         icon: Icons.info_outline,
@@ -273,12 +280,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _appPane(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [_buildAppSettingsCard(context)],
-    );
-  }
+  Widget _appPane(BuildContext context) => const AppSettingsView();
+
+  Widget _messageSettingsPane(BuildContext context) =>
+      const MessageSettingsView();
 
   Widget _actionsPane(BuildContext context) {
     final connector = context.watch<MeshCoreConnector>();
@@ -441,24 +446,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
             }
           : null,
-    );
-  }
-
-  Widget _buildAppSettingsCard(BuildContext context) {
-    final l10n = context.l10n;
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.settings_outlined),
-        title: Text(l10n.settings_appSettings),
-        subtitle: Text(l10n.settings_appSettingsSubtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AppSettingsScreen()),
-          );
-        },
-      ),
     );
   }
 

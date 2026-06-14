@@ -309,6 +309,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_appSettingsSubtitle => '通知、メッセージング、および地図の表示設定';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'ノード設定';
 
   @override

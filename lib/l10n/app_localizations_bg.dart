@@ -320,6 +320,13 @@ class AppLocalizationsBg extends AppLocalizations {
       'Уведомления, съобщения и предпочитания за карта';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Настройки на възела';
 
   @override

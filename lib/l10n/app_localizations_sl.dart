@@ -319,6 +319,13 @@ class AppLocalizationsSl extends AppLocalizations {
       'Obveščanja, sporoščanje in zemljevidi.';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Nastavitev časa';
 
   @override

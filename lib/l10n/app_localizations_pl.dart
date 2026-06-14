@@ -324,6 +324,13 @@ class AppLocalizationsPl extends AppLocalizations {
       'Powiadomienia, wiadomości i preferencje mapy';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Ustawienia węzła';
 
   @override

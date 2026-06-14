@@ -323,6 +323,13 @@ class AppLocalizationsDe extends AppLocalizations {
       'Benachrichtigungen, Messaging und Kartenwahrnehmung';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Knoten-Einstellungen';
 
   @override

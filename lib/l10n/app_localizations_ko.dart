@@ -308,6 +308,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_appSettingsSubtitle => '알림, 메시징, 지도 설정';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => '노드 설정';
 
   @override

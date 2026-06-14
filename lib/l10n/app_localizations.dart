@@ -694,6 +694,18 @@ abstract class AppLocalizations {
   /// **'Notifications, messaging, and map preferences'**
   String get settings_appSettingsSubtitle;
 
+  /// Settings category title for notification and message-handling preferences
+  ///
+  /// In en, this message translates to:
+  /// **'Message Settings'**
+  String get settings_messageSettings;
+
+  /// Settings category subtitle for the message settings pane
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications and message handling'**
+  String get settings_messageSettingsSubtitle;
+
   /// No description provided for @settings_nodeSettings.
   ///
   /// In en, this message translates to:

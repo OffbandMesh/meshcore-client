@@ -321,6 +321,13 @@ class AppLocalizationsUk extends AppLocalizations {
       'Сповіщення, повідомлення та налаштування карти';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Налаштування вузла';
 
   @override

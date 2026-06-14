@@ -322,6 +322,13 @@ class AppLocalizationsRu extends AppLocalizations {
       'Уведомления, сообщения и настройки карты';
 
   @override
+  String get settings_messageSettings => 'Message Settings';
+
+  @override
+  String get settings_messageSettingsSubtitle =>
+      'Notifications and message handling';
+
+  @override
   String get settings_nodeSettings => 'Настройки ноды';
 
   @override
