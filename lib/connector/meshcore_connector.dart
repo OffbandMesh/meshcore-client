@@ -2052,6 +2052,10 @@ class MeshCoreConnector extends ChangeNotifier {
       }
       _notifySubscription = _txCharacteristic!.onValueReceived.listen(
         _handleFrame,
+        onError: (error, stackTrace) {
+          _appDebugLogService?.error('BLE transport error: $error', tag: 'BLE');
+          unawaited(disconnect(manual: false));
+        },
       );
 
       _setState(MeshCoreConnectionState.connected);
@@ -2823,7 +2827,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // Route through retry service (same as normal messages)
       // Don't use auto-rotation for reactions — just send directly
       if (_retryService != null) {
-        _retryService!.sendMessageWithRetry(contact: contact, text: text);
+        await _retryService!.sendMessageWithRetry(contact: contact, text: text);
       } else {
         final outboundText = prepareContactOutboundText(contact, text);
         await sendFrame(buildSendTextMsgFrame(contact.publicKey, outboundText));
