@@ -237,12 +237,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
-          child: ListTile(
-            leading: const Icon(Icons.group_add_outlined),
-            title: Text(l10n.settings_contactSettings),
-            subtitle: Text(l10n.settings_contactSettingsSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _editAutoAddConfig(context, connector),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  l10n.contactsSettings_autoAddTitle,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              _AutoAddSection(
+                key: ValueKey(
+                  '${connector.autoAddUsers}-${connector.autoAddRepeaters}-'
+                  '${connector.autoAddRoomServers}-${connector.autoAddSensors}-'
+                  '${connector.autoAddOverwriteOldest}',
+                ),
+                connector: connector,
+              ),
+            ],
           ),
         ),
       ],
@@ -972,121 +988,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-  void _editAutoAddConfig(BuildContext context, MeshCoreConnector connector) {
-    final l10n = context.l10n;
-    bool autoAddChat = false;
-    bool autoAddRepeater = false;
-    bool autoAddRoomServer = false;
-    bool autoAddSensor = false;
-    bool overwriteOldest = false;
-
-    final connector = context.read<MeshCoreConnector>();
-    autoAddChat = connector.autoAddUsers ?? false;
-    autoAddRepeater = connector.autoAddRepeaters ?? false;
-    autoAddRoomServer = connector.autoAddRoomServers ?? false;
-    autoAddSensor = connector.autoAddSensors ?? false;
-    overwriteOldest = connector.autoAddOverwriteOldest ?? false;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(l10n.contactsSettings_autoAddTitle),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FeatureToggleRow(
-                  title: l10n.contactsSettings_autoAddUsersTitle,
-                  subtitle: l10n.contactsSettings_autoAddUsersSubtitle,
-                  value: autoAddChat,
-                  onChanged: (value) {
-                    setDialogState(() => autoAddChat = value);
-                  },
-                ),
-                SizedBox(height: 8),
-                FeatureToggleRow(
-                  title: l10n.contactsSettings_autoAddRepeatersTitle,
-                  subtitle: l10n.contactsSettings_autoAddRepeatersSubtitle,
-                  value: autoAddRepeater,
-                  onChanged: (value) {
-                    setDialogState(() => autoAddRepeater = value);
-                  },
-                ),
-                SizedBox(height: 8),
-                FeatureToggleRow(
-                  title: l10n.contactsSettings_autoAddRoomServersTitle,
-                  subtitle: l10n.contactsSettings_autoAddRoomServersSubtitle,
-                  value: autoAddRoomServer,
-                  onChanged: (value) {
-                    setDialogState(() => autoAddRoomServer = value);
-                  },
-                ),
-                SizedBox(height: 8),
-                FeatureToggleRow(
-                  title: l10n.contactsSettings_autoAddSensorsTitle,
-                  subtitle: l10n.contactsSettings_autoAddSensorsSubtitle,
-                  value: autoAddSensor,
-                  onChanged: (value) {
-                    setDialogState(() => autoAddSensor = value);
-                  },
-                ),
-                Divider(height: 4),
-                FeatureToggleRow(
-                  title: l10n.contactsSettings_overwriteOldestTitle,
-                  subtitle: l10n.contactsSettings_overwriteOldestSubtitle,
-                  value: overwriteOldest,
-                  onChanged: (value) {
-                    setDialogState(() => overwriteOldest = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.common_cancel),
-            ),
-            TextButton(
-              onPressed: () {
-                _sendSettings(
-                  connector,
-                  autoAddChat,
-                  autoAddRepeater,
-                  autoAddRoomServer,
-                  autoAddSensor,
-                  overwriteOldest,
-                );
-                Navigator.pop(context);
-              },
-              child: Text(l10n.common_save),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _sendSettings(
-    MeshCoreConnector connector,
-    bool autoAddChat,
-    bool autoAddRepeater,
-    bool autoAddRoomServer,
-    bool autoAddSensor,
-    bool overwriteOldest,
-  ) async {
-    final frame = buildSetAutoAddConfigFrame(
-      autoAddChat: autoAddChat,
-      autoAddRepeater: autoAddRepeater,
-      autoAddRoomServer: autoAddRoomServer,
-      autoAddSensor: autoAddSensor,
-      overwriteOldest: overwriteOldest,
-    );
-    await connector.sendFrame(frame);
-    await connector.sendFrame(buildGetAutoAddFlagsFrame());
-  }
 }
 
 void _privacySettings(BuildContext context, MeshCoreConnector connector) {
@@ -1261,18 +1162,164 @@ class _PathHashSizeTileState extends State<_PathHashSizeTile> {
         onChanged: connector.isConnected
             ? (value) async {
                 if (value == null) return;
-                await connector.setPathHashMode(value);
-                await connector.refreshDeviceInfo();
-                if (!context.mounted) return;
-                showDismissibleSnackBar(
-                  context,
-                  content: Text(
-                    '${l10n.repeater_pathHashMode}: ${value + 1}-byte',
-                  ),
-                );
+                try {
+                  await connector.setPathHashMode(value);
+                  await connector.refreshDeviceInfo();
+                  if (!context.mounted) return;
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(
+                      '${l10n.repeater_pathHashMode}: ${value + 1}-byte',
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(l10n.settings_error(e.toString())),
+                  );
+                }
               }
             : null,
       ),
+    );
+  }
+}
+
+/// Inline auto-add controls for the Contacts pane.
+///
+/// Replaces the former modal dialog: toggles apply immediately (send + refetch
+/// flags). The host re-keys this widget on the connector's current flags, so a
+/// device-reported change rebuilds it with fresh values.
+class _AutoAddSection extends StatefulWidget {
+  final MeshCoreConnector connector;
+
+  const _AutoAddSection({super.key, required this.connector});
+
+  @override
+  State<_AutoAddSection> createState() => _AutoAddSectionState();
+}
+
+class _AutoAddSectionState extends State<_AutoAddSection> {
+  late bool _chat;
+  late bool _repeater;
+  late bool _roomServer;
+  late bool _sensor;
+  late bool _overwriteOldest;
+
+  bool _applying = false;
+  bool _applyAgain = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final c = widget.connector;
+    _chat = c.autoAddUsers ?? false;
+    _repeater = c.autoAddRepeaters ?? false;
+    _roomServer = c.autoAddRoomServers ?? false;
+    _sensor = c.autoAddSensors ?? false;
+    _overwriteOldest = c.autoAddOverwriteOldest ?? false;
+  }
+
+  Future<void> _apply() async {
+    // Coalesce rapid toggles: if a send is already in flight, flag a re-apply
+    // with the latest state for when it finishes instead of overlapping sends.
+    if (_applying) {
+      _applyAgain = true;
+      return;
+    }
+    _applying = true;
+    try {
+      do {
+        _applyAgain = false;
+        await widget.connector.sendFrame(
+          buildSetAutoAddConfigFrame(
+            autoAddChat: _chat,
+            autoAddRepeater: _repeater,
+            autoAddRoomServer: _roomServer,
+            autoAddSensor: _sensor,
+            overwriteOldest: _overwriteOldest,
+          ),
+        );
+        await widget.connector.sendFrame(buildGetAutoAddFlagsFrame());
+      } while (_applyAgain);
+    } catch (e) {
+      if (!mounted) return;
+      // Revert the optimistic toggles to the device's last-known flags.
+      final c = widget.connector;
+      setState(() {
+        _chat = c.autoAddUsers ?? false;
+        _repeater = c.autoAddRepeaters ?? false;
+        _roomServer = c.autoAddRoomServers ?? false;
+        _sensor = c.autoAddSensors ?? false;
+        _overwriteOldest = c.autoAddOverwriteOldest ?? false;
+      });
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.settings_error(e.toString())),
+      );
+    } finally {
+      _applying = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.person_add_outlined),
+          title: Text(l10n.contactsSettings_autoAddUsersTitle),
+          subtitle: Text(l10n.contactsSettings_autoAddUsersSubtitle),
+          value: _chat,
+          onChanged: (value) {
+            setState(() => _chat = value);
+            _apply();
+          },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.router_outlined),
+          title: Text(l10n.contactsSettings_autoAddRepeatersTitle),
+          subtitle: Text(l10n.contactsSettings_autoAddRepeatersSubtitle),
+          value: _repeater,
+          onChanged: (value) {
+            setState(() => _repeater = value);
+            _apply();
+          },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.meeting_room_outlined),
+          title: Text(l10n.contactsSettings_autoAddRoomServersTitle),
+          subtitle: Text(l10n.contactsSettings_autoAddRoomServersSubtitle),
+          value: _roomServer,
+          onChanged: (value) {
+            setState(() => _roomServer = value);
+            _apply();
+          },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.sensors_outlined),
+          title: Text(l10n.contactsSettings_autoAddSensorsTitle),
+          subtitle: Text(l10n.contactsSettings_autoAddSensorsSubtitle),
+          value: _sensor,
+          onChanged: (value) {
+            setState(() => _sensor = value);
+            _apply();
+          },
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          secondary: const Icon(Icons.autorenew),
+          title: Text(l10n.contactsSettings_overwriteOldestTitle),
+          subtitle: Text(l10n.contactsSettings_overwriteOldestSubtitle),
+          value: _overwriteOldest,
+          onChanged: (value) {
+            setState(() => _overwriteOldest = value);
+            _apply();
+          },
+        ),
+      ],
     );
   }
 }
