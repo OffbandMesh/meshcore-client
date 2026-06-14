@@ -143,7 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: Text(l10n.radioStats_settingsTile),
                 subtitle: Text(l10n.radioStats_settingsSubtitle),
                 trailing: const Icon(Icons.chevron_right),
-                enabled: connector.isConnected &&
+                enabled:
+                    connector.isConnected &&
                     connector.supportsCompanionRadioStats,
                 onTap: () => pushCompanionRadioStatsScreen(context),
               ),
@@ -167,8 +168,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 leading: const Icon(Icons.person_outline),
                 title: Text(l10n.settings_nodeName),
-                subtitle:
-                    Text(connector.selfName ?? l10n.settings_nodeNameNotSet),
+                subtitle: Text(
+                  connector.selfName ?? l10n.settings_nodeNameNotSet,
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _editNodeName(context, connector),
               ),

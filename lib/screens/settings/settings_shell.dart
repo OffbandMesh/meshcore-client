@@ -84,8 +84,9 @@ class _SettingsShellState extends State<SettingsShell> {
                     leading: Icon(category.icon),
                     title: Text(category.title),
                     selected: i == selected,
-                    selectedTileColor:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    selectedTileColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     onTap: () => setState(() => _selected = i),
                   );
                 },
@@ -117,8 +118,9 @@ class _SettingsShellState extends State<SettingsShell> {
             return ListTile(
               leading: Icon(category.icon),
               title: Text(category.title),
-              subtitle:
-                  category.subtitle != null ? Text(category.subtitle!) : null,
+              subtitle: category.subtitle != null
+                  ? Text(category.subtitle!)
+                  : null,
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _openDetail(context, category),
             );

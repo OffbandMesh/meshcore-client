@@ -26,7 +26,12 @@ class _Entry {
   final String? emoji; // leading glyph (emoji rows)
   final IconData? icon; // leading icon (mention rows)
   final String insert; // replacement text for the trigger token
-  const _Entry({required this.label, this.emoji, this.icon, required this.insert});
+  const _Entry({
+    required this.label,
+    this.emoji,
+    this.icon,
+    required this.insert,
+  });
 }
 
 /// Wraps [ByteCountedTextField] with autocomplete for `@`-mentions and
@@ -287,7 +292,13 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     // Best 8, then reversed so the best sits at the bottom (nearest the input).
     final top = names.take(8).toList().reversed.toList();
     _matches = top
-        .map((k) => _Entry(label: ':$k:', emoji: shortcodes[k], insert: shortcodes[k]!))
+        .map(
+          (k) => _Entry(
+            label: ':$k:',
+            emoji: shortcodes[k],
+            insert: shortcodes[k]!,
+          ),
+        )
         .toList();
     _recentStart = _matches.length; // no divider for emoji
     _highlighted = _matches.length - 1;
@@ -390,7 +401,9 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
 
     final children = <Widget>[];
     for (var i = 0; i < _matches.length; i++) {
-      if (i == _recentStart && _recentStart > 0 && _recentStart < _matches.length) {
+      if (i == _recentStart &&
+          _recentStart > 0 &&
+          _recentStart < _matches.length) {
         children.add(_recentDivider(theme));
       }
       final e = _matches[i];
@@ -422,8 +435,9 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: selected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ),

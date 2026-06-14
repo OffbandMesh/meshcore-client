@@ -687,7 +687,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                             ],
                           ],
                         ),
-                      if (message.hopCount != null && message.hopCount! > 0) ...[
+                      if (message.hopCount != null &&
+                          message.hopCount! > 0) ...[
                         const SizedBox(height: 4),
                         _buildHopBadge(context, message),
                       ],
@@ -1312,7 +1313,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       }
     }
     recentTime.forEach((name, time) {
-      candidates.add(MentionCandidate(name: name, recent: true, lastSeen: time));
+      candidates.add(
+        MentionCandidate(name: name, recent: true, lastSeen: time),
+      );
       seen.add(name.toLowerCase());
     });
 
@@ -1445,8 +1448,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     _ensureDateFormats(context);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final daysAgo =
-        today.difference(DateTime(time.year, time.month, time.day)).inDays;
+    final daysAgo = today
+        .difference(DateTime(time.year, time.month, time.day))
+        .inDays;
     final label = daysAgo == 0
         ? 'Today'
         : daysAgo == 1
