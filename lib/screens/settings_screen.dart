@@ -223,12 +223,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Card(
-          child: ListTile(
-            leading: const Icon(Icons.visibility_off_outlined),
-            title: Text(l10n.settings_privacy),
-            subtitle: Text(l10n.settings_privacySubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _privacySettings(context, connector),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  l10n.settings_privacy,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              _PrivacySection(
+                key: ValueKey(
+                  '${connector.telemetryModeBase}-${connector.telemetryModeLoc}-'
+                  '${connector.telemetryModeEnv}-${connector.advertLocationPolicy}-'
+                  '${connector.multiAcks}',
+                ),
+                connector: connector,
+              ),
+            ],
           ),
         ),
       ],
@@ -975,129 +991,171 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-void _privacySettings(BuildContext context, MeshCoreConnector connector) {
-  final l10n = context.l10n;
+/// Inline privacy controls for the Privacy pane.
+///
+/// Advert-location, multi-ACKs, and the three telemetry-access modes all commit
+/// through a single [MeshCoreConnector.setTelemetryModeBase] call, so each
+/// control sends the full current state on change (coalesced) and reverts to the
+/// device's values on failure. The host re-keys this widget on the connector's
+/// current values, so a device-reported change rebuilds it with fresh values.
+class _PrivacySection extends StatefulWidget {
+  final MeshCoreConnector connector;
 
-  int telemetryMode = connector.telemetryModeBase;
-  int telemetryLocMode = connector.telemetryModeLoc;
-  int telemetryEnvMode = connector.telemetryModeEnv;
-  bool advertLocPolicy = connector.advertLocationPolicy == 0 ? false : true;
-  int multiAcks = connector.multiAcks;
+  const _PrivacySection({super.key, required this.connector});
 
-  final telemModeBase = [
-    DropdownMenuItem(value: teleModeDeny, child: Text(l10n.settings_denyAll)),
-    DropdownMenuItem(
-      value: teleModeAllowFlags,
-      child: Text(l10n.settings_allowByContact),
-    ),
-    DropdownMenuItem(
-      value: teleModeAllowAll,
-      child: Text(l10n.settings_allowAll),
-    ),
-  ];
+  @override
+  State<_PrivacySection> createState() => _PrivacySectionState();
+}
 
-  showDialog(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: Text(l10n.settings_privacy),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10n.settings_privacySettingsDescription),
-              const SizedBox(height: 16),
-              FeatureToggleRow(
-                title: l10n.settings_advertLocation,
-                subtitle: l10n.settings_advertLocationSubtitle,
-                value: advertLocPolicy,
-                onChanged: (value) {
-                  setDialogState(() => advertLocPolicy = value);
-                },
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: Text(l10n.settings_multiAck),
-                value: multiAcks == 1,
-                onChanged: (value) {
-                  setDialogState(() => multiAcks = value ? 1 : 0);
-                },
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: telemetryMode,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_telemetryBaseMode,
-                  border: const OutlineInputBorder(),
-                ),
-                items: telemModeBase,
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() => telemetryMode = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: telemetryLocMode,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_telemetryLocationMode,
-                  border: const OutlineInputBorder(),
-                ),
-                items: telemModeBase,
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() => telemetryLocMode = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: telemetryEnvMode,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_telemetryEnvironmentMode,
-                  border: const OutlineInputBorder(),
-                ),
-                items: telemModeBase,
-                onChanged: (value) {
-                  if (value != null) {
-                    setDialogState(() => telemetryEnvMode = value);
-                  }
-                },
-              ),
-            ],
-          ),
+class _PrivacySectionState extends State<_PrivacySection> {
+  late int _telemetryMode;
+  late int _telemetryLocMode;
+  late int _telemetryEnvMode;
+  late bool _advertLocPolicy;
+  late int _multiAcks;
+
+  bool _applying = false;
+  bool _applyAgain = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _seedFromConnector();
+  }
+
+  void _seedFromConnector() {
+    final c = widget.connector;
+    _telemetryMode = c.telemetryModeBase;
+    _telemetryLocMode = c.telemetryModeLoc;
+    _telemetryEnvMode = c.telemetryModeEnv;
+    _advertLocPolicy = c.advertLocationPolicy != 0;
+    _multiAcks = c.multiAcks;
+  }
+
+  Future<void> _apply() async {
+    if (_applying) {
+      _applyAgain = true;
+      return;
+    }
+    _applying = true;
+    try {
+      do {
+        _applyAgain = false;
+        await widget.connector.setTelemetryModeBase(
+          _telemetryMode,
+          _telemetryLocMode,
+          _telemetryEnvMode,
+          _advertLocPolicy ? 1 : 0,
+          _multiAcks,
+        );
+        await widget.connector.refreshDeviceInfo();
+      } while (_applyAgain);
+    } catch (e) {
+      if (!mounted) return;
+      setState(_seedFromConnector);
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.settings_error(e.toString())),
+      );
+    } finally {
+      _applying = false;
+    }
+  }
+
+  Widget _telemetryDropdown({
+    required String label,
+    required int value,
+    required ValueChanged<int> onChanged,
+  }) {
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('$label-$value'),
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.common_cancel),
+        items: [
+          DropdownMenuItem(
+            value: teleModeDeny,
+            child: Text(l10n.settings_denyAll),
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await connector.setTelemetryModeBase(
-                telemetryMode,
-                telemetryLocMode,
-                telemetryEnvMode,
-                advertLocPolicy ? 1 : 0,
-                multiAcks,
-              );
-              await connector.refreshDeviceInfo();
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(l10n.settings_telemetryModeUpdated),
-              );
-            },
-            child: Text(l10n.common_save),
+          DropdownMenuItem(
+            value: teleModeAllowFlags,
+            child: Text(l10n.settings_allowByContact),
+          ),
+          DropdownMenuItem(
+            value: teleModeAllowAll,
+            child: Text(l10n.settings_allowAll),
           ),
         ],
+        onChanged: (v) {
+          if (v == null) return;
+          onChanged(v);
+        },
       ),
-    ),
-  );
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(l10n.settings_privacySettingsDescription),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.share_location_outlined),
+          title: Text(l10n.settings_advertLocation),
+          subtitle: Text(l10n.settings_advertLocationSubtitle),
+          value: _advertLocPolicy,
+          onChanged: (value) {
+            setState(() => _advertLocPolicy = value);
+            _apply();
+          },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.done_all),
+          title: Text(l10n.settings_multiAck),
+          value: _multiAcks == 1,
+          onChanged: (value) {
+            setState(() => _multiAcks = value ? 1 : 0);
+            _apply();
+          },
+        ),
+        _telemetryDropdown(
+          label: l10n.settings_telemetryBaseMode,
+          value: _telemetryMode,
+          onChanged: (v) {
+            setState(() => _telemetryMode = v);
+            _apply();
+          },
+        ),
+        _telemetryDropdown(
+          label: l10n.settings_telemetryLocationMode,
+          value: _telemetryLocMode,
+          onChanged: (v) {
+            setState(() => _telemetryLocMode = v);
+            _apply();
+          },
+        ),
+        _telemetryDropdown(
+          label: l10n.settings_telemetryEnvironmentMode,
+          value: _telemetryEnvMode,
+          onChanged: (v) {
+            setState(() => _telemetryEnvMode = v);
+            _apply();
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
 }
 
 /// Inline path-hash size selector for the connected device.
