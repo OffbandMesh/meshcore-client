@@ -1053,7 +1053,6 @@ class _PrivacySectionState extends State<_PrivacySection> {
           _advertLocPolicy ? 1 : 0,
           _multiAcks,
         );
-        await widget.connector.refreshDeviceInfo();
       } while (_applyAgain);
     } catch (e) {
       if (!mounted) return;
