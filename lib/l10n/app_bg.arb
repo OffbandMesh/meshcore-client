@@ -8,7 +8,7 @@
     }
   },
   "@@locale": "bg",
-  "appTitle": "MeshCore Open",
+  "appTitle": "Offband Meshcore",
   "nav_contacts": "Контакти",
   "nav_channels": "Канали",
   "nav_map": "Карта",
@@ -125,7 +125,7 @@
   "settings_appDebugLog": "Лог на отстраняване на грешки на приложението",
   "settings_appDebugLogSubtitle": "Съобщения за отстраняване на грешки на приложението",
   "settings_about": "За нас",
-  "settings_aboutVersion": "MeshCore Open, версия {version}",
+  "settings_aboutVersion": "Offband Meshcore, версия {version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {

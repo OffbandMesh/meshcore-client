@@ -133,7 +133,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'MeshCore Open'**
+  /// **'Offband Meshcore'**
   String get appTitle;
 
   /// No description provided for @nav_contacts.
@@ -343,7 +343,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanner_title.
   ///
   /// In en, this message translates to:
-  /// **'MeshCore Open'**
+  /// **'Offband Meshcore'**
   String get scanner_title;
 
   /// No description provided for @connectionChoiceUsbLabel.
@@ -1063,7 +1063,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_aboutVersion.
   ///
   /// In en, this message translates to:
-  /// **'MeshCore Open v{version}'**
+  /// **'Offband Meshcore v{version}'**
   String settings_aboutVersion(String version);
 
   /// No description provided for @settings_aboutLegalese.

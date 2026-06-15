@@ -9,7 +9,7 @@ class AppLocalizationsIt extends AppLocalizations {
   AppLocalizationsIt([String locale = 'it']) : super(locale);
 
   @override
-  String get appTitle => 'MeshCore Open';
+  String get appTitle => 'Offband Meshcore';
 
   @override
   String get nav_contacts => 'Contatti';
@@ -118,7 +118,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get common_interval => 'Intervallo';
 
   @override
-  String get scanner_title => 'MeshCore Open';
+  String get scanner_title => 'Offband Meshcore';
 
   @override
   String get connectionChoiceUsbLabel => 'USB';
@@ -527,7 +527,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String settings_aboutVersion(String version) {
-    return 'MeshCore Open versione $version';
+    return 'Offband Meshcore versione $version';
   }
 
   @override

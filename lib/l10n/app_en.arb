@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "MeshCore Open",
+  "appTitle": "Offband Meshcore",
   "nav_contacts": "Contacts",
   "nav_channels": "Channels",
   "nav_map": "Map",
@@ -49,7 +49,7 @@
   },
   "common_autoRefresh": "Autorefresh",
   "common_interval": "Interval",
-  "scanner_title": "MeshCore Open",
+  "scanner_title": "Offband Meshcore",
   "connectionChoiceUsbLabel": "USB",
   "connectionChoiceBluetoothLabel": "Bluetooth",
   "connectionChoiceTcpLabel": "TCP",
@@ -210,7 +210,7 @@
   "settings_appDebugLog": "App Debug Log",
   "settings_appDebugLogSubtitle": "Application debug messages",
   "settings_about": "About",
-  "settings_aboutVersion": "MeshCore Open v{version}",
+  "settings_aboutVersion": "Offband Meshcore v{version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {

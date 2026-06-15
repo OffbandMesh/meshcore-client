@@ -9,7 +9,7 @@ class AppLocalizationsDe extends AppLocalizations {
   AppLocalizationsDe([String locale = 'de']) : super(locale);
 
   @override
-  String get appTitle => 'MeshCore Open';
+  String get appTitle => 'Offband Meshcore';
 
   @override
   String get nav_contacts => 'Kontakte';
@@ -524,7 +524,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String settings_aboutVersion(String version) {
-    return 'MeshCore Open, Version $version';
+    return 'Offband Meshcore, Version $version';
   }
 
   @override
