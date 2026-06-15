@@ -8,7 +8,7 @@
     }
   },
   "@@locale": "pt",
-  "appTitle": "MeshCore Open",
+  "appTitle": "Offband Meshcore",
   "nav_contacts": "Contactos",
   "nav_channels": "Canais",
   "nav_map": "Mapa",
@@ -125,7 +125,7 @@
   "settings_appDebugLog": "Log de Depuração do Aplicativo",
   "settings_appDebugLogSubtitle": "Mensagens de depuração do aplicativo",
   "settings_about": "Sobre",
-  "settings_aboutVersion": "MeshCore Open v{version}",
+  "settings_aboutVersion": "Offband Meshcore v{version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {

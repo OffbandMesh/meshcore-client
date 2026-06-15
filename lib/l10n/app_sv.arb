@@ -8,7 +8,7 @@
     }
   },
   "@@locale": "sv",
-  "appTitle": "MeshCore Open",
+  "appTitle": "Offband Meshcore",
   "nav_contacts": "Kontakter",
   "nav_channels": "Kanaler",
   "nav_map": "Karta",
@@ -125,7 +125,7 @@
   "settings_appDebugLog": "Appfelsökning",
   "settings_appDebugLogSubtitle": "Applikations felsökningsmeddelanden",
   "settings_about": "Om",
-  "settings_aboutVersion": "MeshCore Open version {version}",
+  "settings_aboutVersion": "Offband Meshcore version {version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {
