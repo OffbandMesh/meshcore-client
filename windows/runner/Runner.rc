@@ -92,9 +92,9 @@ BEGIN
             VALUE "CompanyName", "Offband" "\0"
             VALUE "FileDescription", "Offband Meshcore" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "meshcore_open" "\0"
+            VALUE "InternalName", "offband_meshcore" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 Offband. All rights reserved." "\0"
-            VALUE "OriginalFilename", "meshcore_open.exe" "\0"
+            VALUE "OriginalFilename", "offband_meshcore.exe" "\0"
             VALUE "ProductName", "Offband Meshcore" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
