@@ -5,7 +5,7 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = meshcore_open
+PRODUCT_NAME = offband_meshcore
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = app.offband.meshcore
