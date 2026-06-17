@@ -43,7 +43,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBatteryVoltage = false;
-  bool _deviceInfoExpanded = false;
   String _appVersion = '';
 
   @override
@@ -340,82 +339,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final l10n = context.l10n;
 
     return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              setState(() {
-                _deviceInfoExpanded = !_deviceInfoExpanded;
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l10n.settings_deviceInfo,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: _deviceInfoExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more),
-                  ),
-                ],
-              ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow(l10n.settings_infoName, connector.deviceDisplayName),
+            _buildInfoRow(l10n.settings_infoId, connector.deviceIdLabel),
+            _buildInfoRow(
+              l10n.settings_infoStatus,
+              connector.isConnected
+                  ? l10n.common_connected
+                  : l10n.common_disconnected,
             ),
-          ),
-
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildInfoRow(
-                    l10n.settings_infoName,
-                    connector.deviceDisplayName,
-                  ),
-                  _buildInfoRow(l10n.settings_infoId, connector.deviceIdLabel),
-                  _buildInfoRow(
-                    l10n.settings_infoStatus,
-                    connector.isConnected
-                        ? l10n.common_connected
-                        : l10n.common_disconnected,
-                  ),
-                  _buildBatteryInfoRow(context, connector),
-                  if (connector.selfName != null)
-                    _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
-                  if (connector.selfPublicKey != null)
-                    _buildInfoRow(
-                      l10n.settings_infoPublicKey,
-                      '${pubKeyToHex(connector.selfPublicKey!).substring(0, 16)}...',
-                    ),
-                  _buildInfoRow(
-                    l10n.settings_infoContactsCount,
-                    '${connector.contacts.length}',
-                  ),
-                  _buildInfoRow(
-                    l10n.settings_infoChannelCount,
-                    '${connector.channels.length}',
-                  ),
-                ],
+            _buildBatteryInfoRow(context, connector),
+            if (connector.selfName != null)
+              _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
+            if (connector.selfPublicKey != null)
+              _buildInfoRow(
+                l10n.settings_infoPublicKey,
+                '${pubKeyToHex(connector.selfPublicKey!).substring(0, 16)}...',
               ),
+            _buildInfoRow(
+              l10n.settings_infoContactsCount,
+              '${connector.contacts.length}',
             ),
-            crossFadeState: _deviceInfoExpanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 200),
-          ),
-        ],
+            _buildInfoRow(
+              l10n.settings_infoChannelCount,
+              '${connector.channels.length}',
+            ),
+          ],
+        ),
       ),
     );
   }
