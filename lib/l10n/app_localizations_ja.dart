@@ -3921,6 +3921,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => '近くの電波中継局';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => '最後に確認された場所';
 
   @override

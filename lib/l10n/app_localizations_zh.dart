@@ -3802,6 +3802,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => '附近的重复器';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => '最近访问';
 
   @override

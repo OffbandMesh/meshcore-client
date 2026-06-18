@@ -4127,6 +4127,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Близки повтарящи се устройства';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Последно видян';
 
   @override

@@ -4141,6 +4141,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Найближчі ретранслятори';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Останній раз бачили';
 
   @override

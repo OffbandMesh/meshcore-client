@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
+import '../helpers/snack_bar_builder.dart';
 import '../models/contact.dart';
 import 'signal_ui.dart';
 
@@ -146,9 +147,16 @@ class _SNRIndicatorState extends State<SNRIndicator> {
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       child: InkWell(
-        onTap: directRepeater != null
-            ? () => _showFullPathDialog(context, directBestRepeaters)
-            : null,
+        onTap: () {
+          if (directRepeater != null) {
+            _showFullPathDialog(context, directBestRepeaters);
+          } else {
+            showDismissibleSnackBar(
+              context,
+              content: Text(context.l10n.snrIndicator_noNeighbors),
+            );
+          }
+        },
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),

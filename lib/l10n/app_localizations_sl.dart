@@ -4107,6 +4107,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Bližnji ponovitelji';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Zadnjič videno';
 
   @override
