@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../helpers/reaction_helper.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/platform_info.dart';
+import 'windows_taskbar_service.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -166,6 +167,7 @@ class NotificationService {
     int? badgeCount,
   }) async {
     if (!await _ensureInitialized()) return;
+    await WindowsTaskbarService.flash();
 
     final androidDetails = AndroidNotificationDetails(
       'messages',
@@ -266,6 +268,7 @@ class NotificationService {
     int? badgeCount,
   }) async {
     if (!await _ensureInitialized()) return;
+    await WindowsTaskbarService.flash();
 
     final androidDetails = AndroidNotificationDetails(
       'channel_messages',

@@ -1,5 +1,9 @@
 #include "flutter_window.h"
 
+#include <windows.h>
+
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -25,6 +29,35 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  // Taskbar flash channel - Dart flashes the taskbar button on a new message
+  // when the window isn't focused (see lib/services/windows_taskbar_service.dart).
+  taskbar_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "meshcore_open/windows_taskbar",
+          &flutter::StandardMethodCodec::GetInstance());
+  taskbar_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "flash") {
+          HWND hwnd = GetHandle();
+          if (hwnd != nullptr && GetForegroundWindow() != hwnd) {
+            FLASHWINFO info = {};
+            info.cbSize = static_cast<UINT>(sizeof(info));
+            info.hwnd = hwnd;
+            info.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;
+            info.uCount = 0;
+            info.dwTimeout = 0;
+            FlashWindowEx(&info);
+          }
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
