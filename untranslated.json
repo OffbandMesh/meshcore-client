@@ -1,86 +1,103 @@
 {
   "bg": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "de": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "es": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "fr": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "hu": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "it": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "ja": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "ko": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "nl": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "pl": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "pt": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "ru": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "sk": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "sl": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "sv": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "uk": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ],
 
   "zh": [
     "settings_messageSettings",
-    "settings_messageSettingsSubtitle"
+    "settings_messageSettingsSubtitle",
+    "snrIndicator_noNeighbors"
   ]
 }

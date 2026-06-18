@@ -4058,6 +4058,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Nearby Repeaters';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Last seen';
 
   @override

@@ -3922,6 +3922,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => '주변의 중계기';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => '마지막으로 목격';
 
   @override

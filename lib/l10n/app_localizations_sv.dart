@@ -4080,6 +4080,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Närliggande uppreparstationer';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Senast sedd';
 
   @override

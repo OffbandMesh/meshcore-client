@@ -7066,6 +7066,12 @@ abstract class AppLocalizations {
   /// **'Nearby Repeaters'**
   String get snrIndicator_nearByRepeaters;
 
+  /// No description provided for @snrIndicator_noNeighbors.
+  ///
+  /// In en, this message translates to:
+  /// **'No neighbors heard currently — messages still broadcast and route.'**
+  String get snrIndicator_noNeighbors;
+
   /// No description provided for @snrIndicator_lastSeen.
   ///
   /// In en, this message translates to:

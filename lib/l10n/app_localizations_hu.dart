@@ -4146,6 +4146,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get snrIndicator_nearByRepeaters => 'Helyszíni erősítők';
 
   @override
+  String get snrIndicator_noNeighbors =>
+      'No neighbors heard currently — messages still broadcast and route.';
+
+  @override
   String get snrIndicator_lastSeen => 'Utoljára, amikor látták';
 
   @override

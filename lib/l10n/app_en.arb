@@ -2321,6 +2321,7 @@
   "settings_gpxExportShareText": "Map data exported from meshcore-open",
   "settings_gpxExportShareSubject": "meshcore-open GPX map data export",
   "snrIndicator_nearByRepeaters": "Nearby Repeaters",
+  "snrIndicator_noNeighbors": "No neighbors heard currently — messages still broadcast and route.",
   "snrIndicator_lastSeen": "Last seen",
   "contactsSettings_title": "Contacts settings",
   "contactsSettings_autoAddTitle": "Automatic Discovery",
