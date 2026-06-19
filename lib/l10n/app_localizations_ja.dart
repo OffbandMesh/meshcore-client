@@ -600,6 +600,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appSettings_themeDark => '暗い';
 
   @override
+  String get appSettings_clock => 'Clock';
+
+  @override
+  String get appSettings_clockSystem => 'System default';
+
+  @override
+  String get appSettings_clock12h => '12-hour';
+
+  @override
+  String get appSettings_clock24h => '24-hour';
+
+  @override
   String get appSettings_language => '言語';
 
   @override
@@ -1459,6 +1471,17 @@ class AppLocalizationsJa extends AppLocalizations {
       one: 'ホップ',
     );
     return '$count $_temp0';
+  }
+
+  @override
+  String channel_heardTooltip(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count repeats',
+      one: '1 repeat',
+    );
+    return 'Heard $_temp0';
   }
 
   @override

@@ -13,6 +13,21 @@ extension UnitSystemValue on UnitSystem {
   }
 }
 
+enum ClockFormat { system, twelveHour, twentyFourHour }
+
+extension ClockFormatValue on ClockFormat {
+  String get value {
+    switch (this) {
+      case ClockFormat.twelveHour:
+        return '12h';
+      case ClockFormat.twentyFourHour:
+        return '24h';
+      case ClockFormat.system:
+        return 'system';
+    }
+  }
+}
+
 const Map<String, String> defaultCyr2LatCharMap = {
   'А': 'A',
   'В': 'B',
@@ -88,6 +103,7 @@ class AppSettings {
   final bool mapShowMarkers;
   final bool mapShowGuessedLocations;
   final bool enableMessageTracing;
+  final ClockFormat clockFormat;
   final Map<String, double>? mapCacheBounds;
   final int mapCacheMinZoom;
   final int mapCacheMaxZoom;
@@ -142,6 +158,7 @@ class AppSettings {
     this.mapShowMarkers = true,
     this.mapShowGuessedLocations = true,
     this.enableMessageTracing = false,
+    this.clockFormat = ClockFormat.system,
     this.mapCacheBounds,
     this.mapCacheMinZoom = 10,
     this.mapCacheMaxZoom = 15,
@@ -203,6 +220,7 @@ class AppSettings {
       'map_show_markers': mapShowMarkers,
       'map_show_guessed_locations': mapShowGuessedLocations,
       'enable_message_tracing': enableMessageTracing,
+      'clock_format': clockFormat.value,
       'map_cache_bounds': mapCacheBounds,
       'map_cache_min_zoom': mapCacheMinZoom,
       'map_cache_max_zoom': mapCacheMaxZoom,
@@ -251,6 +269,17 @@ class AppSettings {
       return UnitSystem.metric;
     }
 
+    ClockFormat parseClockFormat(dynamic value) {
+      switch (value) {
+        case '12h':
+          return ClockFormat.twelveHour;
+        case '24h':
+          return ClockFormat.twentyFourHour;
+        default:
+          return ClockFormat.system;
+      }
+    }
+
     return AppSettings(
       clearPathOnMaxRetry: json['clear_path_on_max_retry'] as bool? ?? false,
       mapShowRepeaters: json['map_show_repeaters'] as bool? ?? true,
@@ -265,6 +294,7 @@ class AppSettings {
       mapShowGuessedLocations:
           json['map_show_guessed_locations'] as bool? ?? true,
       enableMessageTracing: json['enable_message_tracing'] as bool? ?? false,
+      clockFormat: parseClockFormat(json['clock_format']),
       mapCacheBounds: (json['map_cache_bounds'] as Map?)?.map(
         (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
       ),
@@ -376,6 +406,7 @@ class AppSettings {
     bool? mapShowMarkers,
     bool? mapShowGuessedLocations,
     bool? enableMessageTracing,
+    ClockFormat? clockFormat,
     Object? mapCacheBounds = _unset,
     int? mapCacheMinZoom,
     int? mapCacheMaxZoom,
@@ -423,6 +454,7 @@ class AppSettings {
       mapShowGuessedLocations:
           mapShowGuessedLocations ?? this.mapShowGuessedLocations,
       enableMessageTracing: enableMessageTracing ?? this.enableMessageTracing,
+      clockFormat: clockFormat ?? this.clockFormat,
       mapCacheBounds: mapCacheBounds == _unset
           ? this.mapCacheBounds
           : mapCacheBounds as Map<String, double>?,

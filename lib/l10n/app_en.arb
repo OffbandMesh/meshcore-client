@@ -255,6 +255,10 @@
   "appSettings_themeSystem": "System default",
   "appSettings_themeLight": "Light",
   "appSettings_themeDark": "Dark",
+  "appSettings_clock": "Clock",
+  "appSettings_clockSystem": "System default",
+  "appSettings_clock12h": "12-hour",
+  "appSettings_clock24h": "24-hour",
   "appSettings_language": "Language",
   "appSettings_languageSystem": "System default",
   "appSettings_languageEn": "English",
@@ -796,6 +800,14 @@
   "chat_hopPlural": "hops",
   "chat_hopsCount": "{count} {count, plural, =1{hop} other{hops}}",
   "@chat_hopsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channel_heardTooltip": "Heard {count, plural, =1{1 repeat} other{{count} repeats}}",
+  "@channel_heardTooltip": {
     "placeholders": {
       "count": {
         "type": "int"

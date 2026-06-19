@@ -1246,6 +1246,30 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get appSettings_themeDark;
 
+  /// No description provided for @appSettings_clock.
+  ///
+  /// In en, this message translates to:
+  /// **'Clock'**
+  String get appSettings_clock;
+
+  /// No description provided for @appSettings_clockSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get appSettings_clockSystem;
+
+  /// No description provided for @appSettings_clock12h.
+  ///
+  /// In en, this message translates to:
+  /// **'12-hour'**
+  String get appSettings_clock12h;
+
+  /// No description provided for @appSettings_clock24h.
+  ///
+  /// In en, this message translates to:
+  /// **'24-hour'**
+  String get appSettings_clock24h;
+
   /// No description provided for @appSettings_language.
   ///
   /// In en, this message translates to:
@@ -2781,6 +2805,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} {count, plural, =1{hop} other{hops}}'**
   String chat_hopsCount(int count);
+
+  /// No description provided for @channel_heardTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Heard {count, plural, =1{1 repeat} other{{count} repeats}}'**
+  String channel_heardTooltip(int count);
 
   /// No description provided for @chat_successes.
   ///
