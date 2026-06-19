@@ -22,6 +22,7 @@ import '../l10n/l10n.dart';
 import '../models/channel.dart';
 import '../models/channel_message.dart';
 import '../models/translation_support.dart';
+import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
@@ -34,7 +35,6 @@ import '../widgets/gif_message.dart';
 import '../widgets/jump_to_bottom_button.dart';
 import '../widgets/gif_picker.dart';
 import '../widgets/message_translation_button.dart';
-import '../widgets/message_status_icon.dart';
 import '../widgets/radio_stats_entry.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/translated_message_content.dart';
@@ -574,10 +574,6 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                         ),
                         if (gifId == null) const SizedBox(height: 4),
                       ],
-                      if (message.replyToMessageId != null) ...[
-                        _buildReplyPreview(message, textScale),
-                        const SizedBox(height: 8),
-                      ],
                       if (poi != null)
                         _buildPoiMessage(
                           context,
@@ -585,20 +581,6 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                           isOutgoing,
                           textScale,
                           message.senderName,
-                          trailing: (!enableTracing && isOutgoing)
-                              ? Padding(
-                                  padding: const EdgeInsets.only(bottom: 2),
-                                  child: MessageStatusIcon(
-                                    isAcked:
-                                        message.status ==
-                                            ChannelMessageStatus.sent &&
-                                        displayPath.isNotEmpty,
-                                    isFailed:
-                                        message.status ==
-                                        ChannelMessageStatus.failed,
-                                  ),
-                                )
-                              : null,
                         )
                       else if (gifId != null)
                         Stack(
@@ -618,36 +600,6 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                           .withValues(alpha: 0.6),
                               ),
                             ),
-                            if (!enableTracing && isOutgoing)
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: isOutgoing
-                                        ? Theme.of(
-                                            context,
-                                          ).colorScheme.primaryContainer
-                                        : Theme.of(
-                                            context,
-                                          ).colorScheme.surfaceContainerHighest,
-                                    borderRadius: const BorderRadius.only(
-                                      bottomLeft: Radius.circular(10),
-                                      topRight: Radius.circular(8),
-                                    ),
-                                  ),
-                                  child: MessageStatusIcon(
-                                    isAcked:
-                                        message.status ==
-                                            ChannelMessageStatus.sent &&
-                                        displayPath.isNotEmpty,
-                                    isFailed:
-                                        message.status ==
-                                        ChannelMessageStatus.failed,
-                                  ),
-                                ),
-                              ),
                           ],
                         )
                       else
@@ -670,106 +622,27 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                 ),
                               ),
                             ),
-                            if (!enableTracing && isOutgoing) ...[
-                              const SizedBox(width: 4),
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 2),
-                                child: MessageStatusIcon(
-                                  isAcked:
-                                      message.status ==
-                                          ChannelMessageStatus.sent &&
-                                      displayPath.isNotEmpty,
-                                  isFailed:
-                                      message.status ==
-                                      ChannelMessageStatus.failed,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
-                      if (message.hopCount != null &&
-                          message.hopCount! > 0) ...[
-                        const SizedBox(height: 4),
-                        _buildHopBadge(context, message),
-                      ],
-                      if (enableTracing) ...[
-                        if (displayPath.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Padding(
-                            padding: gifId != null
-                                ? const EdgeInsets.symmetric(horizontal: 8)
-                                : EdgeInsets.zero,
-                            child: Text(
-                              context.l10n.channels_via(
-                                _formatPathPrefixes(
-                                  displayPath,
-                                  message.pathHashSize,
-                                ),
-                              ),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 4),
+                      const SizedBox(height: 4),
+                      _buildMetaRow(context, message, isOutgoing),
+                      if (enableTracing && displayPath.isNotEmpty) ...[
+                        const SizedBox(height: 2),
                         Padding(
                           padding: gifId != null
-                              ? const EdgeInsets.only(
-                                  left: 8,
-                                  right: 8,
-                                  bottom: 4,
-                                )
+                              ? const EdgeInsets.symmetric(horizontal: 8)
                               : EdgeInsets.zero,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _formatTime(context, message.timestamp),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.grey[400]
-                                      : Colors.grey[600],
-                                ),
+                          child: Text(
+                            context.l10n.channels_via(
+                              _formatPathPrefixes(
+                                displayPath,
+                                message.pathHashSize,
                               ),
-                              if (message.repeatCount > 0) ...[
-                                const SizedBox(width: 6),
-                                Icon(
-                                  Icons.repeat,
-                                  size: 12,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '${message.repeatCount}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                              if (isOutgoing) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  message.status == ChannelMessageStatus.sent
-                                      ? Icons.check
-                                      : message.status ==
-                                            ChannelMessageStatus.pending
-                                      ? Icons.schedule
-                                      : Icons.error_outline,
-                                  size: 14,
-                                  color:
-                                      message.status ==
-                                          ChannelMessageStatus.failed
-                                      ? Colors.red
-                                      : Colors.grey[600],
-                                ),
-                              ],
-                            ],
+                            ),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         ),
                       ],
@@ -844,83 +717,6 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 Icon(Icons.reply, color: colorScheme.primary),
               ],
             ),
-    );
-  }
-
-  Widget _buildReplyPreview(ChannelMessage message, double textScale) {
-    final connector = context.read<MeshCoreConnector>();
-    final isOwnNode = message.replyToSenderName == connector.selfName;
-    final replyText = message.replyToText ?? '';
-    final colorScheme = Theme.of(context).colorScheme;
-    final previewTextColor = colorScheme.onSurface.withValues(alpha: 0.7);
-
-    final gifId = GifHelper.parseGif(replyText);
-    final poi = parseMarkerText(replyText);
-
-    Widget contentPreview;
-    if (gifId != null) {
-      contentPreview = ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: GifMessage(
-          url: 'https://media.giphy.com/media/$gifId/giphy.gif',
-          backgroundColor: colorScheme.surfaceContainerHighest,
-          fallbackTextColor: previewTextColor,
-          maxSize: 80,
-        ),
-      );
-    } else if (poi != null) {
-      contentPreview = Row(
-        children: [
-          Icon(Icons.location_on_outlined, size: 14, color: previewTextColor),
-          const SizedBox(width: 4),
-          Text(
-            context.l10n.chat_location,
-            style: TextStyle(fontSize: 12 * textScale, color: previewTextColor),
-          ),
-        ],
-      );
-    } else {
-      contentPreview = Text(
-        replyText,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12 * textScale,
-          color: previewTextColor,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () => _scrollToMessage(message.replyToMessageId!),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(color: colorScheme.primary, width: 3),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.chat_replyTo(message.replyToSenderName ?? ''),
-              style: TextStyle(
-                fontSize: 11 * textScale,
-                fontWeight: FontWeight.bold,
-                color: isOwnNode
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 2),
-            contentPreview,
-          ],
-        ),
-      ),
     );
   }
 
@@ -1427,17 +1223,76 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   void _ensureDateFormats(BuildContext context) {
     final locale = Localizations.localeOf(context).toString();
-    if (locale != _cachedFormatLocale) {
-      _cachedFormatLocale = locale;
-      _hmFormat = DateFormat.Hm(locale);
+    final clock = context.read<AppSettingsService>().settings.clockFormat;
+    final systemUses24 = MediaQuery.of(context).alwaysUse24HourFormat;
+    final key = '$locale|${clock.index}|$systemUses24';
+    if (key != _cachedFormatLocale) {
+      _cachedFormatLocale = key;
+      _hmFormat = switch (clock) {
+        ClockFormat.twentyFourHour => DateFormat.Hm(locale),
+        ClockFormat.twelveHour => DateFormat('h:mm a', locale),
+        ClockFormat.system =>
+          systemUses24 ? DateFormat.Hm(locale) : DateFormat.jm(locale),
+      };
       _mdFormat = DateFormat.Md(locale);
     }
   }
 
   String _formatTime(BuildContext context, DateTime time) {
     _ensureDateFormats(context);
-    // Always show absolute HH:mm; the calendar date is shown via day dividers.
+    // Time per the user's clock setting; the date is shown via day dividers.
     return _hmFormat.format(time);
+  }
+
+  Widget _buildMetaRow(
+    BuildContext context,
+    ChannelMessage message,
+    bool isOutgoing,
+  ) {
+    final metaColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.grey[400]
+        : Colors.grey[600];
+    final metaStyle = TextStyle(fontSize: 11, color: metaColor);
+    final hops = message.hopCount ?? 0;
+    final dot = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Text('·', style: metaStyle),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(_formatTime(context, message.timestamp), style: metaStyle),
+        if (!isOutgoing && hops > 0) ...[dot, _buildHopBadge(context, message)],
+        if (isOutgoing && message.repeatCount > 0) ...[
+          dot,
+          Tooltip(
+            message: context.l10n.channel_heardTooltip(message.repeatCount),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cell_tower, size: 12, color: metaColor),
+                const SizedBox(width: 4),
+                Text('${message.repeatCount}', style: metaStyle),
+              ],
+            ),
+          ),
+        ],
+        if (isOutgoing) ...[
+          const SizedBox(width: 6),
+          Icon(
+            message.status == ChannelMessageStatus.sent
+                ? Icons.check
+                : message.status == ChannelMessageStatus.pending
+                ? Icons.schedule
+                : Icons.error_outline,
+            size: 14,
+            color: message.status == ChannelMessageStatus.failed
+                ? Colors.red
+                : metaColor,
+          ),
+        ],
+      ],
+    );
   }
 
   bool _isSameDay(DateTime a, DateTime b) =>

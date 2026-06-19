@@ -2,102 +2,187 @@
   "bg": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "de": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "es": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "fr": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "hu": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "it": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "ja": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "ko": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "nl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "pl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "pt": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "ru": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "sk": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "sl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "sv": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "uk": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ],
 
   "zh": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "appSettings_clock",
+    "appSettings_clockSystem",
+    "appSettings_clock12h",
+    "appSettings_clock24h",
+    "channel_heardTooltip",
     "snrIndicator_noNeighbors"
   ]
 }

@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/screens/path_trace_map.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../utils/platform_info.dart';
 
@@ -22,6 +23,7 @@ import '../models/channel_message.dart';
 import '../models/contact.dart';
 import '../l10n/contact_localization.dart';
 import '../models/message.dart';
+import '../models/app_settings.dart';
 import '../models/path_history.dart';
 import '../models/translation_support.dart';
 import '../services/app_settings_service.dart';
@@ -1993,7 +1995,7 @@ class _MessageBubble extends StatelessWidget {
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
-                                  _formatTime(message.timestamp),
+                                  _formatTime(context, message.timestamp),
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: metaColor,
@@ -2254,9 +2256,16 @@ class _MessageBubble extends StatelessWidget {
     return Icon(icon, size: 12, color: color);
   }
 
-  String _formatTime(DateTime time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+  String _formatTime(BuildContext context, DateTime time) {
+    final locale = Localizations.localeOf(context).toString();
+    final clock = context.read<AppSettingsService>().settings.clockFormat;
+    final systemUses24 = MediaQuery.of(context).alwaysUse24HourFormat;
+    final fmt = switch (clock) {
+      ClockFormat.twentyFourHour => DateFormat.Hm(locale),
+      ClockFormat.twelveHour => DateFormat('h:mm a', locale),
+      ClockFormat.system =>
+        systemUses24 ? DateFormat.Hm(locale) : DateFormat.jm(locale),
+    };
+    return fmt.format(time);
   }
 }

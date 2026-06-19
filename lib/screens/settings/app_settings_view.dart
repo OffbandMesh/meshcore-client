@@ -76,6 +76,16 @@ class AppSettingsView extends StatelessWidget {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.schedule_outlined),
+            title: Text(context.l10n.appSettings_clock),
+            subtitle: Text(
+              _clockFormatLabel(context, settingsService.settings.clockFormat),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showClockFormatDialog(context, settingsService),
+          ),
+          const Divider(height: 1),
+          ListTile(
             leading: const Icon(Icons.language_outlined),
             title: Text(context.l10n.appSettings_language),
             subtitle: Text(
@@ -567,6 +577,61 @@ class AppSettingsView extends StatelessWidget {
         return context.l10n.appSettings_themeDark;
       default:
         return context.l10n.appSettings_themeSystem;
+    }
+  }
+
+  void _showClockFormatDialog(
+    BuildContext context,
+    AppSettingsService settingsService,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.l10n.appSettings_clock),
+        content: RadioGroup<ClockFormat>(
+          groupValue: settingsService.settings.clockFormat,
+          onChanged: (value) {
+            if (value != null) {
+              settingsService.setClockFormat(value);
+              Navigator.pop(context);
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<ClockFormat>(
+                title: Text(context.l10n.appSettings_clockSystem),
+                value: ClockFormat.system,
+              ),
+              RadioListTile<ClockFormat>(
+                title: Text(context.l10n.appSettings_clock12h),
+                value: ClockFormat.twelveHour,
+              ),
+              RadioListTile<ClockFormat>(
+                title: Text(context.l10n.appSettings_clock24h),
+                value: ClockFormat.twentyFourHour,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(context.l10n.common_close),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _clockFormatLabel(BuildContext context, ClockFormat value) {
+    switch (value) {
+      case ClockFormat.twelveHour:
+        return context.l10n.appSettings_clock12h;
+      case ClockFormat.twentyFourHour:
+        return context.l10n.appSettings_clock24h;
+      case ClockFormat.system:
+        return context.l10n.appSettings_clockSystem;
     }
   }
 
