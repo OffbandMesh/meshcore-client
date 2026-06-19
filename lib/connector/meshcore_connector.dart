@@ -143,7 +143,7 @@ class MeshCoreConnector extends ChangeNotifier {
   MeshCoreTransportType _activeTransport = MeshCoreTransportType.bluetooth;
 
   final List<ScanResult> _scanResults = [];
-  final List<ScanResult> _linuxSystemScanResults = [];
+  final List<ScanResult> _systemScanResults = [];
   final List<Contact> _contacts = [];
   final List<Contact> _discoveredContacts = [];
   final List<Channel> _channels = [];
@@ -1362,7 +1362,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_state == MeshCoreConnectionState.scanning) return;
 
     _scanResults.clear();
-    _linuxSystemScanResults.clear();
+    _systemScanResults.clear();
     _setState(MeshCoreConnectionState.scanning);
 
     // Ensure any previous scan is fully stopped. Guard with isScanningNow to
@@ -1401,15 +1401,19 @@ class MeshCoreConnector extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    if (PlatformInfo.isLinux) {
-      await _loadLinuxSystemDevicesForScan();
+    // Surface radios already connected to the OS — by us or by another app such
+    // as MeshCore — so we can attach to them. A connected BLE radio stops
+    // advertising, so a scan alone never finds it; systemDevices does. Supported
+    // on every native platform (Android/iOS/macOS/Linux), not web.
+    if (!PlatformInfo.isWeb) {
+      await _loadSystemDevicesForScan();
     }
 
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       _scanResults
         ..clear()
         ..addAll(results);
-      _mergeLinuxSystemScanResults();
+      _mergeSystemScanResults();
       notifyListeners();
     });
 
@@ -1430,12 +1434,12 @@ class MeshCoreConnector extends ChangeNotifier {
     await stopScan();
   }
 
-  Future<void> _loadLinuxSystemDevicesForScan() async {
+  Future<void> _loadSystemDevicesForScan() async {
     try {
       final systemDevices = await FlutterBluePlus.systemDevices([
         Guid(MeshCoreUuids.service),
       ]);
-      _linuxSystemScanResults
+      _systemScanResults
         ..clear()
         ..addAll(
           systemDevices
@@ -1461,24 +1465,24 @@ class MeshCoreConnector extends ChangeNotifier {
                 ),
               ),
         );
-      _mergeLinuxSystemScanResults();
+      _mergeSystemScanResults();
       notifyListeners();
     } catch (error) {
       _appDebugLogService?.warn(
-        'Failed loading Linux paired/system BLE devices: $error',
+        'Failed loading system BLE devices: $error',
         tag: 'BLE Scan',
       );
     }
   }
 
-  void _mergeLinuxSystemScanResults() {
-    if (!PlatformInfo.isLinux || _linuxSystemScanResults.isEmpty) {
+  void _mergeSystemScanResults() {
+    if (_systemScanResults.isEmpty) {
       return;
     }
     final existingIds = _scanResults
         .map((result) => result.device.remoteId.str)
         .toSet();
-    for (final result in _linuxSystemScanResults) {
+    for (final result in _systemScanResults) {
       if (existingIds.contains(result.device.remoteId.str)) {
         continue;
       }
