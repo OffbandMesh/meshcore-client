@@ -18,6 +18,48 @@ class TranslatedMessageContent extends StatelessWidget {
     this.showOriginalFirst = true,
   });
 
+  // A leading `@[Name]` reply mention, with or without a trailing space.
+  static final RegExp _mentionPrefix = RegExp(
+    r'^@\[([^\]]+)\]\s*(.*)$',
+    dotAll: true,
+  );
+
+  Widget _buildText(BuildContext context, String text, TextStyle textStyle) {
+    final match = _mentionPrefix.firstMatch(text);
+    if (match == null) {
+      return LinkHandler.buildLinkifyText(
+        context: context,
+        text: text,
+        style: textStyle,
+      );
+    }
+    final name = match.group(1)!;
+    final rest = match.group(2)!;
+    final scheme = Theme.of(context).colorScheme;
+    return Text.rich(
+      TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '@$name',
+                style: textStyle.copyWith(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ),
+          if (rest.isNotEmpty) TextSpan(text: ' $rest'),
+        ],
+      ),
+      style: textStyle,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final trimmedDisplay = displayText.trim();
@@ -26,23 +68,13 @@ class TranslatedMessageContent extends StatelessWidget {
         trimmedOriginal != null &&
         trimmedOriginal.isNotEmpty &&
         trimmedOriginal != trimmedDisplay;
+    final effectiveOriginalStyle =
+        originalStyle ??
+        style.copyWith(fontStyle: FontStyle.italic, fontSize: style.fontSize);
     final originalWidget = shouldShowOriginal
-        ? LinkHandler.buildLinkifyText(
-            context: context,
-            text: trimmedOriginal,
-            style:
-                originalStyle ??
-                style.copyWith(
-                  fontStyle: FontStyle.italic,
-                  fontSize: style.fontSize,
-                ),
-          )
+        ? _buildText(context, trimmedOriginal, effectiveOriginalStyle)
         : null;
-    final translatedWidget = LinkHandler.buildLinkifyText(
-      context: context,
-      text: trimmedDisplay,
-      style: style,
-    );
+    final translatedWidget = _buildText(context, trimmedDisplay, style);
 
     if (!shouldShowOriginal) {
       return translatedWidget;
