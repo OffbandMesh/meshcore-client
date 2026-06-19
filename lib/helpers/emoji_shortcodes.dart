@@ -1916,3 +1916,17 @@ const Map<String, String> emojiShortcodes = {
   'zombie_woman': '🧟‍♀️',
   'zzz': '💤',
 };
+
+// Hand-authored aliases (not gemoji), kept separate so regenerating the map
+// above never clobbers them. ✅ is `white_check_mark`, hence `check`.
+const Map<String, String> _emojiAliases = {
+  'check': '✅',
+  'checkmark': '✅',
+  'tick': '✅',
+};
+
+/// gemoji shortcodes plus [_emojiAliases] — what composers use.
+final Map<String, String> emojiShortcodesWithAliases = {
+  ...emojiShortcodes,
+  ..._emojiAliases,
+};

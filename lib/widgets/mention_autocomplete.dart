@@ -277,14 +277,18 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
         return;
       }
     }
-    final names = shortcodes.keys.where((k) => k.startsWith(query)).toList();
+    final names = shortcodes.keys.where((k) => k.contains(query)).toList();
     if (names.isEmpty) {
       _close();
       return;
     }
     names.sort((a, b) {
+      // Rank exact, then prefix, then mid-name matches; shorter names first.
       if (a == query && b != query) return -1;
       if (b == query && a != query) return 1;
+      final aPrefix = a.startsWith(query);
+      final bPrefix = b.startsWith(query);
+      if (aPrefix != bPrefix) return aPrefix ? -1 : 1;
       final byLen = a.length.compareTo(b.length);
       if (byLen != 0) return byLen;
       return a.compareTo(b);

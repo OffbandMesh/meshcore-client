@@ -627,7 +627,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     controller: _textController,
                     focusNode: _textFieldFocusNode,
                     candidates: const [],
-                    emojiShortcodes: emojiShortcodes,
+                    emojiShortcodes: emojiShortcodesWithAliases,
                     hintText: context.l10n.chat_typeMessage,
                     onSubmitted: (_) => _sendMessage(connector),
                     encoder:

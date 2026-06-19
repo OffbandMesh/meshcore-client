@@ -1250,7 +1250,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       controller: _textController,
                       focusNode: _textFieldFocusNode,
                       candidates: _buildMentionCandidates(connector),
-                      emojiShortcodes: emojiShortcodes,
+                      emojiShortcodes: emojiShortcodesWithAliases,
                       hintText: context.l10n.chat_typeMessage,
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
