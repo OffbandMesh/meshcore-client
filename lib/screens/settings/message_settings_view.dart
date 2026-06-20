@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../l10n/l10n.dart';
 import '../../services/app_settings_service.dart';
 import '../../services/notification_service.dart';
+import '../../helpers/settings_persist.dart';
 import '../../helpers/snack_bar_builder.dart';
 
 /// Embeddable view (no Scaffold) for the Message Settings shell pane.
@@ -70,7 +71,19 @@ class MessageSettingsView extends StatelessWidget {
                 }
               }
 
-              await settingsService.setNotificationsEnabled(value);
+              try {
+                await settingsService.setNotificationsEnabled(value);
+              } catch (_) {
+                if (context.mounted) {
+                  showDismissibleSnackBar(
+                    context,
+                    content: const Text(
+                      'Could not change notifications. Please try again.',
+                    ),
+                  );
+                }
+                return;
+              }
               if (context.mounted) {
                 showDismissibleSnackBar(
                   context,
@@ -111,7 +124,7 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewMessage,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    settingsService.setNotifyOnNewMessage(value);
+                    persistSetting(context, () => settingsService.setNotifyOnNewMessage(value));
                   }
                 : null,
           ),
@@ -142,7 +155,7 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewChannelMessage,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    settingsService.setNotifyOnNewChannelMessage(value);
+                    persistSetting(context, () => settingsService.setNotifyOnNewChannelMessage(value));
                   }
                 : null,
           ),
@@ -173,7 +186,7 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewAdvert,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    settingsService.setNotifyOnNewAdvert(value);
+                    persistSetting(context, () => settingsService.setNotifyOnNewAdvert(value));
                   }
                 : null,
           ),
@@ -205,7 +218,7 @@ class MessageSettingsView extends StatelessWidget {
             ),
             value: settingsService.settings.clearPathOnMaxRetry,
             onChanged: (value) {
-              settingsService.setClearPathOnMaxRetry(value);
+              persistSetting(context, () => settingsService.setClearPathOnMaxRetry(value));
               showDismissibleSnackBar(
                 context,
                 content: Text(
@@ -223,7 +236,7 @@ class MessageSettingsView extends StatelessWidget {
             title: Text(context.l10n.appSettings_jumpToOldestUnread),
             subtitle: Text(context.l10n.appSettings_jumpToOldestUnreadSubtitle),
             value: settingsService.settings.jumpToOldestUnread,
-            onChanged: settingsService.setJumpToOldestUnread,
+            onChanged: (value) => persistSetting(context, () => settingsService.setJumpToOldestUnread(value)),
           ),
           const Divider(height: 1),
           SwitchListTile(
@@ -232,7 +245,7 @@ class MessageSettingsView extends StatelessWidget {
             subtitle: Text(context.l10n.appSettings_autoRouteRotationSubtitle),
             value: settingsService.settings.autoRouteRotationEnabled,
             onChanged: (value) {
-              settingsService.setAutoRouteRotationEnabled(value);
+              persistSetting(context, () => settingsService.setAutoRouteRotationEnabled(value));
               showDismissibleSnackBar(
                 context,
                 content: Text(
@@ -260,8 +273,10 @@ class MessageSettingsView extends StatelessWidget {
                     label: settingsService.settings.maxRouteWeight
                         .round()
                         .toString(),
-                    onChanged: (value) =>
-                        settingsService.setMaxRouteWeight(value),
+                    onChanged: (value) => persistSetting(
+                      context,
+                      () => settingsService.setMaxRouteWeight(value),
+                    ),
                   ),
                 ],
               ),
@@ -280,8 +295,10 @@ class MessageSettingsView extends StatelessWidget {
                     divisions: 9,
                     label: settingsService.settings.initialRouteWeight
                         .toStringAsFixed(1),
-                    onChanged: (value) =>
-                        settingsService.setInitialRouteWeight(value),
+                    onChanged: (value) => persistSetting(
+                      context,
+                      () => settingsService.setInitialRouteWeight(value),
+                    ),
                   ),
                 ],
               ),
@@ -304,8 +321,11 @@ class MessageSettingsView extends StatelessWidget {
                     divisions: 19,
                     label: settingsService.settings.routeWeightSuccessIncrement
                         .toStringAsFixed(1),
-                    onChanged: (value) =>
-                        settingsService.setRouteWeightSuccessIncrement(value),
+                    onChanged: (value) => persistSetting(
+                      context,
+                      () =>
+                          settingsService.setRouteWeightSuccessIncrement(value),
+                    ),
                   ),
                 ],
               ),
@@ -328,8 +348,11 @@ class MessageSettingsView extends StatelessWidget {
                     divisions: 19,
                     label: settingsService.settings.routeWeightFailureDecrement
                         .toStringAsFixed(1),
-                    onChanged: (value) =>
-                        settingsService.setRouteWeightFailureDecrement(value),
+                    onChanged: (value) => persistSetting(
+                      context,
+                      () =>
+                          settingsService.setRouteWeightFailureDecrement(value),
+                    ),
                   ),
                 ],
               ),
@@ -349,8 +372,10 @@ class MessageSettingsView extends StatelessWidget {
                     divisions: 8,
                     label: settingsService.settings.maxMessageRetries
                         .toString(),
-                    onChanged: (value) =>
-                        settingsService.setMaxMessageRetries(value.toInt()),
+                    onChanged: (value) => persistSetting(
+                      context,
+                      () => settingsService.setMaxMessageRetries(value.toInt()),
+                    ),
                   ),
                 ],
               ),
