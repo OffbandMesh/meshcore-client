@@ -756,6 +756,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void setChannelUnreadCount(int channelIndex, int count) {
+    // Don't persist channel state after disconnect — the store scope still
+    // points at the last radio, so a stale write can mis-scope (#23).
+    if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
     if (channel != null) {
       channel.unreadCount = count;
@@ -774,6 +777,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void markChannelRead(int channelIndex) {
+    // Don't persist channel state after disconnect — the store scope still
+    // points at the last radio, so a stale write can mis-scope (#23).
+    if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
     if (channel != null && channel.unreadCount > 0) {
       final previousCount = channel.unreadCount;
@@ -5397,6 +5403,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> setChannelOrder(List<int> order) async {
+    // Don't persist channel state after disconnect — the store scope still
+    // points at the last radio, so a stale write can mis-scope (#23).
+    if (!isConnected) return;
     _channelOrder = List<int>.from(order);
     _applyChannelOrder();
     notifyListeners();
