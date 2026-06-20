@@ -820,4 +820,69 @@ void main() {
       expect(paths.first.routeWeight, closeTo(1.5, 0.001));
     });
   });
+
+  group('history capacity', () {
+    test('full history evicts the weakest path to admit a new one', () async {
+      final pubKey = _hex('cap1');
+
+      // Seed a full history (100 paths): one clearly-weakest, 99 strong.
+      final seeded = <PathRecord>[
+        PathRecord(
+          hopCount: 1,
+          tripTimeMs: 0,
+          timestamp: null,
+          wasFloodDiscovery: false,
+          pathBytes: const [0xC8],
+          successCount: 0,
+          failureCount: 5,
+          routeWeight: 0.1,
+        ),
+      ];
+      for (var i = 1; i <= 99; i++) {
+        seeded.add(
+          PathRecord(
+            hopCount: 1,
+            tripTimeMs: 100,
+            timestamp: DateTime.now(),
+            wasFloodDiscovery: false,
+            pathBytes: [i],
+            successCount: 5,
+            failureCount: 0,
+            routeWeight: 3.0,
+          ),
+        );
+      }
+      storage._store[pubKey] = ContactPathHistory(
+        contactPubKeyHex: pubKey,
+        recentPaths: seeded,
+      );
+      svc.getRecentPaths(pubKey); // trigger async load into cache
+      await _flush();
+      expect(svc.getRecentPaths(pubKey).length, equals(100));
+
+      // A new distinct path arrives while the history is full.
+      svc.handlePathUpdated(
+        _makeContact(publicKeyHex: pubKey, pathLength: 1, path: [0xFF]),
+      );
+      await _flush();
+
+      final result = svc.getRecentPaths(pubKey);
+      expect(result.length, equals(100), reason: 'cap stays at 100');
+      expect(
+        result.any((p) => p.pathBytes.length == 1 && p.pathBytes[0] == 0xFF),
+        isTrue,
+        reason: 'the new path must be admitted',
+      );
+      expect(
+        result.any((p) => p.pathBytes.length == 1 && p.pathBytes[0] == 0xC8),
+        isFalse,
+        reason: 'the weakest path must be evicted to make room',
+      );
+      expect(
+        result.where((p) => p.routeWeight == 3.0).length,
+        equals(99),
+        reason: 'the 99 strong paths are retained',
+      );
+    });
+  });
 }

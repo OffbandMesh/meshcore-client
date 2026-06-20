@@ -341,7 +341,10 @@ class PathHistoryService extends ChangeNotifier {
     updatedPaths.removeWhere((p) => _pathsEqual(p.pathBytes, pathBytes));
 
     if (existing == null && updatedPaths.length >= _maxHistoryEntries) {
-      return;
+      // History is full: evict the lowest-scored path to make room rather than
+      // dropping the newcomer, so the list keeps refreshing with better routes
+      // instead of freezing on the first _maxHistoryEntries ever seen. See #24.
+      _evictLowestScoredPath(updatedPaths);
     }
 
     updatedPaths.insert(0, newRecord);
@@ -357,6 +360,29 @@ class PathHistoryService extends ChangeNotifier {
     _storage.savePathHistory(contactPubKeyHex, updatedHistory);
 
     notifyListeners();
+  }
+
+  /// Remove the single lowest-scored path from [paths] in place, using the same
+  /// ranking as path selection so the strongest routes are the ones kept when
+  /// the history is at capacity.
+  void _evictLowestScoredPath(List<PathRecord> paths) {
+    if (paths.isEmpty) return;
+    final fastestTripMs = _getFastestKnownTripMs(paths);
+    final highestRouteWeight = _getHighestKnownRouteWeight(paths);
+    var worstIndex = 0;
+    var worstScore = double.infinity;
+    for (var i = 0; i < paths.length; i++) {
+      final score = _scorePathRecord(
+        paths[i],
+        fastestTripMs: fastestTripMs,
+        highestRouteWeight: highestRouteWeight,
+      );
+      if (score < worstScore) {
+        worstScore = score;
+        worstIndex = i;
+      }
+    }
+    paths.removeAt(worstIndex);
   }
 
   List<PathRecord> getRecentPaths(String contactPubKeyHex) {
