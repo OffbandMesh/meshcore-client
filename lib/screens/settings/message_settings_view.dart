@@ -124,7 +124,10 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewMessage,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    persistSetting(context, () => settingsService.setNotifyOnNewMessage(value));
+                    persistSetting(
+                      context,
+                      () => settingsService.setNotifyOnNewMessage(value),
+                    );
                   }
                 : null,
           ),
@@ -155,7 +158,10 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewChannelMessage,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    persistSetting(context, () => settingsService.setNotifyOnNewChannelMessage(value));
+                    persistSetting(
+                      context,
+                      () => settingsService.setNotifyOnNewChannelMessage(value),
+                    );
                   }
                 : null,
           ),
@@ -186,7 +192,10 @@ class MessageSettingsView extends StatelessWidget {
             value: settingsService.settings.notifyOnNewAdvert,
             onChanged: settingsService.settings.notificationsEnabled
                 ? (value) {
-                    persistSetting(context, () => settingsService.setNotifyOnNewAdvert(value));
+                    persistSetting(
+                      context,
+                      () => settingsService.setNotifyOnNewAdvert(value),
+                    );
                   }
                 : null,
           ),
@@ -218,7 +227,10 @@ class MessageSettingsView extends StatelessWidget {
             ),
             value: settingsService.settings.clearPathOnMaxRetry,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setClearPathOnMaxRetry(value));
+              persistSetting(
+                context,
+                () => settingsService.setClearPathOnMaxRetry(value),
+              );
               showDismissibleSnackBar(
                 context,
                 content: Text(
@@ -236,7 +248,10 @@ class MessageSettingsView extends StatelessWidget {
             title: Text(context.l10n.appSettings_jumpToOldestUnread),
             subtitle: Text(context.l10n.appSettings_jumpToOldestUnreadSubtitle),
             value: settingsService.settings.jumpToOldestUnread,
-            onChanged: (value) => persistSetting(context, () => settingsService.setJumpToOldestUnread(value)),
+            onChanged: (value) => persistSetting(
+              context,
+              () => settingsService.setJumpToOldestUnread(value),
+            ),
           ),
           const Divider(height: 1),
           SwitchListTile(
@@ -245,7 +260,10 @@ class MessageSettingsView extends StatelessWidget {
             subtitle: Text(context.l10n.appSettings_autoRouteRotationSubtitle),
             value: settingsService.settings.autoRouteRotationEnabled,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setAutoRouteRotationEnabled(value));
+              persistSetting(
+                context,
+                () => settingsService.setAutoRouteRotationEnabled(value),
+              );
               showDismissibleSnackBar(
                 context,
                 content: Text(

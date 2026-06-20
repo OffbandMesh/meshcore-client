@@ -107,7 +107,10 @@ class AppSettingsView extends StatelessWidget {
             ),
             value: settingsService.settings.enableMessageTracing,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setEnableMessageTracing(value));
+              persistSetting(
+                context,
+                () => settingsService.setEnableMessageTracing(value),
+              );
             },
           ),
         ],
@@ -136,7 +139,10 @@ class AppSettingsView extends StatelessWidget {
             subtitle: Text(context.l10n.appSettings_showRepeatersSubtitle),
             value: settingsService.settings.mapShowRepeaters,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setMapShowRepeaters(value));
+              persistSetting(
+                context,
+                () => settingsService.setMapShowRepeaters(value),
+              );
             },
           ),
           const Divider(height: 1),
@@ -146,7 +152,10 @@ class AppSettingsView extends StatelessWidget {
             subtitle: Text(context.l10n.appSettings_showChatNodesSubtitle),
             value: settingsService.settings.mapShowChatNodes,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setMapShowChatNodes(value));
+              persistSetting(
+                context,
+                () => settingsService.setMapShowChatNodes(value),
+              );
             },
           ),
           const Divider(height: 1),
@@ -156,7 +165,10 @@ class AppSettingsView extends StatelessWidget {
             subtitle: Text(context.l10n.appSettings_showOtherNodesSubtitle),
             value: settingsService.settings.mapShowOtherNodes,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setMapShowOtherNodes(value));
+              persistSetting(
+                context,
+                () => settingsService.setMapShowOtherNodes(value),
+              );
             },
           ),
           const Divider(height: 1),
@@ -233,7 +245,10 @@ class AppSettingsView extends StatelessWidget {
             title: Text(context.l10n.translation_enableTitle),
             subtitle: Text(context.l10n.translation_enableSubtitle),
             value: settings.translationEnabled,
-            onChanged: (value) => persistSetting(context, () => settingsService.setTranslationEnabled(value)),
+            onChanged: (value) => persistSetting(
+              context,
+              () => settingsService.setTranslationEnabled(value),
+            ),
           ),
           const Divider(height: 1),
           SwitchListTile(
@@ -251,7 +266,11 @@ class AppSettingsView extends StatelessWidget {
             ),
             value: settings.autoTranslateIncomingMessages,
             onChanged: translationEnabled
-                ? (value) => persistSetting(context, () => settingsService.setAutoTranslateIncomingMessages(value))
+                ? (value) => persistSetting(
+                    context,
+                    () =>
+                        settingsService.setAutoTranslateIncomingMessages(value),
+                  )
                 : null,
           ),
           const Divider(height: 1),
@@ -270,7 +289,10 @@ class AppSettingsView extends StatelessWidget {
             ),
             value: settings.composerTranslationEnabled,
             onChanged: translationEnabled
-                ? (value) => persistSetting(context, () => settingsService.setComposerTranslationEnabled(value))
+                ? (value) => persistSetting(
+                    context,
+                    () => settingsService.setComposerTranslationEnabled(value),
+                  )
                 : null,
           ),
           const Divider(height: 1),
@@ -307,7 +329,12 @@ class AppSettingsView extends StatelessWidget {
               onChanged: settings.translationDownloadedModels.isEmpty
                   ? null
                   : (value) {
-                      persistSetting(context, () => settingsService.setTranslationSelectedModelId(value));
+                      persistSetting(
+                        context,
+                        () => settingsService.setTranslationSelectedModelId(
+                          value,
+                        ),
+                      );
                     },
             ),
           ),
@@ -351,7 +378,10 @@ class AppSettingsView extends StatelessWidget {
               children: [
                 _TranslationUrlField(
                   initialValue: settings.translationModelSourceUrl ?? '',
-                  onChanged: (value) => persistSetting(context, () => settingsService.setTranslationModelSourceUrl(value)),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setTranslationModelSourceUrl(value),
+                  ),
                   onDownload: translationService.isBusy
                       ? null
                       : (url) => _downloadTranslationModel(
@@ -545,7 +575,10 @@ class AppSettingsView extends StatelessWidget {
           groupValue: settingsService.settings.themeMode,
           onChanged: (value) {
             if (value != null) {
-              persistSetting(context, () => settingsService.setThemeMode(value));
+              persistSetting(
+                context,
+                () => settingsService.setThemeMode(value),
+              );
               Navigator.pop(context);
             }
           },
@@ -600,7 +633,10 @@ class AppSettingsView extends StatelessWidget {
           groupValue: settingsService.settings.clockFormat,
           onChanged: (value) {
             if (value != null) {
-              persistSetting(context, () => settingsService.setClockFormat(value));
+              persistSetting(
+                context,
+                () => settingsService.setClockFormat(value),
+              );
               Navigator.pop(context);
             }
           },
@@ -698,7 +734,10 @@ class AppSettingsView extends StatelessWidget {
           child: RadioGroup<String?>(
             groupValue: settingsService.settings.languageOverride,
             onChanged: (value) {
-              persistSetting(context, () => settingsService.setLanguageOverride(value));
+              persistSetting(
+                context,
+                () => settingsService.setLanguageOverride(value),
+              );
               Navigator.pop(context);
             },
             child: Column(
@@ -806,7 +845,10 @@ class AppSettingsView extends StatelessWidget {
           groupValue: settingsService.settings.mapTimeFilterHours,
           onChanged: (value) {
             if (value != null) {
-              persistSetting(context, () => settingsService.setMapTimeFilterHours(value));
+              persistSetting(
+                context,
+                () => settingsService.setMapTimeFilterHours(value),
+              );
               Navigator.pop(context);
             }
           },
@@ -860,7 +902,10 @@ class AppSettingsView extends StatelessWidget {
           groupValue: settingsService.settings.unitSystem,
           onChanged: (value) {
             if (value != null) {
-              persistSetting(context, () => settingsService.setUnitSystem(value));
+              persistSetting(
+                context,
+                () => settingsService.setUnitSystem(value),
+              );
               Navigator.pop(context);
             }
           },
@@ -898,7 +943,10 @@ class AppSettingsView extends StatelessWidget {
         currentLanguageCode:
             settingsService.settings.translationTargetLanguageCode,
         onLanguageSelected: (value) {
-          persistSetting(context, () => settingsService.setTranslationTargetLanguageCode(value));
+          persistSetting(
+            context,
+            () => settingsService.setTranslationTargetLanguageCode(value),
+          );
           Navigator.pop(context);
         },
       ),
@@ -1045,7 +1093,10 @@ class AppSettingsView extends StatelessWidget {
               }).toList(),
               onChanged: (value) {
                 if (value != null) {
-                  persistSetting(context, () => settingsService.setSelectedCyr2LatProfile(value));
+                  persistSetting(
+                    context,
+                    () => settingsService.setSelectedCyr2LatProfile(value),
+                  );
                 }
               },
             ),
