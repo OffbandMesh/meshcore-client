@@ -53,6 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadVersionInfo() async {
     final packageInfo = await PackageInfo.fromPlatform();
+    if (!mounted) return;
     setState(() {
       _appVersion = packageInfo.version;
     });
@@ -206,7 +207,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text(l10n.settings_locationGPSEnableSubtitle),
                   value: connector.currentCustomVars?['gps'] == '1',
                   onChanged: (value) async {
-                    await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
+                    try {
+                      await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
+                    } catch (_) {
+                      if (context.mounted) {
+                        showDismissibleSnackBar(
+                          context,
+                          content: const Text(
+                            'Could not update GPS setting. Please try again.',
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
               ],
@@ -463,7 +475,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.refresh),
             title: Text(l10n.settings_refreshContacts),
             subtitle: Text(l10n.settings_refreshContactsSubtitle),
-            onTap: () => connector.getContacts(),
+            onTap: () async {
+              try {
+                await connector.getContacts();
+              } catch (_) {
+                if (context.mounted) {
+                  showDismissibleSnackBar(
+                    context,
+                    content: const Text(
+                      'Could not refresh contacts. Please try again.',
+                    ),
+                  );
+                }
+              }
+            },
           ),
           const Divider(height: 1),
           ListTile(
@@ -698,10 +723,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: isGPSEnabled,
                   onChanged: (value) async {
                     setDialogState(() => isGPSEnabled = value);
-                    if (value) {
-                      await connector.setCustomVar("gps:1");
-                    } else {
-                      await connector.setCustomVar("gps:0");
+                    try {
+                      await connector.setCustomVar(value ? "gps:1" : "gps:0");
+                    } catch (_) {
+                      if (context.mounted) {
+                        showDismissibleSnackBar(
+                          context,
+                          content: const Text(
+                            'Could not update GPS setting. Please try again.',
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
@@ -715,6 +747,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             TextButton(
               onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
                 Navigator.pop(context);
 
                 if (hasGPS) {
@@ -733,8 +766,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return;
                   }
 
-                  await connector.setCustomVar("gps_interval:$interval");
-                  await connector.refreshDeviceInfo();
+                  try {
+                    await connector.setCustomVar("gps_interval:$interval");
+                    await connector.refreshDeviceInfo();
+                  } catch (_) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Could not update location. Please try again.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
                   if (!context.mounted) return;
                   showDismissibleSnackBar(
                     context,
@@ -773,8 +817,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
 
-                await connector.setNodeLocation(lat: lat, lon: lon);
-                await connector.refreshDeviceInfo();
+                try {
+                  await connector.setNodeLocation(lat: lat, lon: lon);
+                  await connector.refreshDeviceInfo();
+                } catch (_) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Could not update location. Please try again.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
                 if (!context.mounted) return;
                 showDismissibleSnackBar(
                   context,
@@ -789,9 +844,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _syncTime(BuildContext context, MeshCoreConnector connector) {
+  Future<void> _syncTime(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) async {
     final l10n = context.l10n;
-    connector.syncTime();
+    try {
+      await connector.syncTime();
+    } catch (_) {
+      if (context.mounted) {
+        showDismissibleSnackBar(
+          context,
+          content: const Text('Could not sync time. Please try again.'),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
     showDismissibleSnackBar(
       context,
       content: Text(l10n.settings_timeSynchronized),
