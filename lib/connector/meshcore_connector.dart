@@ -796,9 +796,14 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Unread',
       );
       unawaited(
-        _channelStore.saveChannels(
-          _channels.isNotEmpty ? _channels : _cachedChannels,
-        ),
+        _channelStore
+            .saveChannels(_channels.isNotEmpty ? _channels : _cachedChannels)
+            .catchError((Object e) {
+              _appDebugLogService?.error(
+                'Failed to persist channels (markChannelRead): $e',
+                tag: 'ChannelStore',
+              );
+            }),
       );
       _notificationService.clearChannelNotification(
         channelIndex,
@@ -3679,7 +3684,14 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Cache channels for offline use
     _cachedChannels = List<Channel>.from(_channels);
-    unawaited(_channelStore.saveChannels(_channels));
+    unawaited(
+      _channelStore.saveChannels(_channels).catchError((Object e) {
+        _appDebugLogService?.error(
+          'Failed to persist channels (channel sync): $e',
+          tag: 'ChannelStore',
+        );
+      }),
+    );
     _recalculateCachedChannelsUnreadTotal();
 
     // Apply ordering and notify UI
@@ -4477,11 +4489,25 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> _persistContacts() async {
-    await _contactStore.saveContacts(_contacts);
+    try {
+      await _contactStore.saveContacts(_contacts);
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Failed to persist contacts: $e',
+        tag: 'ContactStore',
+      );
+    }
   }
 
   Future<void> _persistDiscoveredContacts() async {
-    await _discoveryContactStore.saveContacts(_discoveredContacts);
+    try {
+      await _discoveryContactStore.saveContacts(_discoveredContacts);
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Failed to persist discovered contacts: $e',
+        tag: 'ContactStore',
+      );
+    }
   }
 
   int _latestContactLastmod() {
@@ -4695,7 +4721,12 @@ class MeshCoreConnector extends ChangeNotifier {
                 badgeCount: getTotalUnreadCount(),
               );
             }
-          }());
+          }().catchError((Object e) {
+            _appDebugLogService?.error(
+              'Failed to translate/notify incoming message: $e',
+              tag: 'Notification',
+            );
+          }));
         }
       }
       _handleQueuedMessageReceived();
@@ -4998,7 +5029,12 @@ class MeshCoreConnector extends ChangeNotifier {
         channelIndex: message.channelIndex,
         badgeCount: getTotalUnreadCount(),
       );
-    }());
+    }().catchError((Object e) {
+      _appDebugLogService?.error(
+        'Failed to notify channel message: $e',
+        tag: 'Notification',
+      );
+    }));
   }
 
   void _handleIncomingChannelMessage(Uint8List frame) async {
@@ -5035,7 +5071,12 @@ class MeshCoreConnector extends ChangeNotifier {
             msg,
           );
           _maybeNotifyChannelMessage(msg, translationResult: translationResult);
-        }());
+        }().catchError((Object e) {
+          _appDebugLogService?.error(
+            'Failed to translate/notify channel message: $e',
+            tag: 'Notification',
+          );
+        }));
       }
       _handleQueuedMessageReceived();
     } else if (_isSyncingQueuedMessages) {
@@ -5128,7 +5169,12 @@ class MeshCoreConnector extends ChangeNotifier {
                 channelName: label,
                 translationResult: translationResult,
               );
-            }());
+            }().catchError((Object e) {
+              _appDebugLogService?.error(
+                'Failed to translate/notify channel message (log): $e',
+                tag: 'Notification',
+              );
+            }));
           }
           return;
         } catch (e) {
