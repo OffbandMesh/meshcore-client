@@ -4687,46 +4687,48 @@ class MeshCoreConnector extends ChangeNotifier {
         if (settings.notificationsEnabled && settings.notifyOnNewMessage) {
           final msg = message; // capture for closure
           final c = contact; // capture contact reference
-          unawaited(() async {
-            final translationResult = await translateContactMessage(
-              msg.senderKeyHex,
-              msg,
-            );
-            if (c?.type == advTypeChat) {
-              final resolvedText =
-                  (translationResult != null &&
-                      translationResult.status ==
-                          MessageTranslationStatus.completed &&
-                      translationResult.translatedText.trim().isNotEmpty)
-                  ? translationResult.translatedText.trim()
-                  : msg.text.trim();
-              await _notificationService.showMessageNotification(
-                contactName: c?.name ?? 'Unknown',
-                message: resolvedText,
-                contactId: msg.senderKeyHex,
-                badgeCount: getTotalUnreadCount(),
+          unawaited(
+            () async {
+              final translationResult = await translateContactMessage(
+                msg.senderKeyHex,
+                msg,
               );
-            } else if (c?.type == advTypeRoom) {
-              final resolvedText =
-                  (translationResult != null &&
-                      translationResult.status ==
-                          MessageTranslationStatus.completed &&
-                      translationResult.translatedText.trim().isNotEmpty)
-                  ? translationResult.translatedText.trim()
-                  : msg.text.trim();
-              await _notificationService.showMessageNotification(
-                contactName: c?.name ?? 'Unknown Room',
-                message: resolvedText,
-                contactId: msg.senderKeyHex,
-                badgeCount: getTotalUnreadCount(),
+              if (c?.type == advTypeChat) {
+                final resolvedText =
+                    (translationResult != null &&
+                        translationResult.status ==
+                            MessageTranslationStatus.completed &&
+                        translationResult.translatedText.trim().isNotEmpty)
+                    ? translationResult.translatedText.trim()
+                    : msg.text.trim();
+                await _notificationService.showMessageNotification(
+                  contactName: c?.name ?? 'Unknown',
+                  message: resolvedText,
+                  contactId: msg.senderKeyHex,
+                  badgeCount: getTotalUnreadCount(),
+                );
+              } else if (c?.type == advTypeRoom) {
+                final resolvedText =
+                    (translationResult != null &&
+                        translationResult.status ==
+                            MessageTranslationStatus.completed &&
+                        translationResult.translatedText.trim().isNotEmpty)
+                    ? translationResult.translatedText.trim()
+                    : msg.text.trim();
+                await _notificationService.showMessageNotification(
+                  contactName: c?.name ?? 'Unknown Room',
+                  message: resolvedText,
+                  contactId: msg.senderKeyHex,
+                  badgeCount: getTotalUnreadCount(),
+                );
+              }
+            }().catchError((Object e) {
+              _appDebugLogService?.error(
+                'Failed to translate/notify incoming message: $e',
+                tag: 'Notification',
               );
-            }
-          }().catchError((Object e) {
-            _appDebugLogService?.error(
-              'Failed to translate/notify incoming message: $e',
-              tag: 'Notification',
-            );
-          }));
+            }),
+          );
         }
       }
       _handleQueuedMessageReceived();
@@ -5021,20 +5023,22 @@ class MeshCoreConnector extends ChangeNotifier {
             translationResult.translatedText.trim().isNotEmpty)
         ? translationResult.translatedText.trim()
         : message.text.trim();
-    unawaited(() async {
-      await _notificationService.showChannelMessageNotification(
-        channelName: label,
-        senderName: message.senderName,
-        message: resolvedText,
-        channelIndex: message.channelIndex,
-        badgeCount: getTotalUnreadCount(),
-      );
-    }().catchError((Object e) {
-      _appDebugLogService?.error(
-        'Failed to notify channel message: $e',
-        tag: 'Notification',
-      );
-    }));
+    unawaited(
+      () async {
+        await _notificationService.showChannelMessageNotification(
+          channelName: label,
+          senderName: message.senderName,
+          message: resolvedText,
+          channelIndex: message.channelIndex,
+          badgeCount: getTotalUnreadCount(),
+        );
+      }().catchError((Object e) {
+        _appDebugLogService?.error(
+          'Failed to notify channel message: $e',
+          tag: 'Notification',
+        );
+      }),
+    );
   }
 
   void _handleIncomingChannelMessage(Uint8List frame) async {
@@ -5065,18 +5069,23 @@ class MeshCoreConnector extends ChangeNotifier {
       notifyListeners();
       if (isNew && !message.isOutgoing) {
         final msg = message; // capture for closure
-        unawaited(() async {
-          final translationResult = await translateChannelMessage(
-            msg.channelIndex!,
-            msg,
-          );
-          _maybeNotifyChannelMessage(msg, translationResult: translationResult);
-        }().catchError((Object e) {
-          _appDebugLogService?.error(
-            'Failed to translate/notify channel message: $e',
-            tag: 'Notification',
-          );
-        }));
+        unawaited(
+          () async {
+            final translationResult = await translateChannelMessage(
+              msg.channelIndex!,
+              msg,
+            );
+            _maybeNotifyChannelMessage(
+              msg,
+              translationResult: translationResult,
+            );
+          }().catchError((Object e) {
+            _appDebugLogService?.error(
+              'Failed to translate/notify channel message: $e',
+              tag: 'Notification',
+            );
+          }),
+        );
       }
       _handleQueuedMessageReceived();
     } else if (_isSyncingQueuedMessages) {
@@ -5156,25 +5165,27 @@ class MeshCoreConnector extends ChangeNotifier {
           notifyListeners();
           if (isNew) {
             // Run translation + notification asynchronously to avoid blocking
-            unawaited(() async {
-              final translationResult = await translateChannelMessage(
-                channel.index,
-                message,
-              );
-              final label = channel.name.isEmpty
-                  ? 'Channel ${channel.index}'
-                  : channel.name;
-              _maybeNotifyChannelMessage(
-                message,
-                channelName: label,
-                translationResult: translationResult,
-              );
-            }().catchError((Object e) {
-              _appDebugLogService?.error(
-                'Failed to translate/notify channel message (log): $e',
-                tag: 'Notification',
-              );
-            }));
+            unawaited(
+              () async {
+                final translationResult = await translateChannelMessage(
+                  channel.index,
+                  message,
+                );
+                final label = channel.name.isEmpty
+                    ? 'Channel ${channel.index}'
+                    : channel.name;
+                _maybeNotifyChannelMessage(
+                  message,
+                  channelName: label,
+                  translationResult: translationResult,
+                );
+              }().catchError((Object e) {
+                _appDebugLogService?.error(
+                  'Failed to translate/notify channel message (log): $e',
+                  tag: 'Notification',
+                );
+              }),
+            );
           }
           return;
         } catch (e) {
