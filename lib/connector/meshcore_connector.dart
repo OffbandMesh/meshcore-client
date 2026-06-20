@@ -3547,21 +3547,37 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildSetDeviceTimeFrame(now));
   }
 
+  // Mirror queue-sync events to the in-app App Debug Log (plus the console) so
+  // a missed/stuck drain is diagnosable from the device. See #51.
+  void _logQueueSync(String msg) {
+    debugPrint('[QueueSync] $msg');
+    _appDebugLogService?.info(msg, tag: 'QueueSync');
+  }
+
   Future<void> syncQueuedMessages({bool force = false}) async {
     if (!isConnected) return;
     if (!force && _isSyncingQueuedMessages) return;
+    _logQueueSync('drain requested (force: $force)');
     if (_isProcessingDeferredQueuedContactMessages) {
+      _logQueueSync('deferred: still processing deferred contact messages');
       _pendingQueueSync = true;
       return;
     }
     if (_awaitingSelfInfo || _isLoadingContacts) {
+      _logQueueSync(
+        'deferred: awaitingSelfInfo=$_awaitingSelfInfo loadingContacts=$_isLoadingContacts',
+      );
       _pendingQueueSync = true;
       return;
     }
     if (_isSyncingChannels || _channelSyncInFlight) {
+      _logQueueSync(
+        'deferred: syncingChannels=$_isSyncingChannels inFlight=$_channelSyncInFlight',
+      );
       _pendingQueueSync = true;
       return;
     }
+    _logQueueSync('starting drain');
     _isSyncingQueuedMessages = true;
     notifyListeners();
     await _requestNextQueuedMessage();
@@ -3585,14 +3601,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleQueueSyncTimeout();
     });
 
-    debugPrint(
-      '[QueueSync] Requesting next message (retry: $_queueSyncRetries/$_maxQueueSyncRetries)',
+    _logQueueSync(
+      'asking radio for next message (retry $_queueSyncRetries/$_maxQueueSyncRetries)',
     );
 
     try {
       await sendFrame(buildSyncNextMessageFrame());
     } catch (e) {
-      debugPrint('[QueueSync] Error sending sync request: $e');
+      _logQueueSync('error sending sync request: $e');
       _queuedMessageSyncInFlight = false;
       _isSyncingQueuedMessages = false;
       _queueSyncTimeout?.cancel();
@@ -3603,8 +3619,8 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _handleQueueSyncTimeout() {
-    debugPrint(
-      '[QueueSync] Timeout waiting for message (retry: $_queueSyncRetries/$_maxQueueSyncRetries)',
+    _logQueueSync(
+      'timeout waiting for message (retry $_queueSyncRetries/$_maxQueueSyncRetries)',
     );
 
     if (_queueSyncRetries < _maxQueueSyncRetries) {
@@ -3614,7 +3630,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _requestNextQueuedMessage();
     } else {
       // Max retries reached, give up
-      debugPrint('[QueueSync] Max retries reached, stopping sync');
+      _logQueueSync('gave up after max retries -- queue NOT fully drained');
       _queuedMessageSyncInFlight = false;
       _isSyncingQueuedMessages = false;
       _queueSyncRetries = 0;
@@ -3870,6 +3886,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   void _startPostChannelInitialQueuedMessageSync() {
     if (_pendingInitialQueuedMessageSync || _pendingQueueSync) {
+      _logQueueSync('post-channel-sync: firing initial queue drain');
       _deferQueuedContactMessagesUntilContacts = _pendingInitialContactsSync;
       _pendingInitialQueuedMessageSync = false;
       _pendingQueueSync = false;
@@ -4369,7 +4386,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _handleNoMoreMessages() {
-    debugPrint('[QueueSync] No more messages, sync complete');
+    _logQueueSync('radio: no more messages, drain complete');
     _queueSyncTimeout?.cancel();
     _isSyncingQueuedMessages = false;
     _queuedMessageSyncInFlight = false;
@@ -4436,7 +4453,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   void _handleQueuedMessageReceived() {
     if (!_isSyncingQueuedMessages) return;
-    debugPrint('[QueueSync] Message received, requesting next');
+    _logQueueSync('message received, asking for next');
     _queueSyncTimeout?.cancel(); // Cancel timeout - message arrived
     _queuedMessageSyncInFlight = false;
     _queueSyncRetries = 0; // Reset retry counter on successful message
