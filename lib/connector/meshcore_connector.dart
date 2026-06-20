@@ -66,15 +66,20 @@ class DirectRepeater {
 
   int get ranking {
     if (isStale()) {
-      return -1; // Stale repeaters get lowest rank
+      return -1; // Stale repeaters sort last; every live ranking below is >= 0.
     }
-    // Higher SNR gets higher rank and recency within maxAgeMinutes breaks ties.
+    // SNR-first: each dB of SNR is worth 1000 rank points; recency only breaks
+    // ties between repeaters within ~1 dB of each other (a 0-999 bonus). SX126x
+    // SNR is an int8 x 0.25 dB value spanning -32.0 .. +31.75 dB, so the +32
+    // offset keeps every live ranking >= 0 (above the -1 stale sentinel) while
+    // preserving SNR order.
     final ageMs =
         DateTime.now().millisecondsSinceEpoch -
         lastUpdated.millisecondsSinceEpoch;
     final maxAgeMs = maxAgeMinutes * 60 * 1000;
-    final recencyScore = (maxAgeMs - ageMs).clamp(0, maxAgeMs);
-    return ((snr - 31.75) * 1000).round() + recencyScore;
+    final recencyFraction = ((maxAgeMs - ageMs) / maxAgeMs).clamp(0.0, 1.0);
+    final recencyTieBreak = (recencyFraction * 999).round();
+    return ((snr + 32) * 1000).round() + recencyTieBreak;
   }
 
   bool isStale() {
