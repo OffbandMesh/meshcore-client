@@ -10,10 +10,12 @@ import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
+import '../services/observer_config_service.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'settings/settings_shell.dart';
 import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
+import 'settings/observer_settings_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
 import 'companion_radio_stats_screen.dart';
@@ -71,6 +73,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<SettingsCategory> _categories(BuildContext context) {
     final l10n = context.l10n;
+    // Watch the connector so the list re-evaluates when the observer capability
+    // (device-info offband_caps) flips on connect/disconnect.
+    context.watch<MeshCoreConnector>();
+    final showObserver = context.read<ObserverConfigService>().supported;
     return [
       SettingsCategory(
         icon: Icons.settings_input_antenna,
@@ -112,6 +118,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_deviceInfo,
         builder: _devicePane,
       ),
+      if (showObserver)
+        SettingsCategory(
+          icon: Icons.cloud_outlined,
+          title: 'Observer',
+          subtitle: 'WiFi · MQTT brokers · display',
+          builder: _observerPane,
+        ),
       SettingsCategory(
         icon: Icons.tune,
         title: l10n.settings_appSettings,
@@ -130,6 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ];
   }
+
+  Widget _observerPane(BuildContext context) => const ObserverSettingsView();
 
   Widget _radioRangePane(BuildContext context) {
     final l10n = context.l10n;

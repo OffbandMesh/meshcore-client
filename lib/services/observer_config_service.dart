@@ -37,27 +37,14 @@ class ObserverConfigService extends ChangeNotifier {
   String? _lastError;
   String? get lastError => _lastError;
 
-  /// Whether the connected device supports the config command (ver gate AND the
-  /// capability bit). Wired from the connector's device-info parse via
-  /// [updateCapability]; the Observer settings category is shown only when true.
-  bool _supported = false;
-  bool get supported => _supported;
-
-  /// Called by the connector when it parses the device-info reply (the
-  /// `offband_caps` byte appended after `path_hash_mode`, plus the version code).
-  void updateCapability({
-    required int firmwareVerCode,
-    required int offbandCaps,
-  }) {
-    final next = ObserverConfigClient.supportsConfig(
-      firmwareVerCode: firmwareVerCode,
-      offbandCaps: offbandCaps,
-    );
-    if (next != _supported) {
-      _supported = next;
-      notifyListeners();
-    }
-  }
+  /// Whether the connected device supports the config command — the version
+  /// gate AND the capability bit, read live from the connector's device-info
+  /// parse. The settings UI watches the connector, so the Observer category
+  /// appears/hides as this flips on connect/disconnect.
+  bool get supported => ObserverConfigClient.supportsConfig(
+    firmwareVerCode: _connector.firmwareVerCode ?? 0,
+    offbandCaps: _connector.offbandCaps ?? 0,
+  );
 
   void _setError(String? e) {
     _lastError = e;
