@@ -1435,7 +1435,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
     try {
       await FlutterBluePlus.startScan(
-        withKeywords: MeshCoreUuids.deviceNamePrefixes,
+        withServices: [Guid(MeshCoreUuids.service)],
         webOptionalServices: [Guid(MeshCoreUuids.service)],
         timeout: timeout,
         androidScanMode: AndroidScanMode.lowLatency,
@@ -1459,11 +1459,6 @@ class MeshCoreConnector extends ChangeNotifier {
         ..clear()
         ..addAll(
           systemDevices
-              .where(
-                (device) => MeshCoreUuids.deviceNamePrefixes.any(
-                  device.platformName.startsWith,
-                ),
-              )
               .map(
                 (device) => ScanResult(
                   device: device,
