@@ -48,6 +48,73 @@ class _FakeConnector extends MeshCoreConnector {
   void close() => _frames.close();
 }
 
+/// Auto-responds to each request so refresh()'s round-trips complete without
+/// manual interleaving. [failKeys] answer ERR; others answer VALUE; the broker
+/// dump is an empty pool (START -> END).
+class _AutoConnector extends MeshCoreConnector {
+  _AutoConnector({this.failKeys = const {}});
+  final Set<String> failKeys;
+  final StreamController<Uint8List> _frames =
+      StreamController<Uint8List>.broadcast();
+
+  @override
+  Stream<Uint8List> get receivedFrames => _frames.stream;
+  @override
+  int? get firmwareVerCode => 14;
+  @override
+  int? get offbandCaps => 0x01;
+
+  @override
+  Future<void> sendFrame(
+    Uint8List data, {
+    String? channelSendQueueId,
+    bool expectsGenericAck = false,
+  }) async {
+    final op = data[1];
+    if (op == ObserverConfigClient.opGet) {
+      final key = utf8.decode(data.sublist(2, data.length - 1));
+      final frame = failKeys.contains(key)
+          ? _resp(ObserverConfigClient.rErr, 'ERROR not available')
+          : _resp(ObserverConfigClient.rValue, '$key = ${_valueFor(key)}');
+      Future.microtask(() => _frames.add(frame));
+    } else if (op == ObserverConfigClient.opBrokers) {
+      Future.microtask(() {
+        _frames.add(
+          Uint8List.fromList([
+            ObserverConfigClient.respConfig,
+            ObserverConfigClient.rBrokersStart,
+            0,
+          ]),
+        );
+        _frames.add(
+          Uint8List.fromList([
+            ObserverConfigClient.respConfig,
+            ObserverConfigClient.rBrokersEnd,
+          ]),
+        );
+      });
+    }
+  }
+
+  String _valueFor(String key) => switch (key) {
+    'wifi.enabled' => '1',
+    'display.always_on' => '0',
+    'mqtt.status_interval' => '60',
+    'display.rotation' => '0',
+    'wifi.status' => 'StaConnected',
+    _ => 'x',
+  };
+
+  Uint8List _resp(int sub, String text) => Uint8List.fromList([
+    ObserverConfigClient.respConfig,
+    sub,
+    ...utf8.encode(text),
+    0,
+  ]);
+
+  void closeStream() => _frames.close();
+}
+
 Uint8List _respText(int sub, String text) => Uint8List.fromList([
   ObserverConfigClient.respConfig,
   sub,
@@ -124,5 +191,35 @@ void main() {
       isNot(contains('hunter2')),
       reason: 'secret value must never appear in an error',
     );
+  });
+
+  // ---- MINOR-A (#78): a partial read failure must stay visible ----
+  test(
+    'refresh keeps the error visible + stale on a partial read failure',
+    () async {
+      final auto = _AutoConnector(failKeys: {'wifi.ssid'});
+      final s = ObserverConfigService(auto);
+      await s.refresh();
+      expect(
+        s.stale,
+        isTrue,
+        reason: 'a failed field must mark the snapshot stale',
+      );
+      expect(
+        s.lastError,
+        isNotNull,
+        reason: 'a failed GET error must not be wiped by partial success',
+      );
+      auto.closeStream();
+    },
+  );
+
+  test('refresh clears the error + is not stale on a full read', () async {
+    final auto = _AutoConnector();
+    final s = ObserverConfigService(auto);
+    await s.refresh();
+    expect(s.stale, isFalse);
+    expect(s.lastError, isNull);
+    auto.closeStream();
   });
 }

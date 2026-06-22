@@ -78,6 +78,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     final c = svc.config;
     setState(() => _saving = true);
     var ok = true;
+    var invalidInterval = false;
 
     Future<void> setIfChanged(bool changed, String key, String value) async {
       if (changed) ok = await svc.setFlat(key, value) && ok;
@@ -101,11 +102,17 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
       'mqtt.iata',
       _iata.text,
     );
-    await setIfChanged(
-      c == null || _statusInterval.text != '${c.mqtt.statusInterval}',
-      'mqtt.status_interval',
-      _statusInterval.text,
-    );
+    // Validate before sending: the firmware range is 10-3600. Don't put a
+    // predictably invalid value on the wire (#78 MINOR-B).
+    if (c == null || _statusInterval.text != '${c.mqtt.statusInterval}') {
+      final n = int.tryParse(_statusInterval.text);
+      if (n != null && n >= 10 && n <= 3600) {
+        ok = await svc.setFlat('mqtt.status_interval', '$n') && ok;
+      } else {
+        invalidInterval = true;
+        ok = false;
+      }
+    }
     await setIfChanged(
       c == null || _displayAlwaysOn != c.display.alwaysOn,
       'display.always_on',
@@ -125,7 +132,9 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          ok
+          invalidInterval
+              ? 'Status interval must be 10–3600 seconds'
+              : ok
               ? 'Observer settings saved'
               : (svc.lastError ??
                     'Some changes failed — re-read from the device'),
@@ -190,6 +199,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         ),
         const SizedBox(height: 12),
         TextField(
+          key: const Key('observer_interval'),
           controller: _statusInterval,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
