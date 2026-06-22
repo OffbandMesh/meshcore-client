@@ -236,7 +236,13 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         ),
         const Divider(height: 32),
         _sectionTitle('MQTT brokers'),
-        ..._brokerTiles(svc.config?.brokers ?? const []),
+        if (svc.brokersUnavailable)
+          _banner(
+            Icons.cloud_off,
+            'Broker pool unavailable — the device did not finish sending it.',
+          )
+        else
+          ..._brokerTiles(svc.config?.brokers ?? const []),
       ],
     );
   }

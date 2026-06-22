@@ -37,6 +37,11 @@ class ObserverConfigService extends ChangeNotifier {
   String? _lastError;
   String? get lastError => _lastError;
 
+  /// True when the broker-pool dump failed but the flat settings read OK — the
+  /// UI shows the broker section as unavailable instead of blanking the pane.
+  bool _brokersUnavailable = false;
+  bool get brokersUnavailable => _brokersUnavailable;
+
   /// Whether the connected device supports the config command — the version
   /// gate AND the capability bit, read live from the connector's device-info
   /// parse. The settings UI watches the connector, so the Observer category
@@ -164,28 +169,27 @@ class ObserverConfigService extends ChangeNotifier {
       final rotation = await getFlat('display.rotation');
       final brokers = await getBrokers();
 
-      if (brokers == null) {
-        _stale = true;
-        notifyListeners();
-        return;
-      }
-
+      // The broker pool loads independently of the flat settings: a broker-dump
+      // failure (e.g. the firmware never sends BROKERS_END) must NOT blank
+      // settings that read cleanly. Surface it as broker-only "unavailable".
       _config = ObserverConfig(
         wifi: _parseWifi(ssid, wifiEnabled, wifiStatus),
         mqtt: MqttGlobalConfig(
           iata: iata ?? '',
           statusInterval: int.tryParse(statusInterval ?? '') ?? 60,
         ),
-        brokers: brokers,
+        brokers: brokers ?? const [],
         display: DisplayConfig(
           alwaysOn: alwaysOn == '1',
           rotation: int.tryParse(rotation ?? '') ?? 0,
         ),
       );
-      // A null from any getFlat is a failed read (GET returns the value, null
-      // on ERR/timeout). Don't present defaults as a complete snapshot or wipe
-      // the error a failed field already surfaced (SAFELANE error-visibility).
-      final allRead =
+      _brokersUnavailable = brokers == null;
+
+      // A null from any flat getFlat is a failed read (GET returns the value,
+      // null on ERR/timeout). Stale reflects the FLAT read only; a broker miss
+      // is shown in its own section, not as a stale snapshot (SAFELANE §6).
+      final allFlatRead =
           ssid != null &&
           wifiEnabled != null &&
           wifiStatus != null &&
@@ -193,8 +197,8 @@ class ObserverConfigService extends ChangeNotifier {
           statusInterval != null &&
           alwaysOn != null &&
           rotation != null;
-      _stale = !allRead;
-      if (allRead) _lastError = null;
+      _stale = !allFlatRead;
+      if (allFlatRead) _lastError = null;
       notifyListeners();
     } catch (e) {
       _stale = true;

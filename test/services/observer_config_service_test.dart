@@ -52,8 +52,9 @@ class _FakeConnector extends MeshCoreConnector {
 /// manual interleaving. [failKeys] answer ERR; others answer VALUE; the broker
 /// dump is an empty pool (START -> END).
 class _AutoConnector extends MeshCoreConnector {
-  _AutoConnector({this.failKeys = const {}});
+  _AutoConnector({this.failKeys = const {}, this.failBrokers = false});
   final Set<String> failKeys;
+  final bool failBrokers;
   final StreamController<Uint8List> _frames =
       StreamController<Uint8List>.broadcast();
 
@@ -78,6 +79,7 @@ class _AutoConnector extends MeshCoreConnector {
           : _resp(ObserverConfigClient.rValue, '$key = ${_valueFor(key)}');
       Future.microtask(() => _frames.add(frame));
     } else if (op == ObserverConfigClient.opBrokers) {
+      if (failBrokers) return; // no response -> getBrokers times out
       Future.microtask(() {
         _frames.add(
           Uint8List.fromList([
@@ -222,4 +224,28 @@ void main() {
     expect(s.lastError, isNull);
     auto.closeStream();
   });
+
+  // ---- #79: a broker-dump failure must not blank the flat settings ----
+  test(
+    'broker-dump failure keeps flat settings + flags brokers unavailable',
+    () async {
+      final auto = _AutoConnector(failBrokers: true);
+      final s = ObserverConfigService(auto);
+      s.timeout = const Duration(milliseconds: 50);
+      await s.refresh();
+      expect(
+        s.config,
+        isNotNull,
+        reason: 'settings that read cleanly must still show',
+      );
+      expect(s.config!.wifi.ssid, 'x');
+      expect(s.brokersUnavailable, isTrue);
+      expect(
+        s.stale,
+        isFalse,
+        reason: 'a broker-dump miss is not a stale snapshot',
+      );
+      auto.closeStream();
+    },
+  );
 }

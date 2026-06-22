@@ -17,14 +17,21 @@ import 'package:meshcore_open/services/observer_config_service.dart';
 class _DummyConn extends MeshCoreConnector {}
 
 class _FakeSvc extends ObserverConfigService {
-  _FakeSvc(this._cfg, {this.staleFlag = false, this.errorText})
-    : super(_DummyConn());
+  _FakeSvc(
+    this._cfg, {
+    this.staleFlag = false,
+    this.errorText,
+    this.brokersDown = false,
+  }) : super(_DummyConn());
 
   final ObserverConfig _cfg;
   final bool staleFlag;
   final String? errorText;
+  final bool brokersDown;
   final List<MapEntry<String, String>> sets = [];
 
+  @override
+  bool get brokersUnavailable => brokersDown;
   @override
   bool get supported => true;
   @override
@@ -170,5 +177,17 @@ void main() {
     final iv = fake.sets.where((e) => e.key == 'mqtt.status_interval').toList();
     expect(iv, hasLength(1));
     expect(iv.single.value, '120');
+  });
+
+  testWidgets('broker pool shows unavailable when the dump failed (#79)', (
+    tester,
+  ) async {
+    final fake = _FakeSvc(_cfg(), brokersDown: true);
+    await _pump(tester, fake);
+
+    // The broker section is at the bottom of the scroll view; scroll it in.
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Broker pool unavailable'), findsOneWidget);
   });
 }
