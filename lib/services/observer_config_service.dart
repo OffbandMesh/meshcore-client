@@ -1,0 +1,198 @@
+// Drives the Offband config command end-to-end: builds frames via
+// [ObserverConfigClient], sends them over the active transport, awaits and
+// parses the response, and holds the parsed [ObserverConfig].
+//
+// Device NVS is the source of truth — this service caches the last read but
+// never persists locally. The firmware protocol has no request id, so
+// responses are correlated by ORDER: keep ONE request in flight at a time
+// (the settings UI sends staged changes sequentially, awaiting each).
+
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../connector/meshcore_connector.dart';
+import '../connector/observer_config_client.dart';
+import '../models/observer_config.dart';
+
+class ObserverConfigService extends ChangeNotifier {
+  ObserverConfigService(this._connector);
+
+  final MeshCoreConnector _connector;
+
+  /// Per-request timeout. The device replies within a few frames; a miss means
+  /// an unsupported node or a dropped frame.
+  Duration timeout = const Duration(seconds: 6);
+
+  ObserverConfig? _config;
+  ObserverConfig? get config => _config;
+
+  /// True after a refresh failed to complete — the UI shows stale data warning
+  /// rather than silently presenting an out-of-date snapshot.
+  bool _stale = false;
+  bool get stale => _stale;
+
+  /// Last error surfaced (SAFELANE §6 — every failure is visible). The UI shows
+  /// it; cleared on the next success.
+  String? _lastError;
+  String? get lastError => _lastError;
+
+  /// Whether the connected device supports the config command (ver gate AND the
+  /// capability bit). Wired from the connector's device-info parse via
+  /// [updateCapability]; the Observer settings category is shown only when true.
+  bool _supported = false;
+  bool get supported => _supported;
+
+  /// Called by the connector when it parses the device-info reply (the
+  /// `offband_caps` byte appended after `path_hash_mode`, plus the version code).
+  void updateCapability({
+    required int firmwareVerCode,
+    required int offbandCaps,
+  }) {
+    final next = ObserverConfigClient.supportsConfig(
+      firmwareVerCode: firmwareVerCode,
+      offbandCaps: offbandCaps,
+    );
+    if (next != _supported) {
+      _supported = next;
+      notifyListeners();
+    }
+  }
+
+  void _setError(String? e) {
+    _lastError = e;
+    notifyListeners();
+  }
+
+  // --- Round-trips ----------------------------------------------------------
+
+  /// Send [frame] and await the first config response (scalar SET/GET).
+  Future<ConfigResponse> _roundTrip(Uint8List frame) async {
+    final completer = Completer<ConfigResponse>();
+    final sub = _connector.receivedFrames.listen((f) {
+      if (f.isNotEmpty &&
+          f[0] == ObserverConfigClient.respConfig &&
+          !completer.isCompleted) {
+        completer.complete(ObserverConfigClient.parse(f));
+      }
+    });
+    try {
+      await _connector.sendFrame(frame);
+      return await completer.future.timeout(timeout);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  /// SET a flat key (or `mqtt.broker.<N>.<field>`). Returns true on ACK; on ERR
+  /// or timeout records [lastError] and returns false.
+  Future<bool> setFlat(String key, String value) async {
+    try {
+      final r = await _roundTrip(ObserverConfigClient.buildSet(key, value));
+      if (r is ConfigAck) {
+        _setError(null);
+        return true;
+      }
+      _setError(r is ConfigErr ? r.text : 'SET $key: unexpected response');
+      return false;
+    } catch (e) {
+      _setError('SET $key failed: $e');
+      return false;
+    }
+  }
+
+  /// GET a flat key. Returns the value text, or null on ERR/timeout.
+  Future<String?> getFlat(String key) async {
+    try {
+      final r = await _roundTrip(ObserverConfigClient.buildGet(key));
+      if (r is ConfigValue) return r.value;
+      if (r is ConfigErr) _setError(r.text);
+      return null;
+    } catch (e) {
+      _setError('GET $key failed: $e');
+      return null;
+    }
+  }
+
+  /// SET one broker field (`mqtt.broker.<slot>.<field>`).
+  Future<bool> setBrokerField(int slot, String field, String value) =>
+      setFlat('mqtt.broker.$slot.$field', value);
+
+  /// Read the broker pool (paginated START → KV → END). Null on timeout.
+  Future<List<BrokerConfig>?> getBrokers() async {
+    final decoder = BrokerListDecoder();
+    final completer = Completer<List<BrokerConfig>>();
+    final sub = _connector.receivedFrames.listen((f) {
+      if (f.isEmpty || f[0] != ObserverConfigClient.respConfig) return;
+      final list = decoder.add(ObserverConfigClient.parse(f));
+      if (list != null && !completer.isCompleted) completer.complete(list);
+    });
+    try {
+      await _connector.sendFrame(ObserverConfigClient.buildBrokers());
+      return await completer.future.timeout(timeout);
+    } catch (e) {
+      _setError('broker list failed: $e');
+      return null;
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  // --- Full snapshot --------------------------------------------------------
+
+  /// Read the whole observer config from the device into [config]. On any
+  /// failure sets [stale] so the UI never presents a half-read snapshot as live.
+  Future<void> refresh() async {
+    try {
+      final ssid = await getFlat('wifi.ssid');
+      final wifiEnabled = await getFlat('wifi.enabled');
+      final wifiStatus = await getFlat('wifi.status');
+      final iata = await getFlat('mqtt.iata');
+      final statusInterval = await getFlat('mqtt.status_interval');
+      final alwaysOn = await getFlat('display.always_on');
+      final rotation = await getFlat('display.rotation');
+      final brokers = await getBrokers();
+
+      if (brokers == null) {
+        _stale = true;
+        notifyListeners();
+        return;
+      }
+
+      _config = ObserverConfig(
+        wifi: _parseWifi(ssid, wifiEnabled, wifiStatus),
+        mqtt: MqttGlobalConfig(
+          iata: iata ?? '',
+          statusInterval: int.tryParse(statusInterval ?? '') ?? 60,
+        ),
+        brokers: brokers,
+        display: DisplayConfig(
+          alwaysOn: alwaysOn == '1',
+          rotation: int.tryParse(rotation ?? '') ?? 0,
+        ),
+      );
+      _stale = false;
+      _lastError = null;
+      notifyListeners();
+    } catch (e) {
+      _stale = true;
+      _setError('refresh failed: $e');
+    }
+  }
+
+  WifiConfig _parseWifi(String? ssid, String? enabled, String? statusRaw) {
+    var status = WifiStatus.unknown;
+    String? ip;
+    if (statusRaw != null && statusRaw.isNotEmpty) {
+      final parts = statusRaw.split(' ip=');
+      status = WifiStatus.fromWire(parts.first.trim());
+      if (parts.length > 1) ip = parts[1].trim();
+    }
+    return WifiConfig(
+      ssid: (ssid == null || ssid == '(unset)') ? '' : ssid,
+      enabled: enabled != '0',
+      status: status,
+      ip: ip,
+    );
+  }
+}
