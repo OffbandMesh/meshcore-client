@@ -195,6 +195,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool? _clientRepeat;
   MeshCoreRadioStateSnapshot? _rememberedNonRepeatRadioState;
   int? _firmwareVerCode;
+  int? _offbandCaps;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -445,6 +446,10 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   int? get firmwareVerCode => _firmwareVerCode;
+
+  /// `offband_caps` capability bitfield from the device-info reply (v14+);
+  /// null on older firmware that sends a shorter frame.
+  int? get offbandCaps => _offbandCaps;
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
@@ -4044,6 +4049,9 @@ class MeshCoreConnector extends ChangeNotifier {
     } else {
       _pathHashByteWidth = 1;
     }
+    // Offband config capability v14+ (byte 82): offband_caps bitfield, appended
+    // after path_hash_mode (additive — older firmware sends a shorter frame).
+    _offbandCaps = frame.length >= 83 ? frame[82] : null;
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];

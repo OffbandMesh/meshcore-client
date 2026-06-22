@@ -23,6 +23,7 @@ import 'services/chat_text_scale_service.dart';
 import 'services/translation_service.dart';
 import 'services/ui_view_state_service.dart';
 import 'services/timeout_prediction_service.dart';
+import 'services/observer_config_service.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 
@@ -175,6 +176,7 @@ class MeshCoreApp extends StatelessWidget {
         Provider.value(value: storage),
         Provider.value(value: mapTileCacheService),
         ChangeNotifierProvider.value(value: timeoutPredictionService),
+        ChangeNotifierProvider(create: (_) => ObserverConfigService(connector)),
       ],
       child: Consumer<AppSettingsService>(
         builder: (context, settingsService, child) {
