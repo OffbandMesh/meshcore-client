@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/observer_config.dart';
@@ -66,7 +67,9 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     _iata.text = c.mqtt.iata;
     _statusInterval.text = '${c.mqtt.statusInterval}';
     _displayAlwaysOn = c.display.alwaysOn;
-    _rotation = c.display.rotation;
+    // Device may report any int; the SegmentedButton only offers {0, 180}, so
+    // normalize to a valid selection rather than seed a dangling value.
+    _rotation = c.display.rotation == 180 ? 180 : 0;
     _seeded = true;
   }
 
@@ -151,6 +154,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         const SizedBox(height: 8),
         _sectionTitle('WiFi'),
         TextField(
+          key: const Key('observer_ssid'),
           controller: _ssid,
           decoration: const InputDecoration(
             labelText: 'SSID',
@@ -159,6 +163,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         ),
         const SizedBox(height: 12),
         TextField(
+          key: const Key('observer_pwd'),
           controller: _pwd,
           obscureText: true,
           decoration: const InputDecoration(
@@ -187,6 +192,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         TextField(
           controller: _statusInterval,
           keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           decoration: const InputDecoration(
             labelText: 'Status interval (sec, 10-3600)',
             border: OutlineInputBorder(),
@@ -236,7 +242,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         ),
         const SizedBox(width: 8),
         FilledButton.icon(
-          onPressed: _saving ? null : _save,
+          onPressed: (_loading || _saving) ? null : _save,
           icon: _saving
               ? const SizedBox(
                   width: 16,
