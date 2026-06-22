@@ -4031,6 +4031,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _maybeStartInitialChannelSync();
   }
 
+  /// Extract the additive `offband_caps` byte from a device-info reply.
+  ///
+  /// Offset verified against firmware MyMesh.cpp: the reply tail is three
+  /// consecutive `out_frame[i++]` writes — client_repeat (byte 80, v9+),
+  /// path_hash_mode (byte 81, v10+), offband_caps (byte 82, v14+). Bytes 80/81
+  /// are shipping/working (path-hash feature), so byte 82 is the adjacent next
+  /// byte by construction. Pre-v14 firmware sends a shorter frame -> null.
+  /// Bounds-checked: a truncated or hostile short frame never indexes OOB.
+  static int? parseOffbandCaps(Uint8List frame) =>
+      frame.length >= 83 ? frame[82] : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -4049,9 +4060,9 @@ class MeshCoreConnector extends ChangeNotifier {
     } else {
       _pathHashByteWidth = 1;
     }
-    // Offband config capability v14+ (byte 82): offband_caps bitfield, appended
-    // after path_hash_mode (additive — older firmware sends a shorter frame).
-    _offbandCaps = frame.length >= 83 ? frame[82] : null;
+    // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
+    // testable helper; offset verified against firmware (see parseOffbandCaps).
+    _offbandCaps = parseOffbandCaps(frame);
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];
