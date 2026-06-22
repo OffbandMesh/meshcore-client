@@ -214,7 +214,10 @@ class ObserverConfigClient {
       case rBrokersStart:
         return ConfigBrokersStart(f.length > 2 ? f[2] : 0);
       case rBrokerKv:
-        if (f.length < 3) return const ConfigUnknown(rBrokerKv);
+        // Reject out-of-range slots from a hostile device (contract: 0..N-1).
+        if (f.length < 3 || f[2] >= brokerSlotCount) {
+          return const ConfigUnknown(rBrokerKv);
+        }
         final body = _text(f, 3);
         final eq = body.indexOf(
           '=',
@@ -261,8 +264,14 @@ class ObserverConfigClient {
 /// [BrokerConfig]s. Feed each parsed [ConfigResponse]; [add] returns the
 /// decoded list once END arrives (or `[]` for an empty pool), else null.
 class BrokerListDecoder {
+  /// Hard cap on total key/value lines retained across the whole dump — a
+  /// hostile device cannot grow memory without bound (Gemini BLOCKER: DoS).
+  /// Generous for the 10-slot contract (~16 fields each).
+  static const int _maxFields = ObserverConfigClient.brokerSlotCount * 32;
+
   final Map<int, Map<String, String>> _slots = {};
   bool _open = false;
+  int _fields = 0;
 
   /// Feed one response. Returns the broker list on END, else null.
   /// Anything before START or after END is ignored.
@@ -270,10 +279,18 @@ class BrokerListDecoder {
     switch (r) {
       case ConfigBrokersStart():
         _slots.clear();
+        _fields = 0;
         _open = true;
         return null;
       case ConfigBrokerKv(:final slot, :final key, :final value):
-        if (_open) (_slots[slot] ??= {})[key] = value;
+        // Drop out-of-range slots and stop accumulating past the field cap.
+        if (_open &&
+            slot >= 0 &&
+            slot < ObserverConfigClient.brokerSlotCount &&
+            _fields < _maxFields) {
+          (_slots[slot] ??= {})[key] = value;
+          _fields++;
+        }
         return null;
       case ConfigBrokersEnd():
         if (!_open) return null;
