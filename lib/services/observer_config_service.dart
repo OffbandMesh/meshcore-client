@@ -51,24 +51,44 @@ class ObserverConfigService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Single-flight serialization (Gemini BLOCKER #1) ----------------------
+  // No firmware request id -> responses correlate by ORDER, so exactly one
+  // transport round-trip may be in flight at a time. This chain-lock serializes
+  // every send/await so overlapping refresh()/setFlat() cannot cross responses.
+  Future<void> _lock = Future<void>.value();
+
+  Future<T> _serialized<T>(Future<T> Function() op) {
+    final release = Completer<void>();
+    final prev = _lock;
+    _lock = release.future;
+    return prev.then((_) => op()).whenComplete(() => release.complete());
+  }
+
+  /// Secret keys whose name must never appear in a surfaced error (Gemini #6).
+  static bool _isSecretKey(String key) =>
+      key == 'wifi.pwd' || key.endsWith('.password') || key.endsWith('.pwd');
+  static String _safeKey(String key) => _isSecretKey(key) ? '<secret>' : key;
+
   // --- Round-trips ----------------------------------------------------------
 
   /// Send [frame] and await the first config response (scalar SET/GET).
-  Future<ConfigResponse> _roundTrip(Uint8List frame) async {
-    final completer = Completer<ConfigResponse>();
-    final sub = _connector.receivedFrames.listen((f) {
-      if (f.isNotEmpty &&
-          f[0] == ObserverConfigClient.respConfig &&
-          !completer.isCompleted) {
-        completer.complete(ObserverConfigClient.parse(f));
+  Future<ConfigResponse> _roundTrip(Uint8List frame) {
+    return _serialized(() async {
+      final completer = Completer<ConfigResponse>();
+      final sub = _connector.receivedFrames.listen((f) {
+        if (f.isNotEmpty &&
+            f[0] == ObserverConfigClient.respConfig &&
+            !completer.isCompleted) {
+          completer.complete(ObserverConfigClient.parse(f));
+        }
+      });
+      try {
+        await _connector.sendFrame(frame);
+        return await completer.future.timeout(timeout);
+      } finally {
+        await sub.cancel();
       }
     });
-    try {
-      await _connector.sendFrame(frame);
-      return await completer.future.timeout(timeout);
-    } finally {
-      await sub.cancel();
-    }
   }
 
   /// SET a flat key (or `mqtt.broker.<N>.<field>`). Returns true on ACK; on ERR
@@ -80,10 +100,12 @@ class ObserverConfigService extends ChangeNotifier {
         _setError(null);
         return true;
       }
-      _setError(r is ConfigErr ? r.text : 'SET $key: unexpected response');
+      _setError(
+        r is ConfigErr ? r.text : 'SET ${_safeKey(key)}: unexpected response',
+      );
       return false;
     } catch (e) {
-      _setError('SET $key failed: $e');
+      _setError('SET ${_safeKey(key)} failed: $e');
       return false;
     }
   }
@@ -96,7 +118,7 @@ class ObserverConfigService extends ChangeNotifier {
       if (r is ConfigErr) _setError(r.text);
       return null;
     } catch (e) {
-      _setError('GET $key failed: $e');
+      _setError('GET ${_safeKey(key)} failed: $e');
       return null;
     }
   }
@@ -106,23 +128,25 @@ class ObserverConfigService extends ChangeNotifier {
       setFlat('mqtt.broker.$slot.$field', value);
 
   /// Read the broker pool (paginated START → KV → END). Null on timeout.
-  Future<List<BrokerConfig>?> getBrokers() async {
-    final decoder = BrokerListDecoder();
-    final completer = Completer<List<BrokerConfig>>();
-    final sub = _connector.receivedFrames.listen((f) {
-      if (f.isEmpty || f[0] != ObserverConfigClient.respConfig) return;
-      final list = decoder.add(ObserverConfigClient.parse(f));
-      if (list != null && !completer.isCompleted) completer.complete(list);
+  Future<List<BrokerConfig>?> getBrokers() {
+    return _serialized(() async {
+      final decoder = BrokerListDecoder();
+      final completer = Completer<List<BrokerConfig>>();
+      final sub = _connector.receivedFrames.listen((f) {
+        if (f.isEmpty || f[0] != ObserverConfigClient.respConfig) return;
+        final list = decoder.add(ObserverConfigClient.parse(f));
+        if (list != null && !completer.isCompleted) completer.complete(list);
+      });
+      try {
+        await _connector.sendFrame(ObserverConfigClient.buildBrokers());
+        return await completer.future.timeout(timeout);
+      } catch (e) {
+        _setError('broker list failed: $e');
+        return null;
+      } finally {
+        await sub.cancel();
+      }
     });
-    try {
-      await _connector.sendFrame(ObserverConfigClient.buildBrokers());
-      return await completer.future.timeout(timeout);
-    } catch (e) {
-      _setError('broker list failed: $e');
-      return null;
-    } finally {
-      await sub.cancel();
-    }
   }
 
   // --- Full snapshot --------------------------------------------------------
