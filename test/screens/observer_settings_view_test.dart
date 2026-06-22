@@ -135,4 +135,40 @@ void main() {
     expect(find.textContaining('last read'), findsOneWidget);
     expect(find.text('GET wifi.ssid failed'), findsOneWidget);
   });
+
+  testWidgets('an out-of-range status interval is not sent (#78 MINOR-B)', (
+    tester,
+  ) async {
+    final fake = _FakeSvc(_cfg());
+    await _pump(tester, fake);
+
+    await tester.enterText(find.byKey(const Key('observer_interval')), '5');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle(); // _save runs; the SnackBar is still showing
+
+    expect(
+      fake.sets.where((e) => e.key == 'mqtt.status_interval'),
+      isEmpty,
+      reason: 'a value below the firmware range must not be put on the wire',
+    );
+    expect(find.textContaining('Status interval must be'), findsOneWidget);
+
+    // drain the SnackBar's auto-dismiss timer for a clean test end
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an in-range status interval is sent (#78 MINOR-B)', (
+    tester,
+  ) async {
+    final fake = _FakeSvc(_cfg());
+    await _pump(tester, fake);
+
+    await tester.enterText(find.byKey(const Key('observer_interval')), '120');
+    await _save(tester);
+
+    final iv = fake.sets.where((e) => e.key == 'mqtt.status_interval').toList();
+    expect(iv, hasLength(1));
+    expect(iv.single.value, '120');
+  });
 }

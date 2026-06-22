@@ -182,8 +182,19 @@ class ObserverConfigService extends ChangeNotifier {
           rotation: int.tryParse(rotation ?? '') ?? 0,
         ),
       );
-      _stale = false;
-      _lastError = null;
+      // A null from any getFlat is a failed read (GET returns the value, null
+      // on ERR/timeout). Don't present defaults as a complete snapshot or wipe
+      // the error a failed field already surfaced (SAFELANE error-visibility).
+      final allRead =
+          ssid != null &&
+          wifiEnabled != null &&
+          wifiStatus != null &&
+          iata != null &&
+          statusInterval != null &&
+          alwaysOn != null &&
+          rotation != null;
+      _stale = !allRead;
+      if (allRead) _lastError = null;
       notifyListeners();
     } catch (e) {
       _stale = true;
