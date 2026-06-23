@@ -57,9 +57,43 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
   }
 
   Future<void> _quickToggle(BrokerConfig b, bool enable) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    // The client refuses to enable a broker that can't work, and says why
+    // (firmware should reject it too, but don't claim success on the wire).
+    if (enable) {
+      final err = b.enableError;
+      if (err != null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text("Can't enable broker ${b.slot}: $err"),
+            backgroundColor: errorColor,
+          ),
+        );
+        return;
+      }
+    }
     final svc = context.read<ObserverConfigService>();
-    await svc.setBrokerField(b.slot, 'enabled', enable ? '1' : '0');
-    if (mounted) await _reload();
+    final ok = await svc.setBrokerField(b.slot, 'enabled', enable ? '1' : '0');
+    if (!mounted) return;
+    if (ok) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Broker ${b.slot} ${enable ? 'enabled' : 'disabled'}'),
+        ),
+      );
+      await _reload();
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            svc.lastError ??
+                'Failed to ${enable ? 'enable' : 'disable'} broker ${b.slot}',
+          ),
+          backgroundColor: errorColor,
+        ),
+      );
+    }
   }
 
   Future<void> _clear(BrokerConfig b) async {
