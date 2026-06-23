@@ -5,9 +5,10 @@ import 'package:provider/provider.dart';
 import '../../connector/meshcore_connector.dart';
 import '../../models/observer_config.dart';
 import '../../services/observer_config_service.dart';
+import 'mqtt_brokers_screen.dart';
 
 /// Observer settings pane: WiFi / MQTT (region) / display flat settings with
-/// staged-save, plus a read-only view of the MQTT broker pool.
+/// staged-save, plus a row into the MQTT broker editor (#80).
 ///
 /// Staged-save model: every control edits LOCAL state; nothing reaches the
 /// device until "Save", which sends only the changed keys (the firmware has no
@@ -15,8 +16,8 @@ import '../../services/observer_config_service.dart';
 /// the source of truth — Refresh re-reads it.
 ///
 /// TODO(l10n): strings are English-only pending ARB keys.
-/// The broker pool is read-only HERE; the editor (tap -> edit, long-press ->
-/// Enable/Disable/Edit/Clear) is tracked as epic #80 (firmware supports it).
+/// The broker pool opens as its own screen (MqttBrokersScreen, #80) — tap to
+/// edit, long-press for Enable/Disable/Edit/Clear, + FAB to add.
 class ObserverSettingsView extends StatefulWidget {
   const ObserverSettingsView({super.key});
 
@@ -278,14 +279,22 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
           ),
         ),
         const Divider(height: 32),
-        _sectionTitle('MQTT brokers'),
         if (svc.brokersUnavailable)
           _banner(
             Icons.cloud_off,
             'Broker pool unavailable — the device did not finish sending it.',
           )
         else
-          ..._brokerTiles(svc.config?.brokers ?? const []),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('MQTT brokers'),
+            subtitle: Text(_brokerSummary(svc.config?.brokers ?? const [])),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MqttBrokersScreen()),
+            ),
+          ),
       ],
     );
   }
@@ -342,37 +351,10 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     return 'Status: ${w.status.name}$ip';
   }
 
-  List<Widget> _brokerTiles(List<BrokerConfig> brokers) {
+  String _brokerSummary(List<BrokerConfig> brokers) {
     final populated = brokers.where((b) => b.isPopulated).toList();
-    if (populated.isEmpty) {
-      return [
-        const ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text('No brokers configured'),
-        ),
-      ];
-    }
-    return [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 4),
-        child: Text(
-          'Read-only — enable/disable/clear pending firmware support.',
-          style: TextStyle(fontStyle: FontStyle.italic),
-        ),
-      ),
-      for (final b in populated)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(
-            b.enabled ? Icons.cloud_done : Icons.cloud_off,
-            color: b.enabled ? Colors.green : null,
-          ),
-          title: Text('[${b.slot}] ${b.url}:${b.port}'),
-          subtitle: Text(
-            '${b.transport.wire} · ${b.authType.wire}'
-            '${b.passwordSet ? ' · pwd set' : ''}',
-          ),
-        ),
-    ];
+    if (populated.isEmpty) return 'None configured — tap to add';
+    final enabled = populated.where((b) => b.enabled).length;
+    return '${populated.length} configured · $enabled enabled';
   }
 }
