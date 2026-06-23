@@ -113,14 +113,12 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
       _changedFields().isNotEmpty || _enabled != _baseline.enabled;
 
   /// Pre-enable validation, shared with the list's quick Enable via
-  /// [BrokerConfig.enableError]. Builds a tentative config from the form.
+  /// [BrokerConfig.enableError]. Only structural fields (URL, port) gate a save
+  /// — the firmware enforces the rest via its own defaults.
   String? _validate() => BrokerConfig(
     slot: _baseline.slot,
     url: _url.text.trim(),
     port: int.tryParse(_port.text.trim()) ?? -1,
-    authType: _authType,
-    jwtAudience: _jwtAudience.text.trim(),
-    jwtOwner: _jwtOwner.text.trim(),
   ).enableError;
 
   void _snack(String msg, {bool isError = false}) {

@@ -203,7 +203,9 @@ void main() {
     await _drainSnack(tester);
   });
 
-  testWidgets('enabling with incomplete JWT is blocked', (tester) async {
+  testWidgets('a JWT broker with blank owner/audience still enables', (
+    tester,
+  ) async {
     final fake = _FakeSvc();
     await _open(
       tester,
@@ -212,7 +214,8 @@ void main() {
         slot: 2,
         url: 'h',
         port: 1883,
-        authType: BrokerAuthType.jwt, // disabled, blank audience/owner
+        authType:
+            BrokerAuthType.jwt, // blank owner/audience -> firmware default
       ),
     );
 
@@ -221,8 +224,14 @@ void main() {
     await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
 
-    expect(fake.saveCalls, isEmpty);
-    expect(find.textContaining('needs an audience'), findsOneWidget);
+    expect(
+      fake.saveCalls,
+      hasLength(1),
+      reason:
+          'the client no longer gates JWT fields — the firmware enforces them '
+          'with its defaults (owner -> device pubkey)',
+    );
+    expect(fake.saveCalls.single.enable, isTrue);
     await _drainSnack(tester);
   });
 }
