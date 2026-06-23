@@ -18,7 +18,11 @@ class _FakeSvc extends ObserverConfigService {
   final List<BrokerConfig> _brokers;
   final List<String> setCalls = [];
   final List<int> clearCalls = [];
+  bool toggleOk = true;
+  String? errorText;
 
+  @override
+  String? get lastError => errorText;
   @override
   ObserverConfig? get config => ObserverConfig(brokers: _brokers);
   @override
@@ -26,7 +30,7 @@ class _FakeSvc extends ObserverConfigService {
   @override
   Future<bool> setBrokerField(int slot, String field, String value) async {
     setCalls.add('$slot.$field=$value');
-    return true;
+    return toggleOk;
   }
 
   @override
@@ -96,5 +100,47 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Clear'));
     await tester.pumpAndSettle();
     expect(fake.clearCalls, contains(2));
+  });
+
+  testWidgets('quick Enable refuses an incomplete broker with a reason', (
+    tester,
+  ) async {
+    final fake = _FakeSvc(const [
+      BrokerConfig(slot: 2, url: 'a', port: 1883, authType: BrokerAuthType.jwt),
+    ]);
+    await _pump(tester, fake);
+
+    await tester.longPress(find.text('[2] a'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enable'));
+    await tester.pumpAndSettle();
+
+    expect(
+      fake.setCalls,
+      isEmpty,
+      reason: 'an incomplete broker must not be enabled',
+    );
+    expect(find.textContaining("Can't enable"), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('a failed quick toggle surfaces the device reason', (
+    tester,
+  ) async {
+    final fake =
+        _FakeSvc(const [
+            BrokerConfig(slot: 2, url: 'a', port: 1883, enabled: true),
+          ])
+          ..toggleOk = false
+          ..errorText = 'ERROR broker busy';
+    await _pump(tester, fake);
+
+    await tester.longPress(find.text('[2] a'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Disable'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('ERROR broker busy'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
   });
 }

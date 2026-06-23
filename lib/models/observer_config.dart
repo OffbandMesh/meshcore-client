@@ -144,6 +144,19 @@ class BrokerConfig {
   /// A slot is occupied iff it has a URL (firmware `cfg.url[0] != '\0'`).
   bool get isPopulated => url.isNotEmpty;
 
+  /// Why this broker can't be safely enabled, or null if complete. Shared by
+  /// the editor's pre-save check and the list's quick Enable so the client
+  /// never activates a broker that can't work (#80).
+  String? get enableError {
+    if (url.isEmpty) return 'URL is required';
+    if (port < 1 || port > 65535) return 'Port must be between 1 and 65535';
+    if (authType == BrokerAuthType.jwt &&
+        (jwtAudience.isEmpty || jwtOwner.isEmpty)) {
+      return 'JWT auth needs an audience and an owner';
+    }
+    return null;
+  }
+
   /// Build from one slot's decoded `key=value` lines (the OCFG_BROKER_KV bodies).
   /// Unknown keys are ignored; missing keys keep the defaults.
   factory BrokerConfig.fromWireFields(int slot, Map<String, String> kv) {

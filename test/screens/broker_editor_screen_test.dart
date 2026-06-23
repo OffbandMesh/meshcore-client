@@ -115,7 +115,7 @@ void main() {
     await _open(
       tester,
       fake,
-      const BrokerConfig(slot: 1, url: 'h', port: 1883),
+      const BrokerConfig(slot: 1, url: 'h', port: 1883, enabled: true),
     );
 
     await tester.enterText(find.byKey(const Key('broker_port')), '99999');
@@ -171,5 +171,58 @@ void main() {
 
     expect(find.text('fromdevice'), findsOneWidget);
     expect(find.text('8883'), findsOneWidget);
+  });
+
+  testWidgets('disabling a slot saves even with incomplete fields', (
+    tester,
+  ) async {
+    final fake = _FakeSvc();
+    await _open(
+      tester,
+      fake,
+      const BrokerConfig(
+        slot: 2,
+        url: 'h',
+        port: 1883,
+        enabled: true,
+        authType: BrokerAuthType.jwt, // blank audience/owner
+      ),
+    );
+
+    await tester.tap(find.byType(SwitchListTile)); // toggle enabled OFF
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+      fake.saveCalls,
+      hasLength(1),
+      reason: 'disabling must not be blocked by field validation',
+    );
+    expect(fake.saveCalls.single.enable, isFalse);
+    await _drainSnack(tester);
+  });
+
+  testWidgets('enabling with incomplete JWT is blocked', (tester) async {
+    final fake = _FakeSvc();
+    await _open(
+      tester,
+      fake,
+      const BrokerConfig(
+        slot: 2,
+        url: 'h',
+        port: 1883,
+        authType: BrokerAuthType.jwt, // disabled, blank audience/owner
+      ),
+    );
+
+    await tester.tap(find.byType(SwitchListTile)); // toggle enabled ON
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+
+    expect(fake.saveCalls, isEmpty);
+    expect(find.textContaining('needs an audience'), findsOneWidget);
+    await _drainSnack(tester);
   });
 }

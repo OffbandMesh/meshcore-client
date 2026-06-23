@@ -112,20 +112,16 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
   bool get _dirty =>
       _changedFields().isNotEmpty || _enabled != _baseline.enabled;
 
-  /// Reject predictably-bad values before they reach the wire (#80). Returns an
-  /// error message, or null when the form is valid.
-  String? _validate() {
-    if (_url.text.trim().isEmpty) return 'URL is required';
-    final port = int.tryParse(_port.text.trim());
-    if (port == null || port < 1 || port > 65535) {
-      return 'Port must be between 1 and 65535';
-    }
-    if (_authType == BrokerAuthType.jwt &&
-        (_jwtAudience.text.trim().isEmpty || _jwtOwner.text.trim().isEmpty)) {
-      return 'JWT auth requires an audience and an owner';
-    }
-    return null;
-  }
+  /// Pre-enable validation, shared with the list's quick Enable via
+  /// [BrokerConfig.enableError]. Builds a tentative config from the form.
+  String? _validate() => BrokerConfig(
+    slot: _baseline.slot,
+    url: _url.text.trim(),
+    port: int.tryParse(_port.text.trim()) ?? -1,
+    authType: _authType,
+    jwtAudience: _jwtAudience.text.trim(),
+    jwtOwner: _jwtOwner.text.trim(),
+  ).enableError;
 
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -137,10 +133,14 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
   }
 
   Future<void> _save() async {
-    final err = _validate();
-    if (err != null) {
-      _snack(err, isError: true);
-      return;
+    // Validation only gates ENABLING — disabling a slot with blank/partial
+    // fields is fine; it won't be active.
+    if (_enabled) {
+      final err = _validate();
+      if (err != null) {
+        _snack(err, isError: true);
+        return;
+      }
     }
     final svc = context.read<ObserverConfigService>();
     final messenger = ScaffoldMessenger.of(context);
