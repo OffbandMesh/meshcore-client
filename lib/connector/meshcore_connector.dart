@@ -169,6 +169,7 @@ class MeshCoreConnector extends ChangeNotifier {
   StreamSubscription<List<int>>? _notifySubscription;
   Timer? _notifyListenersTimer;
   Timer? _selfInfoRetryTimer;
+  int _appStartRetryAttempt = 0;
   Timer? _reconnectTimer;
   Timer? _batteryPollTimer;
   Timer? _gpsLocationPollTimer;
@@ -2747,6 +2748,25 @@ class MeshCoreConnector extends ChangeNotifier {
     _scheduleSelfInfoRetry();
   }
 
+  /// Backoff for the BLE/USB APP_START handshake retry: 3.5s, 7s, 14s, 28s,
+  /// 56s, then a steady ~60s keep-alive. Replaces the old unbounded 3.5s hammer
+  /// that churned a slow connect and starved the contact sync (#88).
+  static Duration nextAppStartRetryDelay(int attempt) {
+    final ms = (3500 * (1 << attempt.clamp(0, 5))).clamp(3500, 60000);
+    return Duration(milliseconds: ms);
+  }
+
+  /// Whether to send an APP_START retry this tick: only while still connected
+  /// and awaiting SELF_INFO, and never while an initial sync is in flight (the
+  /// Web-path guard, so the retry doesn't contend with the contact/channel
+  /// sync). The timer keeps rescheduling, so the skip is per-tick, not
+  /// permanent — once a sync settles, the next tick sends. (#88)
+  static bool shouldSendAppStartRetry({
+    required bool connected,
+    required bool awaitingSelfInfo,
+    required bool syncing,
+  }) => connected && awaitingSelfInfo && !syncing;
+
   void _scheduleSelfInfoRetry() {
     _selfInfoRetryTimer?.cancel();
     if (PlatformInfo.isWeb &&
@@ -2771,19 +2791,36 @@ class MeshCoreConnector extends ChangeNotifier {
       });
       return;
     }
-    _selfInfoRetryTimer = Timer.periodic(const Duration(milliseconds: 3500), (
-      timer,
-    ) {
-      if (!isConnected) {
-        timer.cancel();
-        return;
-      }
-      if (!_awaitingSelfInfo) {
-        timer.cancel();
-        return;
-      }
+    // BLE/USB: bounded backoff -> slow keep-alive (was an unbounded 3.5s
+    // hammer). A slow handshake no longer churns the connect or contends with
+    // the initial sync, but the retry never hard-stops — a slow/recovering
+    // device still gets prompted (#88).
+    _appStartRetryAttempt = 0;
+    _armAppStartRetry();
+  }
+
+  void _armAppStartRetry() {
+    _selfInfoRetryTimer?.cancel();
+    if (!isConnected || !_awaitingSelfInfo) return;
+    _selfInfoRetryTimer = Timer(
+      nextAppStartRetryDelay(_appStartRetryAttempt),
+      _onAppStartRetryTick,
+    );
+  }
+
+  void _onAppStartRetryTick() {
+    if (!isConnected || !_awaitingSelfInfo) return;
+    final syncing =
+        _isLoadingContacts || _isSyncingChannels || _channelSyncInFlight;
+    if (shouldSendAppStartRetry(
+      connected: isConnected,
+      awaitingSelfInfo: _awaitingSelfInfo,
+      syncing: syncing,
+    )) {
       unawaited(sendFrame(buildAppStartFrame()));
-    });
+      if (_appStartRetryAttempt < 5) _appStartRetryAttempt++;
+    }
+    _armAppStartRetry();
   }
 
   Contact getFromDiscovered(Contact contact) {
