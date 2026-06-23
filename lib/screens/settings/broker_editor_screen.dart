@@ -140,6 +140,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
         return;
       }
     }
+    final intended = _enabled;
     final svc = context.read<ObserverConfigService>();
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -148,17 +149,12 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
     final result = await svc.saveBroker(
       _baseline.slot,
       fields: _changedFields(),
-      enable: _enabled,
+      enable: intended,
       wasLive: _baseline.enabled,
     );
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (result.ok) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Broker ${_baseline.slot} saved')),
-      );
-      navigator.pop(true);
-    } else {
+    if (!result.ok) {
+      setState(() => _busy = false);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -168,6 +164,48 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
           backgroundColor: errorColor,
         ),
       );
+      return;
+    }
+    // The writes were ACKed — but a firmware build can ACK without applying the
+    // enabled state (meshcore-firmware#179). Settle, re-read, and only claim
+    // success if the device actually matches what we asked for.
+    await Future.delayed(ObserverConfigService.applySettleDelay);
+    if (!mounted) return;
+    final fresh = await svc.getBroker(_baseline.slot);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    switch (BrokerConfig.classifyApply(
+      intendedEnabled: intended,
+      actualEnabled: fresh?.enabled,
+    )) {
+      case BrokerApplyOutcome.applied:
+        messenger.showSnackBar(
+          SnackBar(content: Text('Broker ${_baseline.slot} saved')),
+        );
+        navigator.pop(true);
+      case BrokerApplyOutcome.notApplied:
+        // Stay on the editor, re-seed to the device's true state, and warn — the
+        // fields were written but the device didn't honor the enable/disable.
+        if (fresh != null) _seedFrom(fresh);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Saved, but the device did not ${intended ? 'enable' : 'disable'} '
+              'broker ${_baseline.slot} — possible firmware issue',
+            ),
+            backgroundColor: errorColor,
+          ),
+        );
+      case BrokerApplyOutcome.unverified:
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Broker ${_baseline.slot} saved — could not confirm enabled '
+              'state (device may be rebooting)',
+            ),
+          ),
+        );
+        navigator.pop(true);
     }
   }
 

@@ -1,6 +1,7 @@
 // Widget tests for the MQTT brokers screen (#80): a tile per broker, the + FAB
 // opens the editor on the next empty slot, and long-press exposes the
-// Enable/Disable/Edit/Clear actions (Clear behind a confirm).
+// Enable/Disable/Edit/Clear actions (Clear behind a confirm). A toggle/save now
+// verifies the device actually applied the change before confirming (#89).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,11 @@ class _FakeSvc extends ObserverConfigService {
   bool toggleOk = true;
   String? errorText;
 
+  /// When false, the device ACKs an enabled-SET but the verify re-read reports
+  /// the slot UNCHANGED — models the HV4 ack-but-doesn't-apply bug (#89).
+  bool deviceApplies = true;
+  final Map<int, bool> _enabledOverride = {};
+
   @override
   String? get lastError => errorText;
   @override
@@ -30,7 +36,19 @@ class _FakeSvc extends ObserverConfigService {
   @override
   Future<bool> setBrokerField(int slot, String field, String value) async {
     setCalls.add('$slot.$field=$value');
+    if (toggleOk && deviceApplies && field == 'enabled') {
+      _enabledOverride[slot] = value == '1';
+    }
     return toggleOk;
+  }
+
+  @override
+  Future<BrokerConfig?> getBroker(int slot) async {
+    final base = _brokers.firstWhere(
+      (b) => b.slot == slot,
+      orElse: () => BrokerConfig(slot: slot),
+    );
+    return base.copyWith(enabled: _enabledOverride[slot] ?? base.enabled);
   }
 
   @override
@@ -102,7 +120,9 @@ void main() {
     expect(fake.clearCalls, contains(2));
   });
 
-  testWidgets('a successful quick Enable confirms', (tester) async {
+  testWidgets('a successful quick Enable verifies then confirms', (
+    tester,
+  ) async {
     final fake = _FakeSvc(const [BrokerConfig(slot: 2, url: 'a', port: 1883)]);
     await _pump(tester, fake);
 
@@ -110,9 +130,31 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Enable'));
     await tester.pumpAndSettle();
+    // Advance past the settle delay so the verify re-read runs.
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
 
     expect(fake.setCalls, contains('2.enabled=1'));
-    expect(find.textContaining('enabled'), findsOneWidget);
+    expect(find.textContaining('Broker 2 enabled'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('an ACK-but-not-applied toggle warns of a firmware issue', (
+    tester,
+  ) async {
+    final fake = _FakeSvc(const [BrokerConfig(slot: 2, url: 'a', port: 1883)])
+      ..deviceApplies = false; // ACKs success but re-read stays disabled
+    await _pump(tester, fake);
+
+    await tester.longPress(find.text('[2] a'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enable'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+
+    expect(fake.setCalls, contains('2.enabled=1'));
+    expect(find.textContaining('possible firmware issue'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
   });
 

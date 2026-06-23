@@ -24,6 +24,10 @@ class ObserverConfigService extends ChangeNotifier {
   /// an unsupported node or a dropped frame.
   Duration timeout = const Duration(seconds: 6);
 
+  /// After a broker enable/disable SET, wait this long before the verify re-read
+  /// so a device that applies the change asynchronously has settled (#89).
+  static const Duration applySettleDelay = Duration(milliseconds: 600);
+
   ObserverConfig? _config;
   ObserverConfig? get config => _config;
 
