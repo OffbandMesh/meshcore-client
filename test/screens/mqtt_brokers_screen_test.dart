@@ -102,12 +102,8 @@ void main() {
     expect(fake.clearCalls, contains(2));
   });
 
-  testWidgets('quick Enable refuses an incomplete broker with a reason', (
-    tester,
-  ) async {
-    final fake = _FakeSvc(const [
-      BrokerConfig(slot: 2, url: 'a', port: 1883, authType: BrokerAuthType.jwt),
-    ]);
+  testWidgets('a successful quick Enable confirms', (tester) async {
+    final fake = _FakeSvc(const [BrokerConfig(slot: 2, url: 'a', port: 1883)]);
     await _pump(tester, fake);
 
     await tester.longPress(find.text('[2] a'));
@@ -115,12 +111,8 @@ void main() {
     await tester.tap(find.text('Enable'));
     await tester.pumpAndSettle();
 
-    expect(
-      fake.setCalls,
-      isEmpty,
-      reason: 'an incomplete broker must not be enabled',
-    );
-    expect(find.textContaining("Can't enable"), findsOneWidget);
+    expect(fake.setCalls, contains('2.enabled=1'));
+    expect(find.textContaining('enabled'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
   });
 

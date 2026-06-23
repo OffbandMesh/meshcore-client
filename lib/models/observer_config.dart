@@ -150,10 +150,8 @@ class BrokerConfig {
   String? get enableError {
     if (url.isEmpty) return 'URL is required';
     if (port < 1 || port > 65535) return 'Port must be between 1 and 65535';
-    if (authType == BrokerAuthType.jwt &&
-        (jwtAudience.isEmpty || jwtOwner.isEmpty)) {
-      return 'JWT auth needs an audience and an owner';
-    }
+    // JWT owner (device pubkey), IATA override, etc. are firmware-defaulted, so
+    // the client does NOT gate them — the firmware enforces with its defaults.
     return null;
   }
 
