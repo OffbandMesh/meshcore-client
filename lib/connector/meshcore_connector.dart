@@ -3900,12 +3900,41 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Whether a RESP_CODE_ERR should skip the in-flight channel slot. The
+  /// firmware answers ERR for an empty/invalid channel index; without this the
+  /// sync waits out its 2s timeout + 3 retries on every empty slot, so a device
+  /// with few populated channels out of a large capacity takes minutes to sync.
+  /// A pending generic-ack command (a SET / channel-text send) is order-
+  /// correlated to the ERR first, so only advance when none is waiting. (#82)
+  static bool shouldAdvanceChannelSyncOnError({
+    required bool isSyncingChannels,
+    required bool channelSyncInFlight,
+    required bool hasPendingGenericAck,
+  }) => isSyncingChannels && channelSyncInFlight && !hasPendingGenericAck;
+
   void _handleErrorFrame(Uint8List frame) {
     final errCode = frame.length > 1 ? frame[1] : -1;
     _appDebugLogService?.warn(
       'Firmware responded with error code: $errCode',
       tag: 'Protocol',
     );
+
+    // An in-flight channel GET that draws an ERR means that slot is empty —
+    // advance to the next index the instant the ERR lands instead of waiting
+    // out the timeout + retry budget (mirrors the CHANNEL_INFO success path
+    // minus adding a channel). This is the whole sync-slowness fix (#82).
+    if (shouldAdvanceChannelSyncOnError(
+      isSyncingChannels: _isSyncingChannels,
+      channelSyncInFlight: _channelSyncInFlight,
+      hasPendingGenericAck: _pendingGenericAckQueue.isNotEmpty,
+    )) {
+      _channelSyncTimeout?.cancel();
+      _channelSyncInFlight = false;
+      _channelSyncRetries = 0;
+      _nextChannelIndexToRequest++;
+      unawaited(_requestNextChannel());
+      return;
+    }
 
     if (_pendingGenericAckQueue.isEmpty) {
       return;
