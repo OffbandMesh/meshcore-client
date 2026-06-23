@@ -55,6 +55,7 @@ class _AutoConnector extends MeshCoreConnector {
   _AutoConnector({this.failKeys = const {}, this.failBrokers = false});
   final Set<String> failKeys;
   final bool failBrokers;
+  final List<Uint8List> sent = [];
   final StreamController<Uint8List> _frames =
       StreamController<Uint8List>.broadcast();
 
@@ -71,6 +72,7 @@ class _AutoConnector extends MeshCoreConnector {
     String? channelSendQueueId,
     bool expectsGenericAck = false,
   }) async {
+    sent.add(data);
     final op = data[1];
     if (op == ObserverConfigClient.opGet) {
       final key = utf8.decode(data.sublist(2, data.length - 1));
@@ -245,6 +247,28 @@ void main() {
         isFalse,
         reason: 'a broker-dump miss is not a stale snapshot',
       );
+      auto.closeStream();
+    },
+  );
+
+  // ---- #81: a flat refresh must not re-pull the broker dump ----
+  test(
+    'refresh(includeBrokers:false) skips the broker dump, keeps brokers',
+    () async {
+      final auto = _AutoConnector();
+      final s = ObserverConfigService(auto);
+      int brokerReqs() => auto.sent
+          .where((f) => f.length > 1 && f[1] == ObserverConfigClient.opBrokers)
+          .length;
+      await s.refresh(); // full read sends one OCFG_BROKERS
+      expect(brokerReqs(), 1, reason: 'full refresh dumps the pool');
+      await s.refresh(includeBrokers: false); // flat-only
+      expect(
+        brokerReqs(),
+        1,
+        reason: 'includeBrokers:false must NOT send another OCFG_BROKERS',
+      );
+      expect(s.config, isNotNull);
       auto.closeStream();
     },
   );

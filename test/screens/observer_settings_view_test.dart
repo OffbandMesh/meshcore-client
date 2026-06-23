@@ -16,6 +16,21 @@ import 'package:meshcore_open/services/observer_config_service.dart';
 
 class _DummyConn extends MeshCoreConnector {}
 
+class _SyncConn extends MeshCoreConnector {
+  _SyncConn({this.syncing = false});
+  bool syncing;
+  @override
+  bool get isSyncingChannels => syncing;
+  @override
+  bool get isLoadingContacts => false;
+  @override
+  bool get isShowingQueuedMessageSyncProgress => false;
+  void finishSync() {
+    syncing = false;
+    notifyListeners();
+  }
+}
+
 class _FakeSvc extends ObserverConfigService {
   _FakeSvc(
     this._cfg, {
@@ -29,6 +44,7 @@ class _FakeSvc extends ObserverConfigService {
   final String? errorText;
   final bool brokersDown;
   final List<MapEntry<String, String>> sets = [];
+  int refreshCalls = 0;
 
   @override
   bool get brokersUnavailable => brokersDown;
@@ -41,7 +57,10 @@ class _FakeSvc extends ObserverConfigService {
   @override
   String? get lastError => errorText;
   @override
-  Future<void> refresh() async {}
+  Future<void> refresh({bool includeBrokers = true}) async {
+    refreshCalls++;
+  }
+
   @override
   Future<bool> setFlat(String key, String value) async {
     sets.add(MapEntry(key, value));
@@ -64,8 +83,11 @@ ObserverConfig _cfg({String ssid = 'MyNet', int rotation = 0}) =>
 
 Future<void> _pump(WidgetTester tester, _FakeSvc fake) async {
   await tester.pumpWidget(
-    ChangeNotifierProvider<ObserverConfigService>.value(
-      value: fake,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<MeshCoreConnector>.value(value: _SyncConn()),
+        ChangeNotifierProvider<ObserverConfigService>.value(value: fake),
+      ],
       child: const MaterialApp(home: Scaffold(body: ObserverSettingsView())),
     ),
   );
@@ -189,5 +211,29 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -2000));
     await tester.pumpAndSettle();
     expect(find.textContaining('Broker pool unavailable'), findsOneWidget);
+  });
+
+  testWidgets('observer refresh waits for the device sync to finish (#81)', (
+    tester,
+  ) async {
+    final conn = _SyncConn(syncing: true);
+    final fake = _FakeSvc(_cfg());
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<MeshCoreConnector>.value(value: conn),
+          ChangeNotifierProvider<ObserverConfigService>.value(value: fake),
+        ],
+        child: const MaterialApp(home: Scaffold(body: ObserverSettingsView())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fake.refreshCalls, 0, reason: 'must not refresh while syncing');
+    expect(find.textContaining('Waiting for the device sync'), findsOneWidget);
+
+    conn.finishSync();
+    await tester.pumpAndSettle();
+    expect(fake.refreshCalls, 1, reason: 'refresh once the sync settles');
   });
 }
