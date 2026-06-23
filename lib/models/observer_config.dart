@@ -100,6 +100,23 @@ class SecretSet extends SecretField {
   final String value;
 }
 
+/// Outcome of verifying that a broker enable/disable actually took effect, by
+/// re-reading the slot after the SET (#89). A firmware build can ACK a toggle as
+/// success without applying it (meshcore-firmware#179), so the UI never trusts
+/// the ACK alone — it re-reads and reports what the device actually says.
+enum BrokerApplyOutcome {
+  /// Re-read confirms the device is in the intended enabled state.
+  applied,
+
+  /// The device ACKed success but the re-read shows the unchanged state — it did
+  /// not apply the toggle. Surfaced as a warning, never a false success.
+  notApplied,
+
+  /// The re-read itself failed (timeout/disconnect — e.g. an enable that rebooted
+  /// the device), so the result can't be confirmed either way.
+  unverified,
+}
+
 /// One MQTT broker slot (0-9), as read back from the `OCFG_BROKERS` dump.
 /// Non-secret fields only — `password` is reported as presence ([passwordSet]),
 /// `jwt_token` is never a config key.
@@ -153,6 +170,20 @@ class BrokerConfig {
     // JWT owner (device pubkey), IATA override, etc. are firmware-defaulted, so
     // the client does NOT gate them — the firmware enforces with its defaults.
     return null;
+  }
+
+  /// Classify whether a toggle/save took, comparing the [intendedEnabled] state
+  /// to a re-read [actualEnabled] (null = the re-read failed). Pure and
+  /// device-agnostic: it reports only what the device reported back, never
+  /// assuming a change took that the device didn't confirm (#89).
+  static BrokerApplyOutcome classifyApply({
+    required bool intendedEnabled,
+    required bool? actualEnabled,
+  }) {
+    if (actualEnabled == null) return BrokerApplyOutcome.unverified;
+    return actualEnabled == intendedEnabled
+        ? BrokerApplyOutcome.applied
+        : BrokerApplyOutcome.notApplied;
   }
 
   /// Build from one slot's decoded `key=value` lines (the OCFG_BROKER_KV bodies).

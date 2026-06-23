@@ -74,16 +74,11 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
       }
     }
     final svc = context.read<ObserverConfigService>();
+    setState(() => _busy = true);
     final ok = await svc.setBrokerField(b.slot, 'enabled', enable ? '1' : '0');
     if (!mounted) return;
-    if (ok) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Broker ${b.slot} ${enable ? 'enabled' : 'disabled'}'),
-        ),
-      );
-      await _reload();
-    } else {
+    if (!ok) {
+      setState(() => _busy = false);
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -93,6 +88,56 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
           backgroundColor: errorColor,
         ),
       );
+      return;
+    }
+    // The SET was ACKed — but a firmware build can ACK without applying it
+    // (meshcore-firmware#179). Settle, re-read the slot, and report what the
+    // device ACTUALLY did rather than trusting the ACK.
+    await Future.delayed(ObserverConfigService.applySettleDelay);
+    if (!mounted) return;
+    final fresh = await svc.getBroker(b.slot);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (fresh != null) {
+        _brokers = [
+          for (final x in _brokers)
+            if (x.slot == b.slot) fresh else x,
+        ];
+      }
+    });
+    switch (BrokerConfig.classifyApply(
+      intendedEnabled: enable,
+      actualEnabled: fresh?.enabled,
+    )) {
+      case BrokerApplyOutcome.applied:
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Broker ${b.slot} ${enable ? 'enabled' : 'disabled'}',
+            ),
+          ),
+        );
+      case BrokerApplyOutcome.notApplied:
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Device reported success but broker ${b.slot} is still '
+              '${fresh!.enabled ? 'enabled' : 'disabled'} — possible firmware '
+              'issue',
+            ),
+            backgroundColor: errorColor,
+          ),
+        );
+      case BrokerApplyOutcome.unverified:
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Broker ${b.slot} ${enable ? 'enable' : 'disable'} sent — could '
+              'not confirm (device may be rebooting). Tap Refresh to re-check.',
+            ),
+          ),
+        );
     }
   }
 
