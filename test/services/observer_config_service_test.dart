@@ -80,6 +80,14 @@ class _AutoConnector extends MeshCoreConnector {
           ? _resp(ObserverConfigClient.rErr, 'ERROR not available')
           : _resp(ObserverConfigClient.rValue, '$key = ${_valueFor(key)}');
       Future.microtask(() => _frames.add(frame));
+    } else if (op == ObserverConfigClient.opSet) {
+      // SET payload is "key value"; the key is everything before the 1st space.
+      final payload = utf8.decode(data.sublist(2, data.indexOf(0, 2)));
+      final key = payload.split(' ').first;
+      final frame = failKeys.contains(key)
+          ? _resp(ObserverConfigClient.rErr, 'ERROR not available')
+          : _resp(ObserverConfigClient.rAck, '$key = ok');
+      Future.microtask(() => _frames.add(frame));
     } else if (op == ObserverConfigClient.opBrokers) {
       if (failBrokers) return; // no response -> getBrokers times out
       Future.microtask(() {
@@ -269,6 +277,99 @@ void main() {
         reason: 'includeBrokers:false must NOT send another OCFG_BROKERS',
       );
       expect(s.config, isNotNull);
+      auto.closeStream();
+    },
+  );
+
+  // ---- #80: broker save handshake (enabled-last, per-field ACK, recovery) ----
+  List<String> setKeys(_AutoConnector c) => c.sent
+      .where((f) => f.length > 2 && f[1] == ObserverConfigClient.opSet)
+      .map((f) => utf8.decode(f.sublist(2, f.indexOf(0, 2))).split(' ').first)
+      .toList();
+
+  test(
+    'saveBroker on a live slot disables first, writes fields, enables LAST',
+    () async {
+      final auto = _AutoConnector();
+      final s = ObserverConfigService(auto);
+      final r = await s.saveBroker(
+        2,
+        fields: {'url': 'mqtt://h', 'port': '1883'},
+        enable: true,
+        wasLive: true,
+      );
+      expect(r.ok, isTrue);
+      final keys = setKeys(auto);
+      expect(
+        keys.first,
+        'mqtt.broker.2.enabled',
+        reason: 'a live slot is disabled first',
+      );
+      expect(
+        keys.last,
+        'mqtt.broker.2.enabled',
+        reason: 'enabled is written LAST (activation guard)',
+      );
+      expect(keys.where((k) => k == 'mqtt.broker.2.enabled').length, 2);
+      expect(
+        keys.indexOf('mqtt.broker.2.url'),
+        greaterThan(keys.indexOf('mqtt.broker.2.enabled')),
+      );
+      expect(
+        keys.indexOf('mqtt.broker.2.port'),
+        lessThan(keys.lastIndexOf('mqtt.broker.2.enabled')),
+      );
+      auto.closeStream();
+    },
+  );
+
+  test('saveBroker stops on a field ERR and never reaches the enabled-last '
+      'activation', () async {
+    final auto = _AutoConnector(failKeys: {'mqtt.broker.2.port'});
+    final s = ObserverConfigService(auto);
+    final r = await s.saveBroker(
+      2,
+      fields: {'url': 'mqtt://h', 'port': '1883'},
+      enable: true,
+      wasLive: false,
+    );
+    expect(r.ok, isFalse);
+    expect(r.failedField, 'port');
+    expect(
+      setKeys(auto),
+      isNot(contains('mqtt.broker.2.enabled')),
+      reason: 'a failed field must never reach enabled=1 — slot stays safe',
+    );
+    auto.closeStream();
+  });
+
+  test('clearBroker sends the slot clear op', () async {
+    final auto = _AutoConnector();
+    final s = ObserverConfigService(auto);
+    expect(await s.clearBroker(3), isTrue);
+    expect(setKeys(auto), contains('mqtt.broker.3.clear'));
+    auto.closeStream();
+  });
+
+  test(
+    'getBroker re-reads one slot field-by-field, never the pool dump',
+    () async {
+      final auto = _AutoConnector();
+      final s = ObserverConfigService(auto);
+      final b = await s.getBroker(4);
+      expect(b, isNotNull);
+      expect(b!.slot, 4);
+      final getKeys = auto.sent
+          .where((f) => f.length > 2 && f[1] == ObserverConfigClient.opGet)
+          .map((f) => utf8.decode(f.sublist(2, f.indexOf(0, 2))))
+          .toList();
+      expect(getKeys, contains('mqtt.broker.4.url'));
+      expect(getKeys, contains('mqtt.broker.4.enabled'));
+      expect(
+        auto.sent.any((f) => f[1] == ObserverConfigClient.opBrokers),
+        isFalse,
+        reason: 'single-slot re-GET must not trigger the 84-frame pool dump',
+      );
       auto.closeStream();
     },
   );

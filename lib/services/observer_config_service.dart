@@ -132,6 +132,73 @@ class ObserverConfigService extends ChangeNotifier {
   Future<bool> setBrokerField(int slot, String field, String value) =>
       setFlat('mqtt.broker.$slot.$field', value);
 
+  /// Save a broker [slot] field-at-a-time per the firmware contract: a live slot
+  /// is disabled first, each changed [fields] entry is written, then `enabled`
+  /// is written LAST (when [enable]). Stops at the first ERR/timeout and reports
+  /// the failed field — a partial save therefore leaves the slot disabled, never
+  /// live-corrupt (#80). The caller re-GETs the slot to show true state + offer
+  /// retry/clear.
+  Future<BrokerSaveResult> saveBroker(
+    int slot, {
+    required Map<String, String> fields,
+    required bool enable,
+    required bool wasLive,
+  }) async {
+    if (wasLive) {
+      if (!await setBrokerField(slot, 'enabled', '0')) {
+        return const BrokerSaveResult.failed('enabled');
+      }
+    }
+    for (final e in fields.entries) {
+      if (!await setBrokerField(slot, e.key, e.value)) {
+        return BrokerSaveResult.failed(e.key);
+      }
+    }
+    if (enable) {
+      if (!await setBrokerField(slot, 'enabled', '1')) {
+        return const BrokerSaveResult.failed('enabled');
+      }
+    }
+    return const BrokerSaveResult.ok();
+  }
+
+  /// Definitively wipe a broker slot — `mqtt.broker.<slot>.clear` (#80).
+  Future<bool> clearBroker(int slot) => setBrokerField(slot, 'clear', '1');
+
+  /// Re-read a single broker [slot] field-by-field — the post-save / recovery
+  /// re-GET. Cheaper than the whole pool: 14 scalar GETs for one slot, not the
+  /// 84-frame OCFG_BROKERS dump (#80). Returns null if any field GET fails.
+  Future<BrokerConfig?> getBroker(int slot) async {
+    const fields = [
+      'enabled',
+      'url',
+      'port',
+      'transport',
+      'auth_type',
+      'username',
+      'password',
+      'topic_prefix',
+      'iata_override',
+      'jwt_audience',
+      'jwt_refresh',
+      'jwt_owner',
+      'jwt_email',
+      'ca_cert',
+    ];
+    final kv = <String, String>{};
+    for (final f in fields) {
+      final v = await getFlat('mqtt.broker.$slot.$f');
+      if (v == null) {
+        // password is write-only — a missing read is its presence, not a slot
+        // failure; any other missing field means the re-GET is incomplete.
+        if (f == 'password') continue;
+        return null;
+      }
+      kv[f] = v;
+    }
+    return BrokerConfig.fromWireFields(slot, kv);
+  }
+
   /// Read the broker pool (paginated START → KV → END). Null on timeout.
   Future<List<BrokerConfig>?> getBrokers() {
     return _serialized(() async {
@@ -224,4 +291,13 @@ class ObserverConfigService extends ChangeNotifier {
       ip: ip,
     );
   }
+}
+
+/// Outcome of [ObserverConfigService.saveBroker]. On failure [failedField] names
+/// the field whose SET failed (or `enabled`); the slot is left disabled, safe.
+class BrokerSaveResult {
+  const BrokerSaveResult.ok() : ok = true, failedField = null;
+  const BrokerSaveResult.failed(this.failedField) : ok = false;
+  final bool ok;
+  final String? failedField;
 }
