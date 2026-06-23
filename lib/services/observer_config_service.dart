@@ -158,7 +158,7 @@ class ObserverConfigService extends ChangeNotifier {
 
   /// Read the whole observer config from the device into [config]. On any
   /// failure sets [stale] so the UI never presents a half-read snapshot as live.
-  Future<void> refresh() async {
+  Future<void> refresh({bool includeBrokers = true}) async {
     try {
       final ssid = await getFlat('wifi.ssid');
       final wifiEnabled = await getFlat('wifi.enabled');
@@ -167,7 +167,10 @@ class ObserverConfigService extends ChangeNotifier {
       final statusInterval = await getFlat('mqtt.status_interval');
       final alwaysOn = await getFlat('display.always_on');
       final rotation = await getFlat('display.rotation');
-      final brokers = await getBrokers();
+      // Skip the heavy broker dump (84 frames) when only flat settings changed
+      // (e.g. after a flat Save) — it must not re-flood BLE for a toggle (#81).
+      final brokers = includeBrokers ? await getBrokers() : null;
+      final keptBrokers = _config?.brokers ?? const <BrokerConfig>[];
 
       // The broker pool loads independently of the flat settings: a broker-dump
       // failure (e.g. the firmware never sends BROKERS_END) must NOT blank
@@ -178,13 +181,13 @@ class ObserverConfigService extends ChangeNotifier {
           iata: iata ?? '',
           statusInterval: int.tryParse(statusInterval ?? '') ?? 60,
         ),
-        brokers: brokers ?? const [],
+        brokers: includeBrokers ? (brokers ?? const []) : keptBrokers,
         display: DisplayConfig(
           alwaysOn: alwaysOn == '1',
           rotation: int.tryParse(rotation ?? '') ?? 0,
         ),
       );
-      _brokersUnavailable = brokers == null;
+      if (includeBrokers) _brokersUnavailable = brokers == null;
 
       // A null from any flat getFlat is a failed read (GET returns the value,
       // null on ERR/timeout). Stale reflects the FLAT read only; a broker miss

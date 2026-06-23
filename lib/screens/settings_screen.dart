@@ -10,7 +10,7 @@ import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
-import '../services/observer_config_service.dart';
+import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'settings/settings_shell.dart';
 import 'settings/app_settings_view.dart';
@@ -73,10 +73,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<SettingsCategory> _categories(BuildContext context) {
     final l10n = context.l10n;
-    // Watch the connector so the list re-evaluates when the observer capability
-    // (device-info offband_caps) flips on connect/disconnect.
-    context.watch<MeshCoreConnector>();
-    final showObserver = context.read<ObserverConfigService>().supported;
+    // Rebuild ONLY when the observer gate flips — NOT on every connector update.
+    // A blanket context.watch here rebuilt the whole settings screen on every
+    // sync frame, thrashing the UI thread and slowing the channel sync (#81).
+    final showObserver = context.select<MeshCoreConnector, bool>(
+      (c) => ObserverConfigClient.supportsConfig(
+        firmwareVerCode: c.firmwareVerCode ?? 0,
+        offbandCaps: c.offbandCaps ?? 0,
+      ),
+    );
     return [
       SettingsCategory(
         icon: Icons.settings_input_antenna,

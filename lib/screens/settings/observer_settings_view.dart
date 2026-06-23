@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../connector/meshcore_connector.dart';
 import '../../models/observer_config.dart';
 import '../../services/observer_config_service.dart';
 
@@ -14,9 +15,8 @@ import '../../services/observer_config_service.dart';
 /// the source of truth — Refresh re-reads it.
 ///
 /// TODO(l10n): strings are English-only pending ARB keys.
-/// TODO(#64 / firmware F-task): broker enable/disable/clear + the broker editor
-/// are blocked on the firmware wire path (no `enabled` SET; VIEW allowlist is
-/// read-only), so the broker pool is read-only here for now.
+/// The broker pool is read-only HERE; the editor (tap -> edit, long-press ->
+/// Enable/Disable/Edit/Clear) is tracked as epic #80 (firmware supports it).
 class ObserverSettingsView extends StatefulWidget {
   const ObserverSettingsView({super.key});
 
@@ -36,15 +36,46 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
   bool _loading = false;
   bool _saving = false;
   bool _seeded = false;
+  bool _waitingForSync = false;
+  MeshCoreConnector? _syncWaitConn;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshWhenIdle());
   }
+
+  /// Defer the initial read until the device's channel/contact sync settles —
+  /// observer config traffic must not compete with (and slow) that sync (#81).
+  void _refreshWhenIdle() {
+    final conn = context.read<MeshCoreConnector>();
+    if (!_syncing(conn)) {
+      _refresh();
+      return;
+    }
+    setState(() => _waitingForSync = true);
+    _syncWaitConn = conn;
+    conn.addListener(_onSyncProgress);
+  }
+
+  void _onSyncProgress() {
+    final conn = _syncWaitConn;
+    if (conn == null || _syncing(conn)) return;
+    conn.removeListener(_onSyncProgress);
+    _syncWaitConn = null;
+    if (!mounted) return;
+    setState(() => _waitingForSync = false);
+    _refresh();
+  }
+
+  bool _syncing(MeshCoreConnector c) =>
+      c.isLoadingContacts ||
+      c.isSyncingChannels ||
+      c.isShowingQueuedMessageSyncProgress;
 
   @override
   void dispose() {
+    _syncWaitConn?.removeListener(_onSyncProgress);
     _ssid.dispose();
     _pwd.dispose();
     _iata.dispose();
@@ -125,7 +156,8 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     );
 
     _pwd.clear();
-    await svc.refresh();
+    // Flat save: don't re-pull the 84-frame broker pool, just the flats (#81).
+    await svc.refresh(includeBrokers: false);
     _seedFromConfig(svc.config);
     if (!mounted) return;
     setState(() => _saving = false);
@@ -147,6 +179,17 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
   @override
   Widget build(BuildContext context) {
     final svc = context.watch<ObserverConfigService>();
+    if (_waitingForSync && !_seeded) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Waiting for the device sync to finish before reading Observer settings…',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     if (!_seeded && _loading) {
       return const Center(child: CircularProgressIndicator());
     }
