@@ -17,6 +17,7 @@ import 'services/app_settings_service.dart';
 import 'services/notification_service.dart';
 import 'services/ble_debug_log_service.dart';
 import 'services/app_debug_log_service.dart';
+import 'services/file_log_service.dart';
 import 'services/background_service.dart';
 import 'services/map_tile_cache_service.dart';
 import 'services/chat_text_scale_service.dart';
@@ -32,6 +33,9 @@ void main() async {
 
   // Initialize SharedPreferences cache
   await PrefsManager.initialize();
+
+  // Start always-on file logging (#97); no-op on web.
+  await FileLogService.instance.init();
 
   // Initialize services
   final storage = StorageService();

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import '../connector/meshcore_protocol.dart';
+import 'file_log_service.dart';
 
 class BleDebugLogEntry {
   final DateTime timestamp;
@@ -55,6 +56,10 @@ class BleDebugLogService extends ChangeNotifier {
     if (frame.isEmpty) return;
     final code = frame[0];
     final description = _describeFrame(code, frame, outgoing, note);
+    FileLogService.instance.write(
+      '${DateTime.now().toIso8601String()} $description  '
+      '${frame.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+    );
     _entries.add(
       BleDebugLogEntry(
         timestamp: DateTime.now(),
