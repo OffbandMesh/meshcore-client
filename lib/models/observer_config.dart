@@ -117,6 +117,73 @@ enum BrokerApplyOutcome {
   unverified,
 }
 
+/// Live runtime state of a broker connection, from the additive `state` field in
+/// the OCFG_BROKERS dump (firmware #172). `unknown` = field absent (older
+/// firmware) ⇒ the UI falls back to plain enabled/disabled.
+enum BrokerRuntimeState {
+  down,
+  connecting,
+  up,
+  backoff,
+  heldNoClock,
+  heldNoHeap,
+  unknown;
+
+  static BrokerRuntimeState fromWire(String? s) {
+    switch (s) {
+      case 'down':
+        return BrokerRuntimeState.down;
+      case 'connecting':
+        return BrokerRuntimeState.connecting;
+      case 'up':
+        return BrokerRuntimeState.up;
+      case 'backoff':
+        return BrokerRuntimeState.backoff;
+      case 'held_no_clock':
+        return BrokerRuntimeState.heldNoClock;
+      case 'held_no_heap':
+        return BrokerRuntimeState.heldNoHeap;
+      default:
+        return BrokerRuntimeState.unknown;
+    }
+  }
+}
+
+/// Last connection error class, from the additive `last_error` field (firmware
+/// #172). Qualifies a [BrokerRuntimeState.backoff] failure.
+enum BrokerLastError {
+  none,
+  tcp,
+  auth,
+  tls,
+  other;
+
+  static BrokerLastError fromWire(String? s) {
+    switch (s) {
+      case 'tcp':
+        return BrokerLastError.tcp;
+      case 'auth':
+        return BrokerLastError.auth;
+      case 'tls':
+        return BrokerLastError.tls;
+      case 'other':
+        return BrokerLastError.other;
+      default:
+        return BrokerLastError.none;
+    }
+  }
+}
+
+/// Display category for a broker's status line — drives the label colour/icon.
+enum BrokerStatusKind { connected, connecting, failed, held, idle, disabled }
+
+/// A broker's human-facing status: a [label] plus a [kind] the UI colours.
+class BrokerStatus {
+  const BrokerStatus(this.label, this.kind);
+  final String label;
+  final BrokerStatusKind kind;
+}
+
 /// One MQTT broker slot (0-9), as read back from the `OCFG_BROKERS` dump.
 /// Non-secret fields only — `password` is reported as presence ([passwordSet]),
 /// `jwt_token` is never a config key.
@@ -137,6 +204,10 @@ class BrokerConfig {
     this.jwtOwner = '',
     this.jwtEmail = '',
     this.caCert = '',
+    this.runtimeState = BrokerRuntimeState.unknown,
+    this.lastError = BrokerLastError.none,
+    this.jwtOwnerResolved = '',
+    this.iataResolved = '',
   });
 
   final int slot;
@@ -157,6 +228,18 @@ class BrokerConfig {
   final String jwtOwner;
   final String jwtEmail;
   final String caCert;
+
+  /// Live runtime state (firmware #172); [BrokerRuntimeState.unknown] when the
+  /// device doesn't report it (older firmware).
+  final BrokerRuntimeState runtimeState;
+
+  /// Last connection error class, qualifying a [BrokerRuntimeState.backoff] (#172).
+  final BrokerLastError lastError;
+
+  /// Resolved defaults shown as greyed hints when the raw key is blank (#173).
+  /// Never written back — the blank raw key stays the source of truth.
+  final String jwtOwnerResolved;
+  final String iataResolved;
 
   /// A slot is occupied iff it has a URL (firmware `cfg.url[0] != '\0'`).
   bool get isPopulated => url.isNotEmpty;
@@ -186,6 +269,34 @@ class BrokerConfig {
         : BrokerApplyOutcome.notApplied;
   }
 
+  /// Human-facing status, derived from [enabled] + [runtimeState] + [lastError]
+  /// (#172). When the device doesn't report runtime state ([runtimeState] is
+  /// [BrokerRuntimeState.unknown], e.g. older firmware) this is the plain
+  /// enabled/disabled the UI showed before — so absent fields read as today.
+  BrokerStatus get status {
+    if (!enabled) {
+      return const BrokerStatus('Disabled', BrokerStatusKind.disabled);
+    }
+    switch (runtimeState) {
+      case BrokerRuntimeState.up:
+        return const BrokerStatus('Connected', BrokerStatusKind.connected);
+      case BrokerRuntimeState.connecting:
+        return const BrokerStatus('Connecting…', BrokerStatusKind.connecting);
+      case BrokerRuntimeState.backoff:
+        final reason = lastError == BrokerLastError.none
+            ? ''
+            : ' (${lastError.name})';
+        return BrokerStatus('Failed$reason', BrokerStatusKind.failed);
+      case BrokerRuntimeState.heldNoClock:
+        return const BrokerStatus('Held — no clock', BrokerStatusKind.held);
+      case BrokerRuntimeState.heldNoHeap:
+        return const BrokerStatus('Held — low heap', BrokerStatusKind.held);
+      case BrokerRuntimeState.down:
+      case BrokerRuntimeState.unknown:
+        return const BrokerStatus('Enabled', BrokerStatusKind.idle);
+    }
+  }
+
   /// Build from one slot's decoded `key=value` lines (the OCFG_BROKER_KV bodies).
   /// Unknown keys are ignored; missing keys keep the defaults.
   factory BrokerConfig.fromWireFields(int slot, Map<String, String> kv) {
@@ -210,6 +321,10 @@ class BrokerConfig {
       jwtOwner: kv['jwt_owner'] ?? '',
       jwtEmail: kv['jwt_email'] ?? '',
       caCert: kv['ca_cert'] ?? '',
+      runtimeState: BrokerRuntimeState.fromWire(kv['state']),
+      lastError: BrokerLastError.fromWire(kv['last_error']),
+      jwtOwnerResolved: kv['jwt_owner_resolved'] ?? '',
+      iataResolved: kv['iata_resolved'] ?? '',
     );
   }
 
@@ -228,6 +343,10 @@ class BrokerConfig {
     String? jwtOwner,
     String? jwtEmail,
     String? caCert,
+    BrokerRuntimeState? runtimeState,
+    BrokerLastError? lastError,
+    String? jwtOwnerResolved,
+    String? iataResolved,
   }) {
     return BrokerConfig(
       slot: slot,
@@ -245,6 +364,10 @@ class BrokerConfig {
       jwtOwner: jwtOwner ?? this.jwtOwner,
       jwtEmail: jwtEmail ?? this.jwtEmail,
       caCert: caCert ?? this.caCert,
+      runtimeState: runtimeState ?? this.runtimeState,
+      lastError: lastError ?? this.lastError,
+      jwtOwnerResolved: jwtOwnerResolved ?? this.jwtOwnerResolved,
+      iataResolved: iataResolved ?? this.iataResolved,
     );
   }
 

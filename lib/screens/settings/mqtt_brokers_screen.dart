@@ -213,6 +213,36 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
     }
   }
 
+  IconData _statusIcon(BrokerStatusKind kind) {
+    switch (kind) {
+      case BrokerStatusKind.connected:
+      case BrokerStatusKind.idle:
+        return Icons.cloud_done;
+      case BrokerStatusKind.connecting:
+      case BrokerStatusKind.held:
+        return Icons.cloud_queue;
+      case BrokerStatusKind.failed:
+      case BrokerStatusKind.disabled:
+        return Icons.cloud_off;
+    }
+  }
+
+  Color? _statusColor(BrokerStatusKind kind, ThemeData theme) {
+    switch (kind) {
+      case BrokerStatusKind.connected:
+      case BrokerStatusKind.idle:
+        return Colors.green;
+      case BrokerStatusKind.connecting:
+        return theme.colorScheme.primary;
+      case BrokerStatusKind.failed:
+        return theme.colorScheme.error;
+      case BrokerStatusKind.held:
+        return Colors.orange;
+      case BrokerStatusKind.disabled:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final slot = _nextEmptySlot;
@@ -244,13 +274,12 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
                 for (final b in _brokers)
                   ListTile(
                     leading: Icon(
-                      b.enabled ? Icons.cloud_done : Icons.cloud_off,
-                      color: b.enabled ? Colors.green : null,
+                      _statusIcon(b.status.kind),
+                      color: _statusColor(b.status.kind, Theme.of(context)),
                     ),
                     title: Text('[${b.slot}] ${b.url}'),
                     subtitle: Text(
-                      '${b.port} · ${b.transport.wire}'
-                      '${b.enabled ? '' : ' · disabled'}',
+                      '${b.port} · ${b.transport.wire} · ${b.status.label}',
                     ),
                     onTap: () => _openEditor(b),
                     onLongPress: () => _menu(b),
