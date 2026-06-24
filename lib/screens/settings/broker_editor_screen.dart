@@ -121,6 +121,17 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
     port: int.tryParse(_port.text.trim()) ?? -1,
   ).enableError;
 
+  /// Greyed placeholder showing the firmware-resolved default for a field whose
+  /// raw value is blank (#173). The blank raw key stays the source of truth —
+  /// this is hint text only, never written back. Null when nothing to resolve.
+  String? _resolvedHint(String resolved, {bool shortenKey = false}) {
+    if (resolved.isEmpty) return null;
+    if (shortenKey && resolved.length > 16) {
+      return 'Default: ${resolved.substring(0, 16)}… (this device)';
+    }
+    return 'Default: $resolved';
+  }
+
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -344,7 +355,15 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
             if (_authType == BrokerAuthType.jwt) ...[
               const SizedBox(height: 12),
               _field('broker_jwt_audience', _jwtAudience, 'JWT audience'),
-              _field('broker_jwt_owner', _jwtOwner, 'JWT owner'),
+              _field(
+                'broker_jwt_owner',
+                _jwtOwner,
+                'JWT owner',
+                hint: _resolvedHint(
+                  _baseline.jwtOwnerResolved,
+                  shortenKey: true,
+                ),
+              ),
               _field('broker_jwt_email', _jwtEmail, 'JWT email'),
               _field(
                 'broker_jwt_refresh',
@@ -355,7 +374,12 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
             ],
             const Divider(height: 24),
             _field('broker_topic_prefix', _topicPrefix, 'Topic prefix'),
-            _field('broker_iata_override', _iataOverride, 'IATA override'),
+            _field(
+              'broker_iata_override',
+              _iataOverride,
+              'IATA override',
+              hint: _resolvedHint(_baseline.iataResolved),
+            ),
             if (_transport != BrokerTransport.tcp)
               _field(
                 'broker_ca_cert',
@@ -380,6 +404,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
     String label, {
     bool number = false,
     int lines = 1,
+    String? hint,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: TextField(
@@ -390,6 +415,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
       inputFormatters: number ? [FilteringTextInputFormatter.digitsOnly] : null,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         border: const OutlineInputBorder(),
       ),
     ),
