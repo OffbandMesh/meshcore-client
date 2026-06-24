@@ -203,23 +203,41 @@ class ObserverConfigService extends ChangeNotifier {
     return BrokerConfig.fromWireFields(slot, kv);
   }
 
-  /// Read the broker pool (paginated START → KV → END). Null on timeout.
+  /// Read the broker pool (paginated START → KV → END). Null on a stall or
+  /// error. The completion deadline is an INACTIVITY watchdog re-armed on every
+  /// frame — a large pool streams field-by-field and outlasts any single fixed
+  /// deadline, so only a genuine stall (no frame for [timeout]) fails (#103).
   Future<List<BrokerConfig>?> getBrokers() {
     return _serialized(() async {
       final decoder = BrokerListDecoder();
       final completer = Completer<List<BrokerConfig>>();
+      Timer? idle;
+      void armIdle() {
+        idle?.cancel();
+        idle = Timer(timeout, () {
+          if (!completer.isCompleted) {
+            completer.completeError(
+              TimeoutException('broker pool stalled', timeout),
+            );
+          }
+        });
+      }
+
       final sub = _connector.receivedFrames.listen((f) {
         if (f.isEmpty || f[0] != ObserverConfigClient.respConfig) return;
+        armIdle(); // re-arm: a steadily-streaming dump must never time out.
         final list = decoder.add(ObserverConfigClient.parse(f));
         if (list != null && !completer.isCompleted) completer.complete(list);
       });
       try {
         await _connector.sendFrame(ObserverConfigClient.buildBrokers());
-        return await completer.future.timeout(timeout);
+        armIdle(); // initial deadline: if the device never replies at all.
+        return await completer.future;
       } catch (e) {
         _setError('broker list failed: $e');
         return null;
       } finally {
+        idle?.cancel();
         await sub.cancel();
       }
     });

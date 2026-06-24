@@ -134,6 +134,25 @@ Uint8List _respText(int sub, String text) => Uint8List.fromList([
   0,
 ]);
 
+Uint8List _brokersStart(int count) => Uint8List.fromList([
+  ObserverConfigClient.respConfig,
+  ObserverConfigClient.rBrokersStart,
+  count,
+]);
+
+Uint8List _brokerKv(int slot, String key, String value) => Uint8List.fromList([
+  ObserverConfigClient.respConfig,
+  ObserverConfigClient.rBrokerKv,
+  slot,
+  ...utf8.encode('$key=$value'),
+  0,
+]);
+
+Uint8List _brokersEnd() => Uint8List.fromList([
+  ObserverConfigClient.respConfig,
+  ObserverConfigClient.rBrokersEnd,
+]);
+
 Future<void> _tick() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
@@ -373,4 +392,33 @@ void main() {
       auto.closeStream();
     },
   );
+
+  // ---- #103: a slow-but-steady dump must outlast the fixed timeout ----
+  test('getBrokers completes a dump that outlasts the per-frame timeout while '
+      'frames keep arriving (re-armed inactivity watchdog) — #103', () async {
+    svc.timeout = const Duration(milliseconds: 80);
+    final future = svc.getBrokers();
+    final frames = <Uint8List>[
+      _brokersStart(2),
+      _brokerKv(0, 'url', 'mqtt://a'),
+      _brokerKv(0, 'enabled', '1'),
+      _brokerKv(1, 'url', 'mqtt://b'),
+      _brokerKv(1, 'enabled', '0'),
+      _brokersEnd(),
+    ];
+    // Each 50ms gap is under the 80ms timeout, but the whole dump (~300ms)
+    // far exceeds it: a fixed deadline kills it, a re-armed watchdog does not.
+    for (final f in frames) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      c.inject(f);
+    }
+    final list = await future;
+    expect(
+      list,
+      isNotNull,
+      reason: 'a steadily-streaming dump must not time out (#103)',
+    );
+    expect(list!.length, 2);
+    expect(list.map((b) => b.slot).toList(), [0, 1]);
+  });
 }
