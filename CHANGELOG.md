@@ -2,6 +2,14 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.1.2-beta.2] - 2026-06-24
+
+### Fixed
+- Observer broker pool no longer falsely reports "the device did not finish
+  sending it" on large pools — the broker-list GET now uses an inactivity
+  watchdog re-armed on each frame, so a pool that streams over several seconds
+  completes instead of timing out at a fixed deadline (#103).
+
 ## [1.1.2-beta.1] - 2026-06-24
 
 First public beta.
