@@ -1957,10 +1957,22 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                     helperMaxLines: 5,
                     border: const OutlineInputBorder(),
                   ),
+                  // Friendly labels matching the companion's _PathHashSizeTile
+                  // (settings_screen.dart): mode N = (N+1)-byte, with the hop
+                  // ceiling from the firmware path-hash spec (#90).
                   items: const [
-                    DropdownMenuItem(value: 0, child: Text('0')),
-                    DropdownMenuItem(value: 1, child: Text('1')),
-                    DropdownMenuItem(value: 2, child: Text('2')),
+                    DropdownMenuItem(
+                      value: 0,
+                      child: Text('1-byte · max 64 hops'),
+                    ),
+                    DropdownMenuItem(
+                      value: 1,
+                      child: Text('2-byte · max 32 hops'),
+                    ),
+                    DropdownMenuItem(
+                      value: 2,
+                      child: Text('3-byte · max 21 hops'),
+                    ),
                   ],
                   onChanged: (v) {
                     if (v != null) {
