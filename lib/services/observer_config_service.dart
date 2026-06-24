@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/observer_config_client.dart';
 import '../models/observer_config.dart';
+import 'file_log_service.dart';
 
 class ObserverConfigService extends ChangeNotifier {
   ObserverConfigService(this._connector);
@@ -203,14 +204,23 @@ class ObserverConfigService extends ChangeNotifier {
     return BrokerConfig.fromWireFields(slot, kv);
   }
 
+  void _logBroker(String msg) => FileLogService.instance.write(
+    '${DateTime.now().toIso8601String()} [INFO/Broker] $msg',
+  );
+
   /// Read the broker pool (paginated START → KV → END). Null on a stall or
   /// error. The completion deadline is an INACTIVITY watchdog re-armed on every
   /// frame — a large pool streams field-by-field and outlasts any single fixed
   /// deadline, so only a genuine stall (no frame for [timeout]) fails (#103).
+  /// The fetch lifecycle is logged to the shared file log (#108) so a tester's
+  /// Share-logs capture shows in plain text where a pool load succeeds or fails.
   Future<List<BrokerConfig>?> getBrokers() {
     return _serialized(() async {
+      final started = DateTime.now();
       final decoder = BrokerListDecoder();
       final completer = Completer<List<BrokerConfig>>();
+      var frames = 0;
+      int? expected;
       Timer? idle;
       void armIdle() {
         idle?.cancel();
@@ -226,14 +236,32 @@ class ObserverConfigService extends ChangeNotifier {
       final sub = _connector.receivedFrames.listen((f) {
         if (f.isEmpty || f[0] != ObserverConfigClient.respConfig) return;
         armIdle(); // re-arm: a steadily-streaming dump must never time out.
-        final list = decoder.add(ObserverConfigClient.parse(f));
+        final r = ObserverConfigClient.parse(f);
+        if (r is ConfigBrokersStart) {
+          expected = r.count;
+          _logBroker('pool GET: header — ${r.count} brokers');
+        }
+        frames++;
+        final list = decoder.add(r);
         if (list != null && !completer.isCompleted) completer.complete(list);
       });
       try {
         await _connector.sendFrame(ObserverConfigClient.buildBrokers());
+        _logBroker('pool GET: request sent');
         armIdle(); // initial deadline: if the device never replies at all.
-        return await completer.future;
+        final list = await completer.future;
+        _logBroker(
+          'pool GET: COMPLETED ${list.length} brokers '
+          '(header said ${expected ?? "?"}) in '
+          '${DateTime.now().difference(started).inMilliseconds}ms, $frames frames',
+        );
+        return list;
       } catch (e) {
+        _logBroker(
+          'pool GET: FAILED after '
+          '${DateTime.now().difference(started).inMilliseconds}ms '
+          '($frames frames, header said ${expected ?? "?"}) — $e',
+        );
         _setError('broker list failed: $e');
         return null;
       } finally {
