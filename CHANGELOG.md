@@ -2,6 +2,14 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.1.2-beta.3] - 2026-06-24
+
+### Added
+- Diagnostic logging of the Observer broker-pool fetch lifecycle (request sent,
+  header count, completed with N brokers + timing, or failed with the reason) to
+  the shared log, so a Share-logs capture shows in plain text whether a pool load
+  succeeds or stalls (#108).
+
 ## [1.1.2-beta.2] - 2026-06-24
 
 ### Fixed
