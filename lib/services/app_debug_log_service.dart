@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'file_log_service.dart';
+
 enum AppDebugLogLevel { info, warning, error }
 
 class AppDebugLogEntry {
@@ -53,6 +55,14 @@ class AppDebugLogService extends ChangeNotifier {
     AppDebugLogLevel level = AppDebugLogLevel.info,
     bool noNotify = false,
   }) {
+    final lvl = level == AppDebugLogLevel.error
+        ? 'ERROR'
+        : level == AppDebugLogLevel.warning
+        ? 'WARN'
+        : 'INFO';
+    FileLogService.instance.write(
+      '${DateTime.now().toIso8601String()} [$lvl/$tag] $message',
+    );
     if (!_enabled && !kDebugMode) return;
     if (!_enabled) {
       // In debug mode, still print to console but don't store entries.
