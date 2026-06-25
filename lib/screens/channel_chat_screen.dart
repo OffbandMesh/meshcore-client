@@ -494,6 +494,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   Widget _buildMessageBubble(ChannelMessage message, double textScale) {
     final settingsService = context.watch<AppSettingsService>();
     final enableTracing = settingsService.settings.enableMessageTracing;
+    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     final isOutgoing = message.isOutgoing;
     final gifId = GifHelper.parseGif(message.text);
     final poi = parseMarkerText(message.text);
@@ -634,10 +635,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                               : EdgeInsets.zero,
                           child: Text(
                             context.l10n.channels_via(
-                              _formatPathPrefixes(
-                                displayPath,
-                                message.pathHashSize,
-                              ),
+                              _formatPathPrefixes(displayPath, hashWidth),
                             ),
                             style: TextStyle(
                               fontSize: 11,
@@ -1337,7 +1335,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   Widget _buildHopBadge(BuildContext context, ChannelMessage message) {
-    final hops = message.hopCount ?? 0;
+    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
+    final hops = realHopCount(message.hopCount, hashWidth) ?? 0;
     final color = Theme.of(context).brightness == Brightness.dark
         ? Colors.grey[400]
         : Colors.grey[600];

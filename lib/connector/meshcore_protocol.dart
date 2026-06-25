@@ -445,11 +445,25 @@ int readInt32LE(Uint8List data, int offset) {
   return val;
 }
 
-// Path-length byte: firmware packs hop count + hash width into one byte.
-// Low 6 bits = hop count (0-63); high 2 bits = hash-size mode 0..2 -> 1..3 bytes/hop.
+// Path-length byte from the firmware. Low 6 bits = the path length field
+// (a BYTE count of the hop-hash array, 0-63); high 2 bits carry an optional
+// hash-size mode hint (0..2 -> 1..3 bytes/hop) that is not reliably populated,
+// so the device's configured hash width (MeshCoreConnector.pathHashByteWidth)
+// is authoritative for slicing the path. realHopCount() converts the byte
+// length to a true hop count at that width. (#112)
 // TX counterpart: buildSetPathHashModeFrame (CMD_SET_PATH_HASH_MODE).
 int pathHopCount(int pathLenRaw) => pathLenRaw & 0x3F;
 int pathHashSizeBytes(int pathLenRaw) => ((pathLenRaw >> 6) & 0x03) + 1;
+
+/// Real hop count from the firmware path byte-length and the device hash width.
+/// `pathHopCount` returns the path BYTE length, so at a 2-byte hash width a
+/// single 2-byte hop reports 2 — divide by the width to get the true hop count.
+/// Null (unknown) and negative (flood) sentinels pass through unchanged. (#112)
+int? realHopCount(int? rawByteLen, int hashWidth) {
+  if (rawByteLen == null || rawByteLen < 0) return rawByteLen;
+  final w = hashWidth < 1 ? 1 : hashWidth;
+  return rawByteLen ~/ w;
+}
 
 // Helper to convert uint32 to hex string
 String ackHashToHex(int ackHash) {
