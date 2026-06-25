@@ -40,16 +40,12 @@ class ChannelMessagePathScreen extends StatelessWidget {
         final primaryPath = !channelMessage && !message.isOutgoing
             ? Uint8List.fromList(primaryPathTmp.reversed.toList())
             : primaryPathTmp;
-        final hops = _buildPathHops(
-          primaryPath,
-          connector,
-          l10n,
-          message.pathHashSize,
-        );
+        final hashWidth = connector.pathHashByteWidth;
+        final hops = _buildPathHops(primaryPath, connector, l10n, hashWidth);
         final hasHopDetails = primaryPath.isNotEmpty;
         final observedLabel = _formatObservedHops(
-          primaryPath.length ~/ message.pathHashSize,
-          message.hopCount,
+          primaryPath.length ~/ hashWidth,
+          realHopCount(message.hopCount, hashWidth),
           l10n,
         );
         final extraPaths = _otherPaths(primaryPath, message.pathVariants);
@@ -125,6 +121,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
 
   Widget _buildSummaryCard(BuildContext context, {String? observedLabel}) {
     final l10n = context.l10n;
+    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -148,7 +145,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
               ),
             _buildDetailRow(
               l10n.channelPath_pathLabelTitle,
-              _formatPathLabel(message.hopCount, l10n),
+              _formatPathLabel(realHopCount(message.hopCount, hashWidth), l10n),
             ),
             if (observedLabel != null)
               _buildDetailRow(l10n.channelPath_observedLabel, observedLabel),
@@ -160,6 +157,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
 
   Widget _buildPathVariants(BuildContext context, List<Uint8List> variants) {
     final l10n = context.l10n;
+    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -171,15 +169,10 @@ class ChannelMessagePathScreen extends StatelessWidget {
               title: Text(
                 l10n.channelPath_observedPathTitle(
                   i + 1,
-                  _formatHopCount(
-                    variants[i].length ~/ message.pathHashSize,
-                    l10n,
-                  ),
+                  _formatHopCount(variants[i].length ~/ hashWidth, l10n),
                 ),
               ),
-              subtitle: Text(
-                _formatPathPrefixes(variants[i], message.pathHashSize),
-              ),
+              subtitle: Text(_formatPathPrefixes(variants[i], hashWidth)),
               trailing: const Icon(Icons.map_outlined, size: 20),
               onTap: () => _openPathMap(
                 context,
@@ -474,11 +467,12 @@ class _ChannelMessagePathMapScreenState
             : selectedPathTmp;
 
         final selectedIndex = _indexForPath(selectedPath, observedPaths);
+        final hashWidth = connector.pathHashByteWidth;
         final hops = _buildPathHops(
           selectedPath,
           connector,
           context.l10n,
-          widget.message.pathHashSize,
+          hashWidth,
         );
 
         final points = <LatLng>[];
@@ -520,7 +514,7 @@ class _ChannelMessagePathMapScreenState
             ? LatLngBounds.fromPoints(points)
             : null;
         final mapKey = ValueKey(
-          '${_formatPathPrefixes(selectedPath, widget.message.pathHashSize)},${context.l10n.pathTrace_you}',
+          '${_formatPathPrefixes(selectedPath, hashWidth)},${context.l10n.pathTrace_you}',
         );
         _pathDistance = _getPathDistance(points);
 
@@ -633,6 +627,7 @@ class _ChannelMessagePathMapScreenState
     ValueChanged<int> onSelected,
   ) {
     final l10n = context.l10n;
+    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     final selectedPath = paths[selectedIndex];
     final label = selectedPath.isPrimary
         ? l10n.channelPath_primaryPath(selectedIndex + 1)
@@ -663,7 +658,7 @@ class _ChannelMessagePathMapScreenState
                           value: i,
                           child: Text(
                             '${paths[i].isPrimary ? l10n.channelPath_primaryPath(i + 1) : l10n.channelPath_pathLabel(i + 1)}'
-                            ' • ${_formatHopCount(paths[i].pathBytes.length ~/ widget.message.pathHashSize, l10n)}',
+                            ' • ${_formatHopCount(paths[i].pathBytes.length ~/ hashWidth, l10n)}',
                           ),
                         ),
                     ],
@@ -677,10 +672,7 @@ class _ChannelMessagePathMapScreenState
                 Text(
                   l10n.channelPath_selectedPathLabel(
                     label,
-                    _formatPathPrefixes(
-                      selectedPath.pathBytes,
-                      widget.message.pathHashSize,
-                    ),
+                    _formatPathPrefixes(selectedPath.pathBytes, hashWidth),
                   ),
                   style: TextStyle(color: Colors.grey[700], fontSize: 12),
                 ),
@@ -936,14 +928,14 @@ List<_PathHop> _buildPathHops(
 ) {
   if (pathBytes.isEmpty) return const [];
   final w = hashWidth < 1 ? 1 : hashWidth;
-  final candidatesByPrefix = <int, List<Contact>>{};
+  final candidatesByPrefix = <String, List<Contact>>{};
   final allContacts = connector.allContacts;
   for (final contact in allContacts) {
-    if (contact.publicKey.isEmpty) continue;
+    if (contact.publicKey.length < w) continue;
     if (contact.type != advTypeRepeater && contact.type != advTypeRoom) {
       continue;
     }
-    final prefix = contact.publicKey.first;
+    final prefix = _formatHash(contact.publicKey.sublist(0, w));
     candidatesByPrefix.putIfAbsent(prefix, () => <Contact>[]).add(contact);
   }
   for (final candidates in candidatesByPrefix.values) {
@@ -960,7 +952,7 @@ List<_PathHop> _buildPathHops(
   final hops = <_PathHop>[];
   for (var i = 0; i + w <= pathBytes.length; i += w) {
     final hash = pathBytes.sublist(i, i + w);
-    final prefixKey = hash[0];
+    final prefixKey = _formatHash(hash);
     final searchPoint = i == 0 ? startPoint : previousPosition;
     final candidates = candidatesByPrefix[prefixKey];
     Contact? contact;
