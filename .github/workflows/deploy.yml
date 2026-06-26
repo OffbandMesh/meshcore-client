@@ -1,9 +1,12 @@
 name: Deploy to Cloudflare Workers
 
+# Manual-only. This workflow was inherited from upstream zjs81 and deploys the web
+# build to *its* Cloudflare account; this fork has no Cloudflare secrets, so the old
+# `push: tags: ['*']` trigger failed on every tag (missing CLOUDFLARE_API_TOKEN).
+# Disabled the auto-trigger to stop the per-tag failures (chore #120). The job is
+# preserved for the deliberate Offband web-app launch (Feature #121 / Epic #122),
+# which will define the proper trigger scope + secrets.
 on:
-  push:
-    tags:
-      - '*'
   workflow_dispatch:
 
 jobs:
