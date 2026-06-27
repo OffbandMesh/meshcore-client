@@ -384,6 +384,38 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settings_locationIntervalSec => 'Interwał dla GPS (Sekundy)';
 
   @override
+  String get settings_gpsStatusTitle => 'GPS status';
+
+  @override
+  String get settings_gpsStatusRefresh => 'Query GPS';
+
+  @override
+  String get settings_gpsStatusLiveFix => 'Live GPS fix';
+
+  @override
+  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+
+  @override
+  String get settings_gpsStatusCoords => 'Coordinates';
+
+  @override
+  String get settings_gpsStatusSats => 'Satellites';
+
+  @override
+  String get settings_gpsStatusAltitude => 'Altitude';
+
+  @override
+  String get settings_gpsStatusTime => 'Fix time';
+
+  @override
+  String get settings_gpsStatusTapRefresh =>
+      'Tap Query GPS to read the current GPS state';
+
+  @override
+  String get settings_gpsStatusNoResponse =>
+      'No response — device may need the GPS-query firmware build';
+
+  @override
   String get settings_locationIntervalInvalid =>
       'Interwał musi wynosić co najmniej 60 sekund i mniej niż 86400 sekund.';
 

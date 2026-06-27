@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
+import '../models/offband_gps_status.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
 import '../connector/observer_config_client.dart';
@@ -680,6 +681,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildGpsQuerySection(
+    BuildContext context,
+    OffbandGpsStatus? status,
+    bool querying,
+    bool queriedOnce,
+    VoidCallback onRefresh,
+  ) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+
+    Widget row(String label, String value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+
+    final children = <Widget>[
+      const SizedBox(height: 8),
+      const Divider(),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              l10n.settings_gpsStatusTitle,
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
+          if (querying)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: l10n.settings_gpsStatusRefresh,
+              onPressed: onRefresh,
+            ),
+        ],
+      ),
+    ];
+
+    if (status != null) {
+      final live = status.hasLiveFix;
+      final color = live ? Colors.green : Colors.orange;
+      children.add(
+        Row(
+          children: [
+            Icon(
+              live ? Icons.gps_fixed : Icons.gps_off,
+              size: 18,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                live
+                    ? l10n.settings_gpsStatusLiveFix
+                    : l10n.settings_gpsStatusNoFix,
+                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+      children.add(const SizedBox(height: 8));
+      final coords = (status.latitude != null && status.longitude != null)
+          ? '${status.latitude!.toStringAsFixed(6)}, '
+                '${status.longitude!.toStringAsFixed(6)}'
+          : '—';
+      children.add(row(l10n.settings_gpsStatusCoords, coords));
+      children.add(
+        row(l10n.settings_gpsStatusSats, status.satellites?.toString() ?? '—'),
+      );
+      children.add(
+        row(
+          l10n.settings_gpsStatusAltitude,
+          status.altitudeCm != null
+              ? '${(status.altitudeCm! / 100).toStringAsFixed(1)} m'
+              : '—',
+        ),
+      );
+      final t = status.timestampUtc?.toLocal();
+      final ml = MaterialLocalizations.of(context);
+      final timeStr = t == null
+          ? '—'
+          : '${ml.formatCompactDate(t)} '
+                '${ml.formatTimeOfDay(TimeOfDay.fromDateTime(t))}';
+      children.add(row(l10n.settings_gpsStatusTime, timeStr));
+    } else {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            queriedOnce
+                ? l10n.settings_gpsStatusNoResponse
+                : l10n.settings_gpsStatusTapRefresh,
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
   void _editLocation(BuildContext context, MeshCoreConnector connector) {
     final l10n = context.l10n;
     final latController = TextEditingController();
@@ -697,6 +816,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final currentInterval =
         int.tryParse(customVars["gps_interval"] ?? "") ?? 900;
     intervalController.text = currentInterval.toString();
+
+    OffbandGpsStatus? gpsStatus = connector.offbandGpsStatus;
+    bool queryingGps = false;
+    bool queriedOnce = false;
 
     showDialog(
       context: context,
@@ -761,6 +884,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                       }
                     }
+                  },
+                ),
+                _buildGpsQuerySection(
+                  context,
+                  gpsStatus,
+                  queryingGps,
+                  queriedOnce,
+                  () async {
+                    setDialogState(() => queryingGps = true);
+                    final s = await connector.requestOffbandGps();
+                    if (!dialogContext.mounted) return;
+                    setDialogState(() {
+                      queryingGps = false;
+                      queriedOnce = true;
+                      gpsStatus = s;
+                    });
                   },
                 ),
               ],
