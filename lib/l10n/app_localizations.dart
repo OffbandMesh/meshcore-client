@@ -1102,6 +1102,18 @@ abstract class AppLocalizations {
   /// **'Status'**
   String get settings_infoStatus;
 
+  /// No description provided for @settings_infoFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware'**
+  String get settings_infoFirmware;
+
+  /// No description provided for @settings_infoModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get settings_infoModel;
+
   /// No description provided for @settings_infoBattery.
   ///
   /// In en, this message translates to:

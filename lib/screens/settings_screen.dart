@@ -369,6 +369,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     MeshCoreConnector connector,
   ) {
     final l10n = context.l10n;
+    final firmwareVersion = connector.firmwareVersion;
+    final deviceModel = connector.deviceModel;
 
     return Card(
       child: Padding(
@@ -384,6 +386,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? l10n.common_connected
                   : l10n.common_disconnected,
             ),
+            if (firmwareVersion != null)
+              _buildInfoRow(l10n.settings_infoFirmware, firmwareVersion),
+            if (deviceModel != null)
+              _buildInfoRow(l10n.settings_infoModel, deviceModel),
             _buildBatteryInfoRow(context, connector),
             if (connector.selfName != null)
               _buildInfoRow(l10n.settings_nodeName, connector.selfName!),

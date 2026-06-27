@@ -524,6 +524,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_infoStatus => '상태';
 
   @override
+  String get settings_infoFirmware => 'Firmware';
+
+  @override
+  String get settings_infoModel => 'Model';
+
+  @override
   String get settings_infoBattery => '배터리';
 
   @override

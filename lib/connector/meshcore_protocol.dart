@@ -465,6 +465,42 @@ int? realHopCount(int? rawByteLen, int hashWidth) {
   return rawByteLen ~/ w;
 }
 
+/// Readable strings from a RESP_CODE_DEVICE_INFO frame: build date, model, and
+/// firmware version, NUL-terminated after the 8-byte header and before the
+/// binary config block (client_repeat/path-hash/caps live at bytes 80-82).
+/// Collects printable-ASCII runs (>=2 chars) from byte 8 up to byte 80. (#134)
+List<String> parseDeviceInfoStrings(Uint8List frame) {
+  final out = <String>[];
+  final buf = StringBuffer();
+  final end = frame.length < 80 ? frame.length : 80;
+  for (var i = 8; i < end; i++) {
+    final b = frame[i];
+    if (b >= 0x20 && b < 0x7f) {
+      buf.writeCharCode(b);
+    } else {
+      if (buf.length >= 2) out.add(buf.toString());
+      buf.clear();
+    }
+  }
+  if (buf.length >= 2) out.add(buf.toString());
+  return out;
+}
+
+/// Maps a [parseDeviceInfoStrings] list to (version, model, build date),
+/// anchored from the END: the firmware version is the last string and the most
+/// likely to be present, model second-to-last, build date third-to-last. A
+/// partial set keeps the version correct instead of shifting every field. (#134)
+({String? version, String? model, String? buildDate}) deviceInfoFields(
+  List<String> strings,
+) {
+  final n = strings.length;
+  return (
+    version: n >= 1 ? strings[n - 1] : null,
+    model: n >= 2 ? strings[n - 2] : null,
+    buildDate: n >= 3 ? strings[n - 3] : null,
+  );
+}
+
 // Helper to convert uint32 to hex string
 String ackHashToHex(int ackHash) {
   return ackHash.toRadixString(16).padLeft(8, '0');

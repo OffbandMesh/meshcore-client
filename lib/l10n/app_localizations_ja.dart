@@ -524,6 +524,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_infoStatus => 'ステータス';
 
   @override
+  String get settings_infoFirmware => 'Firmware';
+
+  @override
+  String get settings_infoModel => 'Model';
+
+  @override
   String get settings_infoBattery => 'バッテリー';
 
   @override
