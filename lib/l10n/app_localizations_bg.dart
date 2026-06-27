@@ -1381,6 +1381,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chat_reply => 'Отговори';
 
   @override
+  String get chat_replyWithRoute => 'Reply with route';
+
+  @override
   String get chat_addReaction => 'Добави Реакция';
 
   @override

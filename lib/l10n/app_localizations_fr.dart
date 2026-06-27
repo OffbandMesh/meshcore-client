@@ -1384,6 +1384,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chat_reply => 'Répondre';
 
   @override
+  String get chat_replyWithRoute => 'Reply with route';
+
+  @override
   String get chat_addReaction => 'Ajouter une Réaction';
 
   @override
