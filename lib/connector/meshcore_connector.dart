@@ -13,6 +13,7 @@ import '../models/channel_message.dart';
 import '../models/companion_radio_stats.dart';
 import '../models/contact.dart';
 import '../models/message.dart';
+import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
 import '../helpers/reaction_helper.dart';
@@ -2549,6 +2550,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _firmwareVerCode = null;
     _firmwareVersion = null;
     _deviceModel = null;
+    _latestOffbandGpsStatus = null;
     _batteryMillivolts = null;
     _repeaterBatterySnapshots.clear();
     _batteryRequested = false;
@@ -2637,8 +2639,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryPollTimer = null;
   }
 
-  /// Start polling the radio's GPS-backed self-info every minute.
-  /// No-op if already running. Triggered when the radio reports `gps=1`.
+  /// Poll the radio's GPS position every minute via the lightweight Offband
+  /// `0xC1` query — NOT `CMD_APP_START`, which re-inits the whole device
+  /// (re-walks channels, re-drains messages) and floods slow BLE links. (#140)
+  /// No-op if already running. Triggered when the radio reports `gps=1`; the
+  /// reply updates self-lat/lon via `_handleOffbandGps`. (#135)
   void _startGpsLocationPolling() {
     if (_gpsLocationPollTimer != null) return;
     _gpsLocationPollTimer = Timer.periodic(_gpsLocationPollInterval, (timer) {
@@ -2647,7 +2652,7 @@ class MeshCoreConnector extends ChangeNotifier {
         _gpsLocationPollTimer = null;
         return;
       }
-      unawaited(sendFrame(buildAppStartFrame()));
+      unawaited(requestOffbandGps());
     });
   }
 
@@ -3805,6 +3810,61 @@ class MeshCoreConnector extends ChangeNotifier {
     await getChannels(force: true);
   }
 
+  // --- Offband GPS query (CMD_OFFBAND_GPS / RESP_CODE_OFFBAND_GPS = 0xC1) (#135)
+  OffbandGpsStatus? _latestOffbandGpsStatus;
+  Completer<OffbandGpsStatus?>? _offbandGpsCompleter;
+
+  /// Latest GPS state from the most recent [requestOffbandGps], or null until
+  /// one completes (cleared on disconnect).
+  OffbandGpsStatus? get offbandGpsStatus => _latestOffbandGpsStatus;
+
+  /// Sends the 1-byte `0xC1` request and resolves with the parsed reply, or null
+  /// on timeout / disconnect. Companion-available (no observer gate). (#135)
+  Future<OffbandGpsStatus?> requestOffbandGps({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (!isConnected) return null;
+    final existing = _offbandGpsCompleter;
+    if (existing != null && !existing.isCompleted) {
+      // A query is already in flight — share it rather than orphaning it.
+      return existing.future.timeout(timeout, onTimeout: () => null);
+    }
+    final completer = Completer<OffbandGpsStatus?>();
+    _offbandGpsCompleter = completer;
+    await sendFrame(buildOffbandGpsRequestFrame());
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      return null;
+    } finally {
+      if (identical(_offbandGpsCompleter, completer)) {
+        _offbandGpsCompleter = null;
+      }
+    }
+  }
+
+  void _handleOffbandGps(Uint8List frame) {
+    if (frame.length < 2) return;
+    final text = utf8.decode(frame.sublist(1), allowMalformed: true);
+    final status = OffbandGpsStatus.parse(text);
+    // Claim the in-flight request's completer up front so a late reply can't
+    // complete a newer request's future (stale-data race). (#135)
+    final completer = _offbandGpsCompleter;
+    _offbandGpsCompleter = null;
+    _latestOffbandGpsStatus = status;
+    // A live fix is the device's real position — keep self-lat/lon (and the
+    // map) fresh from it, replacing what the old APP_START GPS poll did. (#140)
+    if (status.hasLiveFix) {
+      _selfLatitude = status.latitude;
+      _selfLongitude = status.longitude;
+    }
+    _appDebugLogService?.info('Offband GPS: $text', tag: 'GPS');
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(status);
+    }
+    notifyListeners();
+  }
+
   void _handleFrame(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
@@ -3822,6 +3882,9 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeDeviceInfo:
         _handleDeviceInfo(frame);
+        break;
+      case respCodeOffbandGps:
+        _handleOffbandGps(frame);
         break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');

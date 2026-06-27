@@ -361,6 +361,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settings_locationIntervalSec => 'GPS 间隔（秒）';
 
   @override
+  String get settings_gpsStatusTitle => 'GPS status';
+
+  @override
+  String get settings_gpsStatusRefresh => 'Query GPS';
+
+  @override
+  String get settings_gpsStatusLiveFix => 'Live GPS fix';
+
+  @override
+  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+
+  @override
+  String get settings_gpsStatusCoords => 'Coordinates';
+
+  @override
+  String get settings_gpsStatusSats => 'Satellites';
+
+  @override
+  String get settings_gpsStatusAltitude => 'Altitude';
+
+  @override
+  String get settings_gpsStatusTime => 'Fix time';
+
+  @override
+  String get settings_gpsStatusTapRefresh =>
+      'Tap Query GPS to read the current GPS state';
+
+  @override
+  String get settings_gpsStatusNoResponse =>
+      'No response — device may need the GPS-query firmware build';
+
+  @override
   String get settings_locationIntervalInvalid => '间隔时间必须至少为 60 秒，但不超过 86400 秒。';
 
   @override

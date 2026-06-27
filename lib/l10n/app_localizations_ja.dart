@@ -364,6 +364,38 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_locationIntervalSec => 'GPS データの取得間隔（秒）';
 
   @override
+  String get settings_gpsStatusTitle => 'GPS status';
+
+  @override
+  String get settings_gpsStatusRefresh => 'Query GPS';
+
+  @override
+  String get settings_gpsStatusLiveFix => 'Live GPS fix';
+
+  @override
+  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+
+  @override
+  String get settings_gpsStatusCoords => 'Coordinates';
+
+  @override
+  String get settings_gpsStatusSats => 'Satellites';
+
+  @override
+  String get settings_gpsStatusAltitude => 'Altitude';
+
+  @override
+  String get settings_gpsStatusTime => 'Fix time';
+
+  @override
+  String get settings_gpsStatusTapRefresh =>
+      'Tap Query GPS to read the current GPS state';
+
+  @override
+  String get settings_gpsStatusNoResponse =>
+      'No response — device may need the GPS-query firmware build';
+
+  @override
   String get settings_locationIntervalInvalid =>
       '間隔は少なくとも60秒で、86400秒未満でなければなりません。';
 

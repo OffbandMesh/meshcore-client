@@ -255,6 +255,14 @@ const int respCodeCustomVars = 21;
 const int respCodeAutoAddConfig = 25;
 const int respCodeStats = 24;
 
+/// Offband fork-only extension space (0xC0+) — never collides with upstream,
+/// never submitted upstream. Request and reply share the code. (#135)
+const int cmdOffbandGps = 0xC1;
+const int respCodeOffbandGps = 0xC1;
+
+/// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
+Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;

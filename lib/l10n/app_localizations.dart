@@ -802,6 +802,66 @@ abstract class AppLocalizations {
   /// **'Interval for GPS (Seconds)'**
   String get settings_locationIntervalSec;
 
+  /// No description provided for @settings_gpsStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS status'**
+  String get settings_gpsStatusTitle;
+
+  /// No description provided for @settings_gpsStatusRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Query GPS'**
+  String get settings_gpsStatusRefresh;
+
+  /// No description provided for @settings_gpsStatusLiveFix.
+  ///
+  /// In en, this message translates to:
+  /// **'Live GPS fix'**
+  String get settings_gpsStatusLiveFix;
+
+  /// No description provided for @settings_gpsStatusNoFix.
+  ///
+  /// In en, this message translates to:
+  /// **'No fix — using stored/last position'**
+  String get settings_gpsStatusNoFix;
+
+  /// No description provided for @settings_gpsStatusCoords.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates'**
+  String get settings_gpsStatusCoords;
+
+  /// No description provided for @settings_gpsStatusSats.
+  ///
+  /// In en, this message translates to:
+  /// **'Satellites'**
+  String get settings_gpsStatusSats;
+
+  /// No description provided for @settings_gpsStatusAltitude.
+  ///
+  /// In en, this message translates to:
+  /// **'Altitude'**
+  String get settings_gpsStatusAltitude;
+
+  /// No description provided for @settings_gpsStatusTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix time'**
+  String get settings_gpsStatusTime;
+
+  /// No description provided for @settings_gpsStatusTapRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Query GPS to read the current GPS state'**
+  String get settings_gpsStatusTapRefresh;
+
+  /// No description provided for @settings_gpsStatusNoResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'No response — device may need the GPS-query firmware build'**
+  String get settings_gpsStatusNoResponse;
+
   /// No description provided for @settings_locationIntervalInvalid.
   ///
   /// In en, this message translates to:
