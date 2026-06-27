@@ -185,6 +185,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     setState(() {
       _replyingToMessage = message;
     });
+    // Drop the cursor straight into the composer (the reply banner has just
+    // laid out, so focus after the frame). Saves a click/tab on reply. (#131)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _textFieldFocusNode.requestFocus();
+    });
   }
 
   void _cancelReply() {
@@ -1219,6 +1224,34 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// One-click reply quoting the route a message took — hop count + path,
+  /// truncated with … to fit the channel byte budget, fired directly. (#106)
+  void _sendRouteReply(ChannelMessage message) {
+    final connector = context.read<MeshCoreConnector>();
+    final w = connector.pathHashByteWidth;
+    final hops = message.pathBytes.length ~/ (w < 1 ? 1 : w);
+    final prefix =
+        '@[${message.senderName}] ↩ ${context.l10n.chat_hopsCount(hops)} · via ';
+    final maxBytes = maxChannelMessageBytes(connector.selfName);
+
+    var path = _formatPathPrefixes(message.pathBytes, w);
+    var truncated = false;
+    String outbound() => connector.prepareChannelOutboundText(
+      widget.channel.index,
+      '$prefix$path${truncated ? '…' : ''}',
+    );
+    while (path.isNotEmpty && utf8.encode(outbound()).length > maxBytes) {
+      path = path.substring(0, path.length - 1);
+      truncated = true;
+    }
+
+    var text = '$prefix$path${truncated ? '…' : ''}';
+    if (connector.isChannelCyr2LatEnabled(widget.channel.index)) {
+      text = Cyr2Lat.encode(text);
+    }
+    connector.sendChannelMessage(widget.channel, text);
+  }
+
   void _ensureDateFormats(BuildContext context) {
     final locale = Localizations.localeOf(context).toString();
     final clock = context.read<AppSettingsService>().settings.clockFormat;
@@ -1394,6 +1427,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 _setReplyingTo(message);
               },
             ),
+            if (message.pathBytes.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.alt_route),
+                title: Text(context.l10n.chat_replyWithRoute),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _sendRouteReply(message);
+                },
+              ),
             if (PlatformInfo.isDesktop)
               ListTile(
                 leading: const Icon(Icons.route),

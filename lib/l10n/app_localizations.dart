@@ -2536,6 +2536,12 @@ abstract class AppLocalizations {
   /// **'Reply'**
   String get chat_reply;
 
+  /// No description provided for @chat_replyWithRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply with route'**
+  String get chat_replyWithRoute;
+
   /// No description provided for @chat_addReaction.
   ///
   /// In en, this message translates to:
