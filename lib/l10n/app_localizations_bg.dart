@@ -553,6 +553,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get settings_infoStatus => 'Статус';
 
   @override
+  String get settings_infoFirmware => 'Firmware';
+
+  @override
+  String get settings_infoModel => 'Model';
+
+  @override
   String get settings_infoBattery => 'Батерия';
 
   @override

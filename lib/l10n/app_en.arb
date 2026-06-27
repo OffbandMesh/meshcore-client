@@ -224,6 +224,8 @@
   "settings_infoName": "Name",
   "settings_infoId": "ID",
   "settings_infoStatus": "Status",
+  "settings_infoFirmware": "Firmware",
+  "settings_infoModel": "Model",
   "settings_infoBattery": "Battery",
   "settings_infoPublicKey": "Public Key",
   "settings_infoContactsCount": "Contacts Count",

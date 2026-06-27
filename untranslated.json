@@ -2,6 +2,8 @@
   "bg": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -14,6 +16,8 @@
   "de": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -26,6 +30,8 @@
   "es": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -38,6 +44,8 @@
   "fr": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -50,6 +58,8 @@
   "hu": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -62,6 +72,8 @@
   "it": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -74,6 +86,8 @@
   "ja": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -86,6 +100,8 @@
   "ko": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -98,6 +114,8 @@
   "nl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -110,6 +128,8 @@
   "pl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -122,6 +142,8 @@
   "pt": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -134,6 +156,8 @@
   "ru": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -146,6 +170,8 @@
   "sk": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -158,6 +184,8 @@
   "sl": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -170,6 +198,8 @@
   "sv": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -182,6 +212,8 @@
   "uk": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",
@@ -194,6 +226,8 @@
   "zh": [
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
+    "settings_infoFirmware",
+    "settings_infoModel",
     "appSettings_clock",
     "appSettings_clockSystem",
     "appSettings_clock12h",

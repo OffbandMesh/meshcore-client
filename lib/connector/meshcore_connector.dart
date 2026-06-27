@@ -196,6 +196,8 @@ class MeshCoreConnector extends ChangeNotifier {
   bool? _clientRepeat;
   MeshCoreRadioStateSnapshot? _rememberedNonRepeatRadioState;
   int? _firmwareVerCode;
+  String? _firmwareVersion;
+  String? _deviceModel;
   int? _offbandCaps;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
@@ -447,6 +449,12 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   int? get firmwareVerCode => _firmwareVerCode;
+
+  /// Readable firmware version / model from the device-info reply (#134); null
+  /// until a device-info frame arrives, or on older firmware that omits the
+  /// strings. (Build date is parsed too but only surfaced in the connect log.)
+  String? get firmwareVersion => _firmwareVersion;
+  String? get deviceModel => _deviceModel;
 
   /// `offband_caps` capability bitfield from the device-info reply (v14+);
   /// null on older firmware that sends a shorter frame.
@@ -2539,6 +2547,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _clientRepeat = null;
     _rememberedNonRepeatRadioState = null;
     _firmwareVerCode = null;
+    _firmwareVersion = null;
+    _deviceModel = null;
     _batteryMillivolts = null;
     _repeaterBatterySnapshots.clear();
     _batteryRequested = false;
@@ -4114,6 +4124,17 @@ class MeshCoreConnector extends ChangeNotifier {
       _hasReceivedDeviceInfo = true;
     }
     _firmwareVerCode = frame[1];
+
+    // Readable build date / model / firmware version — NUL-terminated strings
+    // after the 8-byte header, before the binary config block. (#134)
+    final infoStrings = parseDeviceInfoStrings(frame);
+    final info = deviceInfoFields(infoStrings);
+    _firmwareVersion = info.version;
+    _deviceModel = info.model;
+    _appDebugLogService?.info(
+      'Device info: ${infoStrings.isEmpty ? '(no strings)' : infoStrings.join(' · ')}',
+      tag: 'Device',
+    );
 
     // Parse client_repeat from firmware v9+ (byte 80)
     if (frame.length >= 81) {

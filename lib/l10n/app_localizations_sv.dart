@@ -540,6 +540,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settings_infoStatus => 'Status';
 
   @override
+  String get settings_infoFirmware => 'Firmware';
+
+  @override
+  String get settings_infoModel => 'Model';
+
+  @override
   String get settings_infoBattery => 'Batteri';
 
   @override
