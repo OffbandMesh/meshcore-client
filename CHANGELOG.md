@@ -2,6 +2,35 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.1.2-rc.1] - 2026-06-28
+
+### Added
+- Channel reply UX: replying focuses the composer, and one-click route-reply sends
+  back along the path the message arrived on (#131, #106).
+- Device Info shows the connected radio's firmware version and model, and logs them
+  to the app log on connect (#134).
+- GPS state query — when a GPS-capable radio (Offband firmware) has GPS enabled,
+  read its live GPS state (detected / fix, coordinates, satellites) from
+  Settings → Location (#135).
+
+### Fixed
+- BLE write flood (`recv_queue` / `send_queue` full) during sync on slower links:
+  the per-minute GPS refresh no longer re-initializes the whole device each minute
+  (which had been re-walking channels and re-draining messages) (#140).
+- Repeater path-hash labels decode at the device's hash width, so multi-byte hashes
+  render correctly (#115).
+
+### Changed
+- The fork-only GPS query (`0xC1`) is gated on firmware capability, so stock /
+  non-Offband MeshCore radios are never sent a command they can't answer; the GPS
+  status section is hidden on unsupported firmware (#144).
+
+### Known issues
+- The connect-time contact load can hang (red sync bar stuck) if a contact frame is
+  lost — there's no timeout/watchdog yet (#86); reconnect to clear it.
+- Companion message-sync may miss public history after a long offline gap (#91); a
+  firmware-side fix is in progress.
+
 ## [1.1.2-beta.3] - 2026-06-24
 
 ### Added
@@ -43,4 +72,5 @@ First public beta.
   firmware-side fix is in progress.
 - MQTT broker / Observer features require the firmware currently in review.
 
+[1.1.2-rc.1]: https://github.com/OffbandMesh/meshcore-client/releases/tag/v1.1.2-rc.1
 [1.1.2-beta.1]: https://github.com/OffbandMesh/meshcore-client/releases/tag/v1.1.2-beta.1

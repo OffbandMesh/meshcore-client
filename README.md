@@ -22,9 +22,9 @@ Offband Meshcore is a cross-platform mobile application for communicating with M
 
 ## Download & Install
 
-> **Public beta** — expect rough edges; please [report bugs](https://github.com/OffbandMesh/meshcore-client/issues). Grab the newest build from [**Releases**](https://github.com/OffbandMesh/meshcore-client/releases).
+> **Release candidate** — expect rough edges; please [report bugs](https://github.com/OffbandMesh/meshcore-client/issues). Grab the newest build from [**Releases**](https://github.com/OffbandMesh/meshcore-client/releases).
 
-- **Windows (x64):** download `OffbandMeshcore-*-win-x64.zip`, extract it anywhere, and run `offband_meshcore.exe`. The beta is unsigned, so Windows SmartScreen will warn — click **More info → Run anyway**.
+- **Windows (x64):** download `OffbandMeshcore-*-win-x64.zip`, extract it anywhere, and run `offband_meshcore.exe`. The build is unsigned, so Windows SmartScreen will warn — click **More info → Run anyway**.
 - **Android:** download the `.apk` and install it (you may need to allow "install from unknown sources").
 - **iOS / macOS / Linux:** build from source for now — see [Getting Started](#getting-started).
 
