@@ -78,8 +78,13 @@ class _PathManagementDialogState extends State<_PathManagementDialog> {
     final connector = context.read<MeshCoreConnector>();
     final allContacts = connector.allContacts;
 
-    final formattedPath = PathHelper.formatPathHex(pathBytes);
-    final resolvedNames = PathHelper.resolvePathNames(pathBytes, allContacts);
+    final hashWidth = connector.pathHashByteWidth;
+    final formattedPath = PathHelper.formatPathHex(pathBytes, hashWidth);
+    final resolvedNames = PathHelper.resolvePathNames(
+      pathBytes,
+      allContacts,
+      hashWidth,
+    );
 
     showDialog(
       context: context,
