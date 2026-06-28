@@ -263,6 +263,17 @@ const int respCodeOffbandGps = 0xC1;
 /// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
+/// True iff the connected firmware understands the `0xC1` GPS extension. Gated
+/// on the `offband_caps` byte being present: that byte is an Offband-fork
+/// addition (device-info v14+) which stock/upstream MeshCore never emits, so a
+/// null caps value means non-Offband firmware that couldn't answer `0xC1` — and
+/// must not be pinged with it. (#144)
+///
+/// Interim presence-gate: a dedicated `OFFBAND_CAP_GPS` bit (firmware
+/// follow-up) would let an Offband build without GPS opt out; until firmware
+/// defines one, any Offband v14+ radio is assumed to speak `0xC1`.
+bool firmwareSupportsOffbandGps(int? offbandCaps) => offbandCaps != null;
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;

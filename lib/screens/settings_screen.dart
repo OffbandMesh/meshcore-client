@@ -886,22 +886,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   },
                 ),
-                _buildGpsQuerySection(
-                  context,
-                  gpsStatus,
-                  queryingGps,
-                  queriedOnce,
-                  () async {
-                    setDialogState(() => queryingGps = true);
-                    final s = await connector.requestOffbandGps();
-                    if (!dialogContext.mounted) return;
-                    setDialogState(() {
-                      queryingGps = false;
-                      queriedOnce = true;
-                      gpsStatus = s;
-                    });
-                  },
-                ),
+                if (connector.supportsOffbandGps)
+                  _buildGpsQuerySection(
+                    context,
+                    gpsStatus,
+                    queryingGps,
+                    queriedOnce,
+                    () async {
+                      setDialogState(() => queryingGps = true);
+                      final s = await connector.requestOffbandGps();
+                      if (!dialogContext.mounted) return;
+                      setDialogState(() {
+                        queryingGps = false;
+                        queriedOnce = true;
+                        gpsStatus = s;
+                      });
+                    },
+                  ),
               ],
             ],
           ),
