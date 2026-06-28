@@ -1,0 +1,75 @@
+name: Triage User-Submitted Issues
+
+# When an EXTERNAL (non-maintainer) user opens an issue, flag + default-triage it:
+#   user-submitted + priority:P2 + board:backlog.
+# Labels are applied with PROJECT_PAT so the existing sync-labels-to-board.yml
+# (label -> board) fires and sets Status=Backlog / Priority=Medium on board #2.
+# `type:` is intentionally left for manual triage (type is the judgment call).
+#
+# Maintainer-opened issues (author_association OWNER/MEMBER/COLLABORATOR) are untouched.
+#
+# Requires repo secret PROJECT_PAT (classic PAT, project+repo scope) — the same
+# secret sync-labels-to-board.yml uses. The PAT is also what lets the added labels
+# re-trigger that downstream workflow (labels added by the default GITHUB_TOKEN do
+# NOT trigger further workflow runs).
+#
+# Testing: `issues:`-triggered workflows only run from the default branch, and an
+# owner-opened issue reports author_association=OWNER (won't self-trigger). Use the
+# workflow_dispatch entrypoint against a throwaway issue to validate before merge.
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to triage (test path — bypasses the author-association gate)"
+        required: true
+        type: string
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage user-submitted issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const INTERNAL = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const isDispatch = context.eventName === 'workflow_dispatch';
+
+            let issueNumber, association;
+
+            if (isDispatch) {
+              issueNumber = parseInt(context.payload.inputs.issue_number, 10);
+              if (!Number.isInteger(issueNumber)) {
+                core.setFailed(`Invalid issue_number input: "${context.payload.inputs.issue_number}"`);
+                return;
+              }
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+              });
+              association = issue.author_association;
+              core.info(`Manual dispatch for #${issueNumber} (author_association=${association}) — bypassing author gate for test`);
+            } else {
+              issueNumber = context.payload.issue.number;
+              association = context.payload.issue.author_association;
+              if (INTERNAL.has(association)) {
+                core.info(`#${issueNumber} opened by ${association} (maintainer) — skipping triage`);
+                return;
+              }
+              core.info(`#${issueNumber} opened by external author (${association}) — triaging`);
+            }
+
+            const labels = ['user-submitted', 'priority:P2', 'board:backlog'];
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              labels,
+            });
+            core.info(`Applied [${labels.join(', ')}] to #${issueNumber}.`);
+            core.info('sync-labels-to-board.yml will set Status=Backlog / Priority=Medium on board #2.');
