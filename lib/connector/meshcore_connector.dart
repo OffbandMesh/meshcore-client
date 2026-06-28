@@ -51,14 +51,22 @@ import 'meshcore_protocol.dart';
 class DirectRepeater {
   static const int maxAgeMinutes = 30; // Max age for direct repeater info
   final int pubkeyFirstByte;
+  // Last-hop prefix at the device's configured path-hash width (1/2/3 bytes), so
+  // 2-/3-byte meshes display + match the full repeater prefix, not just 1 byte. (#151)
+  final Uint8List pubkeyPrefix;
   double snr;
   DateTime lastUpdated;
 
   DirectRepeater({
     required this.pubkeyFirstByte,
+    required this.pubkeyPrefix,
     required this.snr,
     DateTime? lastUpdated,
   }) : lastUpdated = lastUpdated ?? DateTime.now();
+
+  /// Last-hop prefix as lowercase hex (2 chars per byte). (#151)
+  String get prefixHex =>
+      pubkeyPrefix.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   void update(double newSNR) {
     snr = newSNR;
@@ -6655,6 +6663,20 @@ class MeshCoreConnector extends ChangeNotifier {
     final pubkeyFirstByte = path.isNotEmpty
         ? path.last
         : contact.publicKey.first;
+    // Capture the last hop's FULL configured-width prefix (the directly-heard
+    // repeater), not just one byte, so wide-prefix meshes resolve it correctly. (#151)
+    final width = _pathHashByteWidth;
+    final Uint8List pubkeyPrefix;
+    if (path.isNotEmpty) {
+      pubkeyPrefix = Uint8List.fromList(
+        path.sublist(path.length >= width ? path.length - width : 0),
+      );
+    } else {
+      final pk = contact.publicKey;
+      pubkeyPrefix = Uint8List.fromList(
+        pk.length >= width ? pk.sublist(0, width) : pk,
+      );
+    }
 
     _directRepeaters.removeWhere((r) => r.isStale());
 
@@ -6666,7 +6688,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final isTracked = _directRepeaters.where(
-      (r) => r.pubkeyFirstByte == pubkeyFirstByte,
+      (r) => listEquals(r.pubkeyPrefix, pubkeyPrefix),
     );
 
     final sortedRepeaters = List<DirectRepeater>.from(_directRepeaters)
@@ -6686,7 +6708,11 @@ class MeshCoreConnector extends ChangeNotifier {
       repeater.update(snr);
     } else if (_directRepeaters.length < 5) {
       _directRepeaters.add(
-        DirectRepeater(pubkeyFirstByte: pubkeyFirstByte, snr: snr),
+        DirectRepeater(
+          pubkeyFirstByte: pubkeyFirstByte,
+          pubkeyPrefix: pubkeyPrefix,
+          snr: snr,
+        ),
       );
     }
     notifyListeners();
