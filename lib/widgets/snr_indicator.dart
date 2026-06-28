@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -10,15 +11,18 @@ import 'signal_ui.dart';
 
 Contact? _getRepeaterPrefixMatchNearLocation(
   List<Contact> contacts,
-  int pubkeyFirstByte, {
+  Uint8List pubkeyPrefix, {
   LatLng? searchPoint,
   bool preferFavorites = false,
 }) {
   final candidates = contacts
       .where(
         (c) =>
-            c.publicKey.isNotEmpty &&
-            c.publicKey.first == pubkeyFirstByte &&
+            c.publicKey.length >= pubkeyPrefix.length &&
+            listEquals(
+              c.publicKey.sublist(0, pubkeyPrefix.length),
+              pubkeyPrefix,
+            ) &&
             (c.type == advTypeRepeater || c.type == advTypeRoom),
       )
       .toList();
@@ -170,7 +174,7 @@ class _SNRIndicatorState extends State<SNRIndicator> {
               ),
               if (directRepeater != null)
                 Text(
-                  '${directRepeaters.length}: ${directRepeater.pubkeyFirstByte.toRadixString(16).padLeft(2, '0')}: ${_formatLastUpdated(directRepeater.lastUpdated)}',
+                  '${directRepeaters.length}: ${directRepeater.prefixHex}: ${_formatLastUpdated(directRepeater.lastUpdated)}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -244,7 +248,7 @@ class _SNRIndicatorState extends State<SNRIndicator> {
 
                 final contact = _getRepeaterPrefixMatchNearLocation(
                   allContacts,
-                  repeater.pubkeyFirstByte,
+                  repeater.pubkeyPrefix,
                   searchPoint: selfPoint,
                   preferFavorites: true,
                 );
@@ -255,12 +259,7 @@ class _SNRIndicatorState extends State<SNRIndicator> {
                   children: [
                     ListTile(
                       leading: Icon(snrUi.icon, color: snrUi.color),
-                      title: Text(
-                        name ??
-                            repeater.pubkeyFirstByte
-                                .toRadixString(16)
-                                .padLeft(2, '0'),
-                      ),
+                      title: Text(name ?? repeater.prefixHex),
                       subtitle: Text(
                         'SNR: ${repeater.snr.toStringAsFixed(1)} dB\n${l10n.snrIndicator_lastSeen}: ${_formatLastUpdated(repeater.lastUpdated)}',
                       ),
