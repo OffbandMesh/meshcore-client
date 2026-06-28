@@ -460,6 +460,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// `offband_caps` capability bitfield from the device-info reply (v14+);
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
+
+  /// Whether the connected firmware speaks the `0xC1` GPS extension — i.e. it
+  /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
+  /// so 0xC1 is suppressed there rather than pinged blindly. (#144)
+  bool get supportsOffbandGps => firmwareSupportsOffbandGps(_offbandCaps);
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
@@ -2661,6 +2666,19 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer = null;
   }
 
+  /// Start or stop the 0xC1 GPS poll based on current state: only when the
+  /// radio reports `gps=1` AND the firmware advertises 0xC1 support. Called
+  /// from every input that can change either input (custom-var frames, the
+  /// enable toggle, and the device-info reply that delivers `offband_caps`) so
+  /// frame-arrival order doesn't matter. (#144)
+  void _reconcileGpsPolling() {
+    if (supportsOffbandGps && _currentCustomVars?['gps'] == '1') {
+      _startGpsLocationPolling();
+    } else {
+      _stopGpsLocationPolling();
+    }
+  }
+
   void setPollingInterval(int i) {
     _pollingInterval = i.clamp(1, 60);
     if (isConnected) {
@@ -3566,10 +3584,8 @@ class MeshCoreConnector extends ChangeNotifier {
       (_currentCustomVars ??= <String, String>{})[key] = val;
       notifyListeners();
     }
-    if (value == 'gps:1') {
-      _startGpsLocationPolling();
-    } else if (value == 'gps:0') {
-      _stopGpsLocationPolling();
+    if (value == 'gps:1' || value == 'gps:0') {
+      _reconcileGpsPolling();
     }
   }
 
@@ -3824,6 +3840,8 @@ class MeshCoreConnector extends ChangeNotifier {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     if (!isConnected) return null;
+    // Never emit the fork-only 0xC1 to firmware that can't answer it. (#144)
+    if (!supportsOffbandGps) return null;
     final existing = _offbandGpsCompleter;
     if (existing != null && !existing.isCompleted) {
       // A query is already in flight — share it rather than orphaning it.
@@ -4213,6 +4231,9 @@ class MeshCoreConnector extends ChangeNotifier {
     // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
     // testable helper; offset verified against firmware (see parseOffbandCaps).
     _offbandCaps = parseOffbandCaps(frame);
+    // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
+    // frame arrived before this device-info reply set support. (#144)
+    _reconcileGpsPolling();
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];
@@ -6301,13 +6322,10 @@ class MeshCoreConnector extends ChangeNotifier {
     final buf = BufferReader(frame.sublist(1));
     try {
       _currentCustomVars = _parseKeyValueString(buf.readCString());
-      // Reflect current GPS state in the polling timer (handles initial
-      // device state on connect as well as external CLI/USB toggles).
-      if (_currentCustomVars?['gps'] == '1') {
-        _startGpsLocationPolling();
-      } else {
-        _stopGpsLocationPolling();
-      }
+      // Reflect current GPS state in the polling timer (handles initial device
+      // state on connect as well as external CLI/USB toggles); gated on 0xC1
+      // support so stock firmware never gets polled. (#144)
+      _reconcileGpsPolling();
     } catch (e) {
       appLogger.warn('Malformed custom vars frame: $e', tag: 'Connector');
     }
