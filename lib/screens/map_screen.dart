@@ -269,7 +269,7 @@ class _MapScreenState extends State<MapScreen> {
             )
             .join(',');
         final cacheKey =
-            '$filteredKeys|$anchorKeys|${pathHistory.version}:${connector.currentSf}:${connector.currentBwHz}:${connector.currentTxPower}:${settings.mapShowGuessedLocations}';
+            '$filteredKeys|$anchorKeys|${pathHistory.version}:${connector.currentSf}:${connector.currentBwHz}:${connector.currentTxPower}:${connector.pathHashByteWidth}:${settings.mapShowGuessedLocations}';
         if (cacheKey != _guessedLocationsCacheKey) {
           _guessedLocationsCacheKey = cacheKey;
           _cachedGuessedLocations = settings.mapShowGuessedLocations
@@ -278,6 +278,7 @@ class _MapScreenState extends State<MapScreen> {
                   allContactsWithLocation,
                   pathHistory,
                   maxRangeKm,
+                  connector.pathHashByteWidth,
                 )
               : [];
         }
@@ -698,19 +699,28 @@ class _MapScreenState extends State<MapScreen> {
     List<Contact> withLocation,
     PathHistoryService pathHistory,
     double? maxRangeKm,
+    int pathHashByteWidth,
   ) {
-    // Index known-location repeaters by their 1-byte hash.
-    // null value = two repeaters share the same hash byte (ambiguous collision).
-    final repeaterByHash = <int, Contact?>{};
+    // Index known-location repeaters by their configured-width hash prefix,
+    // packed into an int key. null value = two repeaters share that prefix
+    // (ambiguous collision). Width-aware so 2-/3-byte meshes disambiguate
+    // instead of colliding on the first byte alone. (#156)
+    final w = pathHashByteWidth < 1 ? 1 : pathHashByteWidth;
+    int packPrefix(List<int> bytes, int start) {
+      var v = 0;
+      for (var i = 0; i < w; i++) {
+        v = (v << 8) | bytes[start + i];
+      }
+      return v;
+    }
 
+    final repeaterByHash = <int, Contact?>{};
     for (final c in withLocation) {
-      if (c.type == advTypeRepeater) {
-        if (repeaterByHash.containsKey(c.publicKey[0])) {
-          repeaterByHash[c.publicKey[0]] =
-              null; // collision: can't disambiguate
-        } else {
-          repeaterByHash[c.publicKey[0]] = c;
-        }
+      if (c.type == advTypeRepeater && c.publicKey.length >= w) {
+        final key = packPrefix(c.publicKey, 0);
+        repeaterByHash[key] = repeaterByHash.containsKey(key)
+            ? null // collision: can't disambiguate
+            : c;
       }
     }
 
@@ -736,12 +746,13 @@ class _MapScreenState extends State<MapScreen> {
             .getRecentPaths(contact.publicKeyHex)
             .map((r) => r.pathBytes),
       ];
-      final lastHopBytes = <int>{};
       for (final pathBytes in pathSets) {
-        if (pathBytes.isEmpty) continue;
-        final lastHop = pathBytes.last;
-        lastHopBytes.add(lastHop);
-        final r = repeaterByHash[lastHop];
+        if (pathBytes.length < w) continue;
+        // Anchor on the contact-side hop. Paths are stored device-side-first
+        // (Contact.path is the reversed wire path), so the contact-side repeater
+        // is the trailing w bytes — the same hop the 1-byte code read via
+        // pathBytes.last, just widened to the configured width.
+        final r = repeaterByHash[packPrefix(pathBytes, pathBytes.length - w)];
         if (r != null) anchorSet.add(LatLng(r.latitude!, r.longitude!));
       }
 
@@ -965,6 +976,13 @@ class _MapScreenState extends State<MapScreen> {
   }) {
     List<Contact> filtered = [];
     bool addContact = false;
+    // Overlap detection compares the configured-width hash prefix, so 2-/3-byte
+    // meshes only flag true routing collisions, not incidental 1-byte ones. (#156)
+    int overlapWidth = 1;
+    if (settings.mapShowOverlaps) {
+      final hw = context.read<MeshCoreConnector>().pathHashByteWidth;
+      overlapWidth = hw < 1 ? 1 : hw;
+    }
     for (final contact in contacts) {
       addContact = false;
       if (!contact.hasLocation && !noLocations) {
@@ -999,7 +1017,7 @@ class _MapScreenState extends State<MapScreen> {
             .where(
               (c) =>
                   c.publicKeyHex != contact.publicKeyHex &&
-                  c.publicKey.first == contact.publicKey.first &&
+                  _samePubkeyPrefix(c, contact, overlapWidth) &&
                   (c.type == advTypeRepeater || c.type == advTypeRoom) &&
                   (contact.type == advTypeRepeater ||
                       contact.type == advTypeRoom),
@@ -1018,6 +1036,16 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
     return filtered;
+  }
+
+  /// True if two contacts share their first [width] public-key bytes — the
+  /// width-aware replacement for a 1-byte first-byte comparison. (#156)
+  bool _samePubkeyPrefix(Contact a, Contact b, int width) {
+    if (a.publicKey.length < width || b.publicKey.length < width) return false;
+    for (var i = 0; i < width; i++) {
+      if (a.publicKey[i] != b.publicKey[i]) return false;
+    }
+    return true;
   }
 
   List<Marker> _buildMarkers(
