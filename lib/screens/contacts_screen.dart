@@ -1266,31 +1266,32 @@ class _ContactsScreenState extends State<ContactsScreen>
             if (isRepeater) ...[
               ListTile(
                 leading: const Icon(Icons.radar, color: Colors.green),
-                title: Text(
-                  contact.pathBytesForDisplay.isNotEmpty
-                      ? context.l10n.contacts_pathTrace
-                      : context.l10n.contacts_ping,
-                ),
+                title: Text(context.l10n.contacts_pathTrace),
                 onTap: () {
                   final hw = context
                       .read<MeshCoreConnector>()
                       .pathHashByteWidth;
+                  // A flood route is stored as all-zero bytes = "no real route",
+                  // so trace the target directly instead of routing through (and
+                  // sending) an all-zero/empty path. (#150)
+                  final route = contact.pathBytesForDisplay;
+                  final hasRoute = route.isNotEmpty && route.any((b) => b != 0);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => PathTraceMapScreen(
-                        title: contact.pathBytesForDisplay.isNotEmpty
+                        title: hasRoute
                             ? context.l10n.contacts_repeaterPathTrace
                             : context.l10n.contacts_repeaterPing,
-                        path: contact.pathBytesForDisplay.isNotEmpty
-                            ? contact.pathBytesForDisplay
+                        path: hasRoute
+                            ? route
                             : Uint8List.fromList(
                                 contact.publicKey.sublist(
                                   0,
                                   PathHelper.traceHopBytes(hw),
                                 ),
                               ),
-                        flipPathAround: contact.pathBytesForDisplay.isNotEmpty,
+                        flipPathAround: hasRoute,
                         targetContact: contact,
                         pathHashByteWidth: hw,
                       ),
