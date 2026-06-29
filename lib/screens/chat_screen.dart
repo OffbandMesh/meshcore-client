@@ -1513,6 +1513,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final result = await PathSelectionDialog.show(
       context,
       availableContacts: availableContacts,
+      pathHashByteWidth: connector.pathHashByteWidth,
       initialPath: pathForInput.isEmpty ? null : pathForInput,
       title: context.l10n.chat_setCustomPath,
       currentPathLabel: currentPathLabel,

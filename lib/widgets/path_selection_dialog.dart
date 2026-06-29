@@ -12,11 +12,13 @@ class PathSelectionDialog extends StatefulWidget {
   final String? initialPath;
   final String? currentPathLabel;
   final VoidCallback? onRefresh;
+  final int pathHashByteWidth;
 
   const PathSelectionDialog({
     super.key,
     required this.availableContacts,
     required this.title,
+    required this.pathHashByteWidth,
     this.initialPath,
     this.currentPathLabel,
     this.onRefresh,
@@ -28,6 +30,7 @@ class PathSelectionDialog extends StatefulWidget {
   static Future<Uint8List?> show(
     BuildContext context, {
     required List<Contact> availableContacts,
+    required int pathHashByteWidth,
     String? title,
     String? initialPath,
     String? currentPathLabel,
@@ -37,6 +40,7 @@ class PathSelectionDialog extends StatefulWidget {
       context: context,
       builder: (context) => PathSelectionDialog(
         availableContacts: availableContacts,
+        pathHashByteWidth: pathHashByteWidth,
         title: title ?? context.l10n.path_enterCustomPath,
         initialPath: initialPath,
         currentPathLabel: currentPathLabel,
@@ -44,12 +48,45 @@ class PathSelectionDialog extends StatefulWidget {
       ),
     );
   }
+
+  /// Parses comma-separated hex hop prefixes, each exactly [hashWidth] bytes
+  /// wide (clamped >= 1). Wrong-length or malformed entries go to [invalid] and
+  /// are skipped — never silently truncated. (#155)
+  static List<int> parsePathPrefixes(
+    String text,
+    int hashWidth,
+    List<String> invalid,
+  ) {
+    final hexLen = (hashWidth < 1 ? 1 : hashWidth) * 2;
+    final bytes = <int>[];
+    for (final id
+        in text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty)) {
+      if (id.length != hexLen) {
+        invalid.add(id);
+        continue;
+      }
+      try {
+        for (var i = 0; i < hexLen; i += 2) {
+          bytes.add(int.parse(id.substring(i, i + 2), radix: 16));
+        }
+      } catch (_) {
+        invalid.add(id);
+      }
+    }
+    return bytes;
+  }
 }
 
 class _PathSelectionDialogState extends State<PathSelectionDialog> {
   late TextEditingController _controller;
   final List<Contact> _selectedContacts = [];
   List<Contact> _validContacts = [];
+
+  // Hop prefix width in bytes (clamped >= 1) and in hex chars, from the device's
+  // configured path-hash width. (#155)
+  int get _hopWidth =>
+      widget.pathHashByteWidth < 1 ? 1 : widget.pathHashByteWidth;
+  int get _hexLen => _hopWidth * 2;
 
   @override
   void initState() {
@@ -73,10 +110,11 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
   }
 
   void _updateTextFromContacts() {
+    final hexLen = _hexLen;
     final pathParts = _selectedContacts
         .map((contact) {
-          if (contact.publicKeyHex.length >= 2) {
-            return contact.publicKeyHex.substring(0, 2);
+          if (contact.publicKeyHex.length >= hexLen) {
+            return contact.publicKeyHex.substring(0, hexLen);
           }
           return '';
         })
@@ -112,29 +150,13 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
       return;
     }
 
-    // Parse comma-separated hex prefixes
-    final pathIds = path
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
-    final pathBytesList = <int>[];
+    // Parse comma-separated hex prefixes, each exactly one path-hash hop wide.
     final invalidPrefixes = <String>[];
-
-    for (final id in pathIds) {
-      if (id.length < 2) {
-        invalidPrefixes.add(id);
-        continue;
-      }
-
-      final prefix = id.substring(0, 2);
-      try {
-        final byte = int.parse(prefix, radix: 16);
-        pathBytesList.add(byte);
-      } catch (e) {
-        invalidPrefixes.add(id);
-      }
-    }
+    final pathBytesList = PathSelectionDialog.parsePathPrefixes(
+      path,
+      widget.pathHashByteWidth,
+      invalidPrefixes,
+    );
 
     if (!mounted) return;
 
@@ -150,7 +172,7 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
     }
 
     // Check max path length (64 hops)
-    if (pathBytesList.length > 64) {
+    if (pathBytesList.length > 64 * _hopWidth) {
       showDismissibleSnackBar(
         context,
         content: Text(l10n.path_tooLong),
@@ -227,7 +249,7 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
                   helperText: l10n.path_helperMaxHops,
                 ),
                 textCapitalization: TextCapitalization.characters,
-                maxLength: 191, // 64 hops * 2 chars + 63 commas
+                maxLength: 64 * _hexLen + 63, // 64 hops * (width*2) + 63 commas
               ),
               const SizedBox(height: 16),
               const Divider(),
@@ -312,7 +334,7 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
                           style: const TextStyle(fontSize: 14),
                         ),
                         subtitle: Text(
-                          '${contact.typeLabel(l10n)} • ${contact.publicKeyHex.substring(0, 2)}',
+                          '${contact.typeLabel(l10n)} • ${contact.publicKeyHex.length >= _hexLen ? contact.publicKeyHex.substring(0, _hexLen) : contact.publicKeyHex}',
                           style: const TextStyle(fontSize: 10),
                         ),
                         trailing: isSelected

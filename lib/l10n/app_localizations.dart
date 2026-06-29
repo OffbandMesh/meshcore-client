@@ -3834,13 +3834,13 @@ abstract class AppLocalizations {
   /// No description provided for @path_hexPrefixInstructions.
   ///
   /// In en, this message translates to:
-  /// **'Enter 2-character hex prefixes for each hop, separated by commas.'**
+  /// **'Enter each hop\'s hex prefix, separated by commas.'**
   String get path_hexPrefixInstructions;
 
   /// No description provided for @path_hexPrefixExample.
   ///
   /// In en, this message translates to:
-  /// **'Example: A1,F2,3C (each node uses first byte of its public key)'**
+  /// **'Tap nodes below, or enter each hop\'s hex prefix, comma-separated.'**
   String get path_hexPrefixExample;
 
   /// No description provided for @path_labelHexPrefixes.
@@ -3852,7 +3852,7 @@ abstract class AppLocalizations {
   /// No description provided for @path_helperMaxHops.
   ///
   /// In en, this message translates to:
-  /// **'Max 64 hops. Each prefix is 2 hex characters (1 byte)'**
+  /// **'Max 64 hops.'**
   String get path_helperMaxHops;
 
   /// No description provided for @path_selectFromContacts.

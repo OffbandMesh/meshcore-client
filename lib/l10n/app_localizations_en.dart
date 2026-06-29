@@ -2104,18 +2104,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get path_hexPrefixInstructions =>
-      'Enter 2-character hex prefixes for each hop, separated by commas.';
+      'Enter each hop\'s hex prefix, separated by commas.';
 
   @override
   String get path_hexPrefixExample =>
-      'Example: A1,F2,3C (each node uses first byte of its public key)';
+      'Tap nodes below, or enter each hop\'s hex prefix, comma-separated.';
 
   @override
   String get path_labelHexPrefixes => 'Path (hex prefixes)';
 
   @override
-  String get path_helperMaxHops =>
-      'Max 64 hops. Each prefix is 2 hex characters (1 byte)';
+  String get path_helperMaxHops => 'Max 64 hops.';
 
   @override
   String get path_selectFromContacts => 'Or select from contacts:';
