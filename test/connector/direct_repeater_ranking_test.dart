@@ -86,4 +86,30 @@ void main() {
       expect(r.prefixHex, '84');
     });
   });
+
+  group('DirectRepeater.matchesPathStart (#156)', () {
+    DirectRepeater repeater(List<int> prefix) => DirectRepeater(
+      pubkeyFirstByte: prefix.first,
+      pubkeyPrefix: Uint8List.fromList(prefix),
+      snr: 12.0,
+    );
+
+    test('width 1 — matches on the single prefix byte', () {
+      expect(repeater([0x84]).matchesPathStart([0x84, 0xab]), isTrue);
+      expect(repeater([0x84]).matchesPathStart([0x99]), isFalse);
+    });
+
+    test('width 2 — both bytes must match, so a 1-byte collision misses', () {
+      final r = repeater([0x84, 0xab]);
+      expect(r.matchesPathStart([0x84, 0xab, 0xc1]), isTrue);
+      // Shares only the first byte — the #156 collision that a 1-byte match
+      // would have falsely accepted.
+      expect(r.matchesPathStart([0x84, 0x99]), isFalse);
+    });
+
+    test('a path shorter than the prefix never matches', () {
+      expect(repeater([0x84, 0xab]).matchesPathStart([0x84]), isFalse);
+      expect(repeater([0x84]).matchesPathStart(<int>[]), isFalse);
+    });
+  });
 }

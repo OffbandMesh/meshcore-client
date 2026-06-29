@@ -68,6 +68,16 @@ class DirectRepeater {
   String get prefixHex =>
       pubkeyPrefix.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+  /// True if [pathBytes] begins with this repeater's full configured-width
+  /// prefix — the width-aware replacement for a 1-byte first-hop match. (#156)
+  bool matchesPathStart(List<int> pathBytes) {
+    if (pathBytes.length < pubkeyPrefix.length) return false;
+    for (var i = 0; i < pubkeyPrefix.length; i++) {
+      if (pathBytes[i] != pubkeyPrefix[i]) return false;
+    }
+    return true;
+  }
+
   void update(double newSNR) {
     snr = newSNR;
     lastUpdated = DateTime.now();
