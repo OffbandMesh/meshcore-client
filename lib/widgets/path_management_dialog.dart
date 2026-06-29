@@ -152,6 +152,7 @@ class _PathManagementDialogState extends State<_PathManagementDialog> {
     final result = await PathSelectionDialog.show(
       context,
       availableContacts: availableContacts,
+      pathHashByteWidth: connector.pathHashByteWidth,
       initialPath: pathForInput.isEmpty ? null : pathForInput,
       currentPathLabel: currentContact.pathLabel(l10n),
       onRefresh: connector.isConnected ? connector.getContacts : null,
