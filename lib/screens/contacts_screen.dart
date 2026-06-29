@@ -1266,7 +1266,11 @@ class _ContactsScreenState extends State<ContactsScreen>
             if (isRepeater) ...[
               ListTile(
                 leading: const Icon(Icons.radar, color: Colors.green),
-                title: Text(context.l10n.contacts_ping),
+                title: Text(
+                  contact.pathBytesForDisplay.isNotEmpty
+                      ? context.l10n.contacts_pathTrace
+                      : context.l10n.contacts_ping,
+                ),
                 onTap: () {
                   final hw = context
                       .read<MeshCoreConnector>()
@@ -1275,13 +1279,18 @@ class _ContactsScreenState extends State<ContactsScreen>
                     context,
                     MaterialPageRoute(
                       builder: (context) => PathTraceMapScreen(
-                        title: context.l10n.contacts_repeaterPing,
-                        path: Uint8List.fromList(
-                          contact.publicKey.sublist(
-                            0,
-                            PathHelper.traceHopBytes(hw),
-                          ),
-                        ),
+                        title: contact.pathBytesForDisplay.isNotEmpty
+                            ? context.l10n.contacts_repeaterPathTrace
+                            : context.l10n.contacts_repeaterPing,
+                        path: contact.pathBytesForDisplay.isNotEmpty
+                            ? contact.pathBytesForDisplay
+                            : Uint8List.fromList(
+                                contact.publicKey.sublist(
+                                  0,
+                                  PathHelper.traceHopBytes(hw),
+                                ),
+                              ),
+                        flipPathAround: contact.pathBytesForDisplay.isNotEmpty,
                         targetContact: contact,
                         pathHashByteWidth: hw,
                       ),
