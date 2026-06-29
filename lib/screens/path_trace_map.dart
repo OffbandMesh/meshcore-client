@@ -199,16 +199,14 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
     final hopBytes = PathHelper.traceHopBytes(widget.pathHashByteWidth);
     final pk = widget.targetContact?.publicKey;
 
-    if (pathBytes.isEmpty) {
-      // Direct target: send its own width prefix.
+    // Empty path, or an all-zero "flood" marker, means no real route — trace
+    // the target's own width prefix directly. Never return an empty payload:
+    // the firmware rejects an empty trace with error 1. (#150)
+    if (pathBytes.isEmpty || pathBytes.every((b) => b == 0)) {
       if (pk != null && pk.length >= hopBytes) {
         return Uint8List.fromList(pk.sublist(0, hopBytes));
       }
       return Uint8List.fromList([pk != null && pk.isNotEmpty ? pk[0] : 0]);
-    }
-    // An all-zero path is the "no known path" marker → no trace payload.
-    if (pathBytes.every((b) => b == 0)) {
-      return Uint8List(0);
     }
 
     final throughTarget =
@@ -245,6 +243,23 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
         : widget.path;
 
     final path = widget.flipPathAround ? buildPath(pathTmp) : pathTmp;
+
+    if (path.isEmpty) {
+      // No route to trace — don't send an empty payload (firmware error 1);
+      // surface "not available" instead. (#150)
+      appLogger.info(
+        'Path trace skipped: no route to trace',
+        tag: 'PathTraceMapScreen',
+        noNotify: !mounted,
+      );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _failed2Loaded = true;
+        });
+      }
+      return;
+    }
 
     appLogger.info(
       'Initiating path trace with path: ${_formatPathPrefixes(path)}',
