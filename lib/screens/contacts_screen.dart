@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../connector/meshcore_protocol.dart';
+import '../helpers/path_helper.dart';
 import '../models/contact.dart';
 import '../l10n/contact_localization.dart';
 import '../models/contact_group.dart';
@@ -1275,7 +1276,12 @@ class _ContactsScreenState extends State<ContactsScreen>
                     MaterialPageRoute(
                       builder: (context) => PathTraceMapScreen(
                         title: context.l10n.contacts_repeaterPing,
-                        path: Uint8List.fromList([contact.publicKey.first]),
+                        path: Uint8List.fromList(
+                          contact.publicKey.sublist(
+                            0,
+                            PathHelper.traceHopBytes(hw),
+                          ),
+                        ),
                         targetContact: contact,
                         pathHashByteWidth: hw,
                       ),
@@ -1308,7 +1314,12 @@ class _ContactsScreenState extends State<ContactsScreen>
                             : context.l10n.contacts_roomPing,
                         path: contact.pathBytesForDisplay.isNotEmpty
                             ? contact.pathBytesForDisplay
-                            : Uint8List.fromList([contact.publicKey.first]),
+                            : Uint8List.fromList(
+                                contact.publicKey.sublist(
+                                  0,
+                                  PathHelper.traceHopBytes(hw),
+                                ),
+                              ),
                         flipPathAround: contact.pathBytesForDisplay.isNotEmpty,
                         targetContact: contact,
                         pathHashByteWidth: hw,

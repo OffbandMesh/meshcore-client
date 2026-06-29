@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../connector/meshcore_protocol.dart';
+import '../helpers/path_helper.dart';
 import '../models/app_settings.dart';
 import '../models/channel.dart';
 import '../models/contact.dart';
@@ -2323,9 +2324,14 @@ class _MapScreenState extends State<MapScreen> {
 
   void _addToPath(BuildContext context, Contact contact, {LatLng? position}) {
     setState(() {
-      _pathTrace.add(
-        contact.publicKey[0],
-      ); // Add first 16 bytes of public key to path trace
+      _pathTrace.addAll(
+        contact.publicKey.sublist(
+          0,
+          PathHelper.traceHopBytes(
+            context.read<MeshCoreConnector>().pathHashByteWidth,
+          ),
+        ),
+      ); // Add the configured-width hop prefix to the path trace
       _pathTraceContacts.add(
         contact.copyWith(
           latitude: position?.latitude ?? contact.latitude,
