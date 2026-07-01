@@ -2,9 +2,10 @@
 
 **Status:** App-side design-of-record (2026-07), **app half not yet built**. Reconciled to the firmware
 side, which is **merged / as-built** (`OffbandMesh/meshcore-firmware`, PR #247, `FIRMWARE_VER_CODE 15`;
-Feature #241 / Epic #242 / doc #244). Wire codes below are the firmware **as-built** values (confirmed
-by PearlMeadow); the `BLOCK_LIST` dump framing + `APP_START` early-END are pinned in §8 pending final
-confirmation against PearlMeadow's complete as-built send.
+Feature #241 / Epic #242 / doc #244). Wire codes below are the firmware **as-built** values, **design +
+all wire gaps confirmed by PearlMeadow** (reply 2026-07-01: reply-shape, overflow-at-32, early-END
+re-request, no-unsolicited-push). The app half is reconciled to the shipped firmware; no open
+discrepancies.
 
 **Owners:** app = meshcore-client (Offband); firmware = meshcore-firmware (Offband, agent PearlMeadow).
 **Tracking (app):** Feature #164 → Epic A (app-local) #165 / Epic B (firmware offload) #166.
@@ -129,21 +130,39 @@ Mirrors the `0xC1`/`offband_caps` capability pattern (`supportsOffbandGps`). Val
 
   | Sub | Name | Frame | Reply |
   |---|---|---|---|
-  | `0x01` | BLOCK_ADD | `[0xC2][0x01][pubkey:32]` | ack / err |
-  | `0x02` | BLOCK_REMOVE | `[0xC2][0x02][pubkey:32]` | ack / err |
+  | `0x01` | BLOCK_ADD | `[0xC2][0x01][pubkey:32]` | `[0xC2][0x01][ok]` — ok=1 present-after-call, ok=0 store-full |
+  | `0x02` | BLOCK_REMOVE | `[0xC2][0x02][pubkey:32]` | `[0xC2][0x02][ok]` — ok=1 removed, ok=0 not-present |
   | `0x03` | BLOCK_LIST | `[0xC2][0x03]` | streamed dump (framing below) |
-  | `0x04` | BLOCK_CLEAR | `[0xC2][0x04]` | ack |
+  | `0x04` | BLOCK_CLEAR | `[0xC2][0x04]` | `[0xC2][0x04][ok]` |
+
+  **Reply shape (as-built):** success is always the 3-byte `[0xC2][sub][ok]` — `ok` is a *result byte*,
+  not a separate ack/err frame. The **only** error frame is the generic **`[0x01][0x06]`**
+  (`RESP_CODE_ERR=1`, `ERR_CODE_ILLEGAL_ARG=6`), emitted for a malformed request (ADD/REMOVE < 34 B or
+  unknown sub). ⚠ **It is NOT `0xC2`-prefixed** — the app must recognize the generic 2-byte error frame
+  and must **not** wait for a `0xC2` echo.
 
   **`BLOCK_LIST` dump framing (as-built):** START `[0xC2 0x03 0xFF count]` → one key per idle pass
   `[0xC2 0x03 index pubkey:32]` → END `[0xC2 0x03 0xFE]`. On an `APP_START` reconnect mid-dump the
-  firmware emits an **early-END terminator** so the app never blocks waiting on a stale stream — the
-  app must treat `0xFE` as authoritative end and reconcile against whatever keys it received.
+  firmware emits an **early-END terminator** so the app never blocks on a stale stream. Normal END and
+  early-END are the **identical byte** (`0xFE`); detect truncation by comparing the START `count`
+  against key-frames received — **fewer ⇒ truncated ⇒ re-request `BLOCK_LIST` when the link settles.**
+  Never treat a partial dump as authoritative, and **never derive removals from a LIST** (removal is
+  explicit-unblock only) — a partial pull can only miss node keys (fixed by re-request), never
+  false-unblock.
 
 - **Firmware store:** list of blocked pubkeys in NVS (flat `/blocks` file), **independent of the
   contacts list** (block a spammer without storing them). **`MAX_BLOCKED_KEYS = 32`** (as-built).
-- **Firmware enforcement:** DM from a blocked key → **dropped at receive** (the core offload). Adverts
-  → **still processed** (keeps self-heal alive); app suppresses the *notification*. Channel → **not**
-  enforced in firmware (app-only).
+  **Overflow:** if the app's local list exceeds 32, the overflow `ADD` returns `ok=0` (**not** an
+  error) — those keys simply aren't node-portable; **tolerate it, local stays authoritative.**
+  Idempotent nuance: an already-stored key returns `ok=1` even at capacity (dedup short-circuits before
+  the full check), so `ok=0` strictly means "new key + store full."
+- **Firmware enforcement:** DM from a blocked key → **dropped at receive** (the core offload) —
+  **silently**: no notification, no frame. The app never sees blocked DMs and cannot count/badge them,
+  so any "N blocked" UX must not rely on firmware counts. Adverts → **still processed** (keeps
+  self-heal alive); app suppresses the *notification*. Channel → **not** enforced in firmware (app-only).
+- **No unsolicited pushes.** Block state is strictly app-pull + app-initiated ADD/REMOVE/CLEAR/LIST;
+  the only firmware-initiated `0xC2` frame is the `APP_START` early-END terminator (a reconnect signal,
+  not a state change).
 
 ### Sync model — union, app always retained
 
@@ -154,6 +173,8 @@ Mirrors the `0xC1`/`offband_caps` capability pattern (`supportsOffbandGps`). Val
   3. **Push** local entries missing on the node → `BLOCK_ADD` (`0xC2/0x01`).
   4. Both converge to the **union** → portable to the user's other Offband clients.
   - Reconcile is tolerant of frame-arrival order (mirror `_reconcileGpsPolling`).
+  - If the dump was truncated (START `count` > key-frames received, e.g. `APP_START` early-END),
+    **re-request** once the link settles; treat only a complete dump as the node set.
 - **Unblock:** remove locally **and** `BLOCK_REMOVE` (`0xC2/0x02`) on the node.
 - **On a non-Offband node:** steps skipped; local store does everything (not portable via that node).
 
