@@ -6374,6 +6374,54 @@ abstract class AppLocalizations {
   /// **'Scan to add \"{name}\".'**
   String channels_shareQrInstructions(String name);
 
+  /// No description provided for @channels_scanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR Code'**
+  String get channels_scanQr;
+
+  /// No description provided for @channels_scanQrDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a community or channel from a QR code'**
+  String get channels_scanQrDesc;
+
+  /// No description provided for @channels_scanQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Point at a MeshCore QR code'**
+  String get channels_scanQrInstructions;
+
+  /// No description provided for @channels_invalidQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid QR code'**
+  String get channels_invalidQr;
+
+  /// No description provided for @channels_noFreeSlot.
+  ///
+  /// In en, this message translates to:
+  /// **'No free channel slot'**
+  String get channels_noFreeSlot;
+
+  /// No description provided for @channels_qrAddConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Add channel \"{name}\"?'**
+  String channels_qrAddConfirm(String name);
+
+  /// No description provided for @channels_qrAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added \"{name}\".'**
+  String channels_qrAdded(String name);
+
+  /// No description provided for @channels_qrExists.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" is already added.'**
+  String channels_qrExists(String name);
+
   /// No description provided for @community_hashtagPrivacyHint.
   ///
   /// In en, this message translates to:

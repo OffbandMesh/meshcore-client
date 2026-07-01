@@ -3626,6 +3626,36 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get channels_scanQr => 'Scan QR Code';
+
+  @override
+  String get channels_scanQrDesc => 'Add a community or channel from a QR code';
+
+  @override
+  String get channels_scanQrInstructions => 'Point at a MeshCore QR code';
+
+  @override
+  String get channels_invalidQr => 'Invalid QR code';
+
+  @override
+  String get channels_noFreeSlot => 'No free channel slot';
+
+  @override
+  String channels_qrAddConfirm(String name) {
+    return 'Add channel \"$name\"?';
+  }
+
+  @override
+  String channels_qrAdded(String name) {
+    return 'Added \"$name\".';
+  }
+
+  @override
+  String channels_qrExists(String name) {
+    return '\"$name\" is already added.';
+  }
+
+  @override
   String get community_hashtagPrivacyHint =>
       'Community hashtag channels are only joinable by members of the community';
 
