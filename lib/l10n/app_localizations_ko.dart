@@ -3493,6 +3493,17 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get channels_shareQr => 'Share QR Code';
+
+  @override
+  String get channels_shareQrTitle => 'Share Channel';
+
+  @override
+  String channels_shareQrInstructions(String name) {
+    return 'Scan to add \"$name\".';
+  }
+
+  @override
   String get community_hashtagPrivacyHint =>
       '커뮤니티 해시태그 채널은 커뮤니티 구성원만 가입할 수 있습니다.';
 

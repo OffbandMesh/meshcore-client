@@ -3659,6 +3659,17 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get channels_shareQr => 'Share QR Code';
+
+  @override
+  String get channels_shareQrTitle => 'Share Channel';
+
+  @override
+  String channels_shareQrInstructions(String name) {
+    return 'Scan to add \"$name\".';
+  }
+
+  @override
   String get community_hashtagPrivacyHint =>
       'Community hashtag-kanalen zijn alleen toegankelijk voor leden van de community';
 

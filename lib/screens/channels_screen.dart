@@ -520,6 +520,17 @@ class _ChannelsScreenState extends State<ChannelsScreen>
               },
             ),
             ListTile(
+              leading: const Icon(Icons.qr_code_2),
+              title: Text(context.l10n.channels_shareQr),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await Future.delayed(const Duration(milliseconds: 100));
+                if (parentContext.mounted) {
+                  _showChannelQrDialog(parentContext, channel);
+                }
+              },
+            ),
+            ListTile(
               leading: Icon(
                 isMuted
                     ? Icons.notifications_outlined
@@ -1756,6 +1767,20 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       data: community.toQrJson(),
       title: context.l10n.community_qrTitle,
       instructions: context.l10n.community_qrInstructions(community.name),
+      embeddedImage: Image.asset(
+        'assets/images/mesh-icon.png',
+        width: 40,
+        height: 40,
+      ),
+    );
+  }
+
+  void _showChannelQrDialog(BuildContext context, Channel channel) {
+    QrCodeShareDialog.show(
+      context: context,
+      data: channel.toShareUri(),
+      title: context.l10n.channels_shareQrTitle,
+      instructions: context.l10n.channels_shareQrInstructions(channel.name),
       embeddedImage: Image.asset(
         'assets/images/mesh-icon.png',
         width: 40,

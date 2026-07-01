@@ -1982,6 +1982,16 @@
       }
     }
   },
+  "channels_shareQr": "Share QR Code",
+  "channels_shareQrTitle": "Share Channel",
+  "channels_shareQrInstructions": "Scan to add \"{name}\".",
+  "@channels_shareQrInstructions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "community_hashtagPrivacyHint": "Community hashtag channels are only joinable by members of the community",
   "community_invalidQrCode": "Invalid community QR code",
   "community_alreadyMember": "Already a Member",

@@ -68,6 +68,32 @@ class Channel {
     return bytes;
   }
 
+  /// Reference-app channel share URI:
+  /// `meshcore://channel/add?name=<url-encoded>&secret=<32-hex PSK>`.
+  /// Round-trips with the reference MeshCore app's channel QR. (#161)
+  String toShareUri() =>
+      'meshcore://channel/add?name=${Uri.encodeComponent(name)}&secret=$pskHex';
+
+  /// Parses a channel from a reference-app share URI, or null if malformed.
+  /// [index] is the local slot the caller assigns on add. (#161)
+  static Channel? fromShareUri(String uri, {int index = 0}) {
+    final parsed = Uri.tryParse(uri.trim());
+    if (parsed == null || parsed.scheme != 'meshcore') return null;
+    if (parsed.host != 'channel') return null;
+    if (parsed.path.replaceAll('/', '') != 'add') return null;
+    final name = parsed.queryParameters['name'];
+    final secret = parsed.queryParameters['secret'];
+    if (name == null || secret == null) return null;
+    try {
+      return Channel(index: index, name: name, psk: parsePskHex(secret));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// True if [uri] is a valid channel share URI. (#161)
+  static bool isValidShareUri(String uri) => fromShareUri(uri) != null;
+
   /// Derive PSK from hashtag name using SHA256.
   /// The hashtag is normalized to include '#' prefix.
   /// Returns first 16 bytes of SHA256 hash as PSK.
