@@ -1,68 +1,61 @@
 # Block / Ignore — App ↔ Firmware Contract
 
-**Status:** Proposed contract (design-of-record from the 2026-07 brainstorm). **Not yet built** — the
-`-as-built` filename is the intended home for this doc; it will be reconciled to actual behavior as
-Epic A / Epic B land. Sections marked **[TO LOCK]** require agreement with the firmware side
-(`OffbandMesh/meshcore-firmware`, agent PearlMeadow — which **already has a block feature**) before
-Layer 2 is coded.
+**Status:** App-side design-of-record (2026-07), **app half not yet built**. Reconciled to the firmware
+side, which is **merged / as-built** (`OffbandMesh/meshcore-firmware`, PR #247, `FIRMWARE_VER_CODE 15`;
+Feature #241 / Epic #242 / doc #244). Wire codes below are the firmware **as-built** values (confirmed
+by PearlMeadow); the `BLOCK_LIST` dump framing + `APP_START` early-END are pinned in §8 pending final
+confirmation against PearlMeadow's complete as-built send.
 
-**Owners:** app = meshcore-client (Offband); firmware = meshcore-firmware (Offband).
-**Tracking:** Feature #164 → Epic A (app-local) #165 / Epic B (firmware offload) #166.
-**Related:** device-config-parity Feature #7; firmware companion-API config command.
+**Owners:** app = meshcore-client (Offband); firmware = meshcore-firmware (Offband, agent PearlMeadow).
+**Tracking (app):** Feature #164 → Epic A (app-local) #165 / Epic B (firmware offload) #166.
 
 ---
 
 ## 1. Problem
 
 A single misbehaving node floods the mesh with **adverts, pings, DMs, and Public-channel posts**.
-Users want to *ignore* that node so they stop seeing its traffic. Repeater/firmware-wide rate limiting
-(`flood.max`, `flood.advert.interval`, region scoping) is a blunt, network-operator-level tool and is
-explicitly **out of scope** here. This contract covers a **per-user, per-node block**.
+Users want to *ignore* that node so they stop seeing its traffic. Repeater/network-wide rate limiting
+is operator-level and **out of scope**. This contract covers a **per-user, per-node block**.
 
-## 2. Reality constraints (verified against the code + upstream)
+## 2. Reality constraints (verified — app + firmware)
 
 1. **DMs and adverts carry the sender's public key** → blockable by identity, reliably.
 2. **Channel/Public messages carry NO public key.** `ChannelMessage.senderKey` is always `null`
-   (`lib/models/channel_message.dart`); the "sender" is a plaintext `"name: msg"` prefix. Public is a
-   shared-PSK channel (`Channel.publicChannelPsk`). So channel senders can only be matched by
-   **claimed name**, or by **resolving that name to a known contact's key**.
-3. **There is no block primitive in stock MeshCore** — not in the companion protocol command set
-   (tops out at `cmdSetPathHashMode = 61`, no block), not on the radio, not in the official app
-   (its "Block Sender" is app-local UI filtering, same as MeshMonitor's "Ignored Nodes").
-   → **Cross-app portability of a block is not achievable today by anyone.** A firmware-stored block
-   is only meaningful as an **Offband-fork extension**; the stock app will not honor it.
-4. **`cmdRemoveContact` (15) is not a block** — the firmware re-adds the contact on its next advert.
+   (`lib/models/channel_message.dart`; firmware `BaseChatMesh.cpp:367-387`); sender is a plaintext
+   `"name: msg"` string over a shared PSK. Channel blocking is a **name↔key resolution** problem.
+3. **No block primitive in stock MeshCore.** So a firmware-stored block is meaningful only as an
+   **Offband extension**; a stock/other client will not honor it.
+4. **`cmdRemoveContact` (15) is not a block** — firmware re-adds the contact on its next advert.
 5. **Contact names track the pubkey.** On each advert, `_handleContactAdvert`
-   (`lib/connector/meshcore_connector.dart`) replaces the stored contact with fresh advert data,
-   including the current name (only the user path-override is preserved). This is what lets
-   name→key resolution self-heal across renames (§5).
+   (`meshcore_connector.dart:4639`; firmware `BaseChatMesh.cpp:120,177,186`) refreshes the stored
+   name under the same pubkey — this powers the self-heal (§5).
 
-## 3. Core principle — two layers, app-authoritative, graceful degradation
+## 3. Core principle — app-local is never abandoned; firmware is a portability bonus
 
 ```
-Layer 1  App-local block          ── always on, any firmware. SOURCE OF TRUTH.
-Layer 2  Firmware offload         ── Offband radios only, capability-gated. Best-effort mirror.
+Layer 1  App-local block   ── ALWAYS on, any firmware. The client's source of truth. Never wiped by sync.
+Layer 2  Firmware offload  ── Offband nodes only, capability-gated. Portable store + DM-drop. Additive.
 ```
 
-- **Layer 1** works identically on stock MeshCore and Offband firmware — full parity with the
-  official app's behavior.
-- **Layer 2** is an optional accelerator: on an Offband radio that advertises block capability, the
-  app pushes the block down so the **radio drops that node's traffic before it reaches the app**
-  (saves airtime surfacing / battery; persists across app reinstalls).
-- The app never depends on Layer 2. If the firmware can't do it, Layer 1 still fully hides the node.
+- The app owns a **complete, self-sufficient block** on any firmware (stock/other/Offband).
+- On an **Offband** node the app *also* syncs with the node's store, so the block **follows the user to
+  other Offband clients**. On a **non-Offband** node the block still works and persists **locally** — it
+  just can't ride that node to your other devices.
+- **Blocking never depends on Layer 2**, and **sync never silently unblocks anyone** (§8).
 
 ## 4. Layer 1 — app-local block (data model)
 
-New `BlockStore extends ChangeNotifier`, persisted via `PrefsManager`, **scoped by the connected
-device key** (first 10 hex chars — same pattern as `contact_settings_store`). Provider-wired alongside
-the existing services.
+New `BlockStore extends ChangeNotifier`, persisted via `PrefsManager`, **global to the app (keyed by
+public key), NOT per-radio-scoped** — deliberate deviation from the `contact_settings_store`
+per-device convention, because a block is "I don't want to see *this person*" and identity is a pubkey
+regardless of which radio is connected. (Revisitable later.)
 
 Two sets:
 
 | Set | Key type | Covers |
 |---|---|---|
-| `blockedKeys` | public-key hex | DMs, adverts, and channel posts that resolve to a known contact |
-| `blockedNames` | lowercased display-name string | channel posts from senders with no matching contact (fallback) |
+| `blockedKeys` | public-key hex (full 32-byte identity) | DMs, adverts, and channel posts that resolve to a known key |
+| `blockedNames` | lowercased display-name string | channel posts from senders not resolvable to a key (fallback; self-pruning, §7) |
 
 API: `isBlocked(keyHex)`, `isNameBlocked(name)`, `block(keyHex)`, `unblock(keyHex)`,
 `blockName(name)`, `unblockName(name)`, plus read accessors for the management UI.
@@ -71,105 +64,145 @@ API: `isBlocked(keyHex)`, `isNameBlocked(name)`, `block(keyHex)`, `unblock(keyHe
 
 | Surface | Rule |
 |---|---|
-| Incoming DM | drop from thread + suppress notification when `senderKey ∈ blockedKeys` |
-| Advert | in `_handleContactAdvert`: suppress new-advert notification; exclude key from Contacts + Discovery lists |
+| Incoming DM | drop + suppress notification when `senderKey ∈ blockedKeys` (on Offband, firmware already dropped it at receive — §7) |
+| Advert | suppress the new-advert notification for `blockedKeys`; exclude from Contacts + Discovery. **Do NOT discard the advert** — the contact-name update must keep flowing (self-heal, §5) |
 | Contacts / Discovery lists | filter out `blockedKeys` |
-| Channel message | hide when it resolves to a blocked key (§5) OR `senderName.toLowerCase() ∈ blockedNames`, OR the channel is muted (§6) |
+| Channel message | hide per the resolution rule in §5, OR when the channel is muted (§6) |
 
-Blocking never deletes stored history; it hides. Unblock restores visibility.
+Blocking hides, never deletes history. Unblock restores.
 
-## 5. Channel handling — name ↔ key resolution (the important part)
+## 5. Channel handling — name ↔ key resolution
 
-Channel packets are anonymous by protocol. To make channel blocking as strong as possible:
+Channel packets are anonymous, so resolution runs against a **name↔key index** (§ below).
 
-**At display:** a channel message is hidden if
-`resolveContactByName(senderName)?.publicKeyHex ∈ blockedKeys` **OR**
-`senderName.toLowerCase() ∈ blockedNames`.
+**At display — hide a channel post only if:**
+`resolveKeys(senderName)` is non-empty **and *every* matching pubkey ∈ `blockedKeys`**,
+**OR** `senderName.toLowerCase() ∈ blockedNames`.
 
-**Long-press "Block sender" in a channel:**
-- **Name resolves to a contact** → add that contact's **public key** to `blockedKeys` (this unifies the
-  block: the node vanishes from the channel *and* DMs *and* adverts in one action). Also record the
-  name in `blockedNames` as belt-and-suspenders.
-- **No matching contact** → add the **name** only to `blockedNames`, surfaced with a clear
-  "name-only — can be evaded by renaming" note.
+If **any** matching pubkey is **unblocked → SHOW**. An ambiguous name (two people/devices sharing a
+name) must not censor a possibly-legit namesake (false-positive L1).
 
-**Why this resists rename evasion:** when the node renames, its next advert updates its contact's name
-under the same pubkey (§2.5), so name→key resolution re-links automatically. Because this class of
-abuser floods adverts, the link stays fresh in practice.
+**Long-press "Block sender":**
+- resolves to one key → add to `blockedKeys` (**one action unifies DM + advert + channel**; sync to fw).
+- **multi-match** (one person on multiple devices = multiple keys, same name) → surface *all* matching
+  keys so the user blocks each device's key.
+- no resolution → add to `blockedNames`, flagged "name-only — evadable by rename."
 
-**Honest limitation:** if the node renames **and** the app never receives a linking advert (it goes
-silent on adverts but keeps posting to Public), that specific post is genuinely unattributable — no
-identity exists in the packet. Residual recourse is name-pattern matching or muting the channel (§6).
-This is a protocol limit, not an app defect.
+**Name↔key index — sourced from BOTH (don't rely on one push type):**
+- **`PUSH_CODE_NEW_ADVERT` (0x8A)** — full record (pubkey + name), fires for every advert from a
+  sender **not** in the node's contact store, **no replay guard** → an unstored spammer always
+  resolves (closes the "permanent name-only" worry).
+- **the synced contact list** — a renamed **stored** contact re-adverts as `PUSH_CODE_ADVERT` (0x80,
+  **pubkey only, no name**); read the new name from the contact record, not the advert tickle.
+
+**Why rename evasion mostly fails:** a renamed sender's next advert refreshes the name under the same
+pubkey, so resolution self-heals — and an advert-flooder keeps that link fresh.
+
+**Honest limit (L3):** renamed **and** advert-silent but still posting to a channel = genuinely
+unattributable (no identity in the packet). Not closable app- or firmware-side; recourse is
+name-pattern matching or muting the channel (§6).
 
 ## 6. Per-channel mute (in scope, Layer 1)
 
-Independent of per-sender blocking: a user can **mute an entire channel** (e.g. a noisy Public) so it
-stops generating notifications/unread badges and is de-emphasized, regardless of who is posting. This
-is the blunt-but-reliable answer to the unattributable-poster limitation in §5.
+Independent of per-sender blocking: mute an entire channel (e.g. a noisy Public) so it stops generating
+notifications/unread badges, regardless of who posts — the reliable answer to the L3 limit. Stored
+globally in the `BlockStore`/channel-settings as muted channel identities. Mute ≠ leave (messages stay
+readable when opened). Toggle from the channel header/overflow and the channel list (long-press).
 
-- Stored in the `BlockStore` (or the existing channel-settings store) as a set of muted channel
-  indices / PSK identities, scoped by device key.
-- Muting suppresses notifications + unread counts for that channel; messages remain readable when the
-  channel is opened (mute ≠ leave).
-- Toggle from the channel header/overflow and from the channel list (long-press).
+## 7. `blockedNames` promote-and-prune
 
-## 7. Layer 2 — firmware offload contract  **[TO LOCK with PearlMeadow]**
+A name-only block is provisional. When the index links a `blockedNames` entry to a pubkey (via advert),
+**promote** it — add the pubkey to `blockedKeys` (sync), drop the name entry. Any name that never links
+**expires after ~30 days**. The durable block is always the pubkey; `blockedNames` stays small and
+self-cleaning, bounding the L1/L2 false-positive window.
 
-Mirrors the existing `0xC1`/`offband_caps` capability pattern (`supportsOffbandGps` in the connector).
-The firmware side **already has a block feature** — this section aligns the app to *its* real wire
-format rather than inventing one.
+## 8. Layer 2 — firmware offload + sync (Offband only)
 
-- **Capability bit:** a `block` bit in the `offband_caps` bitfield in the device-info reply.
-  App exposes `bool get supportsOffbandBlock => firmwareSupportsOffbandBlock(_offbandCaps);`.
-  Stock firmware omits the byte → Layer 2 silently disabled. **[TO LOCK]** exact bit value.
-- **Transport / representation [TO LOCK]:** how the radio stores + exchanges the block list
-  (paginated `START → ITEM×N → END` list under a `block.*` namespace, vs a dedicated add/remove
-  command with a sub-type byte). Adopt PearlMeadow's existing scheme.
-- **Firmware behavior [TO LOCK]:** what the radio does with a blocked key (suppress delivery of that
-  node's DMs/adverts to the companion; MAY drop relay on repeater builds). Record PearlMeadow's
-  actual semantics here.
-- **Capability-gated + additive** — stock MeshCore clients/firmware unaffected.
+Mirrors the `0xC1`/`offband_caps` capability pattern (`supportsOffbandGps`). Values are firmware
+**as-built** (merged PR #247, `FIRMWARE_VER_CODE 15`):
 
-## 8. Sync model
+- **Capability:** `OFFBAND_CAP_BLOCK = 0x02` (bit 1) in the capability byte of `RESP_CODE_DEVICE_INFO`
+  (reply to `CMD_DEVICE_QUERY`); gated on `FIRMWARE_VER_CODE ≥ 15` **and** the bit set. App exposes
+  `bool get supportsOffbandBlock => firmwareSupportsOffbandBlock(_offbandCaps);`. Bit absent →
+  **app-only mode** (no sync, no firmware drop); block still works locally.
+- **Command:** `0xC2 = CMD_OFFBAND_BLOCK`, sub-typed (0xC0=config, 0xC1=GPS already used):
 
-- **App is authoritative.** `blockedKeys` in the app is the source of truth.
-- On `block()/unblock()`: write local first; if `supportsOffbandBlock`, push the change to firmware.
-- On connect to a capable radio: **reconcile** by pushing the current local block set down
-  (mirrors `_reconcileGpsPolling`, tolerant of frame-arrival order).
-- The app does **not** read firmware→app blocks; one-way push keeps a single source of truth.
-  **[TO CONFIRM with PearlMeadow]** whether their existing feature expects a read-back / two-way merge.
+  | Sub | Name | Frame | Reply |
+  |---|---|---|---|
+  | `0x01` | BLOCK_ADD | `[0xC2][0x01][pubkey:32]` | ack / err |
+  | `0x02` | BLOCK_REMOVE | `[0xC2][0x02][pubkey:32]` | ack / err |
+  | `0x03` | BLOCK_LIST | `[0xC2][0x03]` | streamed dump (framing below) |
+  | `0x04` | BLOCK_CLEAR | `[0xC2][0x04]` | ack |
 
-## 9. Error visibility (per DifferentWire error-visibility rules)
+  **`BLOCK_LIST` dump framing (as-built):** START `[0xC2 0x03 0xFF count]` → one key per idle pass
+  `[0xC2 0x03 index pubkey:32]` → END `[0xC2 0x03 0xFE]`. On an `APP_START` reconnect mid-dump the
+  firmware emits an **early-END terminator** so the app never blocks waiting on a stale stream — the
+  app must treat `0xFE` as authoritative end and reconcile against whatever keys it received.
 
-- Firmware push failure surfaces a **persistent** snackbar (not a 4s flash); the local block still
-  applies. Never swallow the error.
-- All block/unblock/mute actions log with context (key/channel, surface, firmware-push result).
+- **Firmware store:** list of blocked pubkeys in NVS (flat `/blocks` file), **independent of the
+  contacts list** (block a spammer without storing them). **`MAX_BLOCKED_KEYS = 32`** (as-built).
+- **Firmware enforcement:** DM from a blocked key → **dropped at receive** (the core offload). Adverts
+  → **still processed** (keeps self-heal alive); app suppresses the *notification*. Channel → **not**
+  enforced in firmware (app-only).
+
+### Sync model — union, app always retained
+
+- **App-local is never wiped by sync.** The only removal is an explicit user **unblock**.
+- **On connect to an Offband node:**
+  1. Pull `BLOCK_LIST` (`0xC2/0x03`).
+  2. **Add** node entries missing locally → local. *(Never remove a local entry.)*
+  3. **Push** local entries missing on the node → `BLOCK_ADD` (`0xC2/0x01`).
+  4. Both converge to the **union** → portable to the user's other Offband clients.
+  - Reconcile is tolerant of frame-arrival order (mirror `_reconcileGpsPolling`).
+- **Unblock:** remove locally **and** `BLOCK_REMOVE` (`0xC2/0x02`) on the node.
+- **On a non-Offband node:** steps skipped; local store does everything (not portable via that node).
+
+## 9. Error visibility (per DifferentWire rules)
+
+- Firmware push/pull failure surfaces a **persistent** snackbar (not a 4s flash); the local block
+  still applies. Never swallow.
+- All block/unblock/mute/sync actions log with context (key/channel, surface, fw result).
 
 ## 10. UX surfaces
 
-- **Entry points:** contact context menu, chat overflow menu, Discovery item, channel message
-  long-press (name-based, labeled), channel header/list (mute).
-- **Management:** Settings → **Blocked** — list of entries (name if known + short pubkey), unblock
-  action, muted-channels list, and an indicator of whether firmware-offload is active on the current
-  radio.
+- **Entry points:** contact context menu, chat overflow, Discovery item, channel message long-press
+  (name-based, labeled), channel header/list (mute).
+- **Management:** Settings → **Blocked** — list (name if known + short pubkey), unblock, muted-channels
+  list, and an indicator of whether firmware offload/sync is active on the current radio.
 
-## 11. Scope
+## 11. Interop invariant (binding — from firmware §11)
 
-**In scope (this contract):** app-local block of DMs + adverts by key; channel block via name↔key
-resolution + name fallback; **per-channel mute**; capability-gated firmware offload.
+Block is a **per-user view filter + a portable list synced over the local companion link**. It **MUST
+NOT** alter forwarding, relaying, ACKs, advert re-flood, or any RF behaviour. A blocked sender's
+packets still route and flood **through** the node normally; the drop happens at the **app-push layer,
+after routing** — never in the forward path. Blocking someone must never make the node a worse relay.
+All wire additions (`0xC2`, cap `0x02`) are companion-API frames (BLE/USB, `0xC0+` namespace) that
+never traverse LoRa. Fully compatible with stock MeshCore / non-Offband nodes.
 
-**Deferred / out of scope (tracked separately, not silently dropped):**
-- Content filtering (bullying/profanity/kids-mode) — explicitly future (original request item #3).
-- Repeater / network-wide rate limiting — operator-level.
+## 12. Known gaps (carry into implementation)
 
-## 12. Decomposition
+- **G1** — contact-name re-link only takes when the advert `timestamp` strictly increases
+  (`BaseChatMesh.cpp:123`); a clock-skewed/replayed advert can briefly stall a rename re-resolve.
+- **L1** — spoof-into-block: channel names are attacker-controlled; someone can post as a blocked name
+  (hidden) or impersonate a blocked name to hide a legit person. Low severity; §5 "any-unblocked→show"
+  and §7 age-out bound it.
+- **L2** — stale name post-rename may catch an innocent who later reuses it; mitigated by §7.
+- **L3** — zero-identity hard limit (§5) — protocol, not closable.
+
+## 13. Scope
+
+**In scope:** app-local block of DMs + adverts by key; channel block via name↔key resolution + name
+fallback; per-channel mute; capability-gated firmware offload + union sync.
+
+**Deferred / out of scope:** content filtering (kids-mode/profanity) — future (original item #3);
+repeater/network-wide rate limiting — operator-level.
+
+## 14. Decomposition
 
 | Epic | Scope | Depends on |
 |---|---|---|
-| **A — app-local block** (#165) | `BlockStore`, filter points, name↔key channel resolution, per-channel mute, entry points, management UI | none — ships standalone |
-| **B — firmware offload** (#166) | `offband_caps` block bit, config-command block list, sync/reconcile, capability UI | firmware wire contract §7 **[TO LOCK]** with PearlMeadow |
+| **A — app-local block** (#165) | `BlockStore` (global), filter points, name↔key channel resolution + index, per-channel mute, promote-and-prune, entry points, management UI | none — ships standalone |
+| **B — firmware offload** (#166) | `OFFBAND_CAP_BLOCK` detection, `0xC2` ADD/REMOVE/LIST/CLEAR, union sync/reconcile, capability UI | firmware Feature #241 (codes finalize at fw implementation) |
 
-**Open items to lock before Epic B codes:** §7 representation (list vs command), firmware suppression
-semantics, capability-bit value, and §8 read-back expectation. Coordinate with PearlMeadow
-(`OffbandMesh/meshcore-firmware`); record decisions back into §7–§8 of this file.
+**Cross-project alignment:** firmware doc #244 ↔ this doc. Remaining firmware-side opens (their §10):
+block-store capacity, non-contact auto-add policy, final `0xC2` codes + dump framing.
