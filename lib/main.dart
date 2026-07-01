@@ -26,6 +26,7 @@ import 'services/translation_service.dart';
 import 'services/ui_view_state_service.dart';
 import 'services/timeout_prediction_service.dart';
 import 'services/observer_config_service.dart';
+import 'services/block_service.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 
@@ -53,6 +54,7 @@ void main() async {
   final translationService = TranslationService(appSettingsService);
   final uiViewStateService = UiViewStateService();
   final timeoutPredictionService = TimeoutPredictionService(storage);
+  final blockService = BlockService();
 
   // Load settings
   await appSettingsService.loadSettings();
@@ -76,6 +78,7 @@ void main() async {
   await translationService.refreshDownloadedModels();
   await uiViewStateService.initialize();
   await timeoutPredictionService.initialize();
+  await blockService.load();
 
   // Wire up connector with services
   connector.initialize(
@@ -113,6 +116,7 @@ void main() async {
       translationService: translationService,
       uiViewStateService: uiViewStateService,
       timeoutPredictionService: timeoutPredictionService,
+      blockService: blockService,
     ),
   );
 }
@@ -152,6 +156,7 @@ class MeshCoreApp extends StatelessWidget {
   final TranslationService translationService;
   final UiViewStateService uiViewStateService;
   final TimeoutPredictionService timeoutPredictionService;
+  final BlockService blockService;
 
   const MeshCoreApp({
     super.key,
@@ -168,6 +173,7 @@ class MeshCoreApp extends StatelessWidget {
     required this.translationService,
     required this.uiViewStateService,
     required this.timeoutPredictionService,
+    required this.blockService,
   });
 
   @override
@@ -187,6 +193,7 @@ class MeshCoreApp extends StatelessWidget {
         Provider.value(value: storage),
         Provider.value(value: mapTileCacheService),
         ChangeNotifierProvider.value(value: timeoutPredictionService),
+        ChangeNotifierProvider.value(value: blockService),
         ChangeNotifierProvider(create: (_) => ObserverConfigService(connector)),
       ],
       child: Consumer<AppSettingsService>(
