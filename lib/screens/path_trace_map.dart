@@ -199,10 +199,27 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
     final hopBytes = PathHelper.traceHopBytes(widget.pathHashByteWidth);
     final pk = widget.targetContact?.publicKey;
 
+    // Per the firmware trace contract, the route must EXCLUDE our own origin
+    // prefix (it is implicit at both ends). Drop a leading self hop if the
+    // stored path includes it — otherwise route[0] matches no forwarding node
+    // (we are the sender) and the packet never advances → silent timeout. (#150)
+    var route = pathBytes;
+    final self = context.read<MeshCoreConnector>().selfPublicKey;
+    if (self != null && self.length >= hopBytes && route.length >= hopBytes) {
+      var isSelf = true;
+      for (var i = 0; i < hopBytes; i++) {
+        if (route[i] != self[i]) {
+          isSelf = false;
+          break;
+        }
+      }
+      if (isSelf) route = Uint8List.fromList(route.sublist(hopBytes));
+    }
+
     // Empty path, or an all-zero "flood" marker, means no real route — trace
     // the target's own width prefix directly. Never return an empty payload:
     // the firmware rejects an empty trace with error 1. (#150)
-    if (pathBytes.isEmpty || pathBytes.every((b) => b == 0)) {
+    if (route.isEmpty || route.every((b) => b == 0)) {
       if (pk != null && pk.length >= hopBytes) {
         return Uint8List.fromList(pk.sublist(0, hopBytes));
       }
@@ -219,7 +236,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
         : const <int>[];
     return Uint8List.fromList(
       PathHelper.buildTraceRoundTrip(
-        routingPath: pathBytes,
+        routingPath: route,
         routingWidth: widget.pathHashByteWidth < 1
             ? 1
             : widget.pathHashByteWidth,
