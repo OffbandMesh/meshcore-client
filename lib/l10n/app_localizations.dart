@@ -6356,6 +6356,24 @@ abstract class AppLocalizations {
   /// **'Scan this QR code to join \"{name}\"'**
   String community_qrInstructions(String name);
 
+  /// No description provided for @channels_shareQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Share QR Code'**
+  String get channels_shareQr;
+
+  /// No description provided for @channels_shareQrTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Channel'**
+  String get channels_shareQrTitle;
+
+  /// No description provided for @channels_shareQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan to add \"{name}\".'**
+  String channels_shareQrInstructions(String name);
+
   /// No description provided for @community_hashtagPrivacyHint.
   ///
   /// In en, this message translates to:
