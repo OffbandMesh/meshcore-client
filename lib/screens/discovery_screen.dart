@@ -12,6 +12,8 @@ import '../utils/contact_search.dart';
 import '../utils/platform_info.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/list_filter_widget.dart';
+import '../widgets/blocked_badge.dart';
+import '../services/block_service.dart';
 import '../helpers/snack_bar_builder.dart';
 
 enum DiscoverySortOption { lastSeen, name, type }
@@ -50,6 +52,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final connector = context.watch<MeshCoreConnector>();
+    final blockService = context.watch<BlockService>();
 
     final discoveredContacts = connector.discoveredContacts;
     final filteredAndSorted = _filterAndSortContacts(
@@ -97,6 +100,9 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                     itemCount: filteredAndSorted.length,
                     itemBuilder: (context, index) {
                       final contact = filteredAndSorted[index];
+                      final isBlocked = blockService.isBlocked(
+                        contact.publicKeyHex,
+                      );
                       final tile = ListTile(
                         leading: CircleAvatar(
                           backgroundColor: _getTypeColor(contact.type),
@@ -106,11 +112,29 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                             size: 20,
                           ),
                         ),
-                        title: Text(
-                          contact.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        title: isBlocked
+                            ? Row(
+                                children: [
+                                  const BlockedBadge(),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      contact.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Theme.of(context).disabledColor,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                contact.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                         subtitle: Text(
                           contact.shortPubKeyHex,
                           maxLines: 1,

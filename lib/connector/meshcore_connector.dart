@@ -28,6 +28,7 @@ import '../services/message_retry_service.dart';
 import '../services/path_history_service.dart';
 import '../services/mesh_topology_service.dart';
 import '../services/app_settings_service.dart';
+import '../services/block_service.dart';
 import '../services/background_service.dart';
 import '../services/timeout_prediction_service.dart';
 import '../services/translation_service.dart';
@@ -364,6 +365,7 @@ class MeshCoreConnector extends ChangeNotifier {
   PathHistoryService? _pathHistoryService;
   MeshTopologyService? _topologyService;
   AppSettingsService? _appSettingsService;
+  BlockService? _blockService;
   BackgroundService? _backgroundService;
   final NotificationService _notificationService = NotificationService();
   BleDebugLogService? _bleDebugLogService;
@@ -1006,6 +1008,7 @@ class MeshCoreConnector extends ChangeNotifier {
     AppDebugLogService? appDebugLogService,
     BackgroundService? backgroundService,
     TimeoutPredictionService? timeoutPredictionService,
+    BlockService? blockService,
   }) {
     _retryService = retryService;
     _pathHistoryService = pathHistoryService;
@@ -1016,6 +1019,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _appDebugLogService = appDebugLogService;
     _backgroundService = backgroundService;
     _timeoutPredictionService = timeoutPredictionService;
+    _blockService = blockService;
     _usbManager.setDebugLogService(_appDebugLogService);
     _tcpConnector.setDebugLogService(_appDebugLogService);
 
@@ -4671,7 +4675,9 @@ class MeshCoreConnector extends ChangeNotifier {
       // Show notification for new contact (advertisement)
       if (isNewContact && _appSettingsService != null) {
         final settings = _appSettingsService!.settings;
-        if (settings.notificationsEnabled && settings.notifyOnNewAdvert) {
+        if (settings.notificationsEnabled &&
+            settings.notifyOnNewAdvert &&
+            !(_blockService?.isBlocked(contact.publicKeyHex) ?? false)) {
           _notificationService.showAdvertNotification(
             contactName: contact.name,
             contactType: contact.typeLabelRaw,
@@ -4749,7 +4755,9 @@ class MeshCoreConnector extends ChangeNotifier {
     // Show notification for new contact (advertisement)
     if (isNewContact && _appSettingsService != null) {
       final settings = _appSettingsService!.settings;
-      if (settings.notificationsEnabled && settings.notifyOnNewAdvert) {
+      if (settings.notificationsEnabled &&
+          settings.notifyOnNewAdvert &&
+          !(_blockService?.isBlocked(contact.publicKeyHex) ?? false)) {
         _notificationService.showAdvertNotification(
           contactName: contact.name,
           contactType: contact.typeLabelRaw,
@@ -4919,6 +4927,14 @@ class MeshCoreConnector extends ChangeNotifier {
           message.senderKeyHex == pubKeyToHex(_selfPublicKey!) &&
           (message.pathLength == null || message.pathLength == 0)) {
         debugPrint('Ignoring direct message from self');
+        return;
+      }
+
+      // Blocked sender: drop the DM entirely — no thread entry, no unread, no
+      // notification, no lastMessage bump. Adverts still flow for name self-heal.
+      if (!message.isOutgoing &&
+          (_blockService?.isBlocked(message.senderKeyHex) ?? false)) {
+        _handleQueuedMessageReceived();
         return;
       }
 
@@ -6877,7 +6893,9 @@ class MeshCoreConnector extends ChangeNotifier {
     // Show notification for new contact (advertisement)
     if (_appSettingsService != null && !noNotify) {
       final settings = _appSettingsService!.settings;
-      if (settings.notificationsEnabled && settings.notifyOnNewAdvert) {
+      if (settings.notificationsEnabled &&
+          settings.notifyOnNewAdvert &&
+          !(_blockService?.isBlocked(contact.publicKeyHex) ?? false)) {
         _notificationService.showAdvertNotification(
           contactName: contact.name,
           contactType: contact.typeLabelRaw,
