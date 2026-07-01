@@ -1992,6 +1992,35 @@
       }
     }
   },
+  "channels_scanQr": "Scan QR Code",
+  "channels_scanQrDesc": "Add a community or channel from a QR code",
+  "channels_scanQrInstructions": "Point at a MeshCore QR code",
+  "channels_invalidQr": "Invalid QR code",
+  "channels_noFreeSlot": "No free channel slot",
+  "channels_qrAddConfirm": "Add channel \"{name}\"?",
+  "@channels_qrAddConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_qrAdded": "Added \"{name}\".",
+  "@channels_qrAdded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_qrExists": "\"{name}\" is already added.",
+  "@channels_qrExists": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "community_hashtagPrivacyHint": "Community hashtag channels are only joinable by members of the community",
   "community_invalidQrCode": "Invalid community QR code",
   "community_alreadyMember": "Already a Member",

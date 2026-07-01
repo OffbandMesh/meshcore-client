@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
+import '../models/channel.dart';
 import '../models/community.dart';
 import '../storage/community_store.dart';
 import '../widgets/adaptive_app_bar_title.dart';
@@ -31,16 +32,18 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: AdaptiveAppBarTitle(context.l10n.community_scanQr),
+        title: AdaptiveAppBarTitle(context.l10n.channels_scanQr),
         centerTitle: true,
       ),
       body: _isProcessing
           ? const Center(child: CircularProgressIndicator())
           : QrScannerWidget(
               onScanned: (data) => _handleScannedData(context, data),
-              validator: Community.isValidQrData,
+              validator: (data) =>
+                  Community.isValidQrData(data) ||
+                  Channel.isValidShareUri(data),
               onValidationFailed: (_) => _showInvalidQrError(context),
-              instructions: context.l10n.community_scanInstructions,
+              instructions: context.l10n.channels_scanQrInstructions,
             ),
     );
   }
@@ -56,6 +59,12 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     _communityStore.setPublicKeyHex = connector.selfPublicKeyHex;
 
     try {
+      // A channel share URI (meshcore://channel/add) is handled separately
+      // from community QR JSON. (#161)
+      if (Channel.isValidShareUri(data)) {
+        await _handleChannelUri(context, data);
+        return;
+      }
       // Parse the community data
       final community = Community.fromQrData(const Uuid().v4(), data);
 
@@ -236,6 +245,71 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
 
       // Return to previous screen
       Navigator.pop(context, community);
+    }
+  }
+
+  Future<void> _handleChannelUri(BuildContext context, String data) async {
+    final channel = Channel.fromShareUri(data);
+    if (channel == null) {
+      if (context.mounted) {
+        showDismissibleSnackBar(
+          context,
+          content: Text(context.l10n.channels_invalidQr),
+          backgroundColor: Colors.red,
+        );
+      }
+      return;
+    }
+    final connector = context.read<MeshCoreConnector>();
+    if (connector.channels.any((c) => c.pskHex == channel.pskHex)) {
+      if (context.mounted) {
+        showDismissibleSnackBar(
+          context,
+          content: Text(context.l10n.channels_qrExists(channel.name)),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+    final nextIndex = _findNextAvailableChannelIndex(connector);
+    if (nextIndex == null) {
+      if (context.mounted) {
+        showDismissibleSnackBar(
+          context,
+          content: Text(context.l10n.channels_noFreeSlot),
+          backgroundColor: Colors.red,
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.channels_scanQr),
+        content: Text(context.l10n.channels_qrAddConfirm(channel.name)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.common_cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.common_add),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      connector.setChannel(nextIndex, channel.name, channel.psk);
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.channels_qrAdded(channel.name)),
+        backgroundColor: Colors.green,
+      );
+      Navigator.pop(context);
+    } else if (context.mounted) {
+      Navigator.pop(context);
     }
   }
 

@@ -1355,8 +1355,8 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     buildOptionTile(
                       optionIndex: 4,
                       icon: Icons.qr_code_scanner,
-                      title: dialogContext.l10n.community_scanQr,
-                      subtitle: dialogContext.l10n.community_join,
+                      title: dialogContext.l10n.channels_scanQr,
+                      subtitle: dialogContext.l10n.channels_scanQrDesc,
                     ),
                     if (selectedOption == 4)
                       buildExpandedContent(_channelMessageStore)!,
