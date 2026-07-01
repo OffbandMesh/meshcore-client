@@ -91,6 +91,7 @@ void main() async {
     appDebugLogService: appDebugLogService,
     backgroundService: backgroundService,
     timeoutPredictionService: timeoutPredictionService,
+    blockService: blockService,
   );
 
   await connector.loadContactCache();

@@ -17,6 +17,7 @@ import '../models/contact.dart';
 import '../l10n/contact_localization.dart';
 import '../models/contact_group.dart';
 import '../services/ui_view_state_service.dart';
+import '../services/block_service.dart';
 import '../utils/contact_search.dart';
 import '../storage/contact_group_store.dart';
 import '../utils/dialog_utils.dart';
@@ -25,6 +26,7 @@ import '../utils/emoji_utils.dart';
 import '../utils/route_transitions.dart';
 import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/blocked_badge.dart';
 import '../widgets/quick_switch_bar.dart';
 import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
@@ -1566,6 +1568,9 @@ class _ContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isBlocked = context.watch<BlockService>().isBlocked(
+      contact.publicKeyHex,
+    );
     return GestureDetector(
       onSecondaryTapUp: PlatformInfo.isDesktop ? (_) => onLongPress() : null,
       child: ListTile(
@@ -1573,7 +1578,25 @@ class _ContactTile extends StatelessWidget {
           backgroundColor: _getTypeColor(contact.type),
           child: _buildContactAvatar(contact),
         ),
-        title: Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: isBlocked
+            ? Row(
+                children: [
+                  const BlockedBadge(),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      contact.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).disabledColor,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
