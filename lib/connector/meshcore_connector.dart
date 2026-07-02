@@ -695,6 +695,23 @@ class MeshCoreConnector extends ChangeNotifier {
     return _channelMessages[channel.index] ?? [];
   }
 
+  /// Public keys (hex) of known contacts / discovered nodes whose current
+  /// display name matches [name] (case-insensitive). Resolves an anonymous
+  /// channel sender (name-only, no pubkey) back to identities for block
+  /// matching. Multiple keys => several devices/people share the name.
+  List<String> resolveContactKeysByName(String name) {
+    final target = name.trim().toLowerCase();
+    if (target.isEmpty) return const [];
+    final keys = <String>{};
+    for (final c in contacts) {
+      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
+    }
+    for (final c in discoveredContacts) {
+      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
+    }
+    return keys.toList();
+  }
+
   Future<void> deleteChannelMessage(ChannelMessage message) async {
     final channelIndex = message.channelIndex;
     if (channelIndex == null) return;

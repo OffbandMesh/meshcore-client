@@ -24,6 +24,7 @@ import '../models/channel_message.dart';
 import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
+import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
@@ -348,8 +349,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
               child: Consumer<MeshCoreConnector>(
                 builder: (context, connector, child) {
                   final messages = connector.getChannelMessages(widget.channel);
+                  final blockService = context.watch<BlockService>();
+                  final visibleMessages = messages
+                      .where(
+                        (m) =>
+                            !_isChannelSenderHidden(m, connector, blockService),
+                      )
+                      .toList();
 
-                  if (messages.isEmpty) {
+                  if (visibleMessages.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -383,7 +391,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   }
 
                   // Reverse messages so newest appear at bottom with reverse: true
-                  final reversedMessages = messages.reversed.toList();
+                  final reversedMessages = visibleMessages.reversed.toList();
                   final itemCount =
                       reversedMessages.length + (_isLoadingOlder ? 1 : 0);
 
@@ -494,6 +502,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       if (found && !m.isOutgoing) count++;
     }
     connector.setChannelUnreadCount(widget.channel.index, count);
+  }
+
+  /// A channel post is hidden only when its claimed name resolves to at least
+  /// one identity and *every* matching pubkey is blocked (an ambiguous namesake
+  /// with any unblocked match is still shown), or the name is in blockedNames.
+  bool _isChannelSenderHidden(
+    ChannelMessage message,
+    MeshCoreConnector connector,
+    BlockService blockService,
+  ) {
+    if (message.isOutgoing) return false;
+    final name = message.senderName;
+    if (blockService.isNameBlocked(name)) return true;
+    final keys = connector.resolveContactKeysByName(name);
+    return keys.isNotEmpty && keys.every(blockService.isBlocked);
   }
 
   Widget _buildMessageBubble(ChannelMessage message, double textScale) {
