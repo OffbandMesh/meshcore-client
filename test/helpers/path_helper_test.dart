@@ -31,7 +31,10 @@ void main() {
     });
 
     test('width 2 — groups two bytes per hop', () {
-      expect(PathHelper.formatPathHex([0x84, 0xab, 0x12, 0x34], 2), '84AB,1234');
+      expect(
+        PathHelper.formatPathHex([0x84, 0xab, 0x12, 0x34], 2),
+        '84AB,1234',
+      );
     });
 
     test('width 3 — groups three bytes per hop', () {
