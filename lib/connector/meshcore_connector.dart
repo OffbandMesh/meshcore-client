@@ -3826,7 +3826,22 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> setChannel(int index, String name, Uint8List psk) async {
     if (!isConnected) return;
 
+    // Channel history is stored keyed by the reusable slot [index], not by the
+    // channel's PSK. If this slot is being (re)assigned to a different channel
+    // than the one whose history is stored here, clear the stale history so a
+    // previous occupant's messages (e.g. #echo) don't surface under the newly
+    // added channel. Preserve only when the slot already holds the SAME channel
+    // (same PSK) — e.g. a rename. (#193)
+    final existing = _findChannelByIndex(index);
+    final sameChannel = existing != null && listEquals(existing.psk, psk);
+
     await sendFrame(buildSetChannelFrame(index, name, psk));
+
+    if (!sameChannel) {
+      await _channelMessageStore.clearChannelMessages(index);
+      _channelMessages.remove(index);
+    }
+
     // Refresh channels after setting
     await getChannels(force: true);
   }
