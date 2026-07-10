@@ -2115,6 +2115,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get path_currentPathLabel => 'Nuvarande sökväg';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Ange 2-tecknets hex-prefett för varje hopp, åtskilda med komma.';
 
@@ -4023,6 +4029,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Ping-repeater';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Vägspårning till rumserver';

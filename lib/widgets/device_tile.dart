@@ -14,9 +14,11 @@ class DeviceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final device = scanResult.device;
     final rssi = scanResult.rssi;
-    final name = device.platformName.isNotEmpty
-        ? device.platformName
-        : scanResult.advertisementData.advName;
+    // Prefer the LIVE advertised name over the OS-cached platformName, which can
+    // be a stale/default cache (e.g. "nimble", the NimBLE stack default) that
+    // masks the device's real advertised name. (#189)
+    final adv = scanResult.advertisementData.advName;
+    final name = adv.isNotEmpty ? adv : device.platformName;
 
     return ListTile(
       leading: _buildSignalIcon(rssi),

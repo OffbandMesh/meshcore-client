@@ -14,6 +14,11 @@ class PathSelectionDialog extends StatefulWidget {
   final VoidCallback? onRefresh;
   final int pathHashByteWidth;
 
+  /// A human-readable, name-resolved rendering of a pre-filled suggested route
+  /// (e.g. "You → HomeRepeater → Backbone → Target"), shown prominently so the
+  /// user can read/verify the inferred route instead of raw hex. (#186)
+  final String? suggestedRouteLabel;
+
   const PathSelectionDialog({
     super.key,
     required this.availableContacts,
@@ -22,6 +27,7 @@ class PathSelectionDialog extends StatefulWidget {
     this.initialPath,
     this.currentPathLabel,
     this.onRefresh,
+    this.suggestedRouteLabel,
   });
 
   @override
@@ -35,6 +41,7 @@ class PathSelectionDialog extends StatefulWidget {
     String? initialPath,
     String? currentPathLabel,
     VoidCallback? onRefresh,
+    String? suggestedRouteLabel,
   }) {
     return showDialog<Uint8List?>(
       context: context,
@@ -45,6 +52,7 @@ class PathSelectionDialog extends StatefulWidget {
         initialPath: initialPath,
         currentPathLabel: currentPathLabel,
         onRefresh: onRefresh,
+        suggestedRouteLabel: suggestedRouteLabel,
       ),
     );
   }
@@ -81,6 +89,7 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
   late TextEditingController _controller;
   final List<Contact> _selectedContacts = [];
   List<Contact> _validContacts = [];
+  String _search = '';
 
   // Hop prefix width in bytes (clamped >= 1) and in hex chars, from the device's
   // configured path-hash width. (#155)
@@ -104,9 +113,22 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
   }
 
   void _filterValidContacts() {
-    _validContacts = widget.availableContacts
-        .where((c) => c.type == advTypeRepeater || c.type == advTypeRoom)
-        .toList();
+    // Repeaters/rooms only, filtered by the search box, sorted by name so the
+    // list is coherent and findable instead of raw contact-store order. (#186)
+    final q = _search.trim().toLowerCase();
+    _validContacts =
+        widget.availableContacts
+            .where((c) => c.type == advTypeRepeater || c.type == advTypeRoom)
+            .where(
+              (c) =>
+                  q.isEmpty ||
+                  c.name.toLowerCase().contains(q) ||
+                  c.publicKeyHex.toLowerCase().startsWith(q),
+            )
+            .toList()
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
   }
 
   void _updateTextFromContacts() {
@@ -205,6 +227,54 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.suggestedRouteLabel != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.route,
+                            size: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.path_suggestedRoute,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.suggestedRouteLabel!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (widget.currentPathLabel != null) ...[
                 Row(
                   children: [
@@ -270,6 +340,19 @@ class _PathSelectionDialogState extends State<PathSelectionDialog> {
                       child: Text(l10n.common_clear),
                     ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                onChanged: (v) => setState(() {
+                  _search = v;
+                  _filterValidContacts();
+                }),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: l10n.path_searchRepeaters,
+                  border: const OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 8),
               if (_validContacts.isEmpty) ...[

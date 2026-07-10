@@ -2057,6 +2057,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get path_currentPathLabel => '現在の経路';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       '各ホップに対して、2文字の16進数プレフィックスをカンマで区切って入力してください。';
 
@@ -3872,6 +3878,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'PING 繰り返し';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => '部屋のサーバーへの経路を追跡する';

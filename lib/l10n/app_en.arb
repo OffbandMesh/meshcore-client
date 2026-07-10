@@ -1151,6 +1151,8 @@
   },
   "path_enterCustomPath": "Enter Custom Path",
   "path_currentPathLabel": "Current path",
+  "path_suggestedRoute": "Suggested route (shortest heard)",
+  "path_searchRepeaters": "Search repeaters",
   "path_hexPrefixInstructions": "Enter each hop's hex prefix, separated by commas.",
   "path_hexPrefixExample": "Tap nodes below, or enter each hop's hex prefix, comma-separated.",
   "path_labelHexPrefixes": "Path (hex prefixes)",
@@ -2310,6 +2312,12 @@
   "contacts_ping": "Ping",
   "contacts_repeaterPathTrace": "Path trace to repeater",
   "contacts_repeaterPing": "Ping repeater",
+  "contacts_repeaterPathTraceVia": "Path trace via {prefix}",
+  "@contacts_repeaterPathTraceVia": {
+    "placeholders": {
+      "prefix": { "type": "String" }
+    }
+  },
   "contacts_roomPathTrace": "Path trace to room server",
   "contacts_roomPing": "Ping room server",
   "contacts_chatTraceRoute": "Path trace route",

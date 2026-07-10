@@ -112,12 +112,6 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
   bool _showNodeLabels = true;
   Contact? _targetContact;
 
-  String _formatPathPrefixes(Uint8List pathBytes) {
-    return pathBytes
-        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-        .join(',');
-  }
-
   @override
   void initState() {
     super.initState();
@@ -279,7 +273,8 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
     }
 
     appLogger.info(
-      'Initiating path trace with path: ${_formatPathPrefixes(path)}',
+      'Initiating path trace with path: '
+      '${PathHelper.formatPathHex(path, PathHelper.traceHopBytes(widget.pathHashByteWidth))}',
       tag: 'PathTraceMapScreen',
       noNotify: !mounted,
     );
@@ -576,7 +571,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
         _initialZoom = _points.isNotEmpty ? 13.0 : 2.0;
         _bounds = _points.length > 1 ? LatLngBounds.fromPoints(_points) : null;
         _mapKey = ValueKey(
-          '${context.l10n.pathTrace_you},${_formatPathPrefixes(_traceData!.pathData)}',
+          '${context.l10n.pathTrace_you},${PathHelper.formatPathHex(_traceData!.pathData, _traceData!.hopBytes)}',
         );
         _pathDistanceMeters = getPathDistanceMeters(_points);
       });

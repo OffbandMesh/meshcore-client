@@ -2129,6 +2129,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get path_currentPathLabel => 'Aktuálny priebeh';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Zadajte 2-miestne hexové predpony pre každú fázu, oddelené čiarkami.';
 
@@ -4050,6 +4056,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Pingovať opakovač';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Sledovanie cesty k serveru miestnosti';

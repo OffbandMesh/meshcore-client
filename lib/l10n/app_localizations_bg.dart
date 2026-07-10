@@ -2144,6 +2144,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get path_currentPathLabel => 'Текущ път';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Въведете 2-символни шестнадесетични префикси за всеки хоп, разделени с кама.';
 
@@ -4069,6 +4075,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Пингване на повторителя';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Трасиране на път до съ';

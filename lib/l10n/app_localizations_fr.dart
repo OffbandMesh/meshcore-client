@@ -2150,6 +2150,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get path_currentPathLabel => 'Chemin actuel';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Entrez les préfixes hexadécimaux de 2 caractères pour chaque saut, séparés par des virgules.';
 
@@ -4091,6 +4097,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Pinguer le répéteur';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Traçage du chemin vers le room server';

@@ -2128,6 +2128,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get path_currentPathLabel => 'Huidige pad';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Voer 2-letter hex-voorgiffen voor elke hop in, gescheiden door komma\'s.';
 
@@ -4054,6 +4060,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Ping-repeater';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Padtrace naar room server';
