@@ -146,6 +146,24 @@ void main() {
       );
     });
 
+    test(
+      'buildTraceRoundTrip — via-repeater: [via]+target → [via,target,via]',
+      () {
+        // #150: with no committed route, trace a repeater through our strongest
+        // direct repeater as the first hop (Ben's mesh: 6A3D fronting AC01).
+        expect(
+          PathHelper.buildTraceRoundTrip(
+            routingPath: [0x6a, 0x3d],
+            routingWidth: 2,
+            hopBytes: 2,
+            throughTarget: true,
+            targetPrefix: [0xac, 0x01],
+          ),
+          [0x6a, 0x3d, 0xac, 0x01, 0x6a, 0x3d],
+        );
+      },
+    );
+
     test('buildTraceRoundTrip — chat: far hop is the turnaround', () {
       expect(
         PathHelper.buildTraceRoundTrip(

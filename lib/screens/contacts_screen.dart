@@ -26,6 +26,7 @@ import '../utils/route_transitions.dart';
 import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/quick_switch_bar.dart';
+import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
@@ -1267,31 +1268,100 @@ class _ContactsScreenState extends State<ContactsScreen>
               ListTile(
                 leading: const Icon(Icons.radar, color: Colors.green),
                 title: Text(context.l10n.contacts_pathTrace),
-                onTap: () {
-                  final hw = context
-                      .read<MeshCoreConnector>()
-                      .pathHashByteWidth;
-                  // A flood route is stored as all-zero bytes = "no real route",
-                  // so trace the target directly instead of routing through (and
-                  // sending) an all-zero/empty path. (#150)
-                  final route = contact.pathBytesForDisplay;
-                  final hasRoute = route.isNotEmpty && route.any((b) => b != 0);
-                  Navigator.push(
-                    context,
+                onTap: () async {
+                  final connector = context.read<MeshCoreConnector>();
+                  final navigator = Navigator.of(context);
+                  final l10n = context.l10n;
+                  final hw = connector.pathHashByteWidth;
+                  final hopBytes = PathHelper.traceHopBytes(hw);
+
+                  String hopsToHex(List<int> hops) => hops
+                      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                      .join();
+
+                  // A committed route is stored non-zero; a flood route is
+                  // all-zero = "no real route". (#150)
+                  final committed = contact.pathBytesForDisplay;
+                  final hasRoute =
+                      committed.isNotEmpty && committed.any((b) => b != 0);
+
+                  Uint8List? path;
+                  var flip = false;
+                  var title = l10n.contacts_repeaterPing;
+
+                  if (hasRoute) {
+                    // Firmware already committed a route through the mesh.
+                    path = committed;
+                    flip = true;
+                    title = l10n.contacts_repeaterPathTrace;
+                  } else {
+                    // No committed route. Ask the passive topology oracle for a
+                    // route inferred from traffic we've already heard. (#186)
+                    final inferred = connector.topology?.inferRoute(
+                      contact.publicKey,
+                    );
+                    final direct =
+                        (inferred?.isEmpty ?? false) ||
+                        connector.directRepeaters.any(
+                          (r) => r.matchesPathStart(contact.publicKey),
+                        );
+                    if (direct) {
+                      // A one-hop ping reaches a direct neighbour.
+                      path = Uint8List.fromList(
+                        contact.publicKey.sublist(0, hopBytes),
+                      );
+                    } else {
+                      // Confirm-first: pre-fill the route builder with the
+                      // inferred route when we have one, else an empty builder.
+                      // The user always confirms — we never fire a silent guess.
+                      // (#186; replaces the old strongest-repeater guess.)
+                      final suggested =
+                          (inferred != null && inferred.isNotEmpty)
+                          ? inferred.map(hopsToHex).join(',')
+                          : null;
+                      String? suggestedLabel;
+                      if (inferred != null && inferred.isNotEmpty) {
+                        // Resolve the inferred hops to repeater/contact NAMES so
+                        // the user can read + verify the route instead of hex.
+                        // (#186)
+                        final names = PathHelper.resolvePathNames(
+                          inferred.expand((h) => h).toList(),
+                          connector.allContacts,
+                          hw,
+                        );
+                        suggestedLabel =
+                            '${l10n.pathTrace_you} → $names → ${contact.name}';
+                      }
+                      final picked = await PathSelectionDialog.show(
+                        context,
+                        availableContacts: connector.allContacts
+                            .where(
+                              (c) => c.publicKeyHex != contact.publicKeyHex,
+                            )
+                            .toList(),
+                        pathHashByteWidth: hw,
+                        initialPath: suggested,
+                        suggestedRouteLabel: suggestedLabel,
+                        title: l10n.contacts_repeaterPathTrace,
+                      );
+                      if (picked == null || picked.isEmpty) return; // cancelled
+                      path = picked;
+                      flip = true;
+                      final fh = picked.length >= hopBytes
+                          ? picked.sublist(0, hopBytes)
+                          : picked;
+                      title = l10n.contacts_repeaterPathTraceVia(
+                        hopsToHex(fh).toUpperCase(),
+                      );
+                    }
+                  }
+
+                  navigator.push(
                     MaterialPageRoute(
                       builder: (context) => PathTraceMapScreen(
-                        title: hasRoute
-                            ? context.l10n.contacts_repeaterPathTrace
-                            : context.l10n.contacts_repeaterPing,
-                        path: hasRoute
-                            ? route
-                            : Uint8List.fromList(
-                                contact.publicKey.sublist(
-                                  0,
-                                  PathHelper.traceHopBytes(hw),
-                                ),
-                              ),
-                        flipPathAround: hasRoute,
+                        title: title,
+                        path: path!,
+                        flipPathAround: flip,
                         targetContact: contact,
                         pathHashByteWidth: hw,
                       ),

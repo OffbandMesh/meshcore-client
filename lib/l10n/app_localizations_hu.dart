@@ -2152,6 +2152,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get path_currentPathLabel => 'Jelenlegi útvonal';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Adja meg a 2 karakteres hexadecimális előtagokat minden lépéshez, tagolva kommával.';
 
@@ -4084,6 +4090,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Ping-szinkronizáló';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Kapcsolat a szobai szerverrel';

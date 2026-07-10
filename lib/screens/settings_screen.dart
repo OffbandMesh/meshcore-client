@@ -19,6 +19,7 @@ import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
 import '../widgets/sync_progress_overlay.dart';
 
@@ -583,6 +584,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AppDebugLogScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.hub_outlined),
+            title: const Text('Mesh topology'),
+            subtitle: const Text(
+              'Passively-learned node/edge graph (trace inference)',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const TopologyDebugScreen(),
                 ),
               );
             },

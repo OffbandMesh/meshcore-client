@@ -112,4 +112,86 @@ void main() {
       expect(repeater([0x84]).matchesPathStart(<int>[]), isFalse);
     });
   });
+
+  group(
+    'DirectRepeater.recordHop (#150 — RX-fed nearest-repeater detection)',
+    () {
+      DirectRepeater rep(List<int> prefix, double snr) => DirectRepeater(
+        pubkeyFirstByte: prefix.last,
+        pubkeyPrefix: Uint8List.fromList(prefix),
+        snr: snr,
+      );
+
+      test('adds a new hop to an empty list', () {
+        final list = <DirectRepeater>[];
+        final changed = DirectRepeater.recordHop(
+          list,
+          Uint8List.fromList([0x6a, 0x3d]),
+          5.0,
+        );
+        expect(changed, isTrue);
+        expect(list.length, 1);
+        expect(list.single.pubkeyPrefix, [0x6a, 0x3d]);
+        expect(list.single.snr, 5.0);
+      });
+
+      test('an empty prefix is ignored', () {
+        final list = <DirectRepeater>[];
+        expect(DirectRepeater.recordHop(list, Uint8List(0), 5.0), isFalse);
+        expect(list, isEmpty);
+      });
+
+      test('refreshes an existing hop; notifies only on a >= 1 dB move', () {
+        final list = [
+          rep([0x6a, 0x3d], 5.0),
+        ];
+        // Sub-threshold jitter: value refreshes silently (no notify).
+        expect(
+          DirectRepeater.recordHop(list, Uint8List.fromList([0x6a, 0x3d]), 5.5),
+          isFalse,
+        );
+        expect(list.single.snr, 5.5);
+        expect(list.length, 1);
+        // >= 1 dB move: worth a notify.
+        expect(
+          DirectRepeater.recordHop(list, Uint8List.fromList([0x6a, 0x3d]), 7.0),
+          isTrue,
+        );
+        expect(list.single.snr, 7.0);
+      });
+
+      test('at cap, a stronger newcomer evicts the weakest', () {
+        final list = [
+          rep([0x01, 0x01], 1.0),
+          rep([0x02, 0x02], 2.0),
+          rep([0x03, 0x03], 3.0),
+          rep([0x04, 0x04], 4.0),
+          rep([0x05, 0x05], 5.0),
+        ];
+        expect(
+          DirectRepeater.recordHop(list, Uint8List.fromList([0x06, 0x06]), 6.0),
+          isTrue,
+        );
+        expect(list.length, 5);
+        expect(list.any((r) => r.snr == 1.0), isFalse); // weakest evicted
+        expect(list.any((r) => r.pubkeyPrefix[0] == 0x06), isTrue);
+      });
+
+      test('at cap, a newcomer no stronger than the weakest is dropped', () {
+        final list = [
+          rep([0x01, 0x01], 1.0),
+          rep([0x02, 0x02], 2.0),
+          rep([0x03, 0x03], 3.0),
+          rep([0x04, 0x04], 4.0),
+          rep([0x05, 0x05], 5.0),
+        ];
+        expect(
+          DirectRepeater.recordHop(list, Uint8List.fromList([0x06, 0x06]), 0.5),
+          isFalse,
+        );
+        expect(list.length, 5);
+        expect(list.any((r) => r.pubkeyPrefix[0] == 0x06), isFalse);
+      });
+    },
+  );
 }

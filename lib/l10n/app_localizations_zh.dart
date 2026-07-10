@@ -2016,6 +2016,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get path_currentPathLabel => '当前路径';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions => '请输入每个中继节点的2字符十六进制前缀，用逗号分隔。';
 
   @override
@@ -3775,6 +3781,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Ping 转发节点';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Trace 房间服务器';

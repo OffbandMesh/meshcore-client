@@ -26,6 +26,7 @@ import '../services/linux_ble_pairing_service_stub.dart'
     if (dart.library.io) '../services/linux_ble_pairing_service.dart';
 import '../services/message_retry_service.dart';
 import '../services/path_history_service.dart';
+import '../services/mesh_topology_service.dart';
 import '../services/app_settings_service.dart';
 import '../services/background_service.dart';
 import '../services/timeout_prediction_service.dart';
@@ -104,6 +105,55 @@ class DirectRepeater {
   bool isStale() {
     return DateTime.now().difference(lastUpdated) >
         const Duration(minutes: maxAgeMinutes);
+  }
+
+  /// Records a directly-heard hop [prefix] at [snr] into [list] — the SNR-ranked
+  /// set of nearest direct repeaters, capped at [cap]. Updates an existing
+  /// entry's SNR + timestamp, or adds a new one, evicting the weakest by SNR
+  /// only when the newcomer is stronger. Returns true when the change is worth a
+  /// notify: a new entry, an eviction, or an SNR move of at least [snrDelta] dB;
+  /// sub-threshold jitter refreshes the value silently and returns false. Fed
+  /// from every routed RX packet (not just adverts), so it tracks live traffic
+  /// rather than the ~12h advert cadence. (#150)
+  static bool recordHop(
+    List<DirectRepeater> list,
+    Uint8List prefix,
+    double snr, {
+    int cap = 5,
+    double snrDelta = 1.0,
+  }) {
+    if (prefix.isEmpty) return false;
+    for (final r in list) {
+      if (_prefixEquals(r.pubkeyPrefix, prefix)) {
+        final moved = (r.snr - snr).abs() >= snrDelta;
+        r.update(snr);
+        return moved;
+      }
+    }
+    if (list.length >= cap) {
+      var weakest = list.first;
+      for (final r in list) {
+        if (r.snr < weakest.snr) weakest = r;
+      }
+      if (snr <= weakest.snr) return false; // too weak to displace anyone
+      list.remove(weakest);
+    }
+    list.add(
+      DirectRepeater(
+        pubkeyFirstByte: prefix.last,
+        pubkeyPrefix: Uint8List.fromList(prefix),
+        snr: snr,
+      ),
+    );
+    return true;
+  }
+
+  static bool _prefixEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 }
 
@@ -312,6 +362,7 @@ class MeshCoreConnector extends ChangeNotifier {
   // Services
   MessageRetryService? _retryService;
   PathHistoryService? _pathHistoryService;
+  MeshTopologyService? _topologyService;
   AppSettingsService? _appSettingsService;
   BackgroundService? _backgroundService;
   final NotificationService _notificationService = NotificationService();
@@ -415,6 +466,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool get hasLoadedChannels => _hasLoadedChannels;
   Stream<Uint8List> get receivedFrames => _receivedFramesController.stream;
   Uint8List? get selfPublicKey => _selfPublicKey;
+  MeshTopologyService? get topology => _topologyService;
   String get selfPublicKeyHex => pubKeyToHex(_selfPublicKey ?? Uint8List(0));
   String? get selfName => _selfName;
   double? get selfLatitude => _selfLatitude;
@@ -947,6 +999,7 @@ class MeshCoreConnector extends ChangeNotifier {
   void initialize({
     required MessageRetryService retryService,
     required PathHistoryService pathHistoryService,
+    MeshTopologyService? topologyService,
     AppSettingsService? appSettingsService,
     TranslationService? translationService,
     BleDebugLogService? bleDebugLogService,
@@ -956,6 +1009,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }) {
     _retryService = retryService;
     _pathHistoryService = pathHistoryService;
+    _topologyService = topologyService;
     _appSettingsService = appSettingsService;
     _translationService = translationService;
     _bleDebugLogService = bleDebugLogService;
@@ -6451,6 +6505,27 @@ class MeshCoreConnector extends ChangeNotifier {
       final pathBytes = packet.readBytes(pathByteLen);
       final payload = packet.readBytes(packet.remaining);
 
+      // #186: feed the passive topology map from every routed packet's path —
+      // the same firehose that feeds nearest-repeater detection. Cheap: the
+      // path is already parsed here. Guarded so a topology-side fault can never
+      // stall the RX dispatch that also drives message handling.
+      if (pathBytes.isNotEmpty) {
+        try {
+          final sp = _selfPublicKey;
+          if (sp != null) _topologyService?.setSelf(sp, _pathHashByteWidth);
+          _topologyService?.observePath(
+            pathBytes,
+            width: _pathHashByteWidth,
+            lastHopSnr: snr,
+          );
+        } catch (e) {
+          _appDebugLogService?.warn(
+            'topology ingest failed: $e',
+            tag: 'Topology',
+          );
+        }
+      }
+
       final rawPacket = frame.sublist(3);
       switch (payloadType) {
         case payloadTypeADVERT:
@@ -6463,6 +6538,21 @@ class MeshCoreConnector extends ChangeNotifier {
           );
           break;
         default:
+          // #150: every routed packet's last hop is a directly-heard relay.
+          // Feed the nearest-repeater SNR from it so detection tracks live
+          // traffic, not just the ~12h advert cadence. SNR + path are already
+          // parsed above; recordHop is O(<=5) and notifies only on change.
+          if (pathBytes.isNotEmpty) {
+            final width = _pathHashByteWidth;
+            final prefix = Uint8List.fromList(
+              pathBytes.sublist(
+                pathBytes.length >= width ? pathBytes.length - width : 0,
+              ),
+            );
+            if (DirectRepeater.recordHop(_directRepeaters, prefix, snr)) {
+              notifyListeners();
+            }
+          }
       }
     } catch (e) {
       appLogger.warn('Malformed RX frame: $e', tag: 'Connector');
@@ -6689,62 +6779,34 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _updateDirectRepeater(Contact contact, double snr, Uint8List path) {
-    final pubkeyFirstByte = path.isNotEmpty
-        ? path.last
-        : contact.publicKey.first;
-    // Capture the last hop's FULL configured-width prefix (the directly-heard
-    // repeater), not just one byte, so wide-prefix meshes resolve it correctly. (#151)
+    // A chat/sensor advert with no path gives us no last-hop repeater to learn.
+    if ((contact.type == advTypeChat || contact.type == advTypeSensor) &&
+        path.isEmpty) {
+      return;
+    }
+
+    // The last hop's full configured-width prefix is the directly-heard
+    // repeater; fall back to the node's own prefix for a zero-hop advert. (#151)
     final width = _pathHashByteWidth;
-    final Uint8List pubkeyPrefix;
+    final Uint8List prefix;
     if (path.isNotEmpty) {
-      pubkeyPrefix = Uint8List.fromList(
+      prefix = Uint8List.fromList(
         path.sublist(path.length >= width ? path.length - width : 0),
       );
     } else {
       final pk = contact.publicKey;
-      pubkeyPrefix = Uint8List.fromList(
+      prefix = Uint8List.fromList(
         pk.length >= width ? pk.sublist(0, width) : pk,
       );
     }
 
-    _directRepeaters.removeWhere((r) => r.isStale());
-
-    //We can use adverts from chat and sensor nodes, but only if the advert has a path to get the last hop.
-    if ((contact.type == advTypeChat || contact.type == advTypeSensor) &&
-        path.isEmpty) {
+    // No 30-min hard eviction: a known direct repeater stays usable for routing
+    // between reads. recordHop self-caps the list at 5 (weakest-SNR), and
+    // isStale()/ranking still mark freshness for display. Notify only on a real
+    // change to avoid per-packet UI churn. (#150)
+    if (DirectRepeater.recordHop(_directRepeaters, prefix, snr)) {
       notifyListeners();
-      return;
     }
-
-    final isTracked = _directRepeaters.where(
-      (r) => listEquals(r.pubkeyPrefix, pubkeyPrefix),
-    );
-
-    final sortedRepeaters = List<DirectRepeater>.from(_directRepeaters)
-      ..sort((a, b) => b.snr.compareTo(a.snr));
-    final weakestRepeater = sortedRepeaters.isNotEmpty
-        ? sortedRepeaters.last
-        : null;
-
-    if (_directRepeaters.length >= 5 &&
-        weakestRepeater != null &&
-        isTracked.isEmpty) {
-      _directRepeaters.remove(weakestRepeater);
-    }
-
-    if (isTracked.isNotEmpty) {
-      final repeater = isTracked.first;
-      repeater.update(snr);
-    } else if (_directRepeaters.length < 5) {
-      _directRepeaters.add(
-        DirectRepeater(
-          pubkeyFirstByte: pubkeyFirstByte,
-          pubkeyPrefix: pubkeyPrefix,
-          snr: snr,
-        ),
-      );
-    }
-    notifyListeners();
   }
 
   void _handleAutoAddConfig(Uint8List frame) {

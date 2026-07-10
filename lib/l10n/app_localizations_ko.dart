@@ -2052,6 +2052,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get path_currentPathLabel => '현재 경로';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       '각 단계에 대한 2자리 헥사데진 접두사를 쉼표로 구분하여 입력하세요.';
 
@@ -3874,6 +3880,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => '핑 반복';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => '방 서버로의 경로 추적';

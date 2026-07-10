@@ -2126,6 +2126,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get path_currentPathLabel => 'Trenutna pot';
 
   @override
+  String get path_suggestedRoute => 'Suggested route (shortest heard)';
+
+  @override
+  String get path_searchRepeaters => 'Search repeaters';
+
+  @override
   String get path_hexPrefixInstructions =>
       'Vnesite 2-karakterne heksadecimalne prefixe za vsako skopo, ločeno z zvezekami.';
 
@@ -4045,6 +4051,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get contacts_repeaterPing => 'Pinguj ponavljalnik';
+
+  @override
+  String contacts_repeaterPathTraceVia(String prefix) {
+    return 'Path trace via $prefix';
+  }
 
   @override
   String get contacts_roomPathTrace => 'Sledenje poti do strežnika sobe';

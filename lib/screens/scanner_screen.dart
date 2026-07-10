@@ -290,9 +290,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     MeshCoreConnector connector,
     ScanResult result,
   ) async {
-    final name = result.device.platformName.isNotEmpty
-        ? result.device.platformName
-        : result.advertisementData.advName;
+    // Prefer the live advertised name over the cached platformName. (#189)
+    final adv = result.advertisementData.advName;
+    final name = adv.isNotEmpty ? adv : result.device.platformName;
     try {
       await connector.connect(
         result.device,

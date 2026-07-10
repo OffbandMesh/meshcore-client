@@ -3831,6 +3831,18 @@ abstract class AppLocalizations {
   /// **'Current path'**
   String get path_currentPathLabel;
 
+  /// No description provided for @path_suggestedRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested route (shortest heard)'**
+  String get path_suggestedRoute;
+
+  /// No description provided for @path_searchRepeaters.
+  ///
+  /// In en, this message translates to:
+  /// **'Search repeaters'**
+  String get path_searchRepeaters;
+
   /// No description provided for @path_hexPrefixInstructions.
   ///
   /// In en, this message translates to:
@@ -6999,6 +7011,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ping repeater'**
   String get contacts_repeaterPing;
+
+  /// No description provided for @contacts_repeaterPathTraceVia.
+  ///
+  /// In en, this message translates to:
+  /// **'Path trace via {prefix}'**
+  String contacts_repeaterPathTraceVia(String prefix);
 
   /// No description provided for @contacts_roomPathTrace.
   ///
