@@ -1026,7 +1026,7 @@ Uint8List buildSendTelemetryReq(Uint8List? pubKey) {
     writer.writeBytes(Uint8List(3)); // reserved bytes
     writer.writeBytes(pubKey);
   } else {
-    writer.writeBytes(Uint8List(4)); // reserved bytes
+    writer.writeBytes(Uint8List(3)); // self: [cmd]+3 reserved => len==4 (#110)
   }
   return writer.toBytes();
 }

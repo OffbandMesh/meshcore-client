@@ -19,6 +19,7 @@ import '../models/translation_support.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/cyr2lat.dart';
 import '../helpers/smaz.dart';
+import '../helpers/cayenne_lpp.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/ble_debug_log_service.dart';
 import '../services/linux_ble_error_classifier.dart';
@@ -2716,11 +2717,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryPollTimer = null;
   }
 
-  /// Poll the radio's GPS position every minute via the lightweight Offband
-  /// `0xC1` query — NOT `CMD_APP_START`, which re-inits the whole device
-  /// (re-walks channels, re-drains messages) and floods slow BLE links. (#140)
-  /// No-op if already running. Triggered when the radio reports `gps=1`; the
-  /// reply updates self-lat/lon via `_handleOffbandGps`. (#135)
+  /// Poll the radio's own GPS position every [_gpsLocationPollInterval] without
+  /// resetting the session (the old `CMD_APP_START` poll re-inited the device
+  /// and broke contact/channel sync on gps=1 radios — #110/#140). Mechanism is
+  /// firmware-aware: the Offband `0xC1` query where supported (#135, richer
+  /// state), else standard MeshCore self-telemetry (`CMD_SEND_TELEMETRY_REQ`
+  /// len==4 → `PUSH_CODE_TELEMETRY_RESPONSE`, decoded in [_handleSelfTelemetry])
+  /// as the stock-firmware fallback (#123). No-op if already running. Triggered
+  /// when the radio reports `gps=1`.
   void _startGpsLocationPolling() {
     if (_gpsLocationPollTimer != null) return;
     _gpsLocationPollTimer = Timer.periodic(_gpsLocationPollInterval, (timer) {
@@ -2729,7 +2733,19 @@ class MeshCoreConnector extends ChangeNotifier {
         _gpsLocationPollTimer = null;
         return;
       }
-      unawaited(requestOffbandGps());
+      if (supportsOffbandGps) {
+        unawaited(requestOffbandGps());
+      } else {
+        // Stock firmware (no 0xC1): non-destructive self-telemetry read. (#123)
+        unawaited(
+          sendFrame(buildSendTelemetryReq(null)).catchError((Object e) {
+            _appDebugLogService?.warn(
+              'GPS self-telemetry poll send failed: $e',
+              tag: 'GPS',
+            );
+          }),
+        );
+      }
     });
   }
 
@@ -2738,16 +2754,57 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer = null;
   }
 
-  /// Start or stop the 0xC1 GPS poll based on current state: only when the
-  /// radio reports `gps=1` AND the firmware advertises 0xC1 support. Called
-  /// from every input that can change either input (custom-var frames, the
-  /// enable toggle, and the device-info reply that delivers `offband_caps`) so
-  /// frame-arrival order doesn't matter. (#144)
+  /// Start or stop the GPS poll based on state: run whenever the radio reports
+  /// `gps=1` — the poll itself picks 0xC1 vs self-telemetry by firmware, so
+  /// stock-fw radios get the non-destructive self-telemetry refresh too (#123).
+  /// Called from every input that can change `gps` or `offband_caps` (custom-var
+  /// frames, the enable toggle, the device-info reply that delivers
+  /// `offband_caps`) so frame-arrival order doesn't matter. (#144)
   void _reconcileGpsPolling() {
-    if (supportsOffbandGps && _currentCustomVars?['gps'] == '1') {
+    if (_currentCustomVars?['gps'] == '1') {
       _startGpsLocationPolling();
     } else {
       _stopGpsLocationPolling();
+    }
+  }
+
+  /// Decode a self-telemetry reply
+  /// (`[0x8B][reserved][self-pubkey 6][CayenneLPP]`) and update the radio's own
+  /// position from its GPS — the non-destructive replacement for the APP_START
+  /// GPS poll (#110). Contact telemetry (a different pubkey) is ignored here;
+  /// the telemetry screen handles those.
+  void _handleSelfTelemetry(List<int> frame) {
+    final selfKey = _selfPublicKey;
+    if (selfKey == null || selfKey.length < 6) return;
+    if (frame.length < 8) return; // code + reserved + 6-byte pubkey prefix
+    if (!listEquals(frame.sublist(2, 8), selfKey.sublist(0, 6))) {
+      return; // not the self node — a contact telemetry reply
+    }
+    // Guard the parse: a malformed CayenneLPP payload from an external radio
+    // must not throw out of the RX dispatch and stall the receive loop. (#123)
+    try {
+      final gps = CayenneLpp.extractGps(
+        CayenneLpp.parseByChannel(Uint8List.fromList(frame.sublist(8))),
+      );
+      if (gps == null || !hasValidLocation(gps.latitude, gps.longitude)) {
+        _appDebugLogService?.info(
+          'Self-telemetry reply received, no valid GPS in payload',
+          tag: 'GPS',
+        );
+        return;
+      }
+      _appDebugLogService?.info(
+        'Self GPS via telemetry: ${gps.latitude}, ${gps.longitude}',
+        tag: 'GPS',
+      );
+      _selfLatitude = gps.latitude;
+      _selfLongitude = gps.longitude;
+      notifyListeners();
+    } catch (e) {
+      _appDebugLogService?.warn(
+        'Self-telemetry CayenneLPP parse failed: $e',
+        tag: 'GPS',
+      );
     }
   }
 
@@ -4089,6 +4146,9 @@ class MeshCoreConnector extends ChangeNotifier {
         _lastRadioRxTime = DateTime.now();
         _handleRxData(frame);
         _handleLogRxData(frame);
+        break;
+      case pushCodeTelemetryResponse:
+        _handleSelfTelemetry(frame);
         break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);
