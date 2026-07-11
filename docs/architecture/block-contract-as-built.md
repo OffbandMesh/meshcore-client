@@ -68,7 +68,7 @@ API: `isBlocked(keyHex)`, `isNameBlocked(name)`, `block(keyHex)`, `unblock(keyHe
 | Incoming DM | drop + suppress notification when `senderKey ∈ blockedKeys` (on Offband, firmware already dropped it at receive — §7) |
 | Advert | suppress the new-advert notification for `blockedKeys`. **Do NOT discard the advert** — the contact-name update must keep flowing (self-heal, §5) |
 | Contacts / Discovery lists | **keep blocked entries VISIBLE** with a clear blocked indicator — a red block icon (`Icons.block`, circle-with-slash) + muted/greyed styling. **Do NOT hide them.** Inline unblock available. *(A "hide blocked entirely" toggle is a deliberate post-implementation follow-on, not v1.)* |
-| Channel message | hide per the resolution rule in §5, OR when the channel is muted (§6) |
+| Channel message | hide per the resolution rule in §5 |
 
 Blocking hides, never deletes history. Unblock restores.
 
@@ -100,20 +100,25 @@ name) must not censor a possibly-legit namesake (false-positive L1).
 pubkey, so resolution self-heals — and an advert-flooder keeps that link fresh.
 
 **Honest limit (L3):** renamed **and** advert-silent but still posting to a channel = genuinely
-unattributable (no identity in the packet). Not closable app- or firmware-side; recourse is
-name-pattern matching or muting the channel (§6).
+unattributable (no identity in the packet). Not closable app- or firmware-side; the recourse is the
+global name-fallback block (§6), which upgrades to a pubkey block once the identity is seen (§7).
 
-## 6. Per-channel mute (in scope, Layer 1)
+## 6. Global name-fallback block + evasion scope
 
-Independent of per-sender blocking: mute an entire channel (e.g. a noisy Public) so it stops generating
-notifications/unread badges, regardless of who posts — the reliable answer to the L3 limit. Stored
-globally in the `BlockStore`/channel-settings as muted channel identities. Mute ≠ leave (messages stay
-readable when opened). Toggle from the channel header/overflow and the channel list (long-press).
+When a channel sender **can't** be resolved to a pubkey, "Block sender" adds the lowercased name to the
+app-global `blockedNames` — so that name is hidden in **every** channel, immediately. The user never
+blocks channel-by-channel; one action covers all channels. The name block is provisional and upgrades
+to a durable pubkey block the moment the identity is learned (§7).
+
+**Out of scope (current MeshCore):** a determined troll can dodge a name block with a one-character or
+invisible-Unicode rename. Defeating that is a larger anti-abuse problem than MeshCore's channel model
+allows today (channel posts carry no per-post identity) and is explicitly **not** in this design. The
+durable answer is pubkey promotion (§7) once we ever see them by key — their advert or a DM.
 
 ## 7. `blockedNames` promote-and-prune
 
-A name-only block is provisional. When the index links a `blockedNames` entry to a pubkey (via advert),
-**promote** it — add the pubkey to `blockedKeys` (sync), drop the name entry. Any name that never links
+A name-only block is provisional. When a `blockedNames` entry links to a pubkey — via their **advert**
+OR a **DM** (any time we learn the key) — **promote** it: add the pubkey to `blockedKeys` (sync), drop the name entry. Any name that never links
 **expires after ~30 days**. The durable block is always the pubkey; `blockedNames` stays small and
 self-cleaning, bounding the L1/L2 false-positive window.
 
@@ -182,15 +187,15 @@ Mirrors the `0xC1`/`offband_caps` capability pattern (`supportsOffbandGps`). Val
 
 - Firmware push/pull failure surfaces a **persistent** snackbar (not a 4s flash); the local block
   still applies. Never swallow.
-- All block/unblock/mute/sync actions log with context (key/channel, surface, fw result).
+- All block/unblock/sync actions log with context (key/channel, surface, fw result).
 
 ## 10. UX surfaces
 
 - **Entry points:** contact context menu, chat overflow, Discovery item, channel message long-press
-  (name-based, labeled), channel header/list (mute).
+  (name-based, labeled).
 - **Blocked contacts stay in-list** with a red block badge + muted styling (not hidden); unblock inline from the tile. A future "hide blocked entirely" setting is a post-impl follow-on.
-- **Management:** Settings → **Blocked** — list (name if known + short pubkey), unblock, muted-channels
-  list, and an indicator of whether firmware offload/sync is active on the current radio.
+- **Management:** Settings → **Blocked** — list (name if known + short pubkey), unblock, and an
+  indicator of whether firmware offload/sync is active on the current radio.
 
 ## 11. Interop invariant (binding — from firmware §11)
 
@@ -213,8 +218,8 @@ never traverse LoRa. Fully compatible with stock MeshCore / non-Offband nodes.
 
 ## 13. Scope
 
-**In scope:** app-local block of DMs + adverts by key; channel block via name↔key resolution + name
-fallback; per-channel mute; capability-gated firmware offload + union sync.
+**In scope:** app-local block of DMs + adverts by key; channel block via name↔key resolution + global
+name fallback (with promote-to-pubkey); capability-gated firmware offload + union sync.
 
 **Deferred / out of scope:** content filtering (kids-mode/profanity) — future (original item #3);
 repeater/network-wide rate limiting — operator-level.
@@ -223,7 +228,7 @@ repeater/network-wide rate limiting — operator-level.
 
 | Epic | Scope | Depends on |
 |---|---|---|
-| **A — app-local block** (#165) | `BlockStore` (global), filter points, name↔key channel resolution + index, per-channel mute, promote-and-prune, entry points, management UI | none — ships standalone |
+| **A — app-local block** (#165) | `BlockStore` (global), filter points, name↔key channel resolution + index, global name-fallback + promote-and-prune, entry points, management UI | none — ships standalone |
 | **B — firmware offload** (#166) | `OFFBAND_CAP_BLOCK` detection, `0xC2` ADD/REMOVE/LIST/CLEAR, union sync/reconcile, capability UI | firmware Feature #241 (codes finalize at fw implementation) |
 
 **Cross-project alignment:** firmware doc #244 ↔ this doc. Remaining firmware-side opens (their §10):
