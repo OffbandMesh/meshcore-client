@@ -504,6 +504,30 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     connector.setChannelUnreadCount(widget.channel.index, count);
   }
 
+  /// Block the sender of a channel post. Resolves the claimed name to known
+  /// pubkey(s) and blocks each (full block: DM + adverts + all channels); if it
+  /// resolves to nothing, blocks the name globally across all channels (promotes
+  /// to a pubkey block later, once the identity is learned — #174).
+  Future<void> _blockChannelSender(ChannelMessage message) async {
+    final connector = context.read<MeshCoreConnector>();
+    final blockService = context.read<BlockService>();
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    final name = message.senderName;
+    final keys = connector.resolveContactKeysByName(name);
+    if (keys.isNotEmpty) {
+      for (final key in keys) {
+        await blockService.block(key);
+      }
+      messenger.showSnackBar(SnackBar(content: Text(l10n.block_blocked(name))));
+    } else {
+      await blockService.blockName(name);
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.block_blockedNameOnly(name))),
+      );
+    }
+  }
+
   /// A channel post is hidden only when its claimed name resolves to at least
   /// one identity and *every* matching pubkey is blocked (an ambiguous namesake
   /// with any unblocked match is still shown), or the name is in blockedNames.
@@ -1518,6 +1542,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 await _deleteMessage(message);
               },
             ),
+            if (!message.isOutgoing)
+              ListTile(
+                leading: Icon(Icons.block, color: Colors.red.shade700),
+                title: Text(context.l10n.block_sender),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _blockChannelSender(message);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.close),
               title: Text(context.l10n.common_cancel),

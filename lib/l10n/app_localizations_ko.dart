@@ -4340,4 +4340,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get contact_typeUnknown => 'Unknown';
+
+  @override
+  String get block_block => 'Block';
+
+  @override
+  String get block_unblock => 'Unblock';
+
+  @override
+  String get block_sender => 'Block sender';
+
+  @override
+  String block_blocked(String name) {
+    return 'Blocked $name';
+  }
+
+  @override
+  String block_unblocked(String name) {
+    return 'Unblocked $name';
+  }
+
+  @override
+  String block_blockedNameOnly(String name) {
+    return 'Blocked \"$name\" across all channels — name only until we learn their key';
+  }
 }

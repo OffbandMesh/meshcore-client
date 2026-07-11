@@ -7797,6 +7797,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unknown'**
   String get contact_typeUnknown;
+
+  /// No description provided for @block_block.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get block_block;
+
+  /// No description provided for @block_unblock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock'**
+  String get block_unblock;
+
+  /// No description provided for @block_sender.
+  ///
+  /// In en, this message translates to:
+  /// **'Block sender'**
+  String get block_sender;
+
+  /// No description provided for @block_blocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked {name}'**
+  String block_blocked(String name);
+
+  /// No description provided for @block_unblocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblocked {name}'**
+  String block_unblocked(String name);
+
+  /// No description provided for @block_blockedNameOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked \"{name}\" across all channels — name only until we learn their key'**
+  String block_blockedNameOnly(String name);
 }
 
 class _AppLocalizationsDelegate

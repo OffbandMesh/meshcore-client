@@ -2566,5 +2566,32 @@
   "contact_typeRepeater": "Repeater",
   "contact_typeRoom": "Room",
   "contact_typeSensor": "Sensor",
-  "contact_typeUnknown": "Unknown"
+  "contact_typeUnknown": "Unknown",
+  "block_block": "Block",
+  "block_unblock": "Unblock",
+  "block_sender": "Block sender",
+  "block_blocked": "Blocked {name}",
+  "@block_blocked": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "block_unblocked": "Unblocked {name}",
+  "@block_unblocked": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "block_blockedNameOnly": "Blocked \"{name}\" across all channels — name only until we learn their key",
+  "@block_blockedNameOnly": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }
