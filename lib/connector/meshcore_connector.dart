@@ -32,6 +32,8 @@ import '../services/background_service.dart';
 import '../services/timeout_prediction_service.dart';
 import '../services/translation_service.dart';
 import '../services/notification_service.dart';
+import '../services/queue_sync_file_log_stub.dart'
+    if (dart.library.io) '../services/queue_sync_file_log_io.dart';
 import 'meshcore_connector_usb.dart';
 import 'meshcore_connector_tcp.dart';
 import '../storage/channel_message_store.dart';
@@ -3547,11 +3549,13 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildSetDeviceTimeFrame(now));
   }
 
-  // Mirror queue-sync events to the in-app App Debug Log (plus the console) so
-  // a missed/stuck drain is diagnosable from the device. See #51.
+  // Mirror queue-sync events to an always-on file sink (survives the app being
+  // closed during a drain), the in-app App Debug Log (when enabled), and the
+  // console, so a missed/stuck drain stays diagnosable. See #51.
   void _logQueueSync(String msg) {
     debugPrint('[QueueSync] $msg');
     _appDebugLogService?.info(msg, tag: 'QueueSync');
+    unawaited(appendQueueSyncLine(msg));
   }
 
   Future<void> syncQueuedMessages({bool force = false}) async {
@@ -4064,6 +4068,7 @@ class MeshCoreConnector extends ChangeNotifier {
         if (_deferQueuedContactMessagesUntilContacts) {
           unawaited(_processDeferredQueuedContactMessages());
         } else if (_pendingQueueSync) {
+          _logQueueSync('post-channel-frame: firing parked queue drain');
           _pendingQueueSync = false;
           unawaited(syncQueuedMessages(force: true));
         }
@@ -4424,6 +4429,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _deferQueuedContactMessagesUntilContacts = false;
       notifyListeners();
       if (_pendingQueueSync && isConnected) {
+        _logQueueSync('post-deferred-contacts: firing parked queue drain');
         _pendingQueueSync = false;
         unawaited(syncQueuedMessages(force: true));
       }

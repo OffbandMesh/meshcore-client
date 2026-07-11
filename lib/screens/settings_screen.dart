@@ -605,6 +605,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.sync_problem_outlined),
+            title: const Text('Sync queued messages now'),
+            subtitle: const Text(
+              'Force-pull messages the radio is holding — diagnostic for #51 '
+              '(radio reports a count but the app shows none). Logs the flow '
+              'for diagnostics.',
+            ),
+            trailing: const Icon(Icons.download),
+            onTap: () {
+              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
+              showDismissibleSnackBar(
+                context,
+                content: const Text('Requested queued-message drain (force)'),
+              );
+            },
+          ),
         ],
       ),
     );
