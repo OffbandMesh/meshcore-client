@@ -4,6 +4,26 @@ import 'package:meshcore_open/utils/app_logger.dart';
 import '../connector/meshcore_protocol.dart';
 
 class CayenneLpp {
+  /// The first GPS fix in a parsed CayenneLPP set, or null if none carries one.
+  /// Self-telemetry returns the radio's own position on `TELEM_CHANNEL_SELF`,
+  /// so the first GPS reading is the device's own location (#110).
+  static ({double latitude, double longitude})? extractGps(
+    List<Map<String, dynamic>> parsed,
+  ) {
+    for (final entry in parsed) {
+      final values = entry['values'];
+      if (values is! Map) continue;
+      final gps = values['gps'];
+      if (gps is Map && gps['latitude'] is num && gps['longitude'] is num) {
+        return (
+          latitude: (gps['latitude'] as num).toDouble(),
+          longitude: (gps['longitude'] as num).toDouble(),
+        );
+      }
+    }
+    return null;
+  }
+
   static const int lppDigitalInput = 0; // 1 byte
   static const int lppDigitalOutput = 1; // 1 byte
   static const int lppAnalogInput = 2; // 2 bytes, 0.01 signed
