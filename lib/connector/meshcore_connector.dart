@@ -4193,6 +4193,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
     //set all the stores' public key so they can load the correct data
     _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
+    // Key channel history by the channel's PSK identity (not its reusable slot
+    // index) so reusing a slot can't surface a previous occupant's messages. (#194)
+    _channelMessageStore.channelPskResolver = (index) =>
+        _findChannelByIndex(index)?.pskHex;
     _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelOrderStore.setPublicKeyHex = selfPublicKeyHex;
     _channelSettingsStore.setPublicKeyHex = selfPublicKeyHex;
