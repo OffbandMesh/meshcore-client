@@ -10,11 +10,35 @@ import 'prefs_manager.dart';
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
 
+  /// Marks a PSK-identity key so it can never collide with a legacy slot-index
+  /// key (a PSK is 32 hex chars; an index is a small integer). (#194)
+  static const String _pskMarker = 'psk_';
+
   String publicKeyHex = '';
   set setPublicKeyHex(String value) =>
       publicKeyHex = value.length > 10 ? value.substring(0, 10) : '';
 
+  /// Resolves a channel slot index to its channel's PSK hex — a stable identity
+  /// that does not change when the channel moves slots. Set by the connector.
+  /// When it yields a non-empty hex, history is keyed by PSK so reusing a slot
+  /// can never surface a previous occupant's messages. Falls back to the slot
+  /// index only while the PSK is unknown (channel not yet synced). (#194)
+  String? Function(int index)? channelPskResolver;
+
   String get keyFor => '$_keyPrefix$publicKeyHex';
+
+  /// Device-scoped slot-index key (the pre-#194 scheme; still used as a
+  /// migration source and as the fallback when the PSK is unknown).
+  String _indexKey(int channelIndex) => '$keyFor$channelIndex';
+
+  /// Active storage key: PSK identity when known, else the slot index.
+  String _storageKey(int channelIndex) {
+    final pskHex = channelPskResolver?.call(channelIndex);
+    if (pskHex != null && pskHex.isNotEmpty) {
+      return '$keyFor$_pskMarker$pskHex';
+    }
+    return _indexKey(channelIndex);
+  }
 
   /// Save messages for a specific channel
   Future<void> saveChannelMessages(
@@ -28,13 +52,8 @@ class ChannelMessageStore {
       return;
     }
     final prefs = PrefsManager.instance;
-    final key = '$keyFor$channelIndex';
-
-    // Convert messages to JSON
     final jsonList = messages.map((msg) => _messageToJson(msg)).toList();
-    final jsonString = jsonEncode(jsonList);
-
-    await prefs.setString(key, jsonString);
+    await prefs.setString(_storageKey(channelIndex), jsonEncode(jsonList));
   }
 
   /// Load messages for a specific channel
@@ -46,24 +65,31 @@ class ChannelMessageStore {
       return [];
     }
     final prefs = PrefsManager.instance;
-    final key = '$keyFor$channelIndex';
-    final oldKey = '$_keyPrefix$channelIndex';
-
+    final key = _storageKey(channelIndex);
     String? jsonString = prefs.getString(key);
-    if (jsonString == null || jsonString.isEmpty) {
-      // Attempt migration from legacy unscoped key on first load
-      final legacyJsonString = prefs.getString(oldKey);
-      prefs.remove(oldKey);
-      if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
-        appLogger.info(
-          'Migrating channel messages from legacy key $oldKey to scoped key $key',
-        );
-        await prefs.setString(key, legacyJsonString);
-        jsonString = legacyJsonString;
+
+    // One-time migration into the PSK-identity key. Only runs when the PSK is
+    // known (key != index key). Adopts pre-#194 history keyed by slot index —
+    // device-scoped first, then the oldest unscoped key — and drops the source.
+    // Build-B (#193) clears a slot's index history on mismatched reuse, so a
+    // live slot's index data is the channel's own by the time we read here.
+    if ((jsonString == null || jsonString.isEmpty) &&
+        key != _indexKey(channelIndex)) {
+      for (final legacyKey in [
+        _indexKey(channelIndex),
+        '$_keyPrefix$channelIndex', // pre-device-scoping, unscoped index key
+      ]) {
+        final legacy = prefs.getString(legacyKey);
+        if (legacy != null && legacy.isNotEmpty) {
+          appLogger.info(
+            'Migrating channel messages $legacyKey -> $key (PSK-keyed, #194)',
+          );
+          await prefs.setString(key, legacy);
+          await prefs.remove(legacyKey);
+          jsonString = legacy;
+          break;
+        }
       }
-    }
-    if (jsonString == null || jsonString.isEmpty) {
-      jsonString = prefs.getString(keyFor);
     }
     if (jsonString == null || jsonString.isEmpty) {
       return [];
@@ -72,22 +98,25 @@ class ChannelMessageStore {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
       return jsonList.map((json) => _messageFromJson(json)).toList();
     } catch (e) {
-      // If parsing fails, return empty list
+      appLogger.error('Failed to parse channel messages for $key: $e');
       return [];
     }
   }
 
-  /// Clear messages for a specific channel
+  /// Clear messages for a specific channel slot. Removes BOTH the PSK-identity
+  /// key and the raw slot-index key: deleteChannel needs the channel's own
+  /// history gone, and setChannel's reuse-clear (#193) needs any stale
+  /// slot-index history gone so it can't be migrated onto the new occupant.
   Future<void> clearChannelMessages(int channelIndex) async {
     final prefs = PrefsManager.instance;
-    final key = '$keyFor$channelIndex';
-    await prefs.remove(key);
+    await prefs.remove(_storageKey(channelIndex));
+    await prefs.remove(_indexKey(channelIndex));
   }
 
   /// Clear all channel messages
   Future<void> clearAllChannelMessages() async {
     final prefs = PrefsManager.instance;
-    final keys = prefs.getKeys().where((k) => k.startsWith(keyFor));
+    final keys = prefs.getKeys().where((k) => k.startsWith(keyFor)).toList();
     for (var key in keys) {
       await prefs.remove(key);
     }
