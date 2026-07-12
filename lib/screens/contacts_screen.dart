@@ -1259,6 +1259,8 @@ class _ContactsScreenState extends State<ContactsScreen>
     final isRepeater = contact.type == advTypeRepeater;
     final isRoom = contact.type == advTypeRoom;
     final isFavorite = contact.isFavorite;
+    final blockService = context.read<BlockService>();
+    final isBlocked = blockService.isBlocked(contact.publicKeyHex);
 
     showModalBottomSheet(
       context: context,
@@ -1266,6 +1268,25 @@ class _ContactsScreenState extends State<ContactsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: Icon(
+                isBlocked ? Icons.check_circle_outline : Icons.block,
+                color: isBlocked ? null : Colors.red.shade700,
+              ),
+              title: Text(
+                isBlocked
+                    ? context.l10n.block_unblock
+                    : context.l10n.block_block,
+              ),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                if (isBlocked) {
+                  await blockService.unblock(contact.publicKeyHex);
+                } else {
+                  await blockService.block(contact.publicKeyHex);
+                }
+              },
+            ),
             if (isRepeater) ...[
               ListTile(
                 leading: const Icon(Icons.radar, color: Colors.green),
