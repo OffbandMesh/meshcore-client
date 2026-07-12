@@ -27,6 +27,7 @@ import '../models/app_settings.dart';
 import '../models/path_history.dart';
 import '../models/translation_support.dart';
 import '../services/app_settings_service.dart';
+import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/path_history_service.dart';
 import '../services/translation_service.dart';
@@ -353,52 +354,87 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (value == 'clearChat') {
                     connector.clearMessagesForContact(widget.contact);
                   }
+                  if (value == 'block') {
+                    context.read<BlockService>().block(
+                      widget.contact.publicKeyHex,
+                    );
+                  }
+                  if (value == 'unblock') {
+                    context.read<BlockService>().unblock(
+                      widget.contact.publicKeyHex,
+                    );
+                  }
                 },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'info',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline, size: 20),
-                        const SizedBox(width: 12),
-                        Text(context.l10n.contact_info),
-                      ],
+                itemBuilder: (context) {
+                  final isBlocked = context.read<BlockService>().isBlocked(
+                    widget.contact.publicKeyHex,
+                  );
+                  return [
+                    PopupMenuItem(
+                      value: 'info',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, size: 20),
+                          const SizedBox(width: 12),
+                          Text(context.l10n.contact_info),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'telemetry',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.bar_chart, size: 20),
-                        const SizedBox(width: 12),
-                        Text(context.l10n.contact_telemetry),
-                      ],
+                    PopupMenuItem(
+                      value: 'telemetry',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bar_chart, size: 20),
+                          const SizedBox(width: 12),
+                          Text(context.l10n.contact_telemetry),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'settings',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.settings, size: 20),
-                        const SizedBox(width: 12),
-                        Text(context.l10n.contact_settings),
-                      ],
+                    PopupMenuItem(
+                      value: 'settings',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.settings, size: 20),
+                          const SizedBox(width: 12),
+                          Text(context.l10n.contact_settings),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'clearChat',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.delete, size: 20, color: Colors.red),
-                        const SizedBox(width: 12),
-                        Text(
-                          context.l10n.contact_clearChat,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ],
+                    PopupMenuItem(
+                      value: 'clearChat',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete, size: 20, color: Colors.red),
+                          const SizedBox(width: 12),
+                          Text(
+                            context.l10n.contact_clearChat,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    PopupMenuItem(
+                      value: isBlocked ? 'unblock' : 'block',
+                      child: Row(
+                        children: [
+                          Icon(
+                            isBlocked
+                                ? Icons.check_circle_outline
+                                : Icons.block,
+                            size: 20,
+                            color: isBlocked ? null : Colors.red.shade700,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            isBlocked
+                                ? context.l10n.block_unblock
+                                : context.l10n.block_block,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
               );
             },
           ),

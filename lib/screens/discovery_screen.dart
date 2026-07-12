@@ -218,6 +218,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     Contact contact,
     MeshCoreConnector connector,
   ) async {
+    final blockService = context.read<BlockService>();
+    final isBlocked = blockService.isBlocked(contact.publicKeyHex);
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -236,6 +238,16 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                 leading: const Icon(Icons.copy),
                 title: Text(l10n.discoveredContacts_copyContact),
                 onTap: () => Navigator.of(sheetContext).pop('copy_contact'),
+              ),
+              ListTile(
+                leading: Icon(
+                  isBlocked ? Icons.check_circle_outline : Icons.block,
+                  color: isBlocked ? null : Colors.red.shade700,
+                ),
+                title: Text(isBlocked ? l10n.block_unblock : l10n.block_block),
+                onTap: () => Navigator.of(
+                  sheetContext,
+                ).pop(isBlocked ? 'unblock' : 'block'),
               ),
               ListTile(
                 leading: const Icon(Icons.delete),
@@ -266,6 +278,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         break;
       case 'delete_contact':
         connector.removeDiscoveredContact(contact);
+        break;
+      case 'block':
+        await blockService.block(contact.publicKeyHex);
+        break;
+      case 'unblock':
+        await blockService.unblock(contact.publicKeyHex);
         break;
     }
   }
