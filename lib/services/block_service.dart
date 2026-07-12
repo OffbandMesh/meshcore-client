@@ -24,6 +24,7 @@ class BlockService extends ChangeNotifier {
     _blockedNames
       ..clear()
       ..addAll(await _store.loadNames());
+    await _pruneExpiredNames();
     notifyListeners();
   }
 
@@ -60,5 +61,36 @@ class BlockService extends ChangeNotifier {
     if (_blockedNames.remove(name.trim().toLowerCase()) == null) return;
     await _store.saveNames(_blockedNames);
     notifyListeners();
+  }
+
+  /// Name-only blocks older than this are pruned on load (self-cleaning).
+  static const Duration _nameBlockTtl = Duration(days: 30);
+
+  /// Promote a name-only block to a durable pubkey block once we learn the
+  /// identity behind it (observed via an advert or a DM). No-op if the name
+  /// isn't name-blocked.
+  Future<void> maybePromote(String name, String publicKeyHex) async {
+    final n = name.trim().toLowerCase();
+    if (n.isEmpty || !_blockedNames.containsKey(n)) return;
+    _blockedNames.remove(n);
+    _blockedKeys.add(publicKeyHex.toLowerCase());
+    await _store.saveNames(_blockedNames);
+    await _store.saveKeys(_blockedKeys);
+    notifyListeners();
+  }
+
+  /// Drop name-only blocks that never linked to a pubkey within [_nameBlockTtl].
+  Future<void> _pruneExpiredNames() async {
+    final cutoff =
+        DateTime.now().millisecondsSinceEpoch - _nameBlockTtl.inMilliseconds;
+    final expired = _blockedNames.entries
+        .where((e) => e.value < cutoff)
+        .map((e) => e.key)
+        .toList();
+    if (expired.isEmpty) return;
+    for (final n in expired) {
+      _blockedNames.remove(n);
+    }
+    await _store.saveNames(_blockedNames);
   }
 }
