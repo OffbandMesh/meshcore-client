@@ -4622,4 +4622,23 @@ class AppLocalizationsFr extends AppLocalizations {
   String block_blockedNameOnly(String name) {
     return 'Blocked \"$name\" across all channels — name only until we learn their key';
   }
+
+  @override
+  String get block_settingsTitle => 'Blocked';
+
+  @override
+  String get block_settingsSubtitle => 'Users you\'ve blocked';
+
+  @override
+  String get block_none => 'No blocked users';
+
+  @override
+  String get block_keysSection => 'Blocked contacts';
+
+  @override
+  String get block_namesSection => 'Blocked names';
+
+  @override
+  String get block_namesHint =>
+      'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
 }

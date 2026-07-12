@@ -26,7 +26,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "de": [
@@ -56,7 +62,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "es": [
@@ -86,7 +98,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "fr": [
@@ -116,7 +134,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "hu": [
@@ -146,7 +170,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "it": [
@@ -176,7 +206,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "ja": [
@@ -206,7 +242,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "ko": [
@@ -236,7 +278,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "nl": [
@@ -266,7 +314,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "pl": [
@@ -296,7 +350,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "pt": [
@@ -326,7 +386,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "ru": [
@@ -356,7 +422,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "sk": [
@@ -386,7 +458,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "sl": [
@@ -416,7 +494,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "sv": [
@@ -446,7 +530,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "uk": [
@@ -476,7 +566,13 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ],
 
   "zh": [
@@ -506,6 +602,12 @@
     "block_sender",
     "block_blocked",
     "block_unblocked",
-    "block_blockedNameOnly"
+    "block_blockedNameOnly",
+    "block_settingsTitle",
+    "block_settingsSubtitle",
+    "block_none",
+    "block_keysSection",
+    "block_namesSection",
+    "block_namesHint"
   ]
 }

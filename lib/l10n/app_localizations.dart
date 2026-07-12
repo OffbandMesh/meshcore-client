@@ -7833,6 +7833,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Blocked \"{name}\" across all channels — name only until we learn their key'**
   String block_blockedNameOnly(String name);
+
+  /// No description provided for @block_settingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get block_settingsTitle;
+
+  /// No description provided for @block_settingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Users you\'ve blocked'**
+  String get block_settingsSubtitle;
+
+  /// No description provided for @block_none.
+  ///
+  /// In en, this message translates to:
+  /// **'No blocked users'**
+  String get block_none;
+
+  /// No description provided for @block_keysSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked contacts'**
+  String get block_keysSection;
+
+  /// No description provided for @block_namesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked names'**
+  String get block_namesSection;
+
+  /// No description provided for @block_namesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.'**
+  String get block_namesHint;
 }
 
 class _AppLocalizationsDelegate

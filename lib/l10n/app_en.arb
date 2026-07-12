@@ -2593,5 +2593,11 @@
         "type": "String"
       }
     }
-  }
+  },
+  "block_settingsTitle": "Blocked",
+  "block_settingsSubtitle": "Users you've blocked",
+  "block_none": "No blocked users",
+  "block_keysSection": "Blocked contacts",
+  "block_namesSection": "Blocked names",
+  "block_namesHint": "Name-only blocks (channel senders) — each upgrades to a full block once we learn their key."
 }
