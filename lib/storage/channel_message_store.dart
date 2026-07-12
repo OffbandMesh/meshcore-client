@@ -16,7 +16,7 @@ class ChannelMessageStore {
 
   String publicKeyHex = '';
   set setPublicKeyHex(String value) =>
-      publicKeyHex = value.length > 10 ? value.substring(0, 10) : '';
+      publicKeyHex = value.length >= 10 ? value.substring(0, 10) : '';
 
   /// Resolves a channel slot index to its channel's PSK hex — a stable identity
   /// that does not change when the channel moves slots. Set by the connector.
