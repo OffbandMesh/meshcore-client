@@ -4714,6 +4714,12 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
 
+    // Learned name<->key from this advert: promote a matching name-only block.
+    final blockService = _blockService;
+    if (blockService != null) {
+      unawaited(blockService.maybePromote(contact.name, contact.publicKeyHex));
+    }
+
     if (contact.type == advTypeRepeater) {
       final removedCount = _contactUnreadCount[contact.publicKeyHex] ?? 0;
       _cachedContactsUnreadTotal = (_cachedContactsUnreadTotal - removedCount)
@@ -4967,6 +4973,15 @@ class MeshCoreConnector extends ChangeNotifier {
       }
       if (contact != null) {
         _updateContactLastMessageAt(contact.publicKeyHex, message.timestamp);
+      }
+      if (contact != null) {
+        // Learned name<->key from this DM: promote a matching name-only block.
+        final blockService = _blockService;
+        if (blockService != null) {
+          unawaited(
+            blockService.maybePromote(contact.name, contact.publicKeyHex),
+          );
+        }
       }
       if (!message.isOutgoing) {
         final existing = _conversations[message.senderKeyHex];
