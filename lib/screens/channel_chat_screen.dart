@@ -519,9 +519,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       for (final key in keys) {
         await blockService.block(key);
       }
+      if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(l10n.block_blocked(name))));
     } else {
       await blockService.blockName(name);
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(l10n.block_blockedNameOnly(name))),
       );
