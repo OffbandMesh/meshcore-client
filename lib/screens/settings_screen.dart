@@ -17,6 +17,7 @@ import 'settings/settings_shell.dart';
 import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
+import 'settings/blocked_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
 import 'topology_debug_screen.dart';
@@ -109,6 +110,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _privacyPane,
       ),
       SettingsCategory(
+        icon: Icons.block,
+        title: l10n.block_settingsTitle,
+        subtitle: l10n.block_settingsSubtitle,
+        builder: _blockedPane,
+      ),
+      SettingsCategory(
         icon: Icons.contacts_outlined,
         title: l10n.contacts_title,
         subtitle: l10n.settings_contactSettingsSubtitle,
@@ -152,6 +159,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _observerPane(BuildContext context) => const ObserverSettingsView();
+
+  Widget _blockedPane(BuildContext context) => const BlockedView();
 
   Widget _radioRangePane(BuildContext context) {
     final l10n = context.l10n;
