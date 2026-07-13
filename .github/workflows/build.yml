@@ -76,3 +76,14 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter build web --release --no-pub
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release --no-pub
