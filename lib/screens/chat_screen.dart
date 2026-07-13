@@ -1239,10 +1239,17 @@ class _ChatScreenState extends State<ChatScreen> {
       return context.l10n.chat_hopsForced(contact.pathOverride!);
     }
 
-    // Use device's path
+    // Use device's path. pathLength is a BYTE length; divide by the device's
+    // configured hash width to get the true hop count (#222).
     if (contact.pathLength < 0) return context.l10n.chat_floodAuto;
-    if (contact.pathLength == 0) return context.l10n.chat_direct;
-    return context.l10n.chat_hopsCount(contact.pathLength);
+    final hops =
+        realHopCount(
+          contact.pathLength,
+          context.read<MeshCoreConnector>().pathHashByteWidth,
+        ) ??
+        0;
+    if (hops == 0) return context.l10n.chat_direct;
+    return context.l10n.chat_hopsCount(hops);
   }
 
   Future<void> _notifyPathSet(

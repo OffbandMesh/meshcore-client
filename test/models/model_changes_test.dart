@@ -53,12 +53,16 @@ void main() {
       expect(contact!.pathLength, equals(1));
     });
 
-    test('pathLen == 64 (maxPathSize) → pathLength == 64', () {
-      final frame = _buildContactFrame(pathLen: maxPathSize);
-      final contact = Contact.fromFrame(frame);
-      expect(contact, isNotNull);
-      expect(contact!.pathLength, equals(maxPathSize));
-    });
+    test(
+      'pathLen == 0x40 (2-byte-mode hint + 0 length) → pathLength == 0 (#222)',
+      () {
+        // High 2 bits = hash-mode hint (2-byte), low 6 bits = 0 → direct.
+        final frame = _buildContactFrame(pathLen: 0x40);
+        final contact = Contact.fromFrame(frame);
+        expect(contact, isNotNull);
+        expect(contact!.pathLength, equals(0));
+      },
+    );
 
     test('pathLen == 0xFF → pathLength == -1 (flood)', () {
       final frame = _buildContactFrame(pathLen: 0xFF);
@@ -67,12 +71,16 @@ void main() {
       expect(contact!.pathLength, equals(-1));
     });
 
-    test('pathLen == 65 (over maxPathSize) → pathLength == -1 (flood)', () {
-      final frame = _buildContactFrame(pathLen: 65);
-      final contact = Contact.fromFrame(frame);
-      expect(contact, isNotNull);
-      expect(contact!.pathLength, equals(-1));
-    });
+    test(
+      'pathLen == 0x41 (2-byte-mode hint + 1 byte) → pathLength == 1 (#222)',
+      () {
+        // High 2 bits = hash-mode hint, low 6 bits = 1 → 1-byte path, not flood.
+        final frame = _buildContactFrame(pathLen: 0x41);
+        final contact = Contact.fromFrame(frame);
+        expect(contact, isNotNull);
+        expect(contact!.pathLength, equals(1));
+      },
+    );
   });
 
   group('Contact.fromFrame — corrupt contact guards', () {

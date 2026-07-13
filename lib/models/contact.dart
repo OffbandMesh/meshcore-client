@@ -166,9 +166,14 @@ class Contact {
       final type = reader.readByte();
       final flags = reader.readByte();
       final pathLen = reader.readByte();
-      final safePathLen = pathLen > 0
-          ? (pathLen > maxPathSize ? maxPathSize : pathLen)
-          : 0;
+      // The firmware path-len byte packs a hash-mode hint in the high 2 bits and
+      // the path BYTE length in the low 6 (#222). Decode before use: a direct
+      // node at 2-byte mode sends 0x40, whose raw value would otherwise read as
+      // 64 hops and pull 64 junk bytes into the path. 0xFF stays the flood
+      // sentinel; the device-configured pathHashByteWidth converts bytes->hops
+      // at display time.
+      final byteLen = pathLen == 0xFF ? -1 : pathHopCount(pathLen);
+      final safePathLen = byteLen > 0 ? byteLen : 0;
       final pathBytes = reader.readBytes(maxPathSize).sublist(0, safePathLen);
       final name = reader.readCStringGreedy(maxNameSize);
 
@@ -213,7 +218,7 @@ class Contact {
         name: name.isEmpty ? 'Unknown' : name,
         type: type,
         flags: flags,
-        pathLength: (pathLen == 0xFF || pathLen > maxPathSize) ? -1 : pathLen,
+        pathLength: byteLen, // decoded low-6-bit byte length; -1 = flood (#222)
         path: pathBytes,
         latitude: lat,
         longitude: lon,
