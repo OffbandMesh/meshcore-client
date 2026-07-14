@@ -273,6 +273,7 @@ class MeshCoreConnector extends ChangeNotifier {
   List<String>? _blockDumpKeys;
   int? _blockDumpExpected;
   Timer? _blockListRetryTimer;
+  bool _blockOffloadStoreFull = false;
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -549,6 +550,10 @@ class MeshCoreConnector extends ChangeNotifier {
   /// (Offband firmware, capability-gated). Absent → app-local block only.
   bool get supportsOffbandBlock =>
       firmwareSupportsOffbandBlock(_offbandCaps, _firmwareVerCode);
+
+  /// True when the radio's block store hit `MAX_BLOCKED_KEYS` (32) and rejected
+  /// an ADD (ok=0). Local block still applies; those keys just aren't portable.
+  bool get blockOffloadStoreFull => _blockOffloadStoreFull;
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
@@ -4085,7 +4090,14 @@ class MeshCoreConnector extends ChangeNotifier {
   /// → END `[0xC2 0x03 0xFE]`. Normal END and `APP_START` early-END share `0xFE`;
   /// truncation is detected by `count` vs key-frames received.
   void _handleOffbandBlockFrame(Uint8List frame) {
-    if (frame.length < 3 || frame[1] != offbandBlockList) return;
+    if (frame.length < 2) return;
+    if (frame[1] != offbandBlockList) {
+      // ADD/REMOVE/CLEAR reply: [0xC2][sub][ok].
+      final reply = parseOffbandBlockReply(frame);
+      if (reply != null) _handleOffbandBlockReply(reply);
+      return;
+    }
+    if (frame.length < 3) return;
     final marker = frame[2];
     if (marker == 0xFF) {
       _blockDumpKeys = <String>[];
@@ -4140,7 +4152,26 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reconcile runs when the dump completes.
   void _reconcileFirmwareBlock() {
     if (!supportsOffbandBlock) return;
+    if (_blockOffloadStoreFull) {
+      _blockOffloadStoreFull = false;
+      notifyListeners();
+    }
     unawaited(sendFrame(buildOffbandBlockListFrame()));
+  }
+
+  /// Handle an ADD/REMOVE/CLEAR reply. ADD ok=0 = node store full
+  /// (`MAX_BLOCKED_KEYS`); local stays authoritative, surface it for the UI.
+  void _handleOffbandBlockReply(OffbandBlockReply reply) {
+    _appDebugLogService?.info(
+      'Offband block reply: sub=${reply.sub} ok=${reply.ok}',
+      tag: 'Block',
+    );
+    if (reply.sub == offbandBlockAdd &&
+        reply.ok == 0 &&
+        !_blockOffloadStoreFull) {
+      _blockOffloadStoreFull = true;
+      notifyListeners();
+    }
   }
 
   /// Push one local block change to the firmware store (Offband, capability

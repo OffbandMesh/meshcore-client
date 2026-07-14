@@ -7869,6 +7869,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.'**
   String get block_namesHint;
+
+  /// No description provided for @block_offloadActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware offload active — blocks sync to this radio'**
+  String get block_offloadActive;
+
+  /// No description provided for @block_offloadStoreFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio block list full (32) — extra blocks stay app-only'**
+  String get block_offloadStoreFull;
 }
 
 class _AppLocalizationsDelegate
