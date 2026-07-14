@@ -22,6 +22,33 @@ class TranslatedMessageContent extends StatelessWidget {
   // Rendered as a chip; surrounding text stays plain. (#233)
   static final RegExp _mention = RegExp(r'@\[([^\]]+)\]');
 
+  // A leading `@[Name] ` reply prefix.
+  static final RegExp _replyPrefix = RegExp(r'^@\[([^\]]+)\]\s+');
+
+  /// The name of a leading `@[Name]` reply mention, or null. Lets callers show
+  /// a reply chip above content that isn't rendered as text (e.g. a reply-gif,
+  /// #232).
+  static String? leadingReplyName(String text) =>
+      _replyPrefix.firstMatch(text.trim())?.group(1);
+
+  /// A styled `@Name` mention chip, shared by inline text rendering and reply
+  /// headers above non-text content.
+  static Widget mentionChip(
+    BuildContext context,
+    String name,
+    TextStyle style,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: scheme.onSurface.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('@$name', style: style.copyWith(fontWeight: FontWeight.w500)),
+    );
+  }
+
   Widget _buildText(BuildContext context, String text, TextStyle textStyle) {
     if (!_mention.hasMatch(text)) {
       return LinkHandler.buildLinkifyText(
@@ -34,7 +61,6 @@ class TranslatedMessageContent extends StatelessWidget {
     // contains a mention renders as rich text with chip spans (links inside a
     // mention message are not tappable — same as the prior leading-mention
     // path). Messages without a mention keep full link support above.
-    final scheme = Theme.of(context).colorScheme;
     final spans = <InlineSpan>[];
     var last = 0;
     for (final m in _mention.allMatches(text)) {
@@ -44,17 +70,7 @@ class TranslatedMessageContent extends StatelessWidget {
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: scheme.onSurface.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '@${m.group(1)!}',
-              style: textStyle.copyWith(fontWeight: FontWeight.w500),
-            ),
-          ),
+          child: mentionChip(context, m.group(1)!, textStyle),
         ),
       );
       last = m.end;
