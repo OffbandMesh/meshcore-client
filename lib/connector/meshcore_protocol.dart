@@ -274,6 +274,18 @@ Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 /// defines one, any Offband v14+ radio is assumed to speak `0xC1`.
 bool firmwareSupportsOffbandGps(int? offbandCaps) => offbandCaps != null;
 
+/// `OFFBAND_CAP_BLOCK` bit (bit 1) in the `offband_caps` byte of the device-info
+/// reply: an Offband radio that persists a block list and drops blocked DMs at
+/// receive (firmware PR #247, `FIRMWARE_VER_CODE 15`). Unlike the loose GPS
+/// presence-gate above, block requires the **explicit bit** set AND
+/// `FIRMWARE_VER_CODE >= 15`; absent → app-only mode (no sync, no firmware drop).
+const int offbandCapBlock = 0x02;
+
+bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
+    offbandCaps != null &&
+    (offbandCaps & offbandCapBlock) != 0 &&
+    (firmwareVerCode ?? 0) >= 15;
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;
