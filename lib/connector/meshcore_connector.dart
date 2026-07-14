@@ -540,6 +540,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
   /// so 0xC1 is suppressed there rather than pinged blindly. (#144)
   bool get supportsOffbandGps => firmwareSupportsOffbandGps(_offbandCaps);
+
+  /// Whether the connected radio persists a block list + drops blocked DMs
+  /// (Offband firmware, capability-gated). Absent → app-local block only.
+  bool get supportsOffbandBlock =>
+      firmwareSupportsOffbandBlock(_offbandCaps, _firmwareVerCode);
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
