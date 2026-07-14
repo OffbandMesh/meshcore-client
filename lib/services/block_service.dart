@@ -16,6 +16,12 @@ class BlockService extends ChangeNotifier {
   final Set<String> _blockedKeys = {};
   final Map<String, int> _blockedNames = {};
 
+  /// Set by the connector: pushes a single key change to the firmware block
+  /// store when the connected radio supports it (Epic B). `blocked` = add vs
+  /// remove. Fired only on an actual local change; NOT fired by [importKeys]
+  /// (the pull side), so a synced key never echoes back to the radio.
+  void Function(String keyHex, bool blocked)? firmwareSync;
+
   /// Load persisted state. Call once during app startup.
   Future<void> load() async {
     _blockedKeys
@@ -38,13 +44,30 @@ class BlockService extends ChangeNotifier {
       _blockedNames.containsKey(name.trim().toLowerCase());
 
   Future<void> block(String publicKeyHex) async {
-    if (!_blockedKeys.add(publicKeyHex.toLowerCase())) return;
+    final key = publicKeyHex.toLowerCase();
+    if (!_blockedKeys.add(key)) return;
     await _store.saveKeys(_blockedKeys);
+    firmwareSync?.call(key, true);
     notifyListeners();
   }
 
   Future<void> unblock(String publicKeyHex) async {
-    if (!_blockedKeys.remove(publicKeyHex.toLowerCase())) return;
+    final key = publicKeyHex.toLowerCase();
+    if (!_blockedKeys.remove(key)) return;
+    await _store.saveKeys(_blockedKeys);
+    firmwareSync?.call(key, false);
+    notifyListeners();
+  }
+
+  /// Merge keys learned from the firmware block list into the local set WITHOUT
+  /// echoing them back to the radio (used by the connect-time union pull).
+  /// Never removes — the union only adds.
+  Future<void> importKeys(Iterable<String> keysHex) async {
+    var changed = false;
+    for (final k in keysHex) {
+      if (_blockedKeys.add(k.toLowerCase())) changed = true;
+    }
+    if (!changed) return;
     await _store.saveKeys(_blockedKeys);
     notifyListeners();
   }
@@ -72,10 +95,12 @@ class BlockService extends ChangeNotifier {
   Future<void> maybePromote(String name, String publicKeyHex) async {
     final n = name.trim().toLowerCase();
     if (n.isEmpty || !_blockedNames.containsKey(n)) return;
+    final key = publicKeyHex.toLowerCase();
     _blockedNames.remove(n);
-    _blockedKeys.add(publicKeyHex.toLowerCase());
+    final added = _blockedKeys.add(key);
     await _store.saveNames(_blockedNames);
     await _store.saveKeys(_blockedKeys);
+    if (added) firmwareSync?.call(key, true);
     notifyListeners();
   }
 
