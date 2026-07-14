@@ -18,46 +18,51 @@ class TranslatedMessageContent extends StatelessWidget {
     this.showOriginalFirst = true,
   });
 
-  // A leading `@[Name]` reply mention, with or without a trailing space.
-  static final RegExp _mentionPrefix = RegExp(
-    r'^@\[([^\]]+)\]\s*(.*)$',
-    dotAll: true,
-  );
+  // An `@[Name]` mention anywhere in the text (leading, inline, or repeated).
+  // Rendered as a chip; surrounding text stays plain. (#233)
+  static final RegExp _mention = RegExp(r'@\[([^\]]+)\]');
 
   Widget _buildText(BuildContext context, String text, TextStyle textStyle) {
-    final match = _mentionPrefix.firstMatch(text);
-    if (match == null) {
+    if (!_mention.hasMatch(text)) {
       return LinkHandler.buildLinkifyText(
         context: context,
         text: text,
         style: textStyle,
       );
     }
-    final name = match.group(1)!;
-    final rest = match.group(2)!;
+    // Mentions can't be interleaved with the Linkify widget, so a message that
+    // contains a mention renders as rich text with chip spans (links inside a
+    // mention message are not tappable — same as the prior leading-mention
+    // path). Messages without a mention keep full link support above.
     final scheme = Theme.of(context).colorScheme;
-    return Text.rich(
-      TextSpan(
-        children: [
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: scheme.onSurface.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                '@$name',
-                style: textStyle.copyWith(fontWeight: FontWeight.w500),
-              ),
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m in _mention.allMatches(text)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: text.substring(last, m.start)));
+      }
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: scheme.onSurface.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '@${m.group(1)!}',
+              style: textStyle.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
-          if (rest.isNotEmpty) TextSpan(text: ' $rest'),
-        ],
-      ),
-      style: textStyle,
-    );
+        ),
+      );
+      last = m.end;
+    }
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last)));
+    }
+    return Text.rich(TextSpan(children: spans), style: textStyle);
   }
 
   @override
