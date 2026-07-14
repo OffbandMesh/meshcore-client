@@ -19,12 +19,23 @@ class BlockedView extends StatelessWidget {
       builder: (context, block, connector, child) {
         final keys = block.blockedKeys.toList()..sort();
         final names = block.blockedNames.keys.toList()..sort();
+        final indicator = _offloadIndicator(context, connector);
         if (keys.isEmpty && names.isEmpty) {
-          return Center(child: Text(context.l10n.block_none));
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ?indicator,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: Text(context.l10n.block_none)),
+              ),
+            ],
+          );
         }
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            ?indicator,
             if (keys.isNotEmpty) ...[
               _sectionHeader(context.l10n.block_keysSection),
               ...keys.map((k) => _keyTile(context, block, connector, k)),
@@ -44,6 +55,27 @@ class BlockedView extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  /// Firmware-offload status row (only when the radio supports block offload):
+  /// "active" normally, or a "store full" warning when the node hit its cap.
+  Widget? _offloadIndicator(BuildContext context, MeshCoreConnector connector) {
+    if (!connector.supportsOffbandBlock) return null;
+    final full = connector.blockOffloadStoreFull;
+    return Card(
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          full ? Icons.warning_amber : Icons.sync,
+          color: full ? Colors.amber.shade800 : Colors.green,
+        ),
+        title: Text(
+          full
+              ? context.l10n.block_offloadStoreFull
+              : context.l10n.block_offloadActive,
+        ),
+      ),
     );
   }
 

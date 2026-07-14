@@ -4624,4 +4624,12 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get block_namesHint =>
       'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
+
+  @override
+  String get block_offloadActive =>
+      'Firmware offload active — blocks sync to this radio';
+
+  @override
+  String get block_offloadStoreFull =>
+      'Radio block list full (32) — extra blocks stay app-only';
 }
