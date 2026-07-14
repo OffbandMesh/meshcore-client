@@ -263,6 +263,44 @@ const int respCodeOffbandGps = 0xC1;
 /// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
+// --- Offband block command (0xC2) — capability-gated; see
+// docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
+const int cmdOffbandBlock = 0xC2;
+const int offbandBlockAdd = 0x01;
+const int offbandBlockRemove = 0x02;
+const int offbandBlockList = 0x03;
+const int offbandBlockClear = 0x04;
+
+/// Result of a malformed 0xC2 request: firmware replies with the GENERIC error
+/// frame `[respCodeErr(1)][errCodeIllegalArg(6)]` — NOT 0xC2-prefixed, so the
+/// app must recognise the 2-byte error frame and not wait for a 0xC2 echo.
+const int errCodeIllegalArg = 6;
+
+Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
+    Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
+Uint8List buildOffbandBlockRemoveFrame(Uint8List pubKey) =>
+    Uint8List.fromList([cmdOffbandBlock, offbandBlockRemove, ...pubKey]);
+Uint8List buildOffbandBlockListFrame() =>
+    Uint8List.fromList([cmdOffbandBlock, offbandBlockList]);
+Uint8List buildOffbandBlockClearFrame() =>
+    Uint8List.fromList([cmdOffbandBlock, offbandBlockClear]);
+
+/// Parsed reply to ADD/REMOVE/CLEAR: the sub-type and the result byte `ok`.
+/// ADD: ok=1 present-after-call / ok=0 store-full. REMOVE: ok=1 removed /
+/// ok=0 not-present. (LIST is a streamed dump, parsed separately.)
+class OffbandBlockReply {
+  final int sub;
+  final int ok;
+  const OffbandBlockReply(this.sub, this.ok);
+  bool get success => ok == 1;
+}
+
+/// Parse a 3-byte `[0xC2][sub][ok]` reply; null if not an Offband-block reply.
+OffbandBlockReply? parseOffbandBlockReply(Uint8List frame) {
+  if (frame.length < 3 || frame[0] != cmdOffbandBlock) return null;
+  return OffbandBlockReply(frame[1], frame[2]);
+}
+
 /// True iff the connected firmware understands the `0xC1` GPS extension. Gated
 /// on the `offband_caps` byte being present: that byte is an Offband-fork
 /// addition (device-info v14+) which stock/upstream MeshCore never emits, so a
