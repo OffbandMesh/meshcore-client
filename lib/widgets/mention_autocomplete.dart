@@ -42,10 +42,10 @@ class _Entry {
 /// - Typing `:` at the start of a word lists matching [emojiShortcodes] and
 ///   inserts the emoji character. Typing a full `:name:` auto-converts it.
 ///
-/// Up/Down move the highlight, Tab or click selects, Esc dismisses. Enter
-/// sends, and first completes an unambiguous emoji (single or exact shortcode
-/// match) so it ships the glyph rather than the literal text. Either feature
-/// is disabled by leaving its data empty/null.
+/// Up/Down move the highlight, Tab or click selects without sending, Esc
+/// dismisses. Enter accepts the highlighted item (emoji or mention) then sends;
+/// dismiss with Esc first to send literal text. Either feature is disabled by
+/// leaving its data empty/null.
 class MentionAutocompleteField extends StatefulWidget {
   final int maxBytes;
   final TextEditingController controller;
@@ -83,10 +83,6 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
   int _recentStart = 0;
   int _highlighted = -1;
   int _tokenStart = -1;
-
-  /// Active emoji query while the dropdown shows emoji matches (null for
-  /// mentions or when closed). Lets Enter complete an unambiguous emoji + send.
-  String? _emojiQuery;
 
   @override
   void initState() {
@@ -211,7 +207,6 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
   }
 
   void _filterMentions(String query) {
-    _emojiQuery = null;
     if (widget.candidates.isEmpty) {
       _close();
       return;
@@ -306,7 +301,6 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
         .toList();
     _recentStart = _matches.length; // no divider for emoji
     _highlighted = _matches.length - 1;
-    _emojiQuery = query;
     _show();
   }
 
@@ -330,7 +324,6 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
       _matches = const [];
       _highlighted = -1;
       _tokenStart = -1;
-      _emojiQuery = null;
     }
   }
 
@@ -358,18 +351,14 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
-      // For an unambiguous emoji shortcode (a single match, or the exact name),
-      // Enter completes the glyph first, then sends — so `:rofl` + Enter ships
-      // the emoji, not the literal text. Ambiguous matches still send raw; use
-      // Tab to pick one deliberately.
-      final q = _emojiQuery;
-      if (q != null && _matches.isNotEmpty) {
-        final best = _matches[_highlighted];
-        if (_matches.length == 1 || best.label == ':$q:') {
-          _select(best); // inserts the glyph and closes the dropdown
-          widget.onSubmitted?.call(widget.controller.text);
-          return KeyEventResult.handled;
-        }
+      // Enter accepts the highlighted item (emoji or mention) like Tab, then
+      // sends — so `:shrug` + Enter ships the highlighted glyph, and `@Bob` +
+      // Enter inserts the mention. Tab accepts without sending; Esc dismisses
+      // the dropdown to send literal text. (#231)
+      if (_highlighted >= 0 && _highlighted < _matches.length) {
+        _select(_matches[_highlighted]);
+        widget.onSubmitted?.call(widget.controller.text);
+        return KeyEventResult.handled;
       }
       final text = widget.controller.text;
       _close();
