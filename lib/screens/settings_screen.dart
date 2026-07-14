@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:meshcore_open/utils/gpx_export.dart';
 import 'package:meshcore_open/widgets/elements_ui.dart';
 import 'package:provider/provider.dart';
@@ -259,7 +260,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: _buildInfoRow(
                     l10n.settings_infoPublicKey,
-                    '${pubKeyToHex(connector.selfPublicKey!).substring(0, 16)}...',
+                    pubKeyToHex(connector.selfPublicKey!),
+                    copyValue: pubKeyToHex(connector.selfPublicKey!),
                   ),
                 ),
               ],
@@ -407,7 +409,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (connector.selfPublicKey != null)
               _buildInfoRow(
                 l10n.settings_infoPublicKey,
-                '${pubKeyToHex(connector.selfPublicKey!).substring(0, 16)}...',
+                pubKeyToHex(connector.selfPublicKey!),
+                copyValue: pubKeyToHex(connector.selfPublicKey!),
               ),
             _buildInfoRow(
               l10n.settings_infoContactsCount,
@@ -643,6 +646,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Widget? leading,
     Color? valueColor,
     VoidCallback? onTap,
+    String? copyValue,
   }) {
     final theme = Theme.of(context);
 
@@ -666,13 +670,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: valueColor,
-              fontWeight: FontWeight.w500,
+          if (copyValue == null)
+            Text(
+              value,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: valueColor,
+                fontWeight: FontWeight.w500,
+              ),
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    value,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: valueColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  tooltip: context.l10n.common_copy,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: copyValue));
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.l10n.settings_publicKeyCopied),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
-          ),
         ],
       ),
     );

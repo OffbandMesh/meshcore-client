@@ -584,6 +584,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settings_infoPublicKey => 'Allmänt nyckel';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Kontakterantal';
 
   @override

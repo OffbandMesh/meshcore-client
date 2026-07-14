@@ -594,6 +594,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settings_infoPublicKey => 'Публичный ключ';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Количество контактов';
 
   @override

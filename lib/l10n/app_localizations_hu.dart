@@ -595,6 +595,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settings_infoPublicKey => 'Nyelvkönyv';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Kapcsolatok száma';
 
   @override
