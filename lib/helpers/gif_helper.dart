@@ -10,7 +10,10 @@ class GifHelper {
   ///
   /// Returns null if text is not a valid GIF format
   static String? parseGif(String text) {
-    final trimmed = text.trim();
+    // A reply prepends a leading `@[Name] ` mention; ignore it so a reply-gif
+    // still resolves to the gif rather than plain text. Only a reply mention is
+    // stripped — arbitrary text before a gif is left as text. (#232)
+    final trimmed = text.trim().replaceFirst(RegExp(r'^@\[[^\]]+\]\s+'), '');
     final match = RegExp(r'^g:([A-Za-z0-9_-]+)$').firstMatch(trimmed);
     if (match != null) {
       return match.group(1);
