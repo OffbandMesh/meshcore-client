@@ -1049,6 +1049,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _backgroundService = backgroundService;
     _timeoutPredictionService = timeoutPredictionService;
     _blockService = blockService;
+    blockService?.firmwareSync = _pushBlockChange;
     _usbManager.setDebugLogService(_appDebugLogService);
     _tcpConnector.setDebugLogService(_appDebugLogService);
 
@@ -4120,7 +4121,52 @@ class MeshCoreConnector extends ChangeNotifier {
           unawaited(sendFrame(buildOffbandBlockListFrame()));
         }
       });
+      return;
     }
+    // Complete dump — UNION. Import node keys missing locally (no echo back),
+    // then push local keys the node is missing. Never remove (union): only an
+    // explicit user unblock issues a REMOVE.
+    final blockService = _blockService;
+    if (blockService == null) return;
+    final nodeSet = nodeKeys.map((k) => k.toLowerCase()).toSet();
+    final local = blockService.blockedKeys;
+    unawaited(blockService.importKeys(nodeSet.difference(local)));
+    for (final key in local.difference(nodeSet)) {
+      _pushBlockChange(key, true);
+    }
+  }
+
+  /// On (re)connect to a block-capable radio, pull its block list; the union
+  /// reconcile runs when the dump completes.
+  void _reconcileFirmwareBlock() {
+    if (!supportsOffbandBlock) return;
+    unawaited(sendFrame(buildOffbandBlockListFrame()));
+  }
+
+  /// Push one local block change to the firmware store (Offband, capability
+  /// gated). Wired as `BlockService.firmwareSync`.
+  void _pushBlockChange(String keyHex, bool blocked) {
+    if (!supportsOffbandBlock) return;
+    final key = _pubKeyHexToBytes(keyHex);
+    if (key.length != pubKeySize) return;
+    unawaited(
+      sendFrame(
+        blocked
+            ? buildOffbandBlockAddFrame(key)
+            : buildOffbandBlockRemoveFrame(key),
+      ),
+    );
+  }
+
+  Uint8List _pubKeyHexToBytes(String hex) {
+    final clean = hex.length >= pubKeySize * 2
+        ? hex.substring(0, pubKeySize * 2)
+        : hex;
+    final out = Uint8List(clean.length ~/ 2);
+    for (var i = 0; i < out.length; i++) {
+      out[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return out;
   }
 
   void _handleFrame(List<int> data) {
@@ -4485,6 +4531,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
+    // Caps landed — if the radio speaks block, pull its list and union-reconcile.
+    _reconcileFirmwareBlock();
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];
