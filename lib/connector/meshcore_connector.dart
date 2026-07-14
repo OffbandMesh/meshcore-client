@@ -274,6 +274,8 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _blockDumpExpected;
   Timer? _blockListRetryTimer;
   bool _blockOffloadStoreFull = false;
+  bool _blockDumpInFlight = false;
+  final Set<String> _blockKeysTouchedDuringDump = {};
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -2664,6 +2666,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _clientRepeat = null;
     _rememberedNonRepeatRadioState = null;
     _firmwareVerCode = null;
+    _blockListRetryTimer?.cancel();
+    _blockDumpInFlight = false;
+    _blockKeysTouchedDuringDump.clear();
     _firmwareVersion = null;
     _deviceModel = null;
     _latestOffbandGpsStatus = null;
@@ -4135,15 +4140,25 @@ class MeshCoreConnector extends ChangeNotifier {
       });
       return;
     }
-    // Complete dump — UNION. Import node keys missing locally (no echo back),
-    // then push local keys the node is missing. Never remove (union): only an
-    // explicit user unblock issues a REMOVE.
+    // Complete dump — UNION. Exclude any key the user block/unblocked WHILE the
+    // dump was in flight: _pushBlockChange already sent the right ADD/REMOVE and
+    // the local state is authoritative, so the stale dump must NOT override it
+    // (prevents re-importing an unblock — data loss — and redundant re-pushes).
     final blockService = _blockService;
-    if (blockService == null) return;
+    if (blockService == null) {
+      _blockDumpInFlight = false;
+      _blockKeysTouchedDuringDump.clear();
+      return;
+    }
+    final touched = Set<String>.from(_blockKeysTouchedDuringDump);
+    _blockDumpInFlight = false;
+    _blockKeysTouchedDuringDump.clear();
     final nodeSet = nodeKeys.map((k) => k.toLowerCase()).toSet();
     final local = blockService.blockedKeys;
-    unawaited(blockService.importKeys(nodeSet.difference(local)));
-    for (final key in local.difference(nodeSet)) {
+    final toImport = nodeSet.difference(local).difference(touched);
+    final toPush = local.difference(nodeSet).difference(touched);
+    unawaited(blockService.importKeys(toImport));
+    for (final key in toPush) {
       _pushBlockChange(key, true);
     }
   }
@@ -4156,6 +4171,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _blockOffloadStoreFull = false;
       notifyListeners();
     }
+    _blockDumpInFlight = true;
+    _blockKeysTouchedDuringDump.clear();
     unawaited(sendFrame(buildOffbandBlockListFrame()));
   }
 
@@ -4178,8 +4195,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// gated). Wired as `BlockService.firmwareSync`.
   void _pushBlockChange(String keyHex, bool blocked) {
     if (!supportsOffbandBlock) return;
+    if (_blockDumpInFlight) {
+      _blockKeysTouchedDuringDump.add(keyHex.toLowerCase());
+    }
     final key = _pubKeyHexToBytes(keyHex);
-    if (key.length != pubKeySize) return;
+    if (key == null) return;
     unawaited(
       sendFrame(
         blocked
@@ -4189,15 +4209,20 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
-  Uint8List _pubKeyHexToBytes(String hex) {
-    final clean = hex.length >= pubKeySize * 2
-        ? hex.substring(0, pubKeySize * 2)
-        : hex;
-    final out = Uint8List(clean.length ~/ 2);
-    for (var i = 0; i < out.length; i++) {
-      out[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
+  /// Parse a 64-char pubkey hex to 32 bytes; null on malformed input (e.g. a
+  /// corrupt persisted entry) so a bad key never crashes the fire-and-forget
+  /// push via an unhandled `FormatException`.
+  Uint8List? _pubKeyHexToBytes(String hex) {
+    if (hex.length != pubKeySize * 2) return null;
+    try {
+      final out = Uint8List(pubKeySize);
+      for (var i = 0; i < pubKeySize; i++) {
+        out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+      }
+      return out;
+    } on FormatException {
+      return null;
     }
-    return out;
   }
 
   void _handleFrame(List<int> data) {
