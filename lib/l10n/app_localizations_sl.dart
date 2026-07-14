@@ -586,6 +586,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settings_infoPublicKey => 'Javni ključ';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Število stikov';
 
   @override

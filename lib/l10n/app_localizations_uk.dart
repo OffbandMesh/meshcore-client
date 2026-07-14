@@ -592,6 +592,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get settings_infoPublicKey => 'Відкритий ключ';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Кількість контактів';
 
   @override

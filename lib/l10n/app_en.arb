@@ -238,6 +238,7 @@
   "settings_infoModel": "Model",
   "settings_infoBattery": "Battery",
   "settings_infoPublicKey": "Public Key",
+  "settings_publicKeyCopied": "Public key copied",
   "settings_infoContactsCount": "Contacts Count",
   "settings_infoChannelCount": "Channel Count",
   "settings_presets": "Presets",

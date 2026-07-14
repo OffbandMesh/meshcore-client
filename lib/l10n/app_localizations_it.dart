@@ -595,6 +595,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get settings_infoPublicKey => 'Chiave Pubblica';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => 'Numero contatti';
 
   @override

@@ -568,6 +568,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_infoPublicKey => '公開鍵';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => '連絡先数';
 
   @override

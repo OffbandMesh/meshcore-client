@@ -560,6 +560,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settings_infoPublicKey => '公钥';
 
   @override
+  String get settings_publicKeyCopied => 'Public key copied';
+
+  @override
   String get settings_infoContactsCount => '联系人数量';
 
   @override

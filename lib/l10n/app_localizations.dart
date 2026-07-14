@@ -1186,6 +1186,12 @@ abstract class AppLocalizations {
   /// **'Public Key'**
   String get settings_infoPublicKey;
 
+  /// No description provided for @settings_publicKeyCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Public key copied'**
+  String get settings_publicKeyCopied;
+
   /// No description provided for @settings_infoContactsCount.
   ///
   /// In en, this message translates to:
