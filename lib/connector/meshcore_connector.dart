@@ -269,6 +269,10 @@ class MeshCoreConnector extends ChangeNotifier {
   bool? _clientRepeat;
   MeshCoreRadioStateSnapshot? _rememberedNonRepeatRadioState;
   int? _firmwareVerCode;
+  // BLOCK_LIST (0xC2/0x03) streamed-dump accumulation (B3).
+  List<String>? _blockDumpKeys;
+  int? _blockDumpExpected;
+  Timer? _blockListRetryTimer;
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -4074,6 +4078,51 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Route an incoming `0xC2` frame. Only the BLOCK_LIST streamed dump is parsed
+  /// here (B3); ADD/REMOVE/CLEAR replies are handled by the sync layer (B4).
+  /// LIST dump: START `[0xC2 0x03 0xFF count]` → KEY `[0xC2 0x03 index key:32]`
+  /// → END `[0xC2 0x03 0xFE]`. Normal END and `APP_START` early-END share `0xFE`;
+  /// truncation is detected by `count` vs key-frames received.
+  void _handleOffbandBlockFrame(Uint8List frame) {
+    if (frame.length < 3 || frame[1] != offbandBlockList) return;
+    final marker = frame[2];
+    if (marker == 0xFF) {
+      _blockDumpKeys = <String>[];
+      _blockDumpExpected = frame.length >= 4 ? frame[3] : 0;
+    } else if (marker == 0xFE) {
+      final keys = _blockDumpKeys ?? <String>[];
+      final expected = _blockDumpExpected;
+      final truncated = expected != null && keys.length < expected;
+      _blockDumpKeys = null;
+      _blockDumpExpected = null;
+      _onFirmwareBlockListReceived(keys, truncated: truncated);
+    } else if (frame.length >= 35 && _blockDumpKeys != null) {
+      // KEY frame: marker is the slot index (< MAX_BLOCKED_KEYS, never 0xFE/0xFF).
+      _blockDumpKeys!.add(pubKeyToHex(frame.sublist(3, 35)));
+    }
+  }
+
+  /// Called when a BLOCK_LIST dump ends. A truncated dump (early-END) is
+  /// re-requested once the link settles; never derive removals from a partial
+  /// pull. The union reconcile against the local list is wired in B4.
+  void _onFirmwareBlockListReceived(
+    List<String> nodeKeys, {
+    required bool truncated,
+  }) {
+    _appDebugLogService?.info(
+      'Firmware block list: ${nodeKeys.length} keys (truncated=$truncated)',
+      tag: 'Block',
+    );
+    if (truncated) {
+      _blockListRetryTimer?.cancel();
+      _blockListRetryTimer = Timer(const Duration(seconds: 2), () {
+        if (isConnected && supportsOffbandBlock) {
+          unawaited(sendFrame(buildOffbandBlockListFrame()));
+        }
+      });
+    }
+  }
+
   void _handleFrame(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
@@ -4094,6 +4143,9 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeOffbandGps:
         _handleOffbandGps(frame);
+        break;
+      case cmdOffbandBlock:
+        _handleOffbandBlockFrame(frame);
         break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
