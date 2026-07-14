@@ -551,6 +551,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     final isOutgoing = message.isOutgoing;
     final gifId = GifHelper.parseGif(message.text);
+    final gifReplyName = gifId != null
+        ? TranslatedMessageContent.leadingReplyName(message.text)
+        : null;
     final poi = parseMarkerText(message.text);
     final translatedDisplayText =
         message.translatedText != null &&
@@ -638,22 +641,40 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                           message.senderName,
                         )
                       else if (gifId != null)
-                        Stack(
+                        Column(
+                          crossAxisAlignment: isOutgoing
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: GifMessage(
-                                url:
-                                    'https://media.giphy.com/media/$gifId/giphy.gif',
-                                backgroundColor: Colors.transparent,
-                                fallbackTextColor: isOutgoing
-                                    ? Theme.of(context)
-                                          .colorScheme
-                                          .onPrimaryContainer
-                                          .withValues(alpha: 0.7)
-                                    : Theme.of(context).colorScheme.onSurface
-                                          .withValues(alpha: 0.6),
+                            if (gifReplyName != null) ...[
+                              TranslatedMessageContent.mentionChip(
+                                context,
+                                gifReplyName,
+                                TextStyle(fontSize: bodyFontSize * textScale),
                               ),
+                              const SizedBox(height: 4),
+                            ],
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: GifMessage(
+                                    url:
+                                        'https://media.giphy.com/media/$gifId/giphy.gif',
+                                    backgroundColor: Colors.transparent,
+                                    fallbackTextColor: isOutgoing
+                                        ? Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer
+                                              .withValues(alpha: 0.7)
+                                        : Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         )

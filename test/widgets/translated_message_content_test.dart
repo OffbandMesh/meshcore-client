@@ -36,4 +36,20 @@ void main() {
       expect(find.text('@Bob'), findsOneWidget);
     });
   });
+
+  group('TranslatedMessageContent.leadingReplyName (#232)', () {
+    test('extracts a space-terminated leading reply name', () {
+      expect(TranslatedMessageContent.leadingReplyName('@[Bob] hi'), 'Bob');
+      expect(
+        TranslatedMessageContent.leadingReplyName('@[Bob Smith] g:x'),
+        'Bob Smith',
+      );
+    });
+
+    test('null when not leading or no trailing space', () {
+      expect(TranslatedMessageContent.leadingReplyName('hi @[Bob]'), isNull);
+      expect(TranslatedMessageContent.leadingReplyName('@[Bob]'), isNull);
+      expect(TranslatedMessageContent.leadingReplyName('hello'), isNull);
+    });
+  });
 }
