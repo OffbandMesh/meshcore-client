@@ -66,6 +66,7 @@ API: `isBlocked(keyHex)`, `isNameBlocked(name)`, `block(keyHex)`, `unblock(keyHe
 | Surface | Rule |
 |---|---|
 | Incoming DM | drop + suppress notification when `senderKey ∈ blockedKeys` (on Offband, firmware already dropped it at receive — §7) |
+| Outgoing DM | **prevent sending** to a blocked contact — the DM composer is replaced by a notice bar with an inline **Unblock** action (you cannot message someone you've blocked without first unblocking). Chat history stays visible. |
 | Advert | suppress the new-advert notification for `blockedKeys`. **Do NOT discard the advert** — the contact-name update must keep flowing (self-heal, §5) |
 | Contacts / Discovery lists | **keep blocked entries VISIBLE** with a clear blocked indicator — a red block icon (`Icons.block`, circle-with-slash) + muted/greyed styling. **Do NOT hide them.** Inline unblock available. *(A "hide blocked entirely" toggle is a deliberate post-implementation follow-on, not v1.)* |
 | Channel message | hide per the resolution rule in §5 |

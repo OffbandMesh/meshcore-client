@@ -2602,5 +2602,6 @@
   "block_namesSection": "Blocked names",
   "block_namesHint": "Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.",
   "block_offloadActive": "Firmware offload active — blocks sync to this radio",
-  "block_offloadStoreFull": "Radio block list full (32) — extra blocks stay app-only"
+  "block_offloadStoreFull": "Radio block list full (32) — extra blocks stay app-only",
+  "block_composerNotice": "You've blocked this contact"
 }

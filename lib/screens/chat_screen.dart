@@ -591,6 +591,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildInputBar(MeshCoreConnector connector) {
+    if (context.watch<BlockService>().isBlocked(widget.contact.publicKeyHex)) {
+      return _buildBlockedBar();
+    }
     final maxBytes = maxContactMessageBytes();
     final colorScheme = Theme.of(context).colorScheme;
     final settings = context.watch<AppSettingsService>().settings;
@@ -733,6 +736,38 @@ class _ChatScreenState extends State<ChatScreen> {
       selectedLanguageCode: settings.translationTargetLanguageCode,
       onEnabledChanged: settingsService.setComposerTranslationEnabled,
       onLanguageSelected: settingsService.setTranslationTargetLanguageCode,
+    );
+  }
+
+  Widget _buildBlockedBar() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            const SizedBox(width: 4),
+            Icon(Icons.block, color: colorScheme.error),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                context.l10n.block_composerNotice,
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.read<BlockService>().unblock(
+                widget.contact.publicKeyHex,
+              ),
+              child: Text(context.l10n.block_unblock),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
