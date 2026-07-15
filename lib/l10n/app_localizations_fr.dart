@@ -4652,4 +4652,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get block_offloadStoreFull =>
       'Radio block list full (32) — extra blocks stay app-only';
+
+  @override
+  String get block_composerNotice => 'You\'ve blocked this contact';
 }

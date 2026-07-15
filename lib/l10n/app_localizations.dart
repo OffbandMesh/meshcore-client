@@ -7887,6 +7887,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Radio block list full (32) — extra blocks stay app-only'**
   String get block_offloadStoreFull;
+
+  /// No description provided for @block_composerNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve blocked this contact'**
+  String get block_composerNotice;
 }
 
 class _AppLocalizationsDelegate
