@@ -3078,6 +3078,9 @@ class MeshCoreConnector extends ChangeNotifier {
     String? translationModelId,
   }) async {
     if (!isConnected || text.isEmpty) return;
+    // Outgoing DMs (incl. reactions and retries) to a blocked contact are
+    // dropped — mirrors the incoming DM-drop so a block is symmetric (#252).
+    if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) return;
 
     // Check if this is a reaction - apply locally with pending status and route through retry service
     final reactionInfo = ReactionHelper.parseReaction(text);
