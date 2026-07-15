@@ -6,7 +6,7 @@ questions raised before the first `feat/64` Windows compile.
 ## 1. Installer / short-term distribution
 
 A Flutter Windows release is a **folder**, not a single exe:
-`build/windows/x64/runner/Release/` = `meshcore_open.exe` + `flutter_windows.dll`
+`build/windows/x64/runner/Release/` = `offband_meshcore.exe` + `flutter_windows.dll`
 + plugin DLLs + `data/` (`app.so`, `flutter_assets/`, `icudtl.dat`). The exe will
 **not** run on its own — it needs the whole folder.
 
