@@ -10,6 +10,7 @@ import 'app_debug_log_service.dart';
 import '../utils/macos_usb_device_names.dart';
 import '../utils/platform_info.dart';
 import '../utils/usb_port_labels.dart';
+import '../utils/usb_vid.dart';
 import 'usb_serial_frame_codec.dart';
 
 /// Wraps the native flserial plugin to expose a stream of raw bytes for the
@@ -102,6 +103,25 @@ class UsbSerialService {
     }).toList();
   }
 
+  /// Best-effort USB vendor ID for [portName] from the flserial port
+  /// enumeration, or null if it can't be determined. Enumeration only — it does
+  /// NOT open the port, so it can't trigger the reset the gate exists to avoid.
+  /// Used to gate the DTR open pulse. (#244/#245)
+  int? _lookupPortVid(String portName) {
+    try {
+      for (final entry in FlSerial.listPorts()) {
+        if (normalizeUsbPortName(entry) != portName) continue;
+        final segments = entry.split(' - ');
+        if (segments.length < 3) return null;
+        // hardware_id is the 3rd field onward (may itself contain ' - ').
+        return parseUsbVid(segments.sublist(2).join(' - '));
+      }
+    } catch (e) {
+      _debugLogService?.warn('USB VID lookup failed: $e', tag: 'USB Serial');
+    }
+    return null;
+  }
+
   void setDebugLogService(AppDebugLogService? service) {
     _debugLogService = service;
   }
@@ -164,6 +184,12 @@ class UsbSerialService {
       // When a cu.* open fails with FL_ERROR_PORT_NOT_EXIST, try the tty.*
       // variant as a fallback (and vice-versa) before giving up.
       final candidates = _buildPortCandidates(normalizedPortName);
+
+      // Recover the USB vendor ID so we can gate the DTR open pulse below. The
+      // pulse resets ESP32 USB-Serial/JTAG chips (VID 303A) into ROM download
+      // mode; it must fire only for nRF52 (VID 239A). (#244/#245)
+      final int? portVid = _lookupPortVid(normalizedPortName);
+
       FlSerialException? lastError;
       bool opened = false;
 
@@ -189,11 +215,26 @@ class UsbSerialService {
           serial.setStopBits1();
           serial.setFlowControlNone();
           serial.setRTS(false);
-          // Toggle DTR low→high so the device sees a fresh connection even
-          // if the previous disconnect didn't cleanly signal DTR drop.
-          serial.setDTR(false);
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-          serial.setDTR(true);
+          if (portVid == usbVidAdafruitNrf52) {
+            // nRF52 (Adafruit): keys "fresh connection" off a DTR low→high edge
+            // so a reconnect after an unclean disconnect is seen. Keep the pulse.
+            serial.setDTR(false);
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            serial.setDTR(true);
+          } else {
+            // ESP32 USB-Serial/JTAG (VID 303A) maps DTR/RTS onto EN/BOOT, so a
+            // DTR-low window resets the chip into ROM download mode mid-open and
+            // wedges it. Any non-nRF52 device — including an unknown/unparseable
+            // VID — opens with DTR asserted and no pulse (a stale DTR is safer
+            // than wedging the device). (#244/#245)
+            serial.setDTR(true);
+          }
+          _debugLogService?.info(
+            'USB open pulse gate: vid='
+            '${portVid == null ? 'unknown' : '0x${portVid.toRadixString(16)}'} '
+            '${portVid == usbVidAdafruitNrf52 ? 'DTR pulse (nRF52)' : 'no pulse (DTR asserted)'}',
+            tag: 'USB Serial',
+          );
           _serial = serial;
           // Update the normalized port name to whichever candidate succeeded.
           normalizedPortName = candidate;
