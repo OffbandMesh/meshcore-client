@@ -1789,6 +1789,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _retryMessage(Message message) {
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
+    if (context.read<BlockService>().isBlocked(widget.contact.publicKeyHex)) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.block_composerNotice),
+      );
+      return;
+    }
     // Retry using the contact's current path override setting
     connector.sendMessage(_resolveContact(connector), message.text);
     showDismissibleSnackBar(
@@ -1811,6 +1818,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendReaction(Message message, Contact senderContact, String emoji) {
     final connector = context.read<MeshCoreConnector>();
+    if (context.read<BlockService>().isBlocked(widget.contact.publicKeyHex)) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.block_composerNotice),
+      );
+      return;
+    }
     final emojiIndex = ReactionHelper.emojiToIndex(emoji);
     if (emojiIndex == null) return; // Unknown emoji, skip
     final timestampSecs = message.timestamp.millisecondsSinceEpoch ~/ 1000;

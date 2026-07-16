@@ -1235,6 +1235,15 @@ class MeshCoreConnector extends ChangeNotifier {
     int timestampSeconds,
   ) async {
     if (!isConnected || text.isEmpty) return;
+    // Automatic retries route here without passing sendMessage — stop them
+    // too once the contact is blocked (#252).
+    if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
+      appLogger.info(
+        'Dropped outgoing DM retry to blocked contact',
+        tag: 'Connector',
+      );
+      return;
+    }
     try {
       await _waitForRadioQuiet(lastInboundRxTime: _lastContactMsgRxTime);
       final outboundText = prepareContactOutboundText(contact, text);
@@ -3080,7 +3089,13 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!isConnected || text.isEmpty) return;
     // Outgoing DMs (incl. reactions and retries) to a blocked contact are
     // dropped — mirrors the incoming DM-drop so a block is symmetric (#252).
-    if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) return;
+    if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
+      appLogger.info(
+        'Dropped outgoing DM to blocked contact',
+        tag: 'Connector',
+      );
+      return;
+    }
 
     // Check if this is a reaction - apply locally with pending status and route through retry service
     final reactionInfo = ReactionHelper.parseReaction(text);
