@@ -208,6 +208,54 @@ class AppSettingsService extends ChangeNotifier {
     await updateSettings(_settings.copyWith(unitSystem: value));
   }
 
+  /// Per-channel notification level.
+  ///
+  /// Resolution order: the PSK-keyed mode when one is set, else the legacy
+  /// name-keyed mute (so a channel muted before this feature existed still
+  /// reports [ChannelNotifyMode.off]), else [ChannelNotifyMode.all].
+  ///
+  /// [identityKey] comes from [AppSettings.channelNotifyKey]; the caller
+  /// resolves the slot index to a PSK.
+  ChannelNotifyMode channelNotifyMode({
+    required String identityKey,
+    required String channelName,
+  }) {
+    final mode = _settings.channelNotifyModes[identityKey];
+    if (mode != null) return mode;
+    if (_settings.mutedChannels.contains(channelName)) {
+      return ChannelNotifyMode.off;
+    }
+    return ChannelNotifyMode.all;
+  }
+
+  Future<void> setChannelNotifyMode({
+    required String identityKey,
+    required String channelName,
+    required ChannelNotifyMode mode,
+  }) async {
+    final modes = Map<String, ChannelNotifyMode>.from(
+      _settings.channelNotifyModes,
+    );
+    if (mode == ChannelNotifyMode.all) {
+      modes.remove(identityKey); // `all` is the default; don't store it.
+    } else {
+      modes[identityKey] = mode;
+    }
+
+    // Keep the legacy name-keyed set in sync so rolling back to a build without
+    // notify modes still honours an Off channel. Remove after one release.
+    final muted = Set<String>.from(_settings.mutedChannels);
+    if (mode == ChannelNotifyMode.off) {
+      muted.add(channelName);
+    } else {
+      muted.remove(channelName);
+    }
+
+    await updateSettings(
+      _settings.copyWith(channelNotifyModes: modes, mutedChannels: muted),
+    );
+  }
+
   bool isChannelMuted(String channelName) {
     return _settings.mutedChannels.contains(channelName);
   }
