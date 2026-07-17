@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_blue_plus_platform_interface/flutter_blue_plus_platform_interface.dart';
 
+import '../models/app_settings.dart';
 import '../models/channel.dart';
 import '../models/channel_message.dart';
 import '../models/companion_radio_stats.dart';
@@ -5584,6 +5585,19 @@ class MeshCoreConnector extends ChangeNotifier {
     return 'Channel $channelIndex';
   }
 
+  /// True when [text] carries a canonical mention of this node: the `@[Name]`
+  /// form the composer inserts and the chat renders as a chip (#235).
+  ///
+  /// Matched case-insensitively, since a hand-typed mention need not match the
+  /// advert's casing. Bare `@Name` is deliberately NOT matched: it false-
+  /// positives on ordinary text and cannot be delimited for names containing
+  /// spaces.
+  bool _mentionsSelf(String text) {
+    final name = _selfName?.trim();
+    if (name == null || name.isEmpty) return false;
+    return text.toLowerCase().contains('@[${name.toLowerCase()}]');
+  }
+
   void _maybeNotifyChannelMessage(
     ChannelMessage message, {
     String? channelName,
@@ -5599,7 +5613,6 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final label = channelName ?? _channelDisplayName(channelIndex);
-    if (_appSettingsService!.isChannelMuted(label)) return;
 
     // Reuse translation result only if completed and non-empty; else use original text
     final resolvedText =
@@ -5608,6 +5621,26 @@ class MeshCoreConnector extends ChangeNotifier {
             translationResult.translatedText.trim().isNotEmpty)
         ? translationResult.translatedText.trim()
         : message.text.trim();
+
+    // Per-channel notification level, keyed by the channel's PSK identity so
+    // the setting survives a rename and does not follow a reused slot (#259).
+    // Evaluated against resolvedText so a translated mention still matches.
+    final mode = _appSettingsService!.channelNotifyMode(
+      identityKey: AppSettings.channelNotifyKey(
+        channelIndex: channelIndex,
+        pskHex: _findChannelByIndex(channelIndex)?.pskHex,
+      ),
+      channelName: label,
+    );
+    switch (mode) {
+      case ChannelNotifyMode.off:
+        return;
+      case ChannelNotifyMode.mentionsOnly:
+        if (!_mentionsSelf(resolvedText)) return;
+      case ChannelNotifyMode.all:
+        break;
+    }
+
     unawaited(
       () async {
         await _notificationService.showChannelMessageNotification(
