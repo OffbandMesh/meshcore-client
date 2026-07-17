@@ -1112,6 +1112,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channels_unmuteChannel => '取消静音频道';
 
   @override
+  String get channels_notifications => 'Notifications';
+
+  @override
+  String get channels_notifyAll => 'All messages';
+
+  @override
+  String get channels_notifyMentionsOnly => 'Mentions only';
+
+  @override
+  String get channels_notifyOff => 'Off';
+
+  @override
   String get channels_deleteChannel => '删除频道';
 
   @override
