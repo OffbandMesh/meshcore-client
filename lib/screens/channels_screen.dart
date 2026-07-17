@@ -13,6 +13,7 @@ import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../services/app_settings_service.dart';
 import '../services/ui_view_state_service.dart';
+import '../models/app_settings.dart';
 import '../models/channel.dart';
 import '../models/community.dart';
 import '../storage/community_store.dart';
@@ -492,6 +493,71 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 
+  /// Notify-mode storage key for [channel]: its PSK identity, so the setting
+  /// survives a rename and does not follow a reused slot (#259).
+  String _notifyKeyFor(Channel channel) => AppSettings.channelNotifyKey(
+    channelIndex: channel.index,
+    pskHex: channel.pskHex,
+  );
+
+  IconData _notifyModeIcon(ChannelNotifyMode mode) {
+    switch (mode) {
+      case ChannelNotifyMode.all:
+        return Icons.notifications_outlined;
+      case ChannelNotifyMode.mentionsOnly:
+        return Icons.alternate_email;
+      case ChannelNotifyMode.off:
+        return Icons.notifications_off_outlined;
+    }
+  }
+
+  String _notifyModeLabel(BuildContext context, ChannelNotifyMode mode) {
+    switch (mode) {
+      case ChannelNotifyMode.all:
+        return context.l10n.channels_notifyAll;
+      case ChannelNotifyMode.mentionsOnly:
+        return context.l10n.channels_notifyMentionsOnly;
+      case ChannelNotifyMode.off:
+        return context.l10n.channels_notifyOff;
+    }
+  }
+
+  void _showNotifyModeDialog(BuildContext context, Channel channel) {
+    final settingsService = context.read<AppSettingsService>();
+    final identityKey = _notifyKeyFor(channel);
+    final current = settingsService.channelNotifyMode(
+      identityKey: identityKey,
+      channelName: channel.name,
+    );
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.channels_notifications),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final mode in ChannelNotifyMode.values)
+              ListTile(
+                leading: Icon(_notifyModeIcon(mode)),
+                title: Text(_notifyModeLabel(dialogContext, mode)),
+                trailing: mode == current ? const Icon(Icons.check) : null,
+                onTap: () async {
+                  Navigator.pop(dialogContext);
+                  await settingsService.setChannelNotifyMode(
+                    identityKey: identityKey,
+                    channelName: channel.name,
+                    mode: mode,
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showChannelActions(
     BuildContext context,
     MeshCoreConnector connector,
@@ -500,7 +566,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   ) {
     final parentContext = context;
     final settingsService = context.read<AppSettingsService>();
-    final isMuted = settingsService.isChannelMuted(channel.name);
+    final notifyMode = settingsService.channelNotifyMode(
+      identityKey: _notifyKeyFor(channel),
+      channelName: channel.name,
+    );
 
     showModalBottomSheet(
       context: parentContext,
@@ -531,22 +600,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
               },
             ),
             ListTile(
-              leading: Icon(
-                isMuted
-                    ? Icons.notifications_outlined
-                    : Icons.notifications_off_outlined,
-              ),
-              title: Text(
-                isMuted
-                    ? context.l10n.channels_unmuteChannel
-                    : context.l10n.channels_muteChannel,
-              ),
+              leading: Icon(_notifyModeIcon(notifyMode)),
+              title: Text(context.l10n.channels_notifications),
+              subtitle: Text(_notifyModeLabel(context, notifyMode)),
               onTap: () async {
                 Navigator.pop(sheetContext);
-                if (isMuted) {
-                  await settingsService.unmuteChannel(channel.name);
-                } else {
-                  await settingsService.muteChannel(channel.name);
+                await Future.delayed(const Duration(milliseconds: 100));
+                if (parentContext.mounted) {
+                  _showNotifyModeDialog(parentContext, channel);
                 }
               },
             ),

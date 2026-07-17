@@ -2212,6 +2212,30 @@ abstract class AppLocalizations {
   /// **'Unmute channel'**
   String get channels_unmuteChannel;
 
+  /// No description provided for @channels_notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get channels_notifications;
+
+  /// No description provided for @channels_notifyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All messages'**
+  String get channels_notifyAll;
+
+  /// No description provided for @channels_notifyMentionsOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Mentions only'**
+  String get channels_notifyMentionsOnly;
+
+  /// No description provided for @channels_notifyOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get channels_notifyOff;
+
   /// No description provided for @channels_deleteChannel.
   ///
   /// In en, this message translates to:
