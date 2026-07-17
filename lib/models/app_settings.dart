@@ -28,6 +28,21 @@ extension ClockFormatValue on ClockFormat {
   }
 }
 
+enum ChannelNotifyMode { all, mentionsOnly, off }
+
+extension ChannelNotifyModeValue on ChannelNotifyMode {
+  String get value {
+    switch (this) {
+      case ChannelNotifyMode.all:
+        return 'all';
+      case ChannelNotifyMode.mentionsOnly:
+        return 'mentions';
+      case ChannelNotifyMode.off:
+        return 'off';
+    }
+  }
+}
+
 const Map<String, String> defaultCyr2LatCharMap = {
   'А': 'A',
   'В': 'B',
@@ -123,7 +138,17 @@ class AppSettings {
   final Map<String, String> batteryChemistryByDeviceId;
   final Map<String, String> batteryChemistryByRepeaterId;
   final UnitSystem unitSystem;
+
+  /// Legacy channel-name-keyed mute set. Superseded by [channelNotifyModes],
+  /// which is keyed by PSK identity. Still read as a fallback and still
+  /// written, so an older build can be rolled back to without losing mutes.
   final Set<String> mutedChannels;
+
+  /// Per-channel notification level, keyed by [channelNotifyKey] — the PSK
+  /// identity when known, else the slot index. Keying by PSK (not by display
+  /// name, and not by slot) means the setting survives a rename and does not
+  /// bleed across a slot reassignment (#193/#194).
+  final Map<String, ChannelNotifyMode> channelNotifyModes;
   final bool mapShowDiscoveryContacts;
   final String tcpServerAddress;
   final int tcpServerPort;
@@ -144,6 +169,17 @@ class AppSettings {
       orElse: () => cyr2latProfiles.first,
     );
     return profile.charMap;
+  }
+
+  /// Storage key for a channel's notify mode.
+  ///
+  /// Mirrors the identity scheme [ChannelMessageStore] uses for history (#194):
+  /// the PSK hex when the channel is synced and its key is known, else the slot
+  /// index as a fallback. The `psk_` marker keeps the two spaces from colliding
+  /// (a PSK is 32 hex chars; an index is a small integer).
+  static String channelNotifyKey({required int channelIndex, String? pskHex}) {
+    if (pskHex != null && pskHex.isNotEmpty) return 'psk_$pskHex';
+    return '$channelIndex';
   }
 
   AppSettings({
@@ -179,6 +215,7 @@ class AppSettings {
     Map<String, String>? batteryChemistryByRepeaterId,
     this.unitSystem = UnitSystem.metric,
     Set<String>? mutedChannels,
+    Map<String, ChannelNotifyMode>? channelNotifyModes,
     this.mapShowDiscoveryContacts = true,
     this.tcpServerAddress = '',
     this.tcpServerPort = 0,
@@ -195,6 +232,7 @@ class AppSettings {
   }) : batteryChemistryByDeviceId = batteryChemistryByDeviceId ?? {},
        batteryChemistryByRepeaterId = batteryChemistryByRepeaterId ?? {},
        mutedChannels = mutedChannels ?? {},
+       channelNotifyModes = channelNotifyModes ?? {},
        translationDownloadedModels = translationDownloadedModels ?? const [],
        cyr2latProfiles =
            cyr2latProfiles ??
@@ -241,6 +279,9 @@ class AppSettings {
       'battery_chemistry_by_repeater_id': batteryChemistryByRepeaterId,
       'unit_system': unitSystem.value,
       'muted_channels': mutedChannels.toList(),
+      'channel_notify_modes': channelNotifyModes.map(
+        (key, mode) => MapEntry(key, mode.value),
+      ),
       'map_show_discovery_contacts': mapShowDiscoveryContacts,
       'tcp_server_address': tcpServerAddress,
       'tcp_server_port': tcpServerPort,
@@ -277,6 +318,17 @@ class AppSettings {
           return ClockFormat.twentyFourHour;
         default:
           return ClockFormat.system;
+      }
+    }
+
+    ChannelNotifyMode parseChannelNotifyMode(dynamic value) {
+      switch (value) {
+        case 'mentions':
+          return ChannelNotifyMode.mentionsOnly;
+        case 'off':
+          return ChannelNotifyMode.off;
+        default:
+          return ChannelNotifyMode.all;
       }
     }
 
@@ -333,6 +385,16 @@ class AppSettings {
           ((json['muted_channels'] as List?)
               ?.map((e) => e.toString())
               .toSet()) ??
+          {},
+      // Legacy `muted_channels` is not folded in here: it is name-keyed and a
+      // name cannot be resolved to a PSK at the data layer. AppSettingsService
+      // reads it as a fallback instead, so a pre-existing mute still reports
+      // `off` until the user sets a mode explicitly.
+      channelNotifyModes:
+          (json['channel_notify_modes'] as Map?)?.map(
+            (key, value) =>
+                MapEntry(key.toString(), parseChannelNotifyMode(value)),
+          ) ??
           {},
       mapShowDiscoveryContacts:
           json['map_show_discovery_contacts'] as bool? ?? true,
@@ -427,6 +489,7 @@ class AppSettings {
     Map<String, String>? batteryChemistryByRepeaterId,
     UnitSystem? unitSystem,
     Set<String>? mutedChannels,
+    Map<String, ChannelNotifyMode>? channelNotifyModes,
     bool? mapShowDiscoveryContacts,
     String? tcpServerAddress,
     int? tcpServerPort,
@@ -485,6 +548,7 @@ class AppSettings {
           batteryChemistryByRepeaterId ?? this.batteryChemistryByRepeaterId,
       unitSystem: unitSystem ?? this.unitSystem,
       mutedChannels: mutedChannels ?? this.mutedChannels,
+      channelNotifyModes: channelNotifyModes ?? this.channelNotifyModes,
       mapShowDiscoveryContacts:
           mapShowDiscoveryContacts ?? this.mapShowDiscoveryContacts,
       tcpServerAddress: tcpServerAddress ?? this.tcpServerAddress,
