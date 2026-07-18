@@ -15,12 +15,21 @@ class AppShell extends StatelessWidget {
   static const double wideBreakpoint = 720;
   static const double _drawerWidth = 300;
 
-  final int selectedIndex;
-  final ValueChanged<int> onDestinationSelected;
+  /// Bottom bar tab. Null on pushed detail screens (a channel chat), which
+  /// carry the nav panel but no bottom bar.
+  final int? selectedIndex;
+  final ValueChanged<int>? onDestinationSelected;
   final int contactsUnreadCount;
   final int channelsUnreadCount;
 
   final PreferredSizeWidget? appBar;
+
+  /// App bar that needs to know whether the panel is docked, so a pushed
+  /// screen can drop its hamburger when the panel is already pinned open.
+  /// Takes precedence over [appBar].
+  final PreferredSizeWidget Function(BuildContext context, bool pinned)?
+  appBarBuilder;
+
   final Widget body;
   final Widget? floatingActionButton;
 
@@ -29,10 +38,11 @@ class AppShell extends StatelessWidget {
 
   const AppShell({
     super.key,
-    required this.selectedIndex,
-    required this.onDestinationSelected,
     required this.body,
+    this.selectedIndex,
+    this.onDestinationSelected,
     this.appBar,
+    this.appBarBuilder,
     this.floatingActionButton,
     this.drawerContent,
     this.contactsUnreadCount = 0,
@@ -54,22 +64,30 @@ class AppShell extends StatelessWidget {
     );
   }
 
-  Widget _bottomBar() {
+  /// Null on detail screens, which show the panel but no bottom bar.
+  Widget? _bottomBar() {
+    final index = selectedIndex;
+    final onSelected = onDestinationSelected;
+    if (index == null || onSelected == null) return null;
     return SafeArea(
       top: false,
       child: QuickSwitchBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onDestinationSelected,
+        selectedIndex: index,
+        onDestinationSelected: onSelected,
         contactsUnreadCount: contactsUnreadCount,
         channelsUnreadCount: channelsUnreadCount,
       ),
     );
   }
 
+  PreferredSizeWidget? _appBar(BuildContext context, bool pinned) {
+    return appBarBuilder?.call(context, pinned) ?? appBar;
+  }
+
   /// Wide + pinned: the panel is laid out beside the body, not overlaid.
   Widget _buildPinned(BuildContext context) {
     return Scaffold(
-      appBar: appBar,
+      appBar: _appBar(context, true),
       body: SafeArea(
         top: false,
         child: Row(
@@ -93,7 +111,7 @@ class AppShell extends StatelessWidget {
   /// the hamburger into the app bar automatically.
   Widget _buildTransient(BuildContext context, bool isWide) {
     return Scaffold(
-      appBar: appBar,
+      appBar: _appBar(context, false),
       drawer: Drawer(
         width: _drawerWidth,
         child: _NavPanel(isWide: isWide, content: drawerContent),
