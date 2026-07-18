@@ -12,6 +12,7 @@ import '../l10n/l10n.dart';
 import '../models/offband_gps_status.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
+import '../services/app_settings_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'settings/settings_shell.dart';
@@ -571,6 +572,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
+    final settingsService = context.watch<AppSettingsService>();
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,6 +595,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(
                   builder: (context) => const BleDebugLogScreen(),
                 ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            secondary: const Icon(Icons.bug_report_outlined),
+            title: Text(l10n.appSettings_appDebugLogging),
+            subtitle: Text(l10n.appSettings_appDebugLoggingSubtitle),
+            value: settingsService.settings.appDebugLogEnabled,
+            onChanged: (value) async {
+              try {
+                await settingsService.setAppDebugLogEnabled(value);
+              } catch (_) {
+                if (context.mounted) {
+                  showDismissibleSnackBar(
+                    context,
+                    content: const Text(
+                      'Could not change debug logging. Please try again.',
+                    ),
+                  );
+                }
+                return;
+              }
+              if (!context.mounted) return;
+              showDismissibleSnackBar(
+                context,
+                content: Text(
+                  value
+                      ? l10n.appSettings_appDebugLoggingEnabled
+                      : l10n.appSettings_appDebugLoggingDisabled,
+                ),
+                duration: const Duration(seconds: 2),
               );
             },
           ),
