@@ -216,6 +216,8 @@
   "appSettings_batteryNmc": "18650 NMC (3,0-4,2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2,6–3,65V)",
   "appSettings_batteryLipo": "LiPo (3,0-4,2V)",
+  "appSettings_keepScreenAwake": "Håll skärmen tänd",
+  "appSettings_keepScreenAwakeSubtitle": "Hindrar skärmen från att slockna medan appen är öppen. Drar mer batteri.",
   "appSettings_mapDisplay": "Kartvisning",
   "appSettings_showRepeaters": "Visa återuppslag",
   "appSettings_showRepeatersSubtitle": "Visa återspelsnoder på kartan",

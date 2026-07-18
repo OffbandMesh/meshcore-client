@@ -34,6 +34,7 @@ import 'storage/drift/blob_store.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
+import 'widgets/keep_screen_awake.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -279,10 +280,12 @@ class MeshCoreApp extends StatelessWidget {
               NotificationService().setLocale(locale);
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: _systemUiOverlayStyle(context),
-                child: Consumer<StorageHealthService>(
-                  builder: (context, health, _) => StorageUnavailableBanner(
-                    show: !health.available,
-                    child: child ?? const SizedBox.shrink(),
+                child: KeepScreenAwake(
+                  child: Consumer<StorageHealthService>(
+                    builder: (context, health, _) => StorageUnavailableBanner(
+                      show: !health.available,
+                      child: child ?? const SizedBox.shrink(),
+                    ),
                   ),
                 ),
               );

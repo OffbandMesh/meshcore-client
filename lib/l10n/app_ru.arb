@@ -173,6 +173,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0–4.2 В)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6–3.65 В)",
   "appSettings_batteryLipo": "LiPo (3.0–4.2 В)",
+  "appSettings_keepScreenAwake": "Не выключать экран",
+  "appSettings_keepScreenAwakeSubtitle": "Экран не будет гаснуть, пока приложение открыто. Расходует больше заряда.",
   "appSettings_mapDisplay": "Отображение карты",
   "appSettings_showRepeaters": "Показывать репитеры",
   "appSettings_showRepeatersSubtitle": "Отображать репитеры на карте",

@@ -121,6 +121,7 @@ class AppSettings {
   final bool mapShowMarkers;
   final bool mapShowGuessedLocations;
   final bool enableMessageTracing;
+  final bool keepScreenAwake;
   final ClockFormat clockFormat;
   final Map<String, double>? mapCacheBounds;
   final int mapCacheMinZoom;
@@ -198,6 +199,7 @@ class AppSettings {
     this.mapShowMarkers = true,
     this.mapShowGuessedLocations = true,
     this.enableMessageTracing = false,
+    this.keepScreenAwake = false,
     this.clockFormat = ClockFormat.system,
     this.mapCacheBounds,
     this.mapCacheMinZoom = 10,
@@ -263,6 +265,7 @@ class AppSettings {
       'map_show_markers': mapShowMarkers,
       'map_show_guessed_locations': mapShowGuessedLocations,
       'enable_message_tracing': enableMessageTracing,
+      'keep_screen_awake': keepScreenAwake,
       'clock_format': clockFormat.value,
       'map_cache_bounds': mapCacheBounds,
       'map_cache_min_zoom': mapCacheMinZoom,
@@ -352,6 +355,7 @@ class AppSettings {
       mapShowGuessedLocations:
           json['map_show_guessed_locations'] as bool? ?? true,
       enableMessageTracing: json['enable_message_tracing'] as bool? ?? false,
+      keepScreenAwake: json['keep_screen_awake'] as bool? ?? false,
       clockFormat: parseClockFormat(json['clock_format']),
       mapCacheBounds: (json['map_cache_bounds'] as Map?)?.map(
         (key, value) => MapEntry(key.toString(), (value as num).toDouble()),
@@ -475,6 +479,7 @@ class AppSettings {
     bool? mapShowMarkers,
     bool? mapShowGuessedLocations,
     bool? enableMessageTracing,
+    bool? keepScreenAwake,
     ClockFormat? clockFormat,
     Object? mapCacheBounds = _unset,
     int? mapCacheMinZoom,
@@ -525,6 +530,7 @@ class AppSettings {
       mapShowGuessedLocations:
           mapShowGuessedLocations ?? this.mapShowGuessedLocations,
       enableMessageTracing: enableMessageTracing ?? this.enableMessageTracing,
+      keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
       clockFormat: clockFormat ?? this.clockFormat,
       mapCacheBounds: mapCacheBounds == _unset
           ? this.mapCacheBounds

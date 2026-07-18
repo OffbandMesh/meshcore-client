@@ -896,6 +896,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appSettings_batteryLipo => 'Литиев полимер (3.0-4.2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Поддържане на екрана включен';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Екранът няма да изгасва, докато приложението е отворено. Изразходва повече батерия.';
+
+  @override
   String get appSettings_mapDisplay => 'Карта за показване';
 
   @override

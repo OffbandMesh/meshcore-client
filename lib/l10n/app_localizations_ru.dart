@@ -895,6 +895,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3.0–4.2 В)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Не выключать экран';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Экран не будет гаснуть, пока приложение открыто. Расходует больше заряда.';
+
+  @override
   String get appSettings_mapDisplay => 'Отображение карты';
 
   @override

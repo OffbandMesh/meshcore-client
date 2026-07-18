@@ -55,6 +55,7 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
   flutter_foreground_task: ^9.2.0
+  wakelock_plus: ^1.2.8   # Keep-screen-awake setting (#269)
   characters: ^1.4.0
   package_info_plus: ^9.0.0
   mobile_scanner: ^7.1.4  # QR/barcode scanning

@@ -889,6 +889,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3.0-4.2В)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Не вимикати екран';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Екран не гаснутиме, доки застосунок відкрито. Витрачає більше заряду.';
+
+  @override
   String get appSettings_mapDisplay => 'Відображення карти';
 
   @override

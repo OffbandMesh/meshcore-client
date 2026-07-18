@@ -877,6 +877,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3.0-4.2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Keep screen awake';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Prevent the display from sleeping while the app is open. Uses more battery.';
+
+  @override
   String get appSettings_mapDisplay => 'Map Display';
 
   @override

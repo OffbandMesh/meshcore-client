@@ -308,6 +308,8 @@
   "appSettings_batteryNmc": "18650型 NMC (3.0-4.2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6-3.65V)",
   "appSettings_batteryLipo": "LiPo (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "画面をスリープさせない",
+  "appSettings_keepScreenAwakeSubtitle": "アプリを開いている間、画面が消灯しないようにします。バッテリーの消費が増えます。",
   "appSettings_mapDisplay": "地図の表示",
   "appSettings_showRepeaters": "繰り返し再生機能",
   "appSettings_showRepeatersSubtitle": "地図上にリピーターノードを表示する",

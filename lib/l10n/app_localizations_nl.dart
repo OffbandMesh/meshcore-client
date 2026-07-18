@@ -886,6 +886,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3,0-4,2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Scherm aan houden';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Voorkomt dat het scherm in slaapstand gaat terwijl de app open is. Verbruikt meer batterij.';
+
+  @override
   String get appSettings_mapDisplay => 'Kaartweergave';
 
   @override

@@ -834,6 +834,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appSettings_batteryLipo => '锂聚合物电池 (3.0-4.2V)';
 
   @override
+  String get appSettings_keepScreenAwake => '保持屏幕常亮';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle => '应用打开时防止屏幕休眠。会更耗电。';
+
+  @override
   String get appSettings_mapDisplay => '地图显示';
 
   @override

@@ -216,6 +216,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0-4.2V)",
   "appSettings_batteryLifepo4": "Литиево желязо фосфат (2.6-3.65V)",
   "appSettings_batteryLipo": "Литиев полимер (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "Поддържане на екрана включен",
+  "appSettings_keepScreenAwakeSubtitle": "Екранът няма да изгасва, докато приложението е отворено. Изразходва повече батерия.",
   "appSettings_mapDisplay": "Карта за показване",
   "appSettings_showRepeaters": "Показване на повторители",
   "appSettings_showRepeatersSubtitle": "Показване на възпроизвеждащи се възли на картата",

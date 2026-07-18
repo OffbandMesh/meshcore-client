@@ -557,6 +557,20 @@ class AppSettingsView extends StatelessWidget {
               ],
             ),
           ),
+
+          const Divider(height: 1),
+          SwitchListTile(
+            secondary: const Icon(Icons.screen_lock_portrait_outlined),
+            title: Text(context.l10n.appSettings_keepScreenAwake),
+            subtitle: Text(context.l10n.appSettings_keepScreenAwakeSubtitle),
+            value: settingsService.settings.keepScreenAwake,
+            onChanged: (value) {
+              persistSetting(
+                context,
+                () => settingsService.setKeepScreenAwake(value),
+              );
+            },
+          ),
         ],
       ),
     );

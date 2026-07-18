@@ -883,6 +883,13 @@ class AppLocalizationsSl extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3,0-4,2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Ohrani zaslon prižgan';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Prepreči, da bi zaslon ugasnil, medtem ko je aplikacija odprta. Porabi več baterije.';
+
+  @override
   String get appSettings_mapDisplay => 'Prikaz zemljevida';
 
   @override

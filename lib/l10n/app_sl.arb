@@ -216,6 +216,8 @@
   "appSettings_batteryNmc": "18650 NMC (3,0-4,2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2,6–3,65 V)",
   "appSettings_batteryLipo": "LiPo (3,0-4,2V)",
+  "appSettings_keepScreenAwake": "Ohrani zaslon prižgan",
+  "appSettings_keepScreenAwakeSubtitle": "Prepreči, da bi zaslon ugasnil, medtem ko je aplikacija odprta. Porabi več baterije.",
   "appSettings_mapDisplay": "Prikaz zemljevida",
   "appSettings_showRepeaters": "Prikaži repetitorje",
   "appSettings_showRepeatersSubtitle": "Prikaži repetitorje na mapi",
