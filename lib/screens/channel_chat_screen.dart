@@ -28,6 +28,7 @@ import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
+import '../widgets/channel_drawer_list.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
 import '../widgets/chat_zoom_wrapper.dart';
@@ -271,10 +272,49 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// Switch to another channel from the drawer without backing out to the
+  /// channel list. pushReplacement keeps the back stack one deep, so system
+  /// back still returns to the channel list rather than the previous channel.
+  void _switchChannel(Channel channel) {
+    if (channel.index == widget.channel.index) {
+      Navigator.pop(context);
+      return;
+    }
+    final connector = context.read<MeshCoreConnector>();
+    final unread = connector.getUnreadCountForChannelIndex(channel.index);
+    connector.markChannelRead(channel.index);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ChannelChatScreen(channel: channel, initialUnreadCount: unread),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: Drawer(
+        width: 300,
+        child: SafeArea(
+          child: ChannelDrawerList(
+            currentChannelIndex: widget.channel.index,
+            onChannelSelected: _switchChannel,
+          ),
+        ),
+      ),
       appBar: AppBar(
+        // Explicit hamburger: this is a pushed route, so Scaffold would show a
+        // back arrow here instead of the drawer button. System back still pops
+        // to the channel list.
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: context.l10n.channels_title,
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: Row(
           children: [
             _channelIcon(widget.channel),
