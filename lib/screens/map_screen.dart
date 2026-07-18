@@ -23,7 +23,7 @@ import '../services/map_marker_service.dart';
 import '../services/map_tile_cache_service.dart';
 import '../utils/contact_search.dart';
 import '../utils/route_transitions.dart';
-import '../widgets/quick_switch_bar.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../icons/los_icon.dart';
 import 'channels_screen.dart';
@@ -412,11 +412,15 @@ class _MapScreenState extends State<MapScreen> {
 
         return PopScope(
           canPop: allowBack,
-          child: Scaffold(
+          child: AppShell(
+            selectedIndex: 2,
+            onDestinationSelected: (index) =>
+                _handleQuickSwitch(index, context),
+            contactsUnreadCount: connector.getTotalContactsUnreadCount(),
+            channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
             appBar: AppBar(
               title: AppBarTitle(context.l10n.map_title),
               centerTitle: true,
-              automaticallyImplyLeading: false,
               bottom: const SyncProgressAppBarBottom(),
               actions: [
                 if (!_isBuildingPathTrace)
@@ -673,16 +677,6 @@ class _MapScreenState extends State<MapScreen> {
                   ),
                 if (_isBuildingPathTrace) _buildPathTraceOverlay(),
               ],
-            ),
-            bottomNavigationBar: SafeArea(
-              top: false,
-              child: QuickSwitchBar(
-                selectedIndex: 2,
-                onDestinationSelected: (index) =>
-                    _handleQuickSwitch(index, context),
-                contactsUnreadCount: connector.getTotalContactsUnreadCount(),
-                channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
-              ),
             ),
             floatingActionButton: FloatingActionButton(
               onPressed: () => _showFilterDialog(context, settingsService),

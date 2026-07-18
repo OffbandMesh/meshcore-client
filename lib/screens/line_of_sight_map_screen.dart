@@ -17,7 +17,7 @@ import '../services/map_tile_cache_service.dart';
 import '../utils/route_transitions.dart';
 import '../connector/meshcore_connector.dart';
 import '../widgets/app_bar.dart';
-import '../widgets/quick_switch_bar.dart';
+import '../widgets/app_shell.dart';
 import '../icons/los_icon.dart';
 
 class LineOfSightEndpoint {
@@ -409,7 +409,15 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
       _showMarkerLabels = initialZoom >= _labelZoomThreshold;
     }
 
-    return Scaffold(
+    return AppShell(
+      selectedIndex: 2,
+      onDestinationSelected: (index) => _handleQuickSwitch(index, context),
+      contactsUnreadCount: context
+          .watch<MeshCoreConnector>()
+          .getTotalContactsUnreadCount(),
+      channelsUnreadCount: context
+          .watch<MeshCoreConnector>()
+          .getTotalChannelsUnreadCount(),
       appBar: AppBar(
         title: AppBarTitle(widget.title),
         centerTitle: true,
@@ -533,19 +541,6 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
             ? context.l10n.losHidePanelTooltip
             : context.l10n.losShowPanelTooltip,
         child: Icon(_showHud ? Icons.visibility_off : Icons.tune),
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: QuickSwitchBar(
-          selectedIndex: 2,
-          onDestinationSelected: (index) => _handleQuickSwitch(index, context),
-          contactsUnreadCount: context
-              .watch<MeshCoreConnector>()
-              .getTotalContactsUnreadCount(),
-          channelsUnreadCount: context
-              .watch<MeshCoreConnector>()
-              .getTotalChannelsUnreadCount(),
-        ),
       ),
     );
   }

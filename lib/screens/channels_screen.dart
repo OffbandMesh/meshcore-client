@@ -23,7 +23,7 @@ import '../utils/route_transitions.dart';
 import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/qr_code_display.dart';
-import '../widgets/quick_switch_bar.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -100,11 +100,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
     return PopScope(
       canPop: allowBack,
-      child: Scaffold(
+      child: AppShell(
+        selectedIndex: 1,
+        onDestinationSelected: (index) => _handleQuickSwitch(index, context),
+        contactsUnreadCount: connector.getTotalContactsUnreadCount(),
+        channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
         appBar: AppBar(
           title: AppBarTitle(context.l10n.channels_title),
           centerTitle: true,
-          automaticallyImplyLeading: false,
           bottom: const SyncProgressAppBarBottom(),
           actions: [
             PopupMenuButton(
@@ -334,16 +337,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           onPressed: () => _showAddChannelDialog(context),
           tooltip: context.l10n.channels_addChannel,
           child: const Icon(Icons.add),
-        ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: QuickSwitchBar(
-            selectedIndex: 1,
-            onDestinationSelected: (index) =>
-                _handleQuickSwitch(index, context),
-            contactsUnreadCount: connector.getTotalContactsUnreadCount(),
-            channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
-          ),
         ),
       ),
     );
