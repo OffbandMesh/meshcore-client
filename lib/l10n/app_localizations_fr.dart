@@ -320,7 +320,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Notifications, messagerie et préférences de carte';
+      'Apparence, traduction et préférences de carte';
 
   @override
   String get settings_messageSettings => 'Message Settings';

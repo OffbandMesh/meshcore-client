@@ -84,7 +84,7 @@
   "settings_title": "Paramètres",
   "settings_deviceInfo": "Informations du périphérique",
   "settings_appSettings": "Paramètres de l'application",
-  "settings_appSettingsSubtitle": "Notifications, messagerie et préférences de carte",
+  "settings_appSettingsSubtitle": "Apparence, traduction et préférences de carte",
   "settings_nodeSettings": "Paramètres du nœud",
   "settings_nodeName": "Nom du nœud",
   "settings_nodeNameNotSet": "Non défini",

@@ -141,7 +141,7 @@
   "settings_title": "설정",
   "settings_deviceInfo": "장치 정보",
   "settings_appSettings": "앱 설정",
-  "settings_appSettingsSubtitle": "알림, 메시징, 지도 설정",
+  "settings_appSettingsSubtitle": "모양, 번역 및 지도 환경설정",
   "settings_nodeSettings": "노드 설정",
   "settings_nodeName": "노드 이름",
   "settings_nodeNameNotSet": "설정되지 않음",

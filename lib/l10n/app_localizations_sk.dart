@@ -318,7 +318,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Upozornenia, správy a nastavenia mapy';
+      'Vzhľad, preklad a nastavenia mapy';
 
   @override
   String get settings_messageSettings => 'Message Settings';

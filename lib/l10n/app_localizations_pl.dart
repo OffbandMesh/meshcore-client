@@ -321,7 +321,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Powiadomienia, wiadomości i preferencje mapy';
+      'Wygląd, tłumaczenie i ustawienia mapy';
 
   @override
   String get settings_messageSettings => 'Message Settings';

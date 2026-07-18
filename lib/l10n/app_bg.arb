@@ -84,7 +84,7 @@
   "settings_title": "Настройки",
   "settings_deviceInfo": "Информация за устройството",
   "settings_appSettings": "Настройки на приложението",
-  "settings_appSettingsSubtitle": "Уведомления, съобщения и предпочитания за карта",
+  "settings_appSettingsSubtitle": "Външен вид, превод и настройки на картата",
   "settings_nodeSettings": "Настройки на възела",
   "settings_nodeName": "Име на възела",
   "settings_nodeNameNotSet": "Не е зададено",

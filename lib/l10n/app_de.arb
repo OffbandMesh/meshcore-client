@@ -84,7 +84,7 @@
   "settings_title": "Einstellungen",
   "settings_deviceInfo": "Geräteinformationen",
   "settings_appSettings": "App-Einstellungen",
-  "settings_appSettingsSubtitle": "Benachrichtigungen, Messaging und Kartenwahrnehmung",
+  "settings_appSettingsSubtitle": "Erscheinungsbild, Übersetzung und Karteneinstellungen",
   "settings_nodeSettings": "Knoten-Einstellungen",
   "settings_nodeName": "Knotenname",
   "settings_nodeNameNotSet": "Nicht festgelegt",

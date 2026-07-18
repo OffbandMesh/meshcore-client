@@ -84,7 +84,7 @@
   "settings_title": "Configurações",
   "settings_deviceInfo": "Informações do Dispositivo",
   "settings_appSettings": "Configurações do App",
-  "settings_appSettingsSubtitle": "Notificações, mensagens e preferências de mapa",
+  "settings_appSettingsSubtitle": "Aparência, tradução e preferências de mapa",
   "settings_nodeSettings": "Configurações do Nó",
   "settings_nodeName": "Nome do Nó",
   "settings_nodeNameNotSet": "Não definido",

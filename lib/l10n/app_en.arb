@@ -142,7 +142,7 @@
   "settings_title": "Settings",
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",
-  "settings_appSettingsSubtitle": "Notifications, messaging, and map preferences",
+  "settings_appSettingsSubtitle": "Appearance, translation, and map preferences",
   "settings_messageSettings": "Message Settings",
   "@settings_messageSettings": {
     "description": "Settings category title for notification and message-handling preferences"

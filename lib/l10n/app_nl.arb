@@ -84,7 +84,7 @@
   "settings_title": "Instellingen",
   "settings_deviceInfo": "Apparateninformatie",
   "settings_appSettings": "App Instellingen",
-  "settings_appSettingsSubtitle": "Notificaties, berichten en kaartinstellingen",
+  "settings_appSettingsSubtitle": "Weergave, vertaling en kaartvoorkeuren",
   "settings_nodeSettings": "Node Instellingen",
   "settings_nodeName": "Nodenaam",
   "settings_nodeNameNotSet": "Niet ingesteld",

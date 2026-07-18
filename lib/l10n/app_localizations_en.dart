@@ -314,7 +314,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Notifications, messaging, and map preferences';
+      'Appearance, translation, and map preferences';
 
   @override
   String get settings_messageSettings => 'Message Settings';

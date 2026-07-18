@@ -84,7 +84,7 @@
   "settings_title": "Nastavitve",
   "settings_deviceInfo": "Informacije o napravei",
   "settings_appSettings": "Nastavitve aplikacije",
-  "settings_appSettingsSubtitle": "Obveščanja, sporoščanje in zemljevidi.",
+  "settings_appSettingsSubtitle": "Videz, prevajanje in nastavitve zemljevida",
   "settings_nodeSettings": "Nastavitev časa",
   "settings_nodeName": "Ime node-a",
   "settings_nodeNameNotSet": "Ni nastavljeno",

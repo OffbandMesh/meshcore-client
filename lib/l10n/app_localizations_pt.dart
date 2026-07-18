@@ -319,7 +319,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Notificações, mensagens e preferências de mapa';
+      'Aparência, tradução e preferências de mapa';
 
   @override
   String get settings_messageSettings => 'Message Settings';

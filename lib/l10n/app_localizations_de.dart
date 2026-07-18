@@ -320,7 +320,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Benachrichtigungen, Messaging und Kartenwahrnehmung';
+      'Erscheinungsbild, Übersetzung und Karteneinstellungen';
 
   @override
   String get settings_messageSettings => 'Message Settings';

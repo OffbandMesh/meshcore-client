@@ -319,7 +319,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Уведомления, сообщения и настройки карты';
+      'Внешний вид, перевод и настройки карты';
 
   @override
   String get settings_messageSettings => 'Message Settings';

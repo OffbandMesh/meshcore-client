@@ -141,7 +141,7 @@
   "settings_title": "Beállítások",
   "settings_deviceInfo": "A készülék információi",
   "settings_appSettings": "Alkalmazási beállítások",
-  "settings_appSettingsSubtitle": "Értesítések, üzenetküldés és térképi beállítások",
+  "settings_appSettingsSubtitle": "Megjelenés, fordítás és térképbeállítások",
   "settings_nodeSettings": "Műközép beállítások",
   "settings_nodeName": "Vonal neve",
   "settings_nodeNameNotSet": "Nem megállapított",

@@ -318,7 +318,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Сповіщення, повідомлення та налаштування карти';
+      'Зовнішній вигляд, переклад і налаштування карти';
 
   @override
   String get settings_messageSettings => 'Message Settings';

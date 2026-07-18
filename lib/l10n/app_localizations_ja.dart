@@ -306,7 +306,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_appSettings => 'アプリ設定';
 
   @override
-  String get settings_appSettingsSubtitle => '通知、メッセージング、および地図の表示設定';
+  String get settings_appSettingsSubtitle => '外観、翻訳、地図の設定';
 
   @override
   String get settings_messageSettings => 'Message Settings';
