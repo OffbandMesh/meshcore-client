@@ -18,6 +18,7 @@ import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
 import '../helpers/reaction_helper.dart';
+import '../helpers/time_anomaly.dart';
 import '../helpers/cyr2lat.dart';
 import '../helpers/smaz.dart';
 import '../helpers/cayenne_lpp.dart';
@@ -5171,6 +5172,38 @@ class MeshCoreConnector extends ChangeNotifier {
     return false;
   }
 
+  /// Ingest RX log (#285): one line per received message recording local
+  /// arrival vs the sender-claimed timestamp, so time anomalies (#280) are
+  /// provable from the app debug log / rotating log files after the fact.
+  void _logMessageRx({
+    required String kind,
+    required String sender,
+    required DateTime claimed,
+    required DateTime arrival,
+    required int textBytes,
+    Uint8List? pathBytes,
+    String? channel,
+  }) {
+    final path = (pathBytes == null || pathBytes.isEmpty)
+        ? 'none'
+        : pathBytes
+              .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+              .join(',');
+    final line =
+        '$kind RX${channel != null ? ' ch=$channel' : ''} sender=$sender '
+        'len=$textBytes arrival=${arrival.toIso8601String()} '
+        'claimed=${claimed.toIso8601String()} '
+        'delta=${formatRxTimeDelta(arrival, claimed)} path=$path';
+    // Direct service call (not appLogger): the file trail must not depend on
+    // the in-app debug-log toggle — the service always writes to disk and the
+    // toggle only gates the in-app ring buffer.
+    if (isRxTimeAnomaly(arrival, claimed)) {
+      _appDebugLogService?.warn('$line ** TIME ANOMALY **', tag: 'Ingest');
+    } else {
+      _appDebugLogService?.info(line, tag: 'Ingest', noNotify: true);
+    }
+  }
+
   Future<void> _handleIncomingMessage(Uint8List frame) async {
     if (_selfPublicKey == null) return;
 
@@ -5206,6 +5239,14 @@ class MeshCoreConnector extends ChangeNotifier {
     if (message != null) {
       if (!message.isOutgoing) {
         _lastContactMsgRxTime = DateTime.now();
+        _logMessageRx(
+          kind: 'DM',
+          sender: message.senderKeyHex.substring(0, 12),
+          claimed: message.timestamp,
+          arrival: message.rxTime ?? _lastContactMsgRxTime,
+          textBytes: utf8.encode(message.text).length,
+          pathBytes: message.pathBytes,
+        );
       }
       // Ignore messages from self (device hearing its own broadcast)
       // BUT allow repeated messages (pathLength indicates it went through repeater)
@@ -5412,6 +5453,7 @@ class MeshCoreConnector extends ChangeNotifier {
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
         fourByteRoomContactKey: roomAuthorPrefix,
+        rxTime: DateTime.now(),
       );
     } catch (e) {
       appLogger.warn('Error parsing contact direct message: $e');
@@ -5671,6 +5713,15 @@ class MeshCoreConnector extends ChangeNotifier {
         return;
       }
       _lastChannelMsgRxTime = DateTime.now();
+      _logMessageRx(
+        kind: 'CHAN',
+        channel: '${parsed.channelIndex}',
+        sender: parsed.senderName,
+        claimed: parsed.timestamp,
+        arrival: parsed.rxTime ?? _lastChannelMsgRxTime,
+        textBytes: utf8.encode(parsed.text).length,
+        pathBytes: parsed.pathBytes,
+      );
       final contentHash = _computeContentHash(
         parsed.channelIndex!,
         parsed.timestamp.millisecondsSinceEpoch ~/ 1000,
@@ -5770,6 +5821,7 @@ class MeshCoreConnector extends ChangeNotifier {
             pathLength: packet.isFlood ? packet.hopCount : 0,
             pathBytes: packet.pathBytes,
             channelIndex: channel.index,
+            rxTime: DateTime.now(),
             packetHash: pktHash,
           );
 

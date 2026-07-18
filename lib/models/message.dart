@@ -34,6 +34,11 @@ class Message {
   final Map<String, MessageStatus> reactionStatuses;
   final Uint8List fourByteRoomContactKey;
 
+  /// Local wall-clock time this message's frame arrived, set at ingest.
+  /// Null for outgoing messages and records stored before #285 — never
+  /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
+  final DateTime? rxTime;
+
   Message({
     required this.senderKey,
     required this.text,
@@ -58,6 +63,7 @@ class Message {
     Uint8List? fourByteRoomContactKey,
     Map<String, int>? reactions,
     Map<String, MessageStatus>? reactionStatuses,
+    this.rxTime,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${pubKeyToHex(senderKey)}_${text.hashCode}',
@@ -87,6 +93,7 @@ class Message {
     Map<String, int>? reactions,
     Map<String, MessageStatus>? reactionStatuses,
     Uint8List? fourByteRoomContactKey,
+    DateTime? rxTime,
   }) {
     return Message(
       senderKey: senderKey,
@@ -121,6 +128,7 @@ class Message {
       reactionStatuses: reactionStatuses ?? this.reactionStatuses,
       fourByteRoomContactKey:
           fourByteRoomContactKey ?? this.fourByteRoomContactKey,
+      rxTime: rxTime ?? this.rxTime,
     );
   }
 
@@ -149,6 +157,7 @@ class Message {
         isCli: false,
         status: MessageStatus.delivered,
         pathBytes: Uint8List(0),
+        rxTime: DateTime.now(),
       );
     } catch (e) {
       return null;

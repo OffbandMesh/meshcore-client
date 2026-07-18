@@ -51,6 +51,11 @@ class ChannelMessage {
   final String? replyToText;
   final Map<String, int> reactions;
 
+  /// Local wall-clock time this message's frame arrived, set at ingest.
+  /// Null for outgoing messages and records stored before #285 — never
+  /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
+  final DateTime? rxTime;
+
   ChannelMessage({
     this.senderKey,
     required this.senderName,
@@ -75,6 +80,7 @@ class ChannelMessage {
     this.replyToSenderName,
     this.replyToText,
     Map<String, int>? reactions,
+    this.rxTime,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${senderName.hashCode}_${text.hashCode}',
@@ -123,6 +129,7 @@ class ChannelMessage {
     MessageTranslationStatus? translationStatus,
     Object? translationModelId = _unset,
     Map<String, int>? reactions,
+    DateTime? rxTime,
   }) {
     return ChannelMessage(
       senderKey: senderKey,
@@ -156,6 +163,7 @@ class ChannelMessage {
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
       reactions: reactions ?? this.reactions,
+      rxTime: rxTime ?? this.rxTime,
     );
   }
 
@@ -229,6 +237,7 @@ class ChannelMessage {
         pathLength: pathLen,
         pathBytes: pathBytes,
         channelIndex: channelIdx,
+        rxTime: DateTime.now(),
       );
     } catch (e) {
       appLogger.error('Error parsing channel message frame: $e');
