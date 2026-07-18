@@ -129,6 +129,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: l10n.settings_messageSettingsSubtitle,
         builder: _messageSettingsPane,
       ),
+      if (showObserver)
+        SettingsCategory(
+          icon: Icons.cloud_outlined,
+          title: 'Observer',
+          subtitle: 'WiFi · MQTT brokers · display',
+          builder: _observerPane,
+        ),
       SettingsCategory(
         icon: Icons.tune,
         title: l10n.settings_appSettings,
@@ -140,13 +147,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_deviceInfo,
         builder: _devicePane,
       ),
-      if (showObserver)
-        SettingsCategory(
-          icon: Icons.cloud_outlined,
-          title: 'Observer',
-          subtitle: 'WiFi · MQTT brokers · display',
-          builder: _observerPane,
-        ),
       SettingsCategory(
         icon: Icons.bolt_outlined,
         title: l10n.settings_actions,
