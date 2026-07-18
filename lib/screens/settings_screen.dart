@@ -88,6 +88,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     return [
       SettingsCategory(
+        icon: Icons.badge_outlined,
+        title: l10n.settings_nodeSettings,
+        builder: _identityPane,
+      ),
+      SettingsCategory(
         icon: Icons.settings_input_antenna,
         title: l10n.settings_radioSettings,
         subtitle: l10n.settings_radioSettingsSubtitle,
@@ -100,21 +105,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _radioStatsPane,
       ),
       SettingsCategory(
-        icon: Icons.badge_outlined,
-        title: l10n.settings_nodeSettings,
-        builder: _identityPane,
-      ),
-      SettingsCategory(
         icon: Icons.shield_outlined,
         title: l10n.settings_privacy,
         subtitle: l10n.settings_privacySubtitle,
         builder: _privacyPane,
-      ),
-      SettingsCategory(
-        icon: Icons.block,
-        title: l10n.block_settingsTitle,
-        subtitle: l10n.block_settingsSubtitle,
-        builder: _blockedPane,
       ),
       SettingsCategory(
         icon: Icons.contacts_outlined,
@@ -123,10 +117,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _contactsPane,
       ),
       SettingsCategory(
+        icon: Icons.block,
+        title: l10n.block_settingsTitle,
+        subtitle: l10n.block_settingsSubtitle,
+        builder: _blockedPane,
+      ),
+      SettingsCategory(
         icon: Icons.sms_outlined,
         title: l10n.settings_messageSettings,
         subtitle: l10n.settings_messageSettingsSubtitle,
         builder: _messageSettingsPane,
+      ),
+      SettingsCategory(
+        icon: Icons.tune,
+        title: l10n.settings_appSettings,
+        subtitle: l10n.settings_appSettingsSubtitle,
+        builder: _appPane,
       ),
       SettingsCategory(
         icon: Icons.info_outline,
@@ -140,12 +146,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: 'WiFi · MQTT brokers · display',
           builder: _observerPane,
         ),
-      SettingsCategory(
-        icon: Icons.tune,
-        title: l10n.settings_appSettings,
-        subtitle: l10n.settings_appSettingsSubtitle,
-        builder: _appPane,
-      ),
       SettingsCategory(
         icon: Icons.bolt_outlined,
         title: l10n.settings_actions,
