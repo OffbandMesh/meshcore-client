@@ -895,6 +895,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3,0-4,2 V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Képernyő ébren tartása';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Megakadályozza a képernyő elalvását, amíg az alkalmazás nyitva van. Több akkumulátort fogyaszt.';
+
+  @override
   String get appSettings_mapDisplay => 'Térkép megjelenítése';
 
   @override

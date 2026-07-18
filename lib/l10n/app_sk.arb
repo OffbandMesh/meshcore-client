@@ -216,6 +216,8 @@
   "appSettings_batteryNmc": "18650 NMC (3,0-4,2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2,6–3,65V)",
   "appSettings_batteryLipo": "LiPo (3,0-4,2V)",
+  "appSettings_keepScreenAwake": "Nechať obrazovku zapnutú",
+  "appSettings_keepScreenAwakeSubtitle": "Zabráni vypnutiu obrazovky, kým je aplikácia otvorená. Spotrebuje viac batérie.",
   "appSettings_mapDisplay": "Zobrazenie mapy",
   "appSettings_showRepeaters": "Zobraziť opakovače",
   "appSettings_showRepeatersSubtitle": "Zobraziť opakujúce sa uzly na mape",

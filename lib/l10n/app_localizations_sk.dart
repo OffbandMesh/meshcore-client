@@ -882,6 +882,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3,0-4,2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Nechať obrazovku zapnutú';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Zabráni vypnutiu obrazovky, kým je aplikácia otvorená. Spotrebuje viac batérie.';
+
+  @override
   String get appSettings_mapDisplay => 'Zobrazenie mapy';
 
   @override

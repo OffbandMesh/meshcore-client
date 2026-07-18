@@ -848,6 +848,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appSettings_batteryLipo => '리튬 폴리머 (3.0-4.2V)';
 
   @override
+  String get appSettings_keepScreenAwake => '화면 켜짐 유지';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      '앱이 열려 있는 동안 화면이 꺼지지 않도록 합니다. 배터리를 더 소모합니다.';
+
+  @override
   String get appSettings_mapDisplay => '지도 표시';
 
   @override

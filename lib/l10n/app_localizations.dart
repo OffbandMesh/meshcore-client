@@ -1714,6 +1714,18 @@ abstract class AppLocalizations {
   /// **'LiPo (3.0-4.2V)'**
   String get appSettings_batteryLipo;
 
+  /// No description provided for @appSettings_keepScreenAwake.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep screen awake'**
+  String get appSettings_keepScreenAwake;
+
+  /// No description provided for @appSettings_keepScreenAwakeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent the display from sleeping while the app is open. Uses more battery.'**
+  String get appSettings_keepScreenAwakeSubtitle;
+
   /// No description provided for @appSettings_mapDisplay.
   ///
   /// In en, this message translates to:

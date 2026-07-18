@@ -230,6 +230,8 @@
   "appSettings_batteryNmc": "18650 NMC 电池 (3.0-4.2V)",
   "appSettings_batteryLifepo4": "磷酸铁锂 (2.6-3.65V)",
   "appSettings_batteryLipo": "锂聚合物电池 (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "保持屏幕常亮",
+  "appSettings_keepScreenAwakeSubtitle": "应用打开时防止屏幕休眠。会更耗电。",
   "appSettings_mapDisplay": "地图显示",
   "appSettings_showRepeaters": "显示转发节点",
   "appSettings_showRepeatersSubtitle": "在地图上显示转发节点",

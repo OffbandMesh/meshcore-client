@@ -350,6 +350,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0-4.2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6-3.65V)",
   "appSettings_batteryLipo": "LiPo (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "Keep screen awake",
+  "appSettings_keepScreenAwakeSubtitle": "Prevent the display from sleeping while the app is open. Uses more battery.",
   "appSettings_mapDisplay": "Map Display",
   "appSettings_showRepeaters": "Show Repeaters",
   "appSettings_showRepeatersSubtitle": "Display repeater nodes on the map",

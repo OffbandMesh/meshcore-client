@@ -308,6 +308,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0-4.2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6-3.65V)",
   "appSettings_batteryLipo": "리튬 폴리머 (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "화면 켜짐 유지",
+  "appSettings_keepScreenAwakeSubtitle": "앱이 열려 있는 동안 화면이 꺼지지 않도록 합니다. 배터리를 더 소모합니다.",
   "appSettings_mapDisplay": "지도 표시",
   "appSettings_showRepeaters": "반복 기능 표시",
   "appSettings_showRepeatersSubtitle": "지도에 반복자 노드를 표시",

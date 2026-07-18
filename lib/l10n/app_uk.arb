@@ -218,6 +218,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0-4.2В)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6-3.65В)",
   "appSettings_batteryLipo": "LiPo (3.0-4.2В)",
+  "appSettings_keepScreenAwake": "Не вимикати екран",
+  "appSettings_keepScreenAwakeSubtitle": "Екран не гаснутиме, доки застосунок відкрито. Витрачає більше заряду.",
   "appSettings_mapDisplay": "Відображення карти",
   "appSettings_showRepeaters": "Показувати ретранслятори",
   "appSettings_showRepeatersSubtitle": "Відображати вузли-ретранслятори на карті",

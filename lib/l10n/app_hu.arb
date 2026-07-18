@@ -308,6 +308,8 @@
   "appSettings_batteryNmc": "18650 NMC (3,0-4,2 V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2,6–3,65 V)",
   "appSettings_batteryLipo": "LiPo (3,0-4,2 V)",
+  "appSettings_keepScreenAwake": "Képernyő ébren tartása",
+  "appSettings_keepScreenAwakeSubtitle": "Megakadályozza a képernyő elalvását, amíg az alkalmazás nyitva van. Több akkumulátort fogyaszt.",
   "appSettings_mapDisplay": "Térkép megjelenítése",
   "appSettings_showRepeaters": "Megismétlés",
   "appSettings_showRepeatersSubtitle": "A térképen megjelenítsük a repeater-eket.",

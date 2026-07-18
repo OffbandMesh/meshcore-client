@@ -893,6 +893,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appSettings_batteryLipo => 'LiPo (3,0-4,2V)';
 
   @override
+  String get appSettings_keepScreenAwake => 'Manter a tela ligada';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Impede que a tela desligue enquanto o app está aberto. Consome mais bateria.';
+
+  @override
   String get appSettings_mapDisplay => 'Exibição do Mapa';
 
   @override
