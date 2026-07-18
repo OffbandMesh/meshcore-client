@@ -784,12 +784,11 @@ class AppLocalizationsRu extends AppLocalizations {
       'Показывать уведомление при получении сообщений в каналах';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Уведомления об анонсированиях';
+  String get appSettings_advertisementNotifications => 'Обнаружен новый узел';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Показывать уведомление при обнаружении новых нод';
+      'Уведомлять при обнаружении новых репитеров или контактов';
 
   @override
   String get appSettings_messaging => 'Обмен сообщениями';

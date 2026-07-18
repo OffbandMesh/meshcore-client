@@ -783,12 +783,11 @@ class AppLocalizationsDe extends AppLocalizations {
       'Zeige Benachrichtigung beim Empfangen von Kanalnachrichten';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Ankündigungsbenachrichtigungen';
+  String get appSettings_advertisementNotifications => 'Neuer Knoten entdeckt';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Zeige Benachrichtigung, wenn neue Knoten entdeckt werden.';
+      'Benachrichtigen, wenn neue Repeater oder Kontakte empfangen werden';
 
   @override
   String get appSettings_messaging => 'Nachrichten';

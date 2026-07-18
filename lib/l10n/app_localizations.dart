@@ -1543,13 +1543,13 @@ abstract class AppLocalizations {
   /// No description provided for @appSettings_advertisementNotifications.
   ///
   /// In en, this message translates to:
-  /// **'Advertisement Notifications'**
+  /// **'New node discovered'**
   String get appSettings_advertisementNotifications;
 
   /// No description provided for @appSettings_advertisementNotificationsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show notification when new nodes are discovered'**
+  /// **'Notify when new repeaters or contacts are heard'**
   String get appSettings_advertisementNotificationsSubtitle;
 
   /// No description provided for @appSettings_messaging.

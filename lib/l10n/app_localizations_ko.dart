@@ -752,11 +752,11 @@ class AppLocalizationsKo extends AppLocalizations {
       '채널 메시지를 수신할 때 알림 표시';
 
   @override
-  String get appSettings_advertisementNotifications => '광고 알림';
+  String get appSettings_advertisementNotifications => '새 노드 발견';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      '새 노드가 발견되었을 때 알림 표시';
+      '새 리피터나 연락처가 감지되면 알림';
 
   @override
   String get appSettings_messaging => '메시징';

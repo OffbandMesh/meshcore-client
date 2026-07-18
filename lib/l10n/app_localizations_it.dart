@@ -784,12 +784,11 @@ class AppLocalizationsIt extends AppLocalizations {
       'Mostra notifica all\'arrivo di messaggi nel canale';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Notifiche Pubblicitarie';
+  String get appSettings_advertisementNotifications => 'Nuovo nodo rilevato';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Mostra notifica quando vengono scoperti nuovi nodi';
+      'Notifica quando vengono rilevati nuovi ripetitori o contatti';
 
   @override
   String get appSettings_messaging => 'Messaggi';

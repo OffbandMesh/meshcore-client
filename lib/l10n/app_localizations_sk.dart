@@ -776,11 +776,11 @@ class AppLocalizationsSk extends AppLocalizations {
       'Zobraziť upozornenie pri prijímaní správ z kanálu';
 
   @override
-  String get appSettings_advertisementNotifications => 'Upozornenia na reklamy';
+  String get appSettings_advertisementNotifications => 'Zistený nový uzol';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Zobraziť upozornenie, keď sa objavia nové uzly.';
+      'Upozorniť pri zachytení nových prevádzačov alebo kontaktov';
 
   @override
   String get appSettings_messaging => 'Správy';

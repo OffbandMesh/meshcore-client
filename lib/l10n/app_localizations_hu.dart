@@ -788,11 +788,11 @@ class AppLocalizationsHu extends AppLocalizations {
       'A figyelmeztetést megjelenítve, amikor új üzenet érkezik a csatornáról';
 
   @override
-  String get appSettings_advertisementNotifications => 'Reklám értesítések';
+  String get appSettings_advertisementNotifications => 'Új csomópont észlelve';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'A figyelmeztetést megjelenítve, amikor új csomópontok kerülnek felfedezésre.';
+      'Értesítés, ha új átjátszók vagy névjegyek érkeznek';
 
   @override
   String get appSettings_messaging => 'Üzenetek küldése';

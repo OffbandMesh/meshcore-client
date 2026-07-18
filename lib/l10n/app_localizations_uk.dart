@@ -780,12 +780,11 @@ class AppLocalizationsUk extends AppLocalizations {
       'Показувати сповіщення при отриманні повідомлень каналу';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Сповіщення про оголошення';
+  String get appSettings_advertisementNotifications => 'Виявлено новий вузол';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Показувати сповіщення при виявленні нових вузлів';
+      'Сповіщати про виявлення нових ретрансляторів або контактів';
 
   @override
   String get appSettings_messaging => 'Обмін повідомленнями';

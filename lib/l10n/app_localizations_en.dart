@@ -770,12 +770,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Show notification when receiving channel messages';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Advertisement Notifications';
+  String get appSettings_advertisementNotifications => 'New node discovered';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Show notification when new nodes are discovered';
+      'Notify when new repeaters or contacts are heard';
 
   @override
   String get appSettings_messaging => 'Messaging';
