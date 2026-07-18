@@ -28,6 +28,7 @@ import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
+import '../utils/route_transitions.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
 import '../widgets/mention_autocomplete.dart';
@@ -43,6 +44,7 @@ import '../widgets/sync_progress_overlay.dart';
 import '../widgets/translated_message_content.dart';
 import '../widgets/unread_divider.dart';
 import 'channel_message_path_screen.dart';
+import 'contacts_screen.dart';
 import 'map_screen.dart';
 
 class ChannelChatScreen extends StatefulWidget {
@@ -285,6 +287,27 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// Bottom-bar navigation out of an open channel.
+  ///
+  /// Tapping Channels returns to the channel list. Tapping Contacts or Map
+  /// leaves the channel entirely, so the chat is popped first rather than
+  /// stranding it under the destination.
+  void _handleQuickSwitch(int index) {
+    final navigator = Navigator.of(context);
+    if (index == 1) {
+      navigator.pop();
+      return;
+    }
+    navigator.pop();
+    navigator.pushReplacement(
+      buildQuickSwitchRoute(
+        index == 0
+            ? const ContactsScreen(hideBackButton: true)
+            : const MapScreen(hideBackButton: true),
+      ),
+    );
+  }
+
   /// Switch to another channel picked from the nav panel.
   ///
   /// Swaps the conversation in place rather than pushing a route, so a pinned
@@ -315,9 +338,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   @override
   Widget build(BuildContext context) {
     return AppShell(
-      // No bottom bar: this is a pushed detail screen. The panel is still
-      // pinnable here, which is the wide-screen point - keeping the channel
-      // list and its unread counts visible while reading a channel.
+      // The bottom bar is present here too. Without it there is no way out of
+      // a channel on desktop, where there is no system back button and the
+      // hamburger has taken the back arrow's place.
+      selectedIndex: 1,
+      onDestinationSelected: _handleQuickSwitch,
+      contactsUnreadCount: context
+          .watch<MeshCoreConnector>()
+          .getTotalContactsUnreadCount(),
+      channelsUnreadCount: context
+          .watch<MeshCoreConnector>()
+          .getTotalChannelsUnreadCount(),
       drawerContent: ChannelDrawerList(
         currentChannelIndex: _currentChannel.index,
         onChannelSelected: _switchChannel,
