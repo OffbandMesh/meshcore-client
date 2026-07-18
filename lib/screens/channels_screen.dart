@@ -24,6 +24,7 @@ import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/qr_code_display.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -105,6 +106,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
         onDestinationSelected: (index) => _handleQuickSwitch(index, context),
         contactsUnreadCount: connector.getTotalContactsUnreadCount(),
         channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
+        drawerContent: ChannelDrawerList(
+          onChannelSelected: (channel) => _openChannel(context, channel),
+        ),
         appBar: AppBar(
           title: AppBarTitle(context.l10n.channels_title),
           centerTitle: true,
@@ -625,6 +629,28 @@ class _ChannelsScreenState extends State<ChannelsScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Shared open path for the channel tiles and the nav drawer list.
+  Future<void> _openChannel(BuildContext context, Channel channel) async {
+    final connector = context.read<MeshCoreConnector>();
+    final unread = connector.getUnreadCountForChannelIndex(channel.index);
+    connector.markChannelRead(channel.index);
+    // Close the drawer if the tap came from it, so it is not left open behind
+    // the chat screen when the user comes back.
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    await Future.delayed(const Duration(milliseconds: 50));
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ChannelChatScreen(channel: channel, initialUnreadCount: unread),
       ),
     );
   }
