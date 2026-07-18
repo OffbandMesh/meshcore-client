@@ -24,6 +24,7 @@ import '../models/channel_message.dart';
 import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
+import '../widgets/channel_notify_mode.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
@@ -424,13 +425,33 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'clearChat') {
+              if (value == 'notifications') {
+                showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'clearChat') {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
                   _currentChannel.index,
                 );
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'notifications',
+                child: Row(
+                  children: [
+                    Icon(
+                      channelNotifyModeIcon(
+                        context.read<AppSettingsService>().channelNotifyMode(
+                          identityKey: channelNotifyKeyFor(widget.channel),
+                          channelName: widget.channel.name,
+                        ),
+                      ),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(context.l10n.channels_notifications),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'clearChat',
                 child: Row(
