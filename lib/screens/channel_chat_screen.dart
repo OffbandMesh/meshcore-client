@@ -28,6 +28,7 @@ import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
@@ -294,27 +295,28 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: Drawer(
-        width: 300,
-        child: SafeArea(
-          child: ChannelDrawerList(
-            currentChannelIndex: widget.channel.index,
-            onChannelSelected: _switchChannel,
-          ),
-        ),
+    return AppShell(
+      // No bottom bar: this is a pushed detail screen. The panel is still
+      // pinnable here, which is the wide-screen point - keeping the channel
+      // list and its unread counts visible while reading a channel.
+      drawerContent: ChannelDrawerList(
+        currentChannelIndex: widget.channel.index,
+        onChannelSelected: _switchChannel,
       ),
-      appBar: AppBar(
-        // Explicit hamburger: this is a pushed route, so Scaffold would show a
-        // back arrow here instead of the drawer button. System back still pops
-        // to the channel list.
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            tooltip: context.l10n.channels_title,
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
+      appBarBuilder: (context, pinned) => AppBar(
+        // Pinned: the panel is already docked, so no hamburger is needed.
+        // Unpinned: this is a pushed route, so Scaffold would put a back arrow
+        // in this slot; the explicit hamburger replaces it. System back still
+        // pops to the channel list.
+        leading: pinned
+            ? null
+            : Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  tooltip: context.l10n.channels_title,
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
         title: Row(
           children: [
             _channelIcon(widget.channel),
