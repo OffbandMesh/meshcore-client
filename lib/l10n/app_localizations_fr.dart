@@ -786,12 +786,11 @@ class AppLocalizationsFr extends AppLocalizations {
       'Afficher une notification lors de la réception des messages de canal';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Notifications d\'annonces';
+  String get appSettings_advertisementNotifications => 'Nouveau nœud découvert';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Afficher une notification lors de la découverte de nouveaux nœuds';
+      'Notifier lorsque de nouveaux répéteurs ou contacts sont détectés';
 
   @override
   String get appSettings_messaging => 'Messagerie';

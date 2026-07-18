@@ -753,11 +753,11 @@ class AppLocalizationsJa extends AppLocalizations {
       'チャンネルからのメッセージを受信した際に、通知を表示する';
 
   @override
-  String get appSettings_advertisementNotifications => '広告通知';
+  String get appSettings_advertisementNotifications => '新しいノードを検出';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      '新しいノードが発見された場合に通知を表示する';
+      '新しいリピーターや連絡先を受信したときに通知します';
 
   @override
   String get appSettings_messaging => 'メッセージング';

@@ -784,12 +784,11 @@ class AppLocalizationsPt extends AppLocalizations {
       'Mostrar notificação ao receber mensagens do canal';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Notificações de Anúncios';
+  String get appSettings_advertisementNotifications => 'Novo nó descoberto';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Mostrar notificação quando novos nós forem descobertos';
+      'Notificar quando novos repetidores ou contatos forem detectados';
 
   @override
   String get appSettings_messaging => 'Mensagens';

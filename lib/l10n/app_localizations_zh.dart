@@ -741,10 +741,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appSettings_channelMessageNotificationsSubtitle => '收到频道消息时显示通知';
 
   @override
-  String get appSettings_advertisementNotifications => '广播通知';
+  String get appSettings_advertisementNotifications => '发现新节点';
 
   @override
-  String get appSettings_advertisementNotificationsSubtitle => '发现新节点时显示通知';
+  String get appSettings_advertisementNotificationsSubtitle =>
+      '当检测到新的中继器或联系人时通知';
 
   @override
   String get appSettings_messaging => '消息';

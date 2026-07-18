@@ -787,12 +787,11 @@ class AppLocalizationsPl extends AppLocalizations {
       'Pokaż powiadomienie przy odbieraniu wiadomości z kanału';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Powiadomienia o rozgłoszeniach';
+  String get appSettings_advertisementNotifications => 'Wykryto nowy węzeł';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Wyświetl powiadomienie, gdy zostaną wykryte nowe węzły.';
+      'Powiadamiaj o wykryciu nowych przemienników lub kontaktów';
 
   @override
   String get appSettings_messaging => 'Wiadomości';

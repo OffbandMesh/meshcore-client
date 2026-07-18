@@ -779,11 +779,11 @@ class AppLocalizationsNl extends AppLocalizations {
       'Toon notificatie bij het ontvangen van kanaalberichten';
 
   @override
-  String get appSettings_advertisementNotifications => 'Advertentie-meldingen';
+  String get appSettings_advertisementNotifications => 'Nieuwe node ontdekt';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Toon notificatie wanneer nieuwe nodes worden ontdekt';
+      'Melden wanneer nieuwe repeaters of contacten worden gehoord';
 
   @override
   String get appSettings_messaging => 'Berichten';

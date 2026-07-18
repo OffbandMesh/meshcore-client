@@ -774,11 +774,11 @@ class AppLocalizationsSl extends AppLocalizations {
       'Pokaži obvestilo ob prejemanju sporočil kanala';
 
   @override
-  String get appSettings_advertisementNotifications => 'Opozorila o oglasih';
+  String get appSettings_advertisementNotifications => 'Zaznano novo vozlišče';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Pokaži obvestilo, ko so najdene nove naprave.';
+      'Obvesti ob zaznavi novih repetitorjev ali stikov';
 
   @override
   String get appSettings_messaging => 'Komuniciranje';

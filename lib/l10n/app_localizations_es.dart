@@ -782,12 +782,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Mostrar notificación al recibir mensajes del canal';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Notificaciones de Anuncios';
+  String get appSettings_advertisementNotifications => 'Nuevo nodo descubierto';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Mostrar notificación cuando se descubren nuevos nodos';
+      'Notificar cuando se detecten nuevos repetidores o contactos';
 
   @override
   String get appSettings_messaging => 'Mensajería';

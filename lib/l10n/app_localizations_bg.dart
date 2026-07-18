@@ -786,11 +786,11 @@ class AppLocalizationsBg extends AppLocalizations {
       'Покажи известие при получаване на съобщения от канали';
 
   @override
-  String get appSettings_advertisementNotifications => 'Уведомления за реклами';
+  String get appSettings_advertisementNotifications => 'Открит нов възел';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Покажи известие, когато бъдат открити нови възли.';
+      'Известяване при откриване на нови репитери или контакти';
 
   @override
   String get appSettings_messaging => 'Съобщения';

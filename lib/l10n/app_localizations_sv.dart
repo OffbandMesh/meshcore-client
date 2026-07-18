@@ -771,11 +771,11 @@ class AppLocalizationsSv extends AppLocalizations {
       'Visa notis när meddelanden i kanal mottas';
 
   @override
-  String get appSettings_advertisementNotifications => 'Annonsmeddelanden';
+  String get appSettings_advertisementNotifications => 'Ny nod upptäckt';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Visa notis när nya noder upptäcks';
+      'Avisera när nya repeatrar eller kontakter hörs';
 
   @override
   String get appSettings_messaging => 'Meddelanden';
