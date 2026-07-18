@@ -136,6 +136,7 @@ class ChannelMessageStore {
       'timestamp': msg.timestamp.millisecondsSinceEpoch,
       'isOutgoing': msg.isOutgoing,
       'status': msg.status.index,
+      'rxTime': msg.rxTime?.millisecondsSinceEpoch,
       'channelIndex': msg.channelIndex,
       'repeatCount': msg.repeatCount,
       'pathLength': msg.pathLength,
@@ -171,6 +172,9 @@ class ChannelMessageStore {
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       isOutgoing: json['isOutgoing'] as bool,
       status: ChannelMessageStatus.values[json['status'] as int],
+      rxTime: json['rxTime'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['rxTime'] as int)
+          : null,
       repeatCount: (json['repeatCount'] as int?) ?? 0,
       pathLength: json['pathLength'] as int?,
       pathBytes: json['pathBytes'] != null
