@@ -57,7 +57,7 @@
   "settings_title": "Настройки",
   "settings_deviceInfo": "Информация об устройстве",
   "settings_appSettings": "Настройки приложения",
-  "settings_appSettingsSubtitle": "Уведомления, сообщения и настройки карты",
+  "settings_appSettingsSubtitle": "Внешний вид, перевод и настройки карты",
   "settings_nodeSettings": "Настройки ноды",
   "settings_nodeName": "Имя ноды",
   "settings_nodeNameNotSet": "Не установлено",

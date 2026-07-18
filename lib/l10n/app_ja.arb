@@ -141,7 +141,7 @@
   "settings_title": "設定",
   "settings_deviceInfo": "デバイス情報",
   "settings_appSettings": "アプリ設定",
-  "settings_appSettingsSubtitle": "通知、メッセージング、および地図の表示設定",
+  "settings_appSettingsSubtitle": "外観、翻訳、地図の設定",
   "settings_nodeSettings": "ノード設定",
   "settings_nodeName": "ノード名",
   "settings_nodeNameNotSet": "設定されていない",

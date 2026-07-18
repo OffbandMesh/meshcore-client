@@ -315,7 +315,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Meddelanden, notiser och kartinställningar';
+      'Utseende, översättning och kartinställningar';
 
   @override
   String get settings_messageSettings => 'Message Settings';

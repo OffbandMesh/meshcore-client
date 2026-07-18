@@ -691,7 +691,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_appSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Notifications, messaging, and map preferences'**
+  /// **'Appearance, translation, and map preferences'**
   String get settings_appSettingsSubtitle;
 
   /// Settings category title for notification and message-handling preferences

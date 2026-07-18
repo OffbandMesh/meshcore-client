@@ -85,7 +85,7 @@
   "settings_title": "设置",
   "settings_deviceInfo": "设备信息",
   "settings_appSettings": "应用设置",
-  "settings_appSettingsSubtitle": "通知、消息和地图偏好",
+  "settings_appSettingsSubtitle": "外观、翻译和地图设置",
   "settings_nodeSettings": "节点设置",
   "settings_nodeName": "节点名称",
   "settings_nodeNameNotSet": "未设置",

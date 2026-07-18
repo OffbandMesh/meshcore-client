@@ -316,7 +316,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Obveščanja, sporoščanje in zemljevidi.';
+      'Videz, prevajanje in nastavitve zemljevida';
 
   @override
   String get settings_messageSettings => 'Message Settings';

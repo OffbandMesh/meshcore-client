@@ -305,7 +305,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_appSettings => '앱 설정';
 
   @override
-  String get settings_appSettingsSubtitle => '알림, 메시징, 지도 설정';
+  String get settings_appSettingsSubtitle => '모양, 번역 및 지도 환경설정';
 
   @override
   String get settings_messageSettings => 'Message Settings';

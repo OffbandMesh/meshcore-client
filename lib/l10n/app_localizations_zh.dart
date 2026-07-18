@@ -303,7 +303,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settings_appSettings => '应用设置';
 
   @override
-  String get settings_appSettingsSubtitle => '通知、消息和地图偏好';
+  String get settings_appSettingsSubtitle => '外观、翻译和地图设置';
 
   @override
   String get settings_messageSettings => 'Message Settings';

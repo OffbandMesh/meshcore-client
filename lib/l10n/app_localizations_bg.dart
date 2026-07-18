@@ -317,7 +317,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Уведомления, съобщения и предпочитания за карта';
+      'Външен вид, превод и настройки на картата';
 
   @override
   String get settings_messageSettings => 'Message Settings';

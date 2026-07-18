@@ -317,7 +317,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Értesítések, üzenetküldés és térképi beállítások';
+      'Megjelenés, fordítás és térképbeállítások';
 
   @override
   String get settings_messageSettings => 'Message Settings';

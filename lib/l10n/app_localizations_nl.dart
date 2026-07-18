@@ -316,7 +316,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Notificaties, berichten en kaartinstellingen';
+      'Weergave, vertaling en kaartvoorkeuren';
 
   @override
   String get settings_messageSettings => 'Message Settings';
