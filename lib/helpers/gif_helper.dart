@@ -34,8 +34,13 @@ class GifHelper {
     return pageMatch?.group(1);
   }
 
-  /// Encode a GIF in a format that parseGif() can parse.
+  /// Encode a GIF as a Giphy page URL, a format parseGif() also parses.
+  ///
+  /// A real URL rather than the lineage-only `g:<id>` token: recipients on
+  /// stock (or any non-lineage) MeshCore client can open it, where `g:<id>`
+  /// is opaque text to them. parseGif already matches this form, so Offband
+  /// keeps rendering inline and legacy `g:<id>` payloads still decode. (#282)
   static String encodeGif(String gifId) {
-    return 'g:$gifId';
+    return 'https://giphy.com/gifs/$gifId';
   }
 }
