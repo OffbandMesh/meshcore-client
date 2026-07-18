@@ -16,6 +16,7 @@ class UiViewStateService extends ChangeNotifier {
   static const _keyContactsTypeFilter = 'ui_contacts_type_filter';
   static const _keyChannelsSortOption = 'ui_channels_sort_option';
   static const _keyChannelsSortIndexLegacy = 'ui_channels_sort_index';
+  static const _keyNavDrawerPinned = 'ui_nav_drawer_pinned';
 
   String _contactsSelectedGroupName = contactsAllGroupsValue;
   String _contactsSearchText = '';
@@ -27,6 +28,8 @@ class UiViewStateService extends ChangeNotifier {
   String _channelsSearchText = '';
   ChannelSortOption _channelsSortOption = ChannelSortOption.manual;
 
+  bool _navDrawerPinned = false;
+
   String get contactsSelectedGroupName => _contactsSelectedGroupName;
   String get contactsSearchText => _contactsSearchText;
   bool get contactsSearchExpanded => _contactsSearchExpanded;
@@ -35,6 +38,7 @@ class UiViewStateService extends ChangeNotifier {
   ContactTypeFilter get contactsTypeFilter => _contactsTypeFilter;
   String get channelsSearchText => _channelsSearchText;
   ChannelSortOption get channelsSortOption => _channelsSortOption;
+  bool get navDrawerPinned => _navDrawerPinned;
 
   Future<void> initialize() async {
     final prefs = PrefsManager.instance;
@@ -62,6 +66,9 @@ class UiViewStateService extends ChangeNotifier {
         orElse: () => ContactTypeFilter.all,
       );
     }
+
+    // Must load before the channel-sort block below, which returns early.
+    _navDrawerPinned = prefs.getBool(_keyNavDrawerPinned) ?? false;
 
     final channelSortStr = prefs.getString(_keyChannelsSortOption);
     if (channelSortStr != null) {
@@ -150,5 +157,12 @@ class UiViewStateService extends ChangeNotifier {
     unawaited(
       PrefsManager.instance.setString(_keyChannelsSortOption, value.name),
     );
+  }
+
+  void setNavDrawerPinned(bool value) {
+    if (_navDrawerPinned == value) return;
+    _navDrawerPinned = value;
+    notifyListeners();
+    unawaited(PrefsManager.instance.setBool(_keyNavDrawerPinned, value));
   }
 }

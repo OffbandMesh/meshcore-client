@@ -27,7 +27,7 @@ import '../utils/route_transitions.dart';
 import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/blocked_badge.dart';
-import '../widgets/quick_switch_bar.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
@@ -319,10 +319,13 @@ class _ContactsScreenState extends State<ContactsScreen>
     final allowBack = !connector.isConnected;
     return PopScope(
       canPop: allowBack,
-      child: Scaffold(
+      child: AppShell(
+        selectedIndex: 0,
+        onDestinationSelected: (index) => _handleQuickSwitch(index, context),
+        contactsUnreadCount: connector.getTotalContactsUnreadCount(),
+        channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
         appBar: AppBar(
           title: AppBarTitle(context.l10n.contacts_title),
-          automaticallyImplyLeading: false,
           bottom: const SyncProgressAppBarBottom(),
           actions: [
             PopupMenuButton(
@@ -430,16 +433,6 @@ class _ContactsScreenState extends State<ContactsScreen>
           ],
         ),
         body: _buildContactsBody(context, connector),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: QuickSwitchBar(
-            selectedIndex: 0,
-            onDestinationSelected: (index) =>
-                _handleQuickSwitch(index, context),
-            contactsUnreadCount: connector.getTotalContactsUnreadCount(),
-            channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
-          ),
-        ),
       ),
     );
   }
