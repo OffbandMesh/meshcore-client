@@ -70,6 +70,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   bool _isLoadingOlder = false;
   bool _communitiesLoaded = false;
 
+  /// The channel on screen. Starts as the pushed one, then changes in place
+  /// when another is picked from the nav panel, so the panel stays docked and
+  /// only the conversation swaps.
+  late Channel _currentChannel = widget.channel;
+
   MeshCoreConnector? _connector;
   DateTime? _lastChannelSendAt;
   bool _channelSkipNextBottomSnap = false;
@@ -87,36 +92,43 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     _scrollController.showJumpToBottom.addListener(_clearDividerAtBottom);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final connector = context.read<MeshCoreConnector>();
-      final settings = context.read<AppSettingsService>().settings;
-      final idx = widget.channel.index;
-      final unread = widget.initialUnreadCount;
-      final messages = connector.getChannelMessages(widget.channel);
       _loadCommunities();
-      ChannelMessage? anchor;
-      if (unread > 0) {
-        anchor = _findOldestUnreadChannelAnchor(messages, unread);
-      }
-      setState(() {
-        if (anchor != null) _unreadDividerMessageId = anchor.messageId;
-      });
-      connector.setActiveChannel(idx);
-      _connector = connector;
-      if (anchor != null && settings.jumpToOldestUnread) {
-        _channelSkipNextBottomSnap = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _scrollController.jumpToEstimatedOffset(
-            unreadCount: unread,
-            totalMessages: messages.length,
-            onJumped: () {
-              if (!mounted) return;
-              _scrollToMessage(anchor!.messageId);
-            },
-          );
-        });
-      }
+      _activateChannel(widget.initialUnreadCount);
     });
+  }
+
+  /// Bind the screen to [_currentChannel]: mark it active, place the unread
+  /// divider, and optionally jump to the oldest unread. Runs on first build and
+  /// again each time the channel is switched from the nav panel.
+  void _activateChannel(int unread) {
+    final connector = context.read<MeshCoreConnector>();
+    final settings = context.read<AppSettingsService>().settings;
+    final messages = connector.getChannelMessages(_currentChannel);
+
+    ChannelMessage? anchor;
+    if (unread > 0) {
+      anchor = _findOldestUnreadChannelAnchor(messages, unread);
+    }
+    setState(() {
+      _unreadDividerMessageId = anchor?.messageId;
+    });
+    connector.setActiveChannel(_currentChannel.index);
+    _connector = connector;
+
+    if (anchor != null && settings.jumpToOldestUnread) {
+      _channelSkipNextBottomSnap = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollController.jumpToEstimatedOffset(
+          unreadCount: unread,
+          totalMessages: messages.length,
+          onJumped: () {
+            if (!mounted) return;
+            _scrollToMessage(anchor!.messageId);
+          },
+        );
+      });
+    }
   }
 
   // TODO: Reload communities when returning from another screen
@@ -166,7 +178,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     setState(() => _isLoadingOlder = true);
 
     final connector = context.read<MeshCoreConnector>();
-    await connector.loadOlderChannelMessages(widget.channel.index);
+    await connector.loadOlderChannelMessages(_currentChannel.index);
 
     if (mounted) {
       setState(() => _isLoadingOlder = false);
@@ -273,24 +285,31 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
-  /// Switch to another channel from the drawer without backing out to the
-  /// channel list. pushReplacement keeps the back stack one deep, so system
-  /// back still returns to the channel list rather than the previous channel.
+  /// Switch to another channel picked from the nav panel.
+  ///
+  /// Swaps the conversation in place rather than pushing a route, so a pinned
+  /// panel stays docked and only the chat area changes. The back stack is
+  /// untouched, so system back still returns to the channel list.
   void _switchChannel(Channel channel) {
-    if (channel.index == widget.channel.index) {
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.isDrawerOpen ?? false) {
       Navigator.pop(context);
-      return;
     }
+    if (channel.index == _currentChannel.index) return;
+
     final connector = context.read<MeshCoreConnector>();
     final unread = connector.getUnreadCountForChannelIndex(channel.index);
     connector.markChannelRead(channel.index);
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            ChannelChatScreen(channel: channel, initialUnreadCount: unread),
-      ),
-    );
+
+    // Drop per-channel view state before rebinding.
+    _replyingToMessage = null;
+    _messageKeys.clear();
+    _unreadDividerMessageId = null;
+    _channelSkipNextBottomSnap = false;
+    _textController.clear();
+
+    setState(() => _currentChannel = channel);
+    _activateChannel(unread);
   }
 
   @override
@@ -300,7 +319,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       // pinnable here, which is the wide-screen point - keeping the channel
       // list and its unread counts visible while reading a channel.
       drawerContent: ChannelDrawerList(
-        currentChannelIndex: widget.channel.index,
+        currentChannelIndex: _currentChannel.index,
         onChannelSelected: _switchChannel,
       ),
       appBarBuilder: (context, pinned) => AppBar(
@@ -319,25 +338,25 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
               ),
         title: Row(
           children: [
-            _channelIcon(widget.channel),
+            _channelIcon(_currentChannel),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.channel.name.isEmpty
+                    _currentChannel.name.isEmpty
                         ? context.l10n.channels_channelIndex(
-                            widget.channel.index,
+                            _currentChannel.index,
                           )
-                        : widget.channel.name,
+                        : _currentChannel.name,
                     style: const TextStyle(fontSize: 16),
                   ),
                   Consumer<MeshCoreConnector>(
                     builder: (context, connector, _) {
                       final unreadCount = connector
-                          .getUnreadCountForChannelIndex(widget.channel.index);
-                      final privacy = widget.channel.isPublicChannel
+                          .getUnreadCountForChannelIndex(_currentChannel.index);
+                      final privacy = _currentChannel.isPublicChannel
                           ? context.l10n.channels_public
                           : context.l10n.channels_private;
                       return Text(
@@ -361,7 +380,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             onSelected: (value) {
               if (value == 'clearChat') {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
-                  widget.channel.index,
+                  _currentChannel.index,
                 );
               }
             },
@@ -390,7 +409,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             Expanded(
               child: Consumer<MeshCoreConnector>(
                 builder: (context, connector, child) {
-                  final messages = connector.getChannelMessages(widget.channel);
+                  final messages = connector.getChannelMessages(
+                    _currentChannel,
+                  );
                   final blockService = context.watch<BlockService>();
                   final visibleMessages = messages
                       .where(
@@ -405,7 +426,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            widget.channel.isPublicChannel
+                            _currentChannel.isPublicChannel
                                 ? Icons.public
                                 : Icons.tag,
                             size: 64,
@@ -536,14 +557,14 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   void _markAsUnread(ChannelMessage message) {
     final connector = context.read<MeshCoreConnector>();
-    final messages = connector.getChannelMessages(widget.channel);
+    final messages = connector.getChannelMessages(_currentChannel);
     var count = 0;
     var found = false;
     for (final m in messages) {
       if (m.messageId == message.messageId) found = true;
       if (found && !m.isOutgoing) count++;
     }
-    connector.setChannelUnreadCount(widget.channel.index, count);
+    connector.setChannelUnreadCount(_currentChannel.index, count);
   }
 
   /// Block the sender of a channel post. Resolves the claimed name to known
@@ -890,7 +911,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         ? colorScheme.onPrimaryContainer
         : colorScheme.onSurface;
     final metaColor = textColor.withValues(alpha: 0.7);
-    final channelColor = widget.channel.isPublicChannel
+    final channelColor = _currentChannel.isPublicChannel
         ? Colors.orange
         : Colors.blue;
 
@@ -905,7 +926,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             final selfName = context.read<MeshCoreConnector>().selfName ?? 'Me';
             final fromName = isOutgoing ? selfName : senderName;
             final key = buildSharedMarkerKey(
-              sourceId: 'channel:${widget.channel.index}',
+              sourceId: 'channel:${_currentChannel.index}',
               label: poi.label,
               fromName: fromName,
               flags: poi.flags,
@@ -1166,13 +1187,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
                           (connector.isChannelSmazEnabled(
-                                widget.channel.index,
+                                _currentChannel.index,
                               ) ||
                               connector.isChannelCyr2LatEnabled(
-                                widget.channel.index,
+                                _currentChannel.index,
                               ))
                           ? (text) => connector.prepareChannelOutboundText(
-                              widget.channel.index,
+                              _currentChannel.index,
                               text,
                             )
                           : null,
@@ -1214,7 +1235,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
     // Recent senders in this channel, keyed to their most recent timestamp.
     final recentTime = <String, DateTime>{};
-    for (final message in connector.getChannelMessages(widget.channel)) {
+    for (final message in connector.getChannelMessages(_currentChannel)) {
       if (message.isOutgoing) continue;
       final name = message.senderName.trim();
       if (name.isEmpty || name == 'Unknown') continue;
@@ -1304,7 +1325,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
     final maxBytes = maxChannelMessageBytes(connector.selfName);
     final outboundText = connector.prepareChannelOutboundText(
-      widget.channel.index,
+      _currentChannel.index,
       messageText,
     );
     if (utf8.encode(outboundText).length > maxBytes) {
@@ -1319,7 +1340,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     // but we getting messages doubles in chat screen (source text and transformed).
     // To prevent, we'll perform transform of source before pass to main sender logic.
     // We can pass whole text, senderName will be kept intact
-    if (connector.isChannelCyr2LatEnabled(widget.channel.index)) {
+    if (connector.isChannelCyr2LatEnabled(_currentChannel.index)) {
       messageText = Cyr2Lat.encode(messageText);
     }
     // end transform
@@ -1328,7 +1349,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     _cancelReply();
     _textFieldFocusNode.requestFocus();
     connector.sendChannelMessage(
-      widget.channel,
+      _currentChannel,
       messageText,
       originalText: originalText,
       translatedLanguageCode: translatedLanguageCode,
@@ -1349,7 +1370,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     var path = _formatPathPrefixes(message.pathBytes, w);
     var truncated = false;
     String outbound() => connector.prepareChannelOutboundText(
-      widget.channel.index,
+      _currentChannel.index,
       '$prefix$path${truncated ? '…' : ''}',
     );
     while (path.isNotEmpty && utf8.encode(outbound()).length > maxBytes) {
@@ -1358,10 +1379,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     }
 
     var text = '$prefix$path${truncated ? '…' : ''}';
-    if (connector.isChannelCyr2LatEnabled(widget.channel.index)) {
+    if (connector.isChannelCyr2LatEnabled(_currentChannel.index)) {
       text = Cyr2Lat.encode(text);
     }
-    connector.sendChannelMessage(widget.channel, text);
+    connector.sendChannelMessage(_currentChannel, text);
   }
 
   void _ensureDateFormats(BuildContext context) {
@@ -1583,7 +1604,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   Navigator.pop(sheetContext);
                   unawaited(
                     context.read<MeshCoreConnector>().translateChannelMessage(
-                      widget.channel.index,
+                      _currentChannel.index,
                       message,
                       manualTranslation: true,
                     ),
@@ -1650,7 +1671,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       message.text,
     );
     final reactionText = ReactionHelper.encodeReaction(hash, emojiIndex);
-    connector.sendChannelMessage(widget.channel, reactionText);
+    connector.sendChannelMessage(_currentChannel, reactionText);
   }
 
   void _copyMessageText(String text) {
