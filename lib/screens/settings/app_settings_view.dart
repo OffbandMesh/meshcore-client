@@ -15,8 +15,9 @@ import '../map_cache_screen.dart';
 
 /// Embeddable view (no Scaffold) for the App Settings shell pane.
 ///
-/// Renders appearance, translation, battery, map, Cyr2Lat, and debug cards.
-/// Notifications and message-handling settings live in [MessageSettingsView].
+/// Renders appearance, translation, battery, map, and Cyr2Lat cards.
+/// Notifications and message-handling settings live in [MessageSettingsView];
+/// app debug logging lives in the Debug category on the settings screen.
 class AppSettingsView extends StatelessWidget {
   const AppSettingsView({super.key});
 
@@ -43,8 +44,6 @@ class AppSettingsView extends StatelessWidget {
                 _buildMapSettingsCard(context, settingsService),
                 const SizedBox(height: 16),
                 _buildCyr2LatCard(context, settingsService),
-                const SizedBox(height: 16),
-                _buildDebugCard(context, settingsService),
               ],
             );
           },
@@ -1350,57 +1349,6 @@ class AppSettingsView extends StatelessWidget {
               );
             },
             child: Text(context.l10n.common_delete),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDebugCard(
-    BuildContext context,
-    AppSettingsService settingsService,
-  ) {
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              context.l10n.appSettings_debugCard,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.bug_report_outlined),
-            title: Text(context.l10n.appSettings_appDebugLogging),
-            subtitle: Text(context.l10n.appSettings_appDebugLoggingSubtitle),
-            value: settingsService.settings.appDebugLogEnabled,
-            onChanged: (value) async {
-              try {
-                await settingsService.setAppDebugLogEnabled(value);
-              } catch (_) {
-                if (context.mounted) {
-                  showDismissibleSnackBar(
-                    context,
-                    content: const Text(
-                      'Could not change debug logging. Please try again.',
-                    ),
-                  );
-                }
-                return;
-              }
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(
-                  value
-                      ? context.l10n.appSettings_appDebugLoggingEnabled
-                      : context.l10n.appSettings_appDebugLoggingDisabled,
-                ),
-                duration: const Duration(seconds: 2),
-              );
-            },
           ),
         ],
       ),
