@@ -638,12 +638,8 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     final connector = context.read<MeshCoreConnector>();
     final unread = connector.getUnreadCountForChannelIndex(channel.index);
     connector.markChannelRead(channel.index);
-    // Close the drawer if the tap came from it, so it is not left open behind
-    // the chat screen when the user comes back.
-    final scaffold = Scaffold.maybeOf(context);
-    if (scaffold?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
+    // The drawer closes itself in ChannelDrawerList, which has a context
+    // inside it.
     await Future.delayed(const Duration(milliseconds: 50));
     if (!context.mounted) return;
     Navigator.push(
