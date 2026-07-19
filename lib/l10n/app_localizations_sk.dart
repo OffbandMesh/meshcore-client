@@ -635,6 +635,13 @@ class AppLocalizationsSk extends AppLocalizations {
       'Umožnite, aby toto zariadenie opakovávalo siete pre ostatných.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Použitie off-grid systému vyžaduje frekvencie 433, 869 alebo 918 MHz.';
 

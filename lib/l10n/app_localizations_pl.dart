@@ -644,6 +644,13 @@ class AppLocalizationsPl extends AppLocalizations {
       'Pozwól temu urządzeniu powtarzać pakiety danych dla innych urządzeń.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Powtórka poza siecią wymaga częstotliwości 433, 869 lub 918 MHz.';
 

@@ -282,6 +282,7 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+  bool? _femLnaEnabled;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -589,6 +590,48 @@ class MeshCoreConnector extends ChangeNotifier {
   /// True when the radio's block store hit `MAX_BLOCKED_KEYS` (32) and rejected
   /// an ADD (ok=0). Local block still applies; those keys just aren't portable.
   bool get blockOffloadStoreFull => _blockOffloadStoreFull;
+
+  /// Whether this specific radio can control its external FEM LNA (#304).
+  ///
+  /// Gated on the capability BIT alone — firmware derives it from a runtime FEM
+  /// probe, so it is a per-unit answer: two Heltec V4s can legitimately disagree
+  /// depending on the fitted chip, and `rak3401` reports false by design (its
+  /// SKY66122 gates LNA and PA off one line, so a toggle would kill TX).
+  /// Never shortcut this to a model or version check.
+  bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
+
+  /// Current FEM LNA state as last reported by the radio, or null if unknown
+  /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.
+  bool? get femLnaEnabled => _femLnaEnabled;
+
+  /// Ask the radio to enable or bypass its FEM LNA. No-op unless the capability
+  /// bit is set, so a non-capable radio never sees `0xC3` traffic. State is
+  /// updated from the reply, not optimistically.
+  Future<void> setFemLna(bool enabled) async {
+    if (!isConnected || !supportsOffbandFemLna) return;
+    await sendFrame(buildOffbandFemLnaSetFrame(enabled));
+  }
+
+  /// Fallback read; device-info (offset 83) is the primary source on connect.
+  Future<void> requestFemLnaState() async {
+    if (!isConnected || !supportsOffbandFemLna) return;
+    await sendFrame(buildOffbandFemLnaGetFrame());
+  }
+
+  /// `[0xC3][sub][value]` — the value is the post-apply hardware state, so it is
+  /// adopted verbatim rather than assuming a SET took effect (#304).
+  void _handleOffbandFemLnaReply(Uint8List frame) {
+    final reply = parseOffbandFemLnaReply(frame);
+    if (reply == null) return;
+    if (_femLnaEnabled == reply.enabled) return;
+    _femLnaEnabled = reply.enabled;
+    appLogger.info(
+      'FEM LNA now ${reply.enabled ? 'enabled' : 'bypassed'}',
+      tag: 'Connector',
+    );
+    notifyListeners();
+  }
+
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
@@ -4323,6 +4366,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case cmdOffbandBlock:
         _handleOffbandBlockFrame(frame);
         break;
+      case cmdOffbandFemLna:
+        _handleOffbandFemLnaReply(frame);
+        break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
         _handleSelfInfo(frame);
@@ -4627,6 +4673,14 @@ class MeshCoreConnector extends ChangeNotifier {
   static int? parseOffbandCaps(Uint8List frame) =>
       frame.length >= 83 ? frame[82] : null;
 
+  /// FEM LNA state byte, appended immediately after the caps byte in device-info
+  /// v16+ (firmware #298). Appended **unconditionally** — including on
+  /// non-capable boards, where it reads 0 — so the byte's presence indicates
+  /// firmware version, not capability. The capability BIT is what decides
+  /// whether to render the control. Null on v15 and older (shorter frame).
+  static bool? parseFemLnaState(Uint8List frame) =>
+      frame.length >= 84 ? frame[83] != femLnaBypass : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -4674,6 +4728,9 @@ class MeshCoreConnector extends ChangeNotifier {
     // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
     // testable helper; offset verified against firmware (see parseOffbandCaps).
     _offbandCaps = parseOffbandCaps(frame);
+    // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
+    // read on connect — a 0xC3 GET is only the fallback.
+    _femLnaEnabled = parseFemLnaState(frame);
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();

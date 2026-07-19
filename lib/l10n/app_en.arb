@@ -253,6 +253,8 @@
   "settings_txPowerInvalid": "Invalid TX power (0-22 dBm)",
   "settings_clientRepeat": "Off-Grid Repeat",
   "settings_clientRepeatSubtitle": "Allow this device to repeat mesh packets for others",
+  "settings_femLna": "Receive amplifier (FEM LNA)",
+  "settings_femLnaSubtitle": "Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.",
   "settings_clientRepeatFreqWarning": "Off-grid repeat requires 433, 869, or 918 MHz frequency",
   "settings_error": "Error: {message}",
   "@settings_error": {

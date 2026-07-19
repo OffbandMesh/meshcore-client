@@ -630,6 +630,13 @@ class AppLocalizationsSv extends AppLocalizations {
       'Låt enheten repetera nätpaket för andra användare.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'För att kunna kommunicera utanför elnätet krävs frekvenserna 433, 869 eller 918 MHz.';
 

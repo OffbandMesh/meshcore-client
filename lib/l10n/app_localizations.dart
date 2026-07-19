@@ -1276,6 +1276,18 @@ abstract class AppLocalizations {
   /// **'Allow this device to repeat mesh packets for others'**
   String get settings_clientRepeatSubtitle;
 
+  /// No description provided for @settings_femLna.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive amplifier (FEM LNA)'**
+  String get settings_femLna;
+
+  /// No description provided for @settings_femLnaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.'**
+  String get settings_femLnaSubtitle;
+
   /// No description provided for @settings_clientRepeatFreqWarning.
   ///
   /// In en, this message translates to:

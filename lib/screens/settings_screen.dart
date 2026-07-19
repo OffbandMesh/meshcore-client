@@ -2192,6 +2192,23 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
             contentPadding: EdgeInsets.zero,
           ),
         ],
+        // Only this radio's own FEM probe decides whether this appears — never
+        // model or version (#304). Deliberately not mirrored into local state:
+        // firmware returns post-apply hardware truth, so the switch renders
+        // what the radio reports rather than what we asked for.
+        if (widget.connector.supportsOffbandFemLna) ...[
+          const SizedBox(height: 16),
+          ListenableBuilder(
+            listenable: widget.connector,
+            builder: (context, _) => SwitchListTile(
+              title: Text(l10n.settings_femLna),
+              subtitle: Text(l10n.settings_femLnaSubtitle),
+              value: widget.connector.femLnaEnabled ?? true,
+              onChanged: (value) => widget.connector.setFemLna(value),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,

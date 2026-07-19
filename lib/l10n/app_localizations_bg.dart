@@ -643,6 +643,13 @@ class AppLocalizationsBg extends AppLocalizations {
       'Позволете на това устройство да предава пакети към мрежата за други устройства.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'За повторение извън мрежата са необходими честоти от 433, 869 или 918 MHz.';
 

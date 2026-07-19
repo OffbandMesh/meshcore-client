@@ -287,9 +287,17 @@ Uint8List buildOffbandFemLnaSetFrame(bool enabled) => Uint8List.fromList([
 Uint8List buildOffbandFemLnaGetFrame() =>
     Uint8List.fromList([cmdOffbandFemLna, offbandFemLnaGet]);
 
-/// Reply to a `0xC3` request: `[0xC3][sub][value]`. A malformed request draws
-/// the generic `[respCodeErr][errCodeIllegalArg]` instead, which is NOT
-/// 0xC3-prefixed and so never reaches this parser.
+/// Reply to a `0xC3` request: `[0xC3][sub][value]`.
+///
+/// The value is the **post-apply hardware state, not an echo of the request**
+/// (firmware #298 as-built): if the FEM ever refused a write, this reports the
+/// truth rather than confirming a change that didn't take. Always render from
+/// this value; never assume the written value stuck.
+///
+/// Error replies are never 0xC3-prefixed, so they don't reach this parser:
+/// malformed → `[respCodeErr][errCodeIllegalArg]`; a request to a non-capable
+/// board → `[respCodeErr][errCodeUnsupportedCmd]` (unreachable when gated on
+/// the capability bit, but firmware answers it defensively).
 class OffbandFemLnaReply {
   const OffbandFemLnaReply(this.subType, this.value);
   final int subType;
@@ -315,6 +323,12 @@ const int offbandBlockClear = 0x04;
 /// frame `[respCodeErr(1)][errCodeIllegalArg(6)]` — NOT 0xC2-prefixed, so the
 /// app must recognise the 2-byte error frame and not wait for a 0xC2 echo.
 const int errCodeIllegalArg = 6;
+
+/// `ERR_CODE_UNSUPPORTED_CMD` — returned for an Offband command the connected
+/// board can't service (e.g. a `0xC3` FEM LNA request to a board without FEM
+/// control). Unreachable when the capability bit is respected; firmware answers
+/// it defensively against a stale or mis-gated client. (#304)
+const int errCodeUnsupportedCmd = 1;
 
 Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
     Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
