@@ -614,6 +614,13 @@ class AppLocalizationsJa extends AppLocalizations {
       'このデバイスが、他のデバイスに対してメッシュパケットを繰り返し送信できるようにする。';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'オフグリッドでの再送には、433MHz、869MHz、または918MHzの周波数が必要です。';
 

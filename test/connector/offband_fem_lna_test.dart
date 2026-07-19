@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
 
 void main() {
@@ -25,6 +26,55 @@ void main() {
 
     test('does not collide with the block capability bit', () {
       expect(offbandCapFemLna & offbandCapBlock, equals(0));
+    });
+  });
+
+  group('FEM LNA device-info state byte, offset 83 (#304)', () {
+    Uint8List deviceInfo({required int length, int femByte = 0}) {
+      final frame = Uint8List(length);
+      frame[0] = respCodeDeviceInfo;
+      if (length >= 84) frame[83] = femByte;
+      return frame;
+    }
+
+    test('reads the byte immediately after caps on v16+', () {
+      expect(
+        MeshCoreConnector.parseFemLnaState(deviceInfo(length: 84, femByte: 1)),
+        isTrue,
+      );
+      expect(
+        MeshCoreConnector.parseFemLnaState(deviceInfo(length: 84, femByte: 0)),
+        isFalse,
+      );
+    });
+
+    test('null on pre-v16 firmware that stops at the caps byte', () {
+      expect(
+        MeshCoreConnector.parseFemLnaState(deviceInfo(length: 83)),
+        isNull,
+      );
+      expect(MeshCoreConnector.parseFemLnaState(Uint8List(0)), isNull);
+    });
+
+    test('does not disturb the caps byte at offset 82', () {
+      final frame = deviceInfo(length: 84, femByte: 1);
+      frame[82] = offbandCapBlock | offbandCapFemLna;
+      expect(MeshCoreConnector.parseOffbandCaps(frame), equals(0x06));
+      expect(MeshCoreConnector.parseFemLnaState(frame), isTrue);
+    });
+
+    test('byte is present on non-capable boards and reads as bypassed', () {
+      // Firmware appends it unconditionally, so presence indicates version,
+      // not capability — the cap bit is what gates the UI.
+      final frame = deviceInfo(length: 84, femByte: 0);
+      frame[82] = 0x00;
+      expect(MeshCoreConnector.parseFemLnaState(frame), isFalse);
+      expect(
+        firmwareSupportsOffbandFemLna(
+          MeshCoreConnector.parseOffbandCaps(frame),
+        ),
+        isFalse,
+      );
     });
   });
 

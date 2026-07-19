@@ -643,6 +643,13 @@ class AppLocalizationsHu extends AppLocalizations {
       'Engedje, hogy ez a eszköz mások számára is ismételje a hálózati csomagokat.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'A hálózat nélküli kommunikációhoz 433, 869 vagy 918 MHz frekvenciát igényel.';
 

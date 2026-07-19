@@ -605,6 +605,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settings_clientRepeatSubtitle => '允许此设备重复发送网状数据包给其他设备';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       '离网重复通信需要使用 433、869 或 918 兆赫兹的频率。';
 

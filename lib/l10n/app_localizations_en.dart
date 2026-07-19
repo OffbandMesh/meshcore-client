@@ -628,6 +628,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Allow this device to repeat mesh packets for others';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Off-grid repeat requires 433, 869, or 918 MHz frequency';
 

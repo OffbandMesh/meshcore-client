@@ -632,6 +632,13 @@ class AppLocalizationsSl extends AppLocalizations {
       'Omogočite temu naprave, da ponavlja paketne sporočila za druge.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Za ponovni prenos na brezžični način so potrebne frekvence 433, 869 ali 918 MHz.';
 

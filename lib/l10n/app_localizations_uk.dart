@@ -638,6 +638,13 @@ class AppLocalizationsUk extends AppLocalizations {
       'Дозвольте цьому пристрою повторювати пакети даних для інших пристроїв.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Повтор без підключення до мережі вимагає частоти 433, 869 або 918 МГц.';
 

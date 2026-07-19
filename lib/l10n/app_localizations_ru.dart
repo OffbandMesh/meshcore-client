@@ -641,6 +641,13 @@ class AppLocalizationsRu extends AppLocalizations {
       'Позвольте этому устройству повторять пакеты данных для других устройств.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Для работы в режиме \"без подключения к сети\" требуется частота 433, 869 или 918 МГц.';
 

@@ -638,6 +638,13 @@ class AppLocalizationsDe extends AppLocalizations {
       'Ermöglichen Sie diesem Gerät, Mesh-Pakete für andere zu wiederholen.';
 
   @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
+
+  @override
   String get settings_clientRepeatFreqWarning =>
       'Die Kommunikation ohne Stromversorgung erfordert Frequenzen von 433, 869 oder 918 MHz.';
 
