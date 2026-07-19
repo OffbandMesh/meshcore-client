@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -757,16 +758,32 @@ Uint8List buildRemoveContactFrame(Uint8List pubKey) {
   return writer.toBytes();
 }
 
+/// Byte length of the client id carried in [buildAppStartFrame] (#297).
+///
+/// 6 is load-bearing, not arbitrary: stock firmware treats `cmd_frame[1..7]` as
+/// reserved and reads the app name at a FIXED offset 8, while Wadamesh reads
+/// byte 1 as the client-id length and the app name at `2 + cid_len`. Only
+/// `cid_len == 6` puts the name at 8 for both, so one frame serves both.
+const int clientIdLength = 6;
+
 // Build CMD_APP_START frame
-// Format: [cmd][app_ver][reserved x6][app_name...]
+// Format: [cmd][cid_len=6][client_id x6][app_name...]
+// Stock reads bytes 1..7 as reserved + name at 8; Wadamesh reads the client id
+// and lands on the same name offset. See [clientIdLength].
 Uint8List buildAppStartFrame({
   String appName = 'MeshCoreOpen',
-  int appVersion = 1,
+  Uint8List? clientId,
 }) {
+  final id = Uint8List(clientIdLength);
+  if (clientId != null) {
+    // Truncate or zero-pad: the length byte must stay 6 or the app-name offset
+    // desyncs on one of the two firmwares.
+    id.setRange(0, min(clientId.length, clientIdLength), clientId);
+  }
   final writer = BufferWriter();
   writer.writeByte(cmdAppStart);
-  writer.writeByte(appVersion);
-  writer.writeBytes(Uint8List(6)); // reserved bytes
+  writer.writeByte(clientIdLength);
+  writer.writeBytes(id);
   writer.writeString(appName);
   writer.writeByte(0);
   return writer.toBytes();

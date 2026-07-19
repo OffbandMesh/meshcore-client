@@ -47,6 +47,7 @@ import '../storage/channel_message_store.dart';
 import '../storage/channel_order_store.dart';
 import '../storage/channel_settings_store.dart';
 import '../storage/channel_store.dart';
+import '../storage/client_id_store.dart';
 import '../storage/contact_discovery_store.dart';
 import '../storage/contact_settings_store.dart';
 import '../storage/contact_store.dart';
@@ -3056,7 +3057,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _webInitialHandshakeRequestSent = true;
     }
     await sendFrame(buildDeviceQueryFrame());
-    await sendFrame(buildAppStartFrame());
+    await sendFrame(buildAppStartFrame(clientId: ClientIdStore.load()));
     await requestBatteryStatus(force: true);
     await sendFrame(buildGetCustomVarsFrame());
     await sendFrame(buildGetAutoAddFlagsFrame());
@@ -3079,7 +3080,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _webInitialHandshakeRequestSent = true;
     }
     await sendFrame(buildDeviceQueryFrame());
-    await sendFrame(buildAppStartFrame());
+    await sendFrame(buildAppStartFrame(clientId: ClientIdStore.load()));
     await sendFrame(buildGetCustomVarsFrame());
     await requestBatteryStatus();
     await sendFrame(buildGetAutoAddFlagsFrame());
@@ -3122,7 +3123,9 @@ class MeshCoreConnector extends ChangeNotifier {
           return;
         }
         attempts += 1;
-        unawaited(sendFrame(buildAppStartFrame()));
+        unawaited(
+          sendFrame(buildAppStartFrame(clientId: ClientIdStore.load())),
+        );
         if (attempts >= maxAttempts) {
           timer.cancel();
         }
@@ -3155,7 +3158,7 @@ class MeshCoreConnector extends ChangeNotifier {
       awaitingSelfInfo: _awaitingSelfInfo,
       syncing: syncing,
     )) {
-      unawaited(sendFrame(buildAppStartFrame()));
+      unawaited(sendFrame(buildAppStartFrame(clientId: ClientIdStore.load())));
       if (_appStartRetryAttempt < 5) _appStartRetryAttempt++;
     }
     _armAppStartRetry();
