@@ -2503,8 +2503,19 @@ class MeshCoreConnector extends ChangeNotifier {
     _maybeStartInitialChannelSync();
   }
 
+  /// Keep [BlockService]'s notion of "me" in sync with the connected node, so
+  /// it can refuse a self-block and self-heal one that already exists — the
+  /// union pull can land before self-info arrives, so healing matters (#250).
+  void _applySelfKeyToBlockService() {
+    final service = _blockService;
+    if (service == null) return;
+    final key = _selfPublicKey;
+    unawaited(service.setSelfKey(key == null ? null : pubKeyToHex(key)));
+  }
+
   void _resetConnectionHandshakeState() {
     _selfPublicKey = null;
+    _applySelfKeyToBlockService();
     _selfName = null;
     _selfLatitude = null;
     _selfLongitude = null;
@@ -2671,6 +2682,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _conversations.clear();
     _loadedConversationKeys.clear();
     _selfPublicKey = null;
+    _applySelfKeyToBlockService();
     _selfName = null;
     _selfLatitude = null;
     _selfLongitude = null;
@@ -4489,6 +4501,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _currentTxPower = reader.readInt8();
       _maxTxPower = reader.readInt8();
       _selfPublicKey = reader.readBytes(pubKeySize);
+      _applySelfKeyToBlockService();
       _selfLatitude = reader.readInt32LE() / 1000000.0;
       _selfLongitude = reader.readInt32LE() / 1000000.0;
       _multiAcks = reader.readByte();

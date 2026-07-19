@@ -22,6 +22,37 @@ class BlockService extends ChangeNotifier {
   /// (the pull side), so a synced key never echoes back to the radio.
   void Function(String keyHex, bool blocked)? firmwareSync;
 
+  String? _selfKeyHex;
+
+  /// The connected node's own public key, injected by the connector once it is
+  /// learned and cleared on disconnect. Blocking yourself silently hides your
+  /// own traffic with no way to see why, so every add path refuses it (#250).
+  String? get selfKeyHex => _selfKeyHex;
+
+  bool isSelf(String publicKeyHex) {
+    final self = _selfKeyHex;
+    return self != null && publicKeyHex.toLowerCase() == self;
+  }
+
+  /// Called by the connector when the self key is learned (or cleared). If the
+  /// self key is already stored — blocked before this guard existed, or pulled
+  /// in from the radio's list — drop it here and tell the radio to remove it.
+  Future<void> setSelfKey(String? publicKeyHex) async {
+    final key = publicKeyHex?.toLowerCase();
+    final normalized = (key == null || key.isEmpty) ? null : key;
+    final changed = normalized != _selfKeyHex;
+    _selfKeyHex = normalized;
+    // Heal even when the key is unchanged — a self-block can appear after the
+    // key is already known (a union pull racing self-info, or a stale store),
+    // and an unchanged-key early return would strand it.
+    final healed = normalized != null && _blockedKeys.remove(normalized);
+    if (healed) firmwareSync?.call(normalized, false);
+    if (changed || healed) notifyListeners();
+    // Everything above is synchronous, so a caller that doesn't await this
+    // still observes consistent state immediately; only the write is deferred.
+    if (healed) await _store.saveKeys(_blockedKeys);
+  }
+
   /// Load persisted state. Call once during app startup.
   Future<void> load() async {
     _blockedKeys
@@ -45,6 +76,7 @@ class BlockService extends ChangeNotifier {
 
   Future<void> block(String publicKeyHex) async {
     final key = publicKeyHex.toLowerCase();
+    if (isSelf(key)) return;
     if (!_blockedKeys.add(key)) return;
     await _store.saveKeys(_blockedKeys);
     firmwareSync?.call(key, true);
@@ -65,7 +97,11 @@ class BlockService extends ChangeNotifier {
   Future<void> importKeys(Iterable<String> keysHex) async {
     var changed = false;
     for (final k in keysHex) {
-      if (_blockedKeys.add(k.toLowerCase())) changed = true;
+      final key = k.toLowerCase();
+      // A self-block already pushed to the radio must not come back via the
+      // union pull (#250).
+      if (isSelf(key)) continue;
+      if (_blockedKeys.add(key)) changed = true;
     }
     if (!changed) return;
     await _store.saveKeys(_blockedKeys);
@@ -97,6 +133,13 @@ class BlockService extends ChangeNotifier {
     if (n.isEmpty || !_blockedNames.containsKey(n)) return;
     final key = publicKeyHex.toLowerCase();
     _blockedNames.remove(n);
+    // Your own name resolving to your own key must not promote into a
+    // self-block — drop the name block and stop (#250).
+    if (isSelf(key)) {
+      await _store.saveNames(_blockedNames);
+      notifyListeners();
+      return;
+    }
     final added = _blockedKeys.add(key);
     await _store.saveNames(_blockedNames);
     await _store.saveKeys(_blockedKeys);
