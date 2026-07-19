@@ -91,7 +91,16 @@ class _ChannelDrawerTile extends StatelessWidget {
         ),
       ),
       trailing: unread > 0 ? UnreadBadge(count: unread) : null,
-      onTap: onTap,
+      onTap: () {
+        // Close from here, not from the caller: this context is inside the
+        // Drawer, whereas a screen's State context sits above the Scaffold and
+        // would never resolve it. Pinned layouts have no drawer to close.
+        final scaffold = Scaffold.maybeOf(context);
+        if (scaffold?.isDrawerOpen ?? false) {
+          scaffold!.closeDrawer();
+        }
+        onTap();
+      },
     );
   }
 }

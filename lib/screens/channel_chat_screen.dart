@@ -314,10 +314,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   /// panel stays docked and only the chat area changes. The back stack is
   /// untouched, so system back still returns to the channel list.
   void _switchChannel(Channel channel) {
-    final scaffold = Scaffold.maybeOf(context);
-    if (scaffold?.isDrawerOpen ?? false) {
-      Navigator.pop(context);
-    }
+    // The drawer closes itself in ChannelDrawerList, which has a context
+    // inside it.
     if (channel.index == _currentChannel.index) return;
 
     final connector = context.read<MeshCoreConnector>();
