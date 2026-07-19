@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 
+import '../helpers/gif_helper.dart';
 import '../helpers/reaction_helper.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/platform_info.dart';
@@ -154,7 +155,7 @@ class NotificationService {
     if (reaction != null) {
       return 'Reacted ${reaction.emoji}';
     }
-    if (RegExp(r'^g:[A-Za-z0-9_-]+$').hasMatch(trimmed)) {
+    if (GifHelper.parseGif(trimmed) != null) {
       return 'Sent a GIF';
     }
     return text;
