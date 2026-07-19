@@ -1008,6 +1008,11 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String contacts_searchSensors(int number, String str) {
+    return 'Search $number$str Sensors...';
+  }
+
+  @override
   String get contacts_noUnreadContacts => 'Ne prebrani stiki.';
 
   @override
@@ -3860,6 +3865,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get listFilter_roomServers => 'Smeti za prostore';
+
+  @override
+  String get listFilter_sensors => 'Sensors';
 
   @override
   String get listFilter_unreadOnly => 'Nezbrani samo';

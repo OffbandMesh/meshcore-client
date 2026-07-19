@@ -1924,6 +1924,12 @@ abstract class AppLocalizations {
   /// **'Search {number}{str} Room servers...'**
   String contacts_searchRoomServers(int number, String str);
 
+  /// No description provided for @contacts_searchSensors.
+  ///
+  /// In en, this message translates to:
+  /// **'Search {number}{str} Sensors...'**
+  String contacts_searchSensors(int number, String str);
+
   /// No description provided for @contacts_noUnreadContacts.
   ///
   /// In en, this message translates to:
@@ -6709,6 +6715,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Room servers'**
   String get listFilter_roomServers;
+
+  /// No description provided for @listFilter_sensors.
+  ///
+  /// In en, this message translates to:
+  /// **'Sensors'**
+  String get listFilter_sensors;
 
   /// No description provided for @listFilter_unreadOnly.
   ///

@@ -353,6 +353,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           showUnreadOnly ? " ${context.l10n.contacts_unread}" : "",
         );
         break;
+      case ContactTypeFilter.sensors:
+        hintText = context.l10n.contacts_searchSensors(
+          filteredAndSorted.length,
+          showUnreadOnly ? " ${context.l10n.contacts_unread}" : "",
+        );
+        break;
     }
 
     return Column(
@@ -471,6 +477,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         return contact.type == advTypeRepeater;
       case ContactTypeFilter.rooms:
         return contact.type == advTypeRoom;
+      case ContactTypeFilter.sensors:
+        return contact.type == advTypeSensor;
       default:
         return false;
     }

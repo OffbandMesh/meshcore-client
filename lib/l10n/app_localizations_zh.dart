@@ -952,6 +952,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String contacts_searchSensors(int number, String str) {
+    return 'Search $number$str Sensors...';
+  }
+
+  @override
   String get contacts_noUnreadContacts => '没有未读内容';
 
   @override
@@ -3597,6 +3602,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get listFilter_roomServers => '房间服务器';
+
+  @override
+  String get listFilter_sensors => 'Sensors';
 
   @override
   String get listFilter_unreadOnly => '仅显示未读';
