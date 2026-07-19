@@ -496,9 +496,9 @@ class MeshCoreConnector extends ChangeNotifier {
   /// being sliced at, the resulting hop count, and the hop-grouped bytes.
   ///
   /// Captures previously logged only the byte length, which made it impossible
-  /// to tell a single 2-byte hop from two 1-byte hops — the exact question
-  /// #240/#279 turn on. One line, existing log sites only, no new per-frame
-  /// logging. (#298)
+  /// to tell a single 2-byte hop from two 1-byte hops. That is the exact
+  /// question #240/#279 turn on. One line, existing log sites only, no new
+  /// per-frame logging. (#298)
   String _pathDiag(List<int> pathBytes, int byteLen) {
     if (byteLen < 0) return 'flood';
     final w = _pathHashByteWidth;
