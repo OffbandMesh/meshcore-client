@@ -263,6 +263,46 @@ const int respCodeOffbandGps = 0xC1;
 /// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
+// --- Offband FEM LNA command (0xC3) — capability-gated. Heltec V4 external
+// FEM LNA control; firmware counterpart OffbandMesh/meshcore-firmware#298.
+//
+// Deliberately a fork-private command rather than an extra byte on the stock
+// CMD_SET_OTHER_PARAMS (38): that frame is shared with upstream MeshCore and is
+// sent to every radio regardless of fork, so widening it would perturb stock
+// firmware. Nothing here is emitted unless the capability bit is set. (#304)
+const int cmdOffbandFemLna = 0xC3;
+const int offbandFemLnaSet = 0x01;
+const int offbandFemLnaGet = 0x02;
+
+/// `0` = FEM LNA bypassed, `1` = enabled. Firmware default is enabled.
+const int femLnaBypass = 0x00;
+const int femLnaEnabled = 0x01;
+
+Uint8List buildOffbandFemLnaSetFrame(bool enabled) => Uint8List.fromList([
+  cmdOffbandFemLna,
+  offbandFemLnaSet,
+  enabled ? femLnaEnabled : femLnaBypass,
+]);
+
+Uint8List buildOffbandFemLnaGetFrame() =>
+    Uint8List.fromList([cmdOffbandFemLna, offbandFemLnaGet]);
+
+/// Reply to a `0xC3` request: `[0xC3][sub][value]`. A malformed request draws
+/// the generic `[respCodeErr][errCodeIllegalArg]` instead, which is NOT
+/// 0xC3-prefixed and so never reaches this parser.
+class OffbandFemLnaReply {
+  const OffbandFemLnaReply(this.subType, this.value);
+  final int subType;
+  final int value;
+
+  bool get enabled => value != femLnaBypass;
+}
+
+OffbandFemLnaReply? parseOffbandFemLnaReply(Uint8List frame) {
+  if (frame.length < 3 || frame[0] != cmdOffbandFemLna) return null;
+  return OffbandFemLnaReply(frame[1], frame[2]);
+}
+
 // --- Offband block command (0xC2) — capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
 const int cmdOffbandBlock = 0xC2;
@@ -318,6 +358,21 @@ bool firmwareSupportsOffbandGps(int? offbandCaps) => offbandCaps != null;
 /// presence-gate above, block requires the **explicit bit** set AND
 /// `FIRMWARE_VER_CODE >= 15`; absent → app-only mode (no sync, no firmware drop).
 const int offbandCapBlock = 0x02;
+
+/// `OFFBAND_CAP_FEM_LNA` bit (bit 2) in the `offband_caps` byte: this radio can
+/// control its external FEM LNA (firmware #298).
+///
+/// PROVISIONAL — firmware owns the caps byte and has not yet confirmed 0x04 as
+/// free. Do not ship against this without that confirmation (#304).
+///
+/// Gate on the BIT ONLY, never on model or version: firmware derives it at
+/// runtime from the auto-detected FEM chip (KCT8103L vs GC1109), so it is a
+/// per-unit answer — two Heltec V4s can legitimately disagree, and other
+/// FEM-bearing boards report false today.
+const int offbandCapFemLna = 0x04;
+
+bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
+    offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
 
 bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
