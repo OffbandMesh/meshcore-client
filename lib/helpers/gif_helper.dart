@@ -31,7 +31,14 @@ class GifHelper {
     final pageMatch = RegExp(
       r'^(?:https?:\/\/)?giphy\.com\/gifs\/(?:[^/?]*-)?([A-Za-z0-9_]+)\/?$',
     ).firstMatch(trimmed);
-    return pageMatch?.group(1);
+    if (pageMatch != null) {
+      return pageMatch.group(1);
+    }
+    // The CDN form people actually paste out of a browser. (#283)
+    final cdnMatch = RegExp(
+      r'^(?:https?:\/\/)?i\.giphy\.com\/([A-Za-z0-9_-]+)\.(?:gif|webp)$',
+    ).firstMatch(trimmed);
+    return cdnMatch?.group(1);
   }
 
   /// Encode a GIF as a Giphy page URL, a format parseGif() also parses.
@@ -42,5 +49,32 @@ class GifHelper {
   /// keeps rendering inline and legacy `g:<id>` payloads still decode. (#282)
   static String encodeGif(String gifId) {
     return 'https://giphy.com/gifs/$gifId';
+  }
+
+  /// Tenor's own CDN, the only Tenor form that is directly renderable.
+  ///
+  /// A `tenor.com/view/<slug>-<id>` page URL is deliberately NOT matched: the
+  /// modern CDN path uses an opaque hash that cannot be derived from the page
+  /// id, so resolving one needs the Tenor API. Such a link stays plain text
+  /// rather than silently rendering the wrong image. (#283)
+  static final RegExp _tenorMedia = RegExp(
+    r'^(?:https?:\/\/)?(?:media|c)\.tenor\.com\/[A-Za-z0-9_\-\/]+\.(?:gif|webp)$',
+  );
+
+  /// The URL that renders [text], or null if it is not a GIF we will display.
+  ///
+  /// Rendering is restricted to an allowlist of curated GIF platforms (Giphy
+  /// and Tenor). Anything off-list returns null and stays a plain tap-to-open
+  /// link: auto-fetching an arbitrary URL leaks the viewer's IP and enables
+  /// tracking-pixel abuse, and inline-rendering unmoderated hosts is a malware
+  /// and inappropriate-content vector. Widening the allowlist is a deliberate
+  /// decision, not a convenience. (#283)
+  static String? resolveGifUrl(String text) {
+    final gifId = parseGif(text);
+    if (gifId != null) {
+      return 'https://media.giphy.com/media/$gifId/giphy.gif';
+    }
+    final trimmed = text.trim().replaceFirst(RegExp(r'^@\[[^\]]+\]\s+'), '');
+    return _tenorMedia.hasMatch(trimmed) ? trimmed : null;
   }
 }
