@@ -83,13 +83,39 @@ class ContactFilterRail extends StatelessWidget {
     }
   }
 
+  /// Counts every filter in ONE pass over the contact list.
+  ///
+  /// The obvious shape (a `where().length` per row) walks the whole list once
+  /// per filter, so a 350-contact radio costs ~2100 iterations on every
+  /// MeshCoreConnector notification, and those arrive per packet during sync.
+  /// One pass keeps it at N, and the per-contact unread lookup is done at most
+  /// once rather than once per filter.
+  Map<ContactTypeFilter, int> _countsByFilter(
+    MeshCoreConnector connector,
+    bool unreadOnly,
+  ) {
+    final counts = {for (final f in _entries) f: 0};
+    for (final contact in connector.contacts) {
+      // Repeaters are exempt: unread is never tracked for them, so an
+      // unread-only view must not drop them from their own row's count.
+      final hasUnread =
+          !unreadOnly || connector.getUnreadCountForContact(contact) > 0;
+      for (final filter in _entries) {
+        if (!_matches(contact, filter)) continue;
+        if (unreadOnly && typeSupportsUnread(filter) && !hasUnread) continue;
+        counts[filter] = counts[filter]! + 1;
+      }
+    }
+    return counts;
+  }
+
   @override
   Widget build(BuildContext context) {
     final connector = context.watch<MeshCoreConnector>();
     final viewState = context.watch<UiViewStateService>();
     final selected = viewState.contactsTypeFilter;
     final unreadOnly = viewState.contactsShowUnreadOnly;
-    final contacts = connector.contacts;
+    final counts = _countsByFilter(connector, unreadOnly);
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -99,15 +125,7 @@ class ContactFilterRail extends StatelessWidget {
             icon: _icon(filter),
             label: _label(context, filter),
             selected: filter == selected,
-            // Count what the user would actually land on, so the number never
-            // disagrees with the list after tapping.
-            count: contacts.where((c) {
-              if (!_matches(c, filter)) return false;
-              if (unreadOnly && typeSupportsUnread(filter)) {
-                return connector.getUnreadCountForContact(c) > 0;
-              }
-              return true;
-            }).length,
+            count: counts[filter] ?? 0,
             onTap: () {
               final scaffold = Scaffold.maybeOf(context);
               if (scaffold?.isDrawerOpen ?? false) {

@@ -25,6 +25,13 @@ class ChannelDrawerList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // watch, deliberately. context.select cannot help here: `channels` is
+    // `List.unmodifiable(_channels)`, a fresh instance per call, and Dart lists
+    // have no value equality, so select would see a new object every
+    // notification and rebuild just as often. Selecting on `length` instead
+    // would go stale on a rename or reorder. The rebuild is cheap regardless:
+    // ListView.builder only builds visible tiles, and each tile isolates its
+    // own unread count with select.
     final channels = context.watch<MeshCoreConnector>().channels;
 
     if (channels.isEmpty) {
