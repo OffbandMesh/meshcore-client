@@ -418,12 +418,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildBatteryInfoRow(context, connector),
             if (connector.selfName != null)
               _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
-            if (connector.selfPublicKey != null)
+            if (connector.selfPublicKey != null) ...[
               _buildInfoRow(
                 l10n.settings_infoPublicKey,
                 pubKeyToHex(connector.selfPublicKey!),
                 copyValue: pubKeyToHex(connector.selfPublicKey!),
               ),
+              // #295: stores are keyed by the first 10 hex of the connected
+              // radio's public key, so switching radios silently swaps which
+              // history you are looking at. Surface the key that is in effect.
+              ...() {
+                final hex = pubKeyToHex(connector.selfPublicKey!);
+                final scope = hex.length > 10 ? hex.substring(0, 10) : hex;
+                if (scope.isEmpty) return <Widget>[];
+                return <Widget>[
+                  _buildInfoRow(
+                    l10n.settings_infoDataScope,
+                    scope,
+                    copyValue: scope,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      l10n.settings_infoDataScopeSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ];
+              }(),
+            ],
             _buildInfoRow(
               l10n.settings_infoContactsCount,
               '${connector.contacts.length}',

@@ -596,6 +596,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settings_infoPublicKey => 'Clave Pública';
 
   @override
+  String get settings_infoDataScope => 'Data scope';
+
+  @override
+  String get settings_infoDataScopeSubtitle =>
+      'Messages, contacts, and channels are stored per radio under this key';
+
+  @override
   String get settings_publicKeyCopied => 'Public key copied';
 
   @override
