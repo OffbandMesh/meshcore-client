@@ -22,6 +22,7 @@ import '../helpers/time_anomaly.dart';
 import '../helpers/cyr2lat.dart';
 import '../helpers/smaz.dart';
 import '../helpers/cayenne_lpp.dart';
+import '../helpers/path_helper.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/ble_debug_log_service.dart';
 import '../services/linux_ble_error_classifier.dart';
@@ -490,6 +491,23 @@ class MeshCoreConnector extends ChangeNotifier {
   int? get maxTxPower => _maxTxPower;
 
   int get pathHashByteWidth => _pathHashByteWidth;
+
+  /// Compact path rendering for logs: the raw byte length, the width it is
+  /// being sliced at, the resulting hop count, and the hop-grouped bytes.
+  ///
+  /// Captures previously logged only the byte length, which made it impossible
+  /// to tell a single 2-byte hop from two 1-byte hops — the exact question
+  /// #240/#279 turn on. One line, existing log sites only, no new per-frame
+  /// logging. (#298)
+  String _pathDiag(List<int> pathBytes, int byteLen) {
+    if (byteLen < 0) return 'flood';
+    final w = _pathHashByteWidth;
+    final hops = realHopCount(byteLen, w);
+    final bytes = pathBytes.isEmpty
+        ? 'none'
+        : PathHelper.formatPathHex(pathBytes, w);
+    return 'len=$byteLen w=$w hops=$hops [$bytes]';
+  }
 
   CompanionRadioStats? get latestRadioStats => _latestRadioStats;
 
@@ -4599,7 +4617,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _firmwareVersion = info.version;
     _deviceModel = info.model;
     _appDebugLogService?.info(
-      'Device info: ${infoStrings.isEmpty ? '(no strings)' : infoStrings.join(' · ')}',
+      'Device info: ${infoStrings.isEmpty ? '(no strings)' : infoStrings.join(' · ')}'
+      ' (frameLen=${frame.length})',
       tag: 'Device',
     );
 
@@ -4608,11 +4627,25 @@ class MeshCoreConnector extends ChangeNotifier {
       _clientRepeat = frame[80] != 0;
     }
     // Path hash mode v10+ (byte 81): width = mode + 1 byte(s) per hop
+    final priorPathHashByteWidth = _pathHashByteWidth;
     if (frame.length >= 82) {
       final mode = (frame[81] & 0xFF).clamp(0, 2);
       _pathHashByteWidth = mode + 1;
     } else {
       _pathHashByteWidth = 1;
+    }
+    // A short frame silently downgrades a known-good width to 1 (#240). Log the
+    // frame length and the before/after width so any capture shows whether that
+    // happened, without needing the device. (#298)
+    final widthChanged = _pathHashByteWidth != priorPathHashByteWidth;
+    final widthNote =
+        'Path hash width: $priorPathHashByteWidth -> $_pathHashByteWidth '
+        '(device-info frame len=${frame.length}'
+        '${frame.length < 82 ? ', SHORT: no byte 81, forced to 1' : ''})';
+    if (widthChanged) {
+      _appDebugLogService?.warn(widthNote, tag: 'Device');
+    } else {
+      _appDebugLogService?.info(widthNote, tag: 'Device');
     }
     // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
     // testable helper; offset verified against firmware (see parseOffbandCaps).
@@ -4918,7 +4951,7 @@ class MeshCoreConnector extends ChangeNotifier {
             : contact.lastMessageAt;
 
         appLogger.info(
-          'Refreshing contact ${contact.name}: devicePath=${contact.pathLength}, existingOverride=${existing.pathOverride}',
+          'Refreshing contact ${contact.name}: devicePath=${_pathDiag(contact.path, contact.pathLength)}, existingOverride=${existing.pathOverride}',
           tag: 'Connector',
         );
 
@@ -4933,7 +4966,7 @@ class MeshCoreConnector extends ChangeNotifier {
         );
 
         appLogger.info(
-          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
           tag: 'Connector',
         );
       } else {
@@ -4944,7 +4977,7 @@ class MeshCoreConnector extends ChangeNotifier {
             isContact) {
           _contacts.add(contact);
           appLogger.info(
-            'Added new contact ${contact.name}: pathLen=${contact.pathLength}',
+            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength)}',
             tag: 'Connector',
           );
         } else {
@@ -5032,7 +5065,7 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
         tag: 'Connector',
       );
     } else {
@@ -7154,7 +7187,7 @@ class MeshCoreConnector extends ChangeNotifier {
           : existing.lastMessageAt;
 
       appLogger.info(
-        'Refreshing contact ${existing.name}: devicePath=${existing.pathLength}, existingOverride=${existing.pathOverride}',
+        'Refreshing contact ${existing.name}: devicePath=${_pathDiag(existing.path, existing.pathLength)}, existingOverride=${existing.pathOverride}',
         tag: 'Connector',
       );
 
@@ -7180,7 +7213,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _updateDirectRepeater(_contacts[existingIndex], snr, path);
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
         tag: 'Connector',
       );
     }
