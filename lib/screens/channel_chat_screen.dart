@@ -642,8 +642,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final enableTracing = settingsService.settings.enableMessageTracing;
     final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     final isOutgoing = message.isOutgoing;
-    final gifId = GifHelper.parseGif(message.text);
-    final gifReplyName = gifId != null
+    final gifUrl = GifHelper.resolveGifUrl(message.text);
+    final gifReplyName = gifUrl != null
         ? TranslatedMessageContent.leadingReplyName(message.text)
         : null;
     final poi = parseMarkerText(message.text);
@@ -689,7 +689,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     ? (_) => _showMessageActions(message)
                     : null,
                 child: Container(
-                  padding: gifId != null
+                  padding: gifUrl != null
                       ? const EdgeInsets.all(4)
                       : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   constraints: BoxConstraints(
@@ -706,7 +706,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     children: [
                       if (!isOutgoing) ...[
                         Padding(
-                          padding: gifId != null
+                          padding: gifUrl != null
                               ? const EdgeInsets.only(
                                   left: 8,
                                   top: 4,
@@ -722,7 +722,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                             ),
                           ),
                         ),
-                        if (gifId == null) const SizedBox(height: 4),
+                        if (gifUrl == null) const SizedBox(height: 4),
                       ],
                       if (poi != null)
                         _buildPoiMessage(
@@ -732,7 +732,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                           textScale,
                           message.senderName,
                         )
-                      else if (gifId != null)
+                      else if (gifUrl != null)
                         Column(
                           crossAxisAlignment: isOutgoing
                               ? CrossAxisAlignment.end
@@ -752,8 +752,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: GifMessage(
-                                    url:
-                                        'https://media.giphy.com/media/$gifId/giphy.gif',
+                                    url: gifUrl,
                                     backgroundColor: Colors.transparent,
                                     fallbackTextColor: isOutgoing
                                         ? Theme.of(context)
@@ -797,7 +796,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       if (enableTracing && displayPath.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Padding(
-                          padding: gifId != null
+                          padding: gifUrl != null
                               ? const EdgeInsets.symmetric(horizontal: 8)
                               : EdgeInsets.zero,
                           child: Text(
@@ -1161,8 +1160,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 child: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _textController,
                   builder: (context, value, child) {
-                    final gifId = GifHelper.parseGif(value.text);
-                    if (gifId != null) {
+                    final gifUrl = GifHelper.resolveGifUrl(value.text);
+                    if (gifUrl != null) {
                       return Focus(
                         autofocus: true,
                         onKeyEvent: (node, event) {
@@ -1181,8 +1180,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: GifMessage(
-                                  url:
-                                      'https://media.giphy.com/media/$gifId/giphy.gif',
+                                  url: gifUrl,
                                   backgroundColor: Theme.of(
                                     context,
                                   ).colorScheme.surfaceContainerHighest,

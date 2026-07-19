@@ -621,8 +621,8 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _textController,
                 builder: (context, value, child) {
-                  final gifId = GifHelper.parseGif(value.text);
-                  if (gifId != null) {
+                  final gifUrl = GifHelper.resolveGifUrl(value.text);
+                  if (gifUrl != null) {
                     return Focus(
                       autofocus: true,
                       onKeyEvent: (node, event) {
@@ -641,8 +641,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: GifMessage(
-                                url:
-                                    'https://media.giphy.com/media/$gifId/giphy.gif',
+                                url: gifUrl,
                                 backgroundColor:
                                     colorScheme.surfaceContainerHighest,
                                 fallbackTextColor: colorScheme.onSurface
@@ -1866,7 +1865,7 @@ class _MessageBubble extends StatelessWidget {
     final enableTracing = settingsService.settings.enableMessageTracing;
     final isOutgoing = message.isOutgoing;
     final colorScheme = Theme.of(context).colorScheme;
-    final gifId = GifHelper.parseGif(message.text);
+    final gifUrl = GifHelper.resolveGifUrl(message.text);
     final poi = parseMarkerText(message.text);
     final isFailed = message.status == MessageStatus.failed;
     final bubbleColor = isFailed
@@ -1915,7 +1914,7 @@ class _MessageBubble extends StatelessWidget {
                 ],
                 Flexible(
                   child: Container(
-                    padding: gifId != null
+                    padding: gifUrl != null
                         ? const EdgeInsets.all(4)
                         : const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -1933,7 +1932,7 @@ class _MessageBubble extends StatelessWidget {
                       children: [
                         if (!isOutgoing) ...[
                           Padding(
-                            padding: gifId != null
+                            padding: gifUrl != null
                                 ? const EdgeInsets.only(
                                     left: 8,
                                     top: 4,
@@ -1949,7 +1948,7 @@ class _MessageBubble extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (gifId == null) const SizedBox(height: 4),
+                          if (gifUrl == null) const SizedBox(height: 4),
                         ],
                         if (poi != null)
                           _buildPoiMessage(
@@ -1974,14 +1973,13 @@ class _MessageBubble extends StatelessWidget {
                                   )
                                 : null,
                           )
-                        else if (gifId != null)
+                        else if (gifUrl != null)
                           Stack(
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: GifMessage(
-                                  url:
-                                      'https://media.giphy.com/media/$gifId/giphy.gif',
+                                  url: gifUrl,
                                   backgroundColor: Colors.transparent,
                                   fallbackTextColor: textColor.withValues(
                                     alpha: 0.7,
@@ -2053,7 +2051,7 @@ class _MessageBubble extends StatelessWidget {
                           if (isOutgoing && message.retryCount > 0) ...[
                             const SizedBox(height: 4),
                             Padding(
-                              padding: gifId != null
+                              padding: gifUrl != null
                                   ? const EdgeInsets.symmetric(horizontal: 8)
                                   : EdgeInsets.zero,
                               child: Text(
@@ -2074,7 +2072,7 @@ class _MessageBubble extends StatelessWidget {
                           ],
                           const SizedBox(height: 4),
                           Padding(
-                            padding: gifId != null
+                            padding: gifUrl != null
                                 ? const EdgeInsets.only(
                                     left: 8,
                                     right: 8,
