@@ -28,6 +28,7 @@ import '../widgets/list_filter_widget.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/blocked_badge.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/contact_filter_rail.dart';
 import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
@@ -324,6 +325,7 @@ class _ContactsScreenState extends State<ContactsScreen>
         onDestinationSelected: (index) => _handleQuickSwitch(index, context),
         contactsUnreadCount: connector.getTotalContactsUnreadCount(),
         channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
+        drawerContent: const ContactFilterRail(),
         appBar: AppBar(
           title: AppBarTitle(context.l10n.contacts_title),
           bottom: const SyncProgressAppBarBottom(),
