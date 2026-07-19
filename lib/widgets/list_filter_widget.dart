@@ -178,6 +178,11 @@ class ContactsFilterMenu extends StatelessWidget {
               checked: typeFilter == ContactTypeFilter.rooms,
             ),
             SortFilterMenuOption(
+              value: _TypeFilterAction(ContactTypeFilter.sensors),
+              label: l10n.listFilter_sensors,
+              checked: typeFilter == ContactTypeFilter.sensors,
+            ),
+            SortFilterMenuOption(
               value: const _ToggleUnreadAction(),
               label: l10n.listFilter_unreadOnly,
               checked: showUnreadOnly,

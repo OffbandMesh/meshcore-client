@@ -452,6 +452,17 @@
       }
     }
   },
+  "contacts_searchSensors": "Search {number}{str} Sensors...",
+  "@contacts_searchSensors": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "str": {
+        "type": "String"
+      }
+    }
+  },
   "contacts_noUnreadContacts": "No unread contacts",
   "contacts_noContactsFound": "No contacts or groups found",
   "contacts_deleteContact": "Delete Contact",
@@ -2132,6 +2143,7 @@
   "listFilter_users": "Users",
   "listFilter_repeaters": "Repeaters",
   "listFilter_roomServers": "Room servers",
+  "listFilter_sensors": "Sensors",
   "listFilter_unreadOnly": "Unread only",
   "listFilter_newGroup": "New group",
   "pathTrace_you": "You",

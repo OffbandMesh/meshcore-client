@@ -673,6 +673,14 @@ class _ContactsScreenState extends State<ContactsScreen>
               : "",
         );
         break;
+      case ContactTypeFilter.sensors:
+        hintText = context.l10n.contacts_searchSensors(
+          filteredAndSorted.length,
+          viewState.contactsShowUnreadOnly
+              ? " ${context.l10n.contacts_unread}"
+              : "",
+        );
+        break;
     }
 
     final groupsByName = <String, ContactGroup>{};
@@ -920,6 +928,8 @@ class _ContactsScreenState extends State<ContactsScreen>
         return contact.type == advTypeRepeater;
       case ContactTypeFilter.rooms:
         return contact.type == advTypeRoom;
+      case ContactTypeFilter.sensors:
+        return contact.type == advTypeSensor;
     }
   }
 

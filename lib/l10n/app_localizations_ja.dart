@@ -971,6 +971,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String contacts_searchSensors(int number, String str) {
+    return 'Search $number$str Sensors...';
+  }
+
+  @override
   String get contacts_noUnreadContacts => '未読の連絡先はありません';
 
   @override
@@ -3693,6 +3698,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get listFilter_roomServers => 'ルーム用サーバー';
+
+  @override
+  String get listFilter_sensors => 'Sensors';
 
   @override
   String get listFilter_unreadOnly => '未読のみ';

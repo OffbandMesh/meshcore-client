@@ -1023,6 +1023,11 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String contacts_searchSensors(int number, String str) {
+    return 'Search $number$str Sensors...';
+  }
+
+  @override
   String get contacts_noUnreadContacts => 'Nincs olvasatlan üzenetek';
 
   @override
@@ -3896,6 +3901,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get listFilter_roomServers => 'Szoba-szolgálatok';
+
+  @override
+  String get listFilter_sensors => 'Sensors';
 
   @override
   String get listFilter_unreadOnly => 'Csak olvasatlan';
