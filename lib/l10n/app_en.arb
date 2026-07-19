@@ -239,6 +239,8 @@
   "settings_infoOffbandCaps": "Offband capabilities",
   "settings_infoBattery": "Battery",
   "settings_infoPublicKey": "Public Key",
+  "settings_infoDataScope": "Data scope",
+  "settings_infoDataScopeSubtitle": "Messages, contacts, and channels are stored per radio under this key",
   "settings_publicKeyCopied": "Public key copied",
   "settings_infoContactsCount": "Contacts Count",
   "settings_infoChannelCount": "Channel Count",

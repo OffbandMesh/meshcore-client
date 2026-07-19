@@ -1192,6 +1192,18 @@ abstract class AppLocalizations {
   /// **'Public Key'**
   String get settings_infoPublicKey;
 
+  /// No description provided for @settings_infoDataScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Data scope'**
+  String get settings_infoDataScope;
+
+  /// No description provided for @settings_infoDataScopeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages, contacts, and channels are stored per radio under this key'**
+  String get settings_infoDataScopeSubtitle;
+
   /// No description provided for @settings_publicKeyCopied.
   ///
   /// In en, this message translates to:
