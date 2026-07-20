@@ -49,9 +49,12 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
+      # Pinned to the bench toolchain, matching every other workflow (#331).
+      # A release artifact in particular must not be built by whatever
+      # version `stable` happens to point at on the day.
       - uses: subosito/flutter-action@v2
         with:
-          channel: "stable"
+          flutter-version: "3.44.1"
           cache: true
 
       - name: Cache Gradle
@@ -98,11 +101,18 @@ jobs:
 
       - run: flutter pub get
 
+      # Same mechanism as build.yml (#331). A signed release that shipped
+      # without the Giphy key would have a dead GIF picker.
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+
       - name: Build signed APK
-        run: flutter build apk --release --no-pub
+        run: flutter build apk --release --no-pub --dart-define-from-file=dart_defines.json
 
       - name: Build signed AAB
-        run: flutter build appbundle --release --no-pub
+        run: flutter build appbundle --release --no-pub --dart-define-from-file=dart_defines.json
 
       # The load-bearing check. A green build does NOT prove the artifact is
       # release-signed: build.gradle.kts silently falls back to the debug
@@ -179,5 +189,5 @@ jobs:
       - name: Remove keystore material
         if: always()
         run: |
-          rm -f android/app/release.jks android/key.properties
-          echo "Keystore material removed."
+          rm -f android/app/release.jks android/key.properties dart_defines.json
+          echo "Keystore material and dart_defines removed."
