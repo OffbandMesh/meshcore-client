@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/l10n.dart';
 import '../services/ui_view_state_service.dart';
+import '../utils/app_backgrounder.dart';
 import 'quick_switch_bar.dart';
 
 /// Shared shell for the primary views (Contacts / Channels / Map).
@@ -69,8 +69,8 @@ class _AppShellState extends State<AppShell> {
   /// System back, in priority order:
   ///   1. an open drawer closes,
   ///   2. on a detail screen, pop back to the list it came from,
-  ///   3. on a primary view, hand back to the OS so Android returns to the
-  ///      home screen or the previous app.
+  ///   3. on a primary view, send the app to the background so Android
+  ///      returns to the home screen or the previous app.
   ///
   /// Step 3 must NOT pop, even though the route below can be popped. The
   /// primary views sit on top of the scanner, so popping would dump a
@@ -79,7 +79,7 @@ class _AppShellState extends State<AppShell> {
   ///
   /// A primary view is one carrying the bottom bar; a detail screen (a channel
   /// chat) has no [selectedIndex] and is genuinely pushed.
-  void _handleBack() {
+  Future<void> _handleBack() async {
     final scaffold = _scaffoldKey.currentState;
     if (scaffold?.isDrawerOpen ?? false) {
       scaffold!.closeDrawer();
@@ -92,7 +92,11 @@ class _AppShellState extends State<AppShell> {
       navigator.pop();
       return;
     }
-    SystemNavigator.pop();
+
+    // Background, do NOT finish. SystemNavigator.pop() would call finish() on
+    // the activity, tearing down the Flutter engine and dropping the radio
+    // connection, so reopening the app would show a disconnected radio.
+    await AppBackgrounder.moveToBackground();
   }
 
   @override
