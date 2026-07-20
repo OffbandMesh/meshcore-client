@@ -1,0 +1,285 @@
+name: Release (signed, all platforms)
+
+# Produces a COMPLETE, published release from a `v*` tag: signed Android APK +
+# AAB, Windows, and Linux, attached to a GitHub release whose body is the
+# human-authored release notes. This is what makes a partial release (the
+# rc.2/rc.3 failure) impossible.
+#
+# SECURITY: this repo is PUBLIC and the `android` job has the signing keystore,
+# the single most irreplaceable credential in the project. If it leaks the app
+# can never be updated again on any channel.
+#
+#   - NEVER add a `pull_request` trigger. A PR (incl. from a fork) must never
+#     run a job that can read the keystore.
+#   - Only the `android` job references the `release-signing` Environment, so
+#     ONLY it receives the keystore secrets, and only after the required
+#     reviewer approves. The windows/linux/release jobs never see them.
+#   - Keystore written to disk only for the build, deleted with `if: always()`.
+#   - Signing values passed via env:, never on a command line, never echoed.
+#
+# Debug-signed artifacts for day-to-day PR testing still come from build.yml
+# and are unaffected. See #330 / #342, epic #312.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap backstop: the same gate that runs on the cut PR, re-run here so a tag
+  # can never publish without the four release texts. Fails in seconds, before
+  # any expensive build.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release-notes gate
+        run: bash .github/scripts/release-gate.sh
+
+  android:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: release-signing   # required-reviewer gate; do not remove
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle', 'android/settings.gradle', 'android/app/build.gradle', 'pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # PKCS12 keystore (despite the .jks extension) has one password for both
+      # store and key. See #330.
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ]; then
+            echo "::error::Signing secrets are not available to this run."
+            exit 1
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > android/app/release.jks
+          SIZE=$(stat -c%s android/app/release.jks)
+          if [ "${SIZE}" -lt 1000 ]; then
+            echo "::error::Decoded keystore is ${SIZE} bytes; expected ~2.8 KB. Secret is malformed."
+            exit 1
+          fi
+          umask 077
+          cat > android/key.properties <<'PROPS'
+          storeFile=release.jks
+          keyAlias=meshcore
+          PROPS
+          {
+            printf 'storePassword=%s\n' "${KEYSTORE_PASSWORD}"
+            printf 'keyPassword=%s\n' "${KEYSTORE_PASSWORD}"
+          } >> android/key.properties
+          echo "Keystore decoded (${SIZE} bytes), key.properties written."
+
+      - run: flutter pub get
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - name: Build signed APK
+        run: flutter build apk --release --no-pub --dart-define-from-file=dart_defines.json
+      - name: Build signed AAB
+        run: flutter build appbundle --release --no-pub --dart-define-from-file=dart_defines.json
+
+      # A green build does NOT prove release signing: build.gradle.kts silently
+      # falls back to the debug config when key.properties is absent (#111). Read
+      # the cert off the APK and fail on the debug key or any mismatch.
+      - name: Verify APK signing certificate
+        env:
+          EXPECTED_SHA256: e7da8cd5bf22ac3eda7cb954b8b120a18b6c4382d1b6e6fdd204ddedddaf5488
+        run: |
+          set -eu
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          BUILD_TOOLS=$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)
+          CERTS=$("${BUILD_TOOLS}/apksigner" verify --print-certs "${APK}")
+          if echo "${CERTS}" | grep -qi "CN=Android Debug"; then
+            echo "::error::APK is DEBUG-SIGNED. key.properties not picked up; see #111."
+            exit 1
+          fi
+          ACTUAL=$(echo "${CERTS}" | grep -i "Signer #1 certificate SHA-256 digest" | head -1 | awk -F': ' '{print $2}' | tr -d '[:space:]')
+          if [ "${ACTUAL}" != "${EXPECTED_SHA256}" ]; then
+            echo "::error::Signing cert MISMATCH. expected ${EXPECTED_SHA256} actual ${ACTUAL}"
+            exit 1
+          fi
+          echo "APK signing certificate verified: ${ACTUAL}"
+
+      # The AAB is the artifact that goes to Play, so verify IT directly rather
+      # than trusting the APK as a proxy. apksigner cannot read an AAB; keytool
+      # can, and reports the same SHA-256 fingerprint. Same pin as the APK.
+      # (Gemini review, #342.)
+      - name: Verify AAB signing certificate
+        env:
+          EXPECTED_SHA256: e7da8cd5bf22ac3eda7cb954b8b120a18b6c4382d1b6e6fdd204ddedddaf5488
+        run: |
+          set -eu
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          # keytool comes from the JDK that setup-java put on PATH in this job.
+          AAB_SHA=$(keytool -printcert -jarfile "${AAB}" \
+            | grep -i 'SHA256:' | head -1 \
+            | sed 's/.*SHA256:[[:space:]]*//' | tr -d ': ' | tr 'A-F' 'a-f')
+          if [ -z "${AAB_SHA}" ]; then
+            echo "::error::Could not read a SHA-256 from the AAB signing cert."
+            exit 1
+          fi
+          if [ "${AAB_SHA}" != "${EXPECTED_SHA256}" ]; then
+            echo "::error::AAB signing cert MISMATCH. expected ${EXPECTED_SHA256} actual ${AAB_SHA}"
+            echo "::error::This AAB would be rejected by Play App Signing or break cross-channel updates."
+            exit 1
+          fi
+          echo "AAB signing certificate verified: ${AAB_SHA}"
+
+      - name: Stage signed artifacts
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/
+          cp build/app/outputs/bundle/release/app-release.aab dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove keystore material
+        if: always()
+        run: |
+          rm -f android/app/release.jks android/key.properties dart_defines.json
+          echo "Keystore material removed."
+
+  windows:
+    needs: gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - run: flutter pub get
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: |
+          @{ GIPHY_API_KEY = $env:GIPHY_API_KEY } | ConvertTo-Json -Compress |
+            Set-Content -Path dart_defines.json -Encoding utf8 -NoNewline
+      - run: flutter build windows --release --no-pub --dart-define-from-file=dart_defines.json
+      - name: Zip Windows build
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath offband-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: offband-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - name: Install Linux build deps
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
+      - run: flutter pub get
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - run: flutter build linux --release --no-pub --dart-define-from-file=dart_defines.json
+      - name: Tar Linux bundle
+        run: tar -czf offband-linux-x64.tar.gz -C build/linux/x64/release/bundle .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: offband-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  # Creates the release ONLY after all platform builds (and the signing cert
+  # check) have passed, so a signing failure yields no release rather than an
+  # empty one. Published directly: the notes were reviewed in the cut PR.
+  release:
+    needs: [android, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release + upload assets
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version + notes
+        id: v
+        run: |
+          set -eu
+          VERSION=$(grep -E '^version:' pubspec.yaml | head -1 | sed 's/version:[[:space:]]*//' | sed 's/+.*//' | tr -d '[:space:]')
+          NOTES="release-notes/${VERSION}.md"
+          test -s "${NOTES}" || { echo "::error::${NOTES} missing at release time"; exit 1; }
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "notes=${NOTES}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+      - name: Collect assets
+        run: |
+          mkdir -p out
+          cp incoming/release-android/* out/
+          cp incoming/release-windows/* out/
+          cp incoming/release-linux/* out/
+          echo "Assets for the release:"
+          ls -la out/
+      # Draft-first so publication is ATOMIC: the release is not visible to
+      # anyone until every asset is uploaded. Creating-then-uploading would
+      # leave a public release with missing assets if an upload stalls or the
+      # runner dies mid-way — the exact partial-release failure this pipeline
+      # exists to prevent. `gh release create --help` documents this pattern.
+      # The final `--draft=false` is applied in BOTH branches so a run retried
+      # after a mid-way death still ends published, never stuck as a draft.
+      - name: Create GitHub release (draft → upload → publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.v.outputs.notes }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -eu
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            # Retry / re-run: refresh assets and notes, then ensure published.
+            gh release upload "${TAG}" out/* --clobber
+            gh release edit "${TAG}" --notes-file "${NOTES}" --prerelease --draft=false
+          else
+            gh release create "${TAG}" \
+              --draft \
+              --title "Offband Meshcore ${VERSION}" \
+              --notes-file "${NOTES}" \
+              --prerelease
+            gh release upload "${TAG}" out/*
+            gh release edit "${TAG}" --draft=false
+          fi
+          echo "Release ${TAG} published with $(ls out | wc -l) assets."

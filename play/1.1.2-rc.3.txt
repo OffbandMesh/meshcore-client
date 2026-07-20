@@ -1,0 +1,9 @@
+What's new in 1.1.2-rc.3
+
+- Block or mute contacts and channel senders, with a Blocked management screen
+- Per-channel notifications: all, mentions only, or muted
+- Better path tracing and mesh topology readout
+- Share and add channels by QR code
+- Fix: USB no longer wedges some ESP32 boards on connect
+- Fix: messages to a blocked contact are no longer sent
+- More radios report GPS position reliably

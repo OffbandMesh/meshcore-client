@@ -2,6 +2,51 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.1.2-rc.3] - 2026-07-17
+
+Combined entry for rc.2 (versionCode 59) and rc.3 (versionCode 60). Both shipped
+to the Play closed test with only a version bump; this backfills the changelog
+they should have carried.
+
+### Added
+- Block / mute system: block a contact or a channel sender from contacts, DMs,
+  discovery, or a channel message; blocked DMs and adverts are suppressed with a
+  visible marker, and a name-only block promotes to the sender's public key on
+  the next advert or DM and ages out after 30 days. Managed from Settings →
+  Blocked. Synced to firmware on connect where the radio supports it (#168–#180,
+  #172–#174, #169, #170).
+- Per-channel notification modes: a 3-way selector (all / mentions / mute) on the
+  Channels screen, applied at the notification gate and stored keyed to the
+  channel PSK (#260, #261, #262).
+- Path trace and topology: width-matched path tracing, a topology service and
+  readout, RX ingestion, and a route-builder UX that groups hops by hash width
+  rather than raw bytes (#150, #186, #156, #155, #224).
+- Channel QR: share a channel as a scannable QR and scan one to add it, unified
+  with the community scanner and using the reference-app format (#163).
+- Own device public key is now full, selectable, and one-tap copyable (#234).
+- Reply-to chip shown above a reply-gif, with inline `@[Name]` mention chips
+  (#235).
+- GPS refresh falls back to stock-firmware self-telemetry when the fork-specific
+  query is unavailable, chosen by firmware capability (#123).
+- Queue-sync diagnostics: a file log of queue-drain activity plus a manual
+  force-drain action (#51).
+
+### Fixed
+- USB open no longer wedges ESP32-C6 boards: the DTR open pulse is gated by USB
+  vendor ID, so it fires only for nRF52 reconnect and is skipped for chips it
+  would reset into ROM download mode (#248).
+- Outgoing DMs to a blocked contact are dropped at the send path (#252).
+- Contact path-length byte decodes at the device's hash width instead of being
+  read as a raw byte count (#224).
+- Stale channel slot history is cleared on channel reassignment, and the message
+  store's device-key scope is aligned (#193, #194).
+- Enter selects the highlighted emoji or mention in autocomplete (#238).
+- Manual path entry honors the configured path-hash width (#155).
+
+### Changed
+- The fork-only GPS query is gated on firmware capability, so stock and
+  non-Offband radios degrade gracefully instead of erroring (#123, #144).
+
 ## [1.1.2-rc.1] - 2026-06-28
 
 ### Added
