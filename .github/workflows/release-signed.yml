@@ -118,11 +118,23 @@ jobs:
           APK=build/app/outputs/flutter-apk/app-release.apk
           BUILD_TOOLS=$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)
           CERTS=$("${BUILD_TOOLS}/apksigner" verify --print-certs "${APK}")
+          echo "--- apksigner --print-certs output ---"
+          echo "${CERTS}"
+          echo "--------------------------------------"
           if echo "${CERTS}" | grep -qi "CN=Android Debug"; then
             echo "::error::APK is DEBUG-SIGNED. key.properties not picked up; see #111."
             exit 1
           fi
-          ACTUAL=$(echo "${CERTS}" | grep -i "Signer #1 certificate SHA-256 digest" | head -1 | awk -F': ' '{print $2}' | tr -d '[:space:]')
+          # Extract the fingerprint by shape, not by label: only the cert's
+          # SHA-256 digest is 64 hex chars (SHA-1 is 40, MD5 is 32), so this is
+          # unambiguous and independent of how a given apksigner version phrases
+          # the line. The label-based awk parse broke on the runner's apksigner
+          # (#345 first live run: label differed, ACTUAL came back empty).
+          ACTUAL=$(echo "${CERTS}" | grep -ioE '[0-9a-f]{64}' | head -1 | tr 'A-F' 'a-f')
+          if [ -z "${ACTUAL}" ]; then
+            echo "::error::Could not read a SHA-256 fingerprint from the APK (see output above)."
+            exit 1
+          fi
           if [ "${ACTUAL}" != "${EXPECTED_SHA256}" ]; then
             echo "::error::Signing cert MISMATCH. expected ${EXPECTED_SHA256} actual ${ACTUAL}"
             exit 1
@@ -140,11 +152,15 @@ jobs:
           set -eu
           AAB=build/app/outputs/bundle/release/app-release.aab
           # keytool comes from the JDK that setup-java put on PATH in this job.
+          echo "--- keytool -printcert -jarfile output ---"
+          keytool -printcert -jarfile "${AAB}" | grep -iE 'Owner|SHA256' || true
+          echo "------------------------------------------"
+          # Strip the label, keep only hex (robust to spacing/case), lowercase.
           AAB_SHA=$(keytool -printcert -jarfile "${AAB}" \
             | grep -i 'SHA256:' | head -1 \
-            | sed 's/.*SHA256:[[:space:]]*//' | tr -d ': ' | tr 'A-F' 'a-f')
+            | sed 's/.*SHA256://' | tr -cd '0-9a-fA-F' | tr 'A-F' 'a-f')
           if [ -z "${AAB_SHA}" ]; then
-            echo "::error::Could not read a SHA-256 from the AAB signing cert."
+            echo "::error::Could not read a SHA-256 from the AAB signing cert (see output above)."
             exit 1
           fi
           if [ "${AAB_SHA}" != "${EXPECTED_SHA256}" ]; then
