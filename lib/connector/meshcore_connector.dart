@@ -5101,6 +5101,28 @@ class MeshCoreConnector extends ChangeNotifier {
     return physicsMax;
   }
 
+  /// Coalesces notifications during a bulk contact pull.
+  ///
+  /// Outside a pull this notifies immediately, preserving live-update
+  /// behaviour for adverts arriving one at a time.
+  DateTime? _lastContactPullNotify;
+  static const Duration _contactPullNotifyInterval = Duration(
+    milliseconds: 250,
+  );
+
+  void _notifyContactPullThrottled() {
+    if (!_isLoadingContacts) {
+      notifyListeners();
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastContactPullNotify;
+    if (last == null || now.difference(last) >= _contactPullNotifyInterval) {
+      _lastContactPullNotify = now;
+      notifyListeners();
+    }
+  }
+
   void _handleContact(Uint8List frame, {bool isContact = true}) {
     final contactTmp = Contact.fromFrame(frame);
     if (contactTmp != null) {
@@ -5188,7 +5210,14 @@ class MeshCoreConnector extends ChangeNotifier {
         _pathHistoryService!.handlePathUpdated(contact);
       }
 
-      notifyListeners();
+      // During a bulk pull this fired once per contact, and each notification
+      // is a synchronous full-tree rebuild that itself walks the contact list.
+      // Measured at ~19ms per contact, which never tripped a per-call slow
+      // threshold but dominated total isolate time. The channel handler
+      // already guards its notify with _isLoadingChannels; this is the same
+      // guard, throttled rather than suppressed so the sync progress bar still
+      // advances while the pull runs.
+      _notifyContactPullThrottled();
 
       // Show notification for new contact (advertisement)
       if (isNewContact && _appSettingsService != null) {
