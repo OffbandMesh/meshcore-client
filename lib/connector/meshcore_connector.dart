@@ -3192,11 +3192,15 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Pushes a path to the device. [hopCount] is a HOP count and [hashWidth] the
+  /// bytes per hop hash; both are needed because the wire path_len byte packs
+  /// them together, and sending a bare count mislabels the width. (#309)
   Future<void> setContactPath(
     Contact contact,
     Uint8List customPath,
-    int pathLen,
-  ) async {
+    int hopCount, {
+    int hashWidth = 1,
+  }) async {
     // Serialize path operations to prevent interleaved async calls from
     // leaving in-memory state inconsistent with the device.
     final prev = _pathOpLock;
@@ -3210,7 +3214,8 @@ class MeshCoreConnector extends ChangeNotifier {
         buildUpdateContactPathFrame(
           contact.publicKey,
           customPath,
-          pathLen,
+          hopCount,
+          hashWidth: hashWidth,
           type: contact.type,
           flags: contact.flags,
           name: contact.name,
@@ -3225,8 +3230,12 @@ class MeshCoreConnector extends ChangeNotifier {
         (c) => c.publicKeyHex == contact.publicKeyHex,
       );
       if (idx != -1) {
+        // pathLength is a HOP count. This wrote customPath.length (a BYTE
+        // count), which silently redefined the field's unit after any path
+        // set and doubled it at 2-byte width. (#309)
         _contacts[idx] = _contacts[idx].copyWith(
-          pathLength: customPath.length,
+          pathLength: hopCount,
+          pathHashWidth: hashWidth,
           path: customPath,
         );
         notifyListeners();
@@ -3272,6 +3281,7 @@ class MeshCoreConnector extends ChangeNotifier {
         latestContact.publicKey,
         latestContact.path,
         latestContact.pathLength,
+        hashWidth: latestContact.pathHashWidth,
         type: latestContact.type,
         flags: updatedFlags,
         name: latestContact.name,
@@ -3615,6 +3625,7 @@ class MeshCoreConnector extends ChangeNotifier {
         contact.publicKey,
         contact.path,
         contact.pathLength,
+        hashWidth: contact.pathHashWidth,
         type: contact.type,
         flags: contact.flags,
         name: contact.name,

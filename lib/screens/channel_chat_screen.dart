@@ -1530,8 +1530,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   Widget _buildHopBadge(BuildContext context, ChannelMessage message) {
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
-    final hops = realHopCount(message.hopCount, hashWidth) ?? 0;
+    // message.hopCount is already a hop count (path-len low 6 bits). It used to
+    // be divided by the device width, which halved it at 2-byte width. (#309)
+    final hops = message.hopCount ?? 0;
     final color = Theme.of(context).brightness == Brightness.dark
         ? Colors.grey[400]
         : Colors.grey[600];
