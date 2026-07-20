@@ -236,6 +236,7 @@
   "settings_infoStatus": "Status",
   "settings_infoFirmware": "Firmware",
   "settings_infoModel": "Model",
+  "settings_infoOffbandCaps": "Offband capabilities",
   "settings_infoBattery": "Battery",
   "settings_infoPublicKey": "Public Key",
   "settings_publicKeyCopied": "Public key copied",

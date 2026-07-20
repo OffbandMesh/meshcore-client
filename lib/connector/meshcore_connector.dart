@@ -4731,6 +4731,16 @@ class MeshCoreConnector extends ChangeNotifier {
     // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
     // read on connect — a 0xC3 GET is only the fallback.
     _femLnaEnabled = parseFemLnaState(frame);
+    // Capability-gated features are invisible when a bit is clear, which looks
+    // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
+    // be told apart from "this radio says it can't". (#304)
+    _appDebugLogService?.info(
+      'Offband caps=0x${(_offbandCaps ?? 0).toRadixString(16).padLeft(2, '0')} '
+      'verCode=${_firmwareVerCode ?? 0} frameLen=${frame.length} '
+      'femLnaByte=${_femLnaEnabled == null ? 'absent' : (_femLnaEnabled! ? '1' : '0')} '
+      'femCapable=$supportsOffbandFemLna blockCapable=$supportsOffbandBlock',
+      tag: 'Device',
+    );
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
