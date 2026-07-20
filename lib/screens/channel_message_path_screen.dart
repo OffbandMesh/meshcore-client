@@ -43,9 +43,11 @@ class ChannelMessagePathScreen extends StatelessWidget {
         final hashWidth = connector.pathHashByteWidth;
         final hops = _buildPathHops(primaryPath, connector, l10n, hashWidth);
         final hasHopDetails = primaryPath.isNotEmpty;
+        // Observed = bytes we hold / this path's width. Claimed = the hop count
+        // the path-len byte already carries; dividing it again halved it. (#309)
         final observedLabel = _formatObservedHops(
-          primaryPath.length ~/ hashWidth,
-          realHopCount(message.hopCount, hashWidth),
+          primaryPath.length ~/ message.pathHashSize,
+          message.hopCount,
           l10n,
         );
         final extraPaths = _otherPaths(primaryPath, message.pathVariants);
@@ -121,7 +123,6 @@ class ChannelMessagePathScreen extends StatelessWidget {
 
   Widget _buildSummaryCard(BuildContext context, {String? observedLabel}) {
     final l10n = context.l10n;
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -145,7 +146,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
               ),
             _buildDetailRow(
               l10n.channelPath_pathLabelTitle,
-              _formatPathLabel(realHopCount(message.hopCount, hashWidth), l10n),
+              _formatPathLabel(message.hopCount, l10n),
             ),
             if (observedLabel != null)
               _buildDetailRow(l10n.channelPath_observedLabel, observedLabel),

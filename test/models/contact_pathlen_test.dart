@@ -46,18 +46,37 @@ void main() {
       expect(c.path, [0xAA, 0xBB, 0xCC]);
     });
 
-    test('2-byte-mode multi-hop (0x44) decodes to 4 bytes, not flood', () {
-      // High bits = mode-1 hint, low bits = 4 bytes = a 2-hop path at 2-byte
-      // width. Pre-#222 the raw 68 (> maxPathSize) was mis-flagged as flood.
+    test('2-byte-mode 2-hop (0x42) keeps all FOUR bytes (#309)', () {
+      // 0x42 = size 2, count 2 -> 2 hops occupying 2*2 = 4 bytes.
+      //
+      // Pre-#309 the low 6 bits were read as a byte count, so this kept only
+      // the first 2 bytes and silently discarded the second hop. That is the
+      // truncation behind #240's failed repeater logins.
       final c = Contact.fromFrame(
-        _frame(pathLen: 0x44, pathBytes: [1, 2, 3, 4]),
+        _frame(pathLen: 0x42, pathBytes: [0xC6, 0x5C, 0xA1, 0xB2]),
       )!;
-      expect(c.pathLength, 4);
-      expect(c.path, [1, 2, 3, 4]);
-      expect(
-        realHopCount(c.pathLength, 2),
-        2,
-      ); // 4 bytes / 2-byte width = 2 hops
+      expect(c.pathLength, 2); // HOPS, not bytes
+      expect(c.pathHashWidth, 2);
+      expect(c.path, [0xC6, 0x5C, 0xA1, 0xB2]); // all 4 bytes retained
+    });
+
+    test('2-byte-mode single hop (0x41) is 1 hop of 2 bytes (#309)', () {
+      // Bandit's C65C case: ONE hop, previously surfaced as "2 hops".
+      final c = Contact.fromFrame(
+        _frame(pathLen: 0x41, pathBytes: [0xC6, 0x5C]),
+      )!;
+      expect(c.pathLength, 1);
+      expect(c.pathHashWidth, 2);
+      expect(c.path, [0xC6, 0x5C]);
+    });
+
+    test('3-byte-mode 2-hop (0x82) keeps six bytes (#309)', () {
+      final c = Contact.fromFrame(
+        _frame(pathLen: 0x82, pathBytes: [1, 2, 3, 4, 5, 6]),
+      )!;
+      expect(c.pathLength, 2);
+      expect(c.pathHashWidth, 3);
+      expect(c.path, [1, 2, 3, 4, 5, 6]);
     });
 
     test('flood sentinel (0xFF) stays -1, empty path', () {

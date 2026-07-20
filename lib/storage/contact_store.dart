@@ -67,6 +67,7 @@ class ContactStore {
       'type': contact.type,
       'flags': contact.flags,
       'pathLength': contact.pathLength,
+      'pathHashWidth': contact.pathHashWidth,
       'path': base64Encode(contact.path),
       'pathOverride': contact.pathOverride,
       'pathOverrideBytes': contact.pathOverrideBytes != null
@@ -88,13 +89,31 @@ class ContactStore {
     final lastSeenMs = json['lastSeen'] as int? ?? 0;
     final lastMessageMs = json['lastMessageAt'] as int?;
     final lastModifiedMs = json['lastModified'] as int?;
+    final isLegacyPathRecord =
+        !json.containsKey('pathHashWidth') &&
+        ((json['pathLength'] as int? ?? -1) > 0);
+    if (isLegacyPathRecord) {
+      appLogger.info(
+        'Dropping pre-#309 path for contact ${json['name']} '
+        '(decoded with the old count-as-bytes rule, so truncated); '
+        'reverting to flood until the device re-supplies it',
+      );
+    }
     return Contact(
       publicKey: Uint8List.fromList(base64Decode(json['publicKey'] as String)),
       name: json['name'] as String? ?? 'Unknown',
       type: json['type'] as int? ?? 0,
       flags: json['flags'] as int? ?? 0,
-      pathLength: json['pathLength'] as int? ?? -1,
-      path: json['path'] != null
+      // Records written before #309 have no 'pathHashWidth' and their path was
+      // decoded with the old count-as-bytes rule, so at any width above 1 the
+      // stored bytes are a truncated fragment. Truncated bytes cannot be
+      // recovered by reinterpreting them, so a legacy record's path is dropped
+      // and the contact reverts to flood until the radio re-supplies it (the
+      // device refreshes contacts routinely, so this self-heals). Ben's call:
+      // re-fetch rather than keep a path we know is wrong. (#309)
+      pathLength: isLegacyPathRecord ? -1 : (json['pathLength'] as int? ?? -1),
+      pathHashWidth: json['pathHashWidth'] as int? ?? 1,
+      path: (!isLegacyPathRecord && json['path'] != null)
           ? Uint8List.fromList(base64Decode(json['path'] as String))
           : Uint8List(0),
       pathOverride: json['pathOverride'] as int?,
