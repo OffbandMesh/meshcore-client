@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../utils/app_logger.dart';
 import '../prefs_manager.dart';
 import 'offband_database.dart';
@@ -19,10 +21,19 @@ class BlobStore {
   final OffbandDatabase _db;
 
   static OffbandDatabase? _sharedDb;
+  static BlobStore? _override;
 
   /// Process-wide instance. The database must be opened once; opening it twice
   /// is an error on the web backends.
-  static BlobStore get instance => BlobStore(_sharedDb ??= OffbandDatabase());
+  static BlobStore get instance =>
+      _override ?? BlobStore(_sharedDb ??= OffbandDatabase());
+
+  /// Test seam: point the singleton at an in-memory database.
+  @visibleForTesting
+  static void overrideForTest(BlobStore store) => _override = store;
+
+  @visibleForTesting
+  static void clearTestOverride() => _override = null;
 
   /// Key families that hold bulk data. Everything else stays in
   /// SharedPreferences, which is what it is for.

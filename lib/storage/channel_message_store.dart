@@ -65,10 +65,83 @@ class ChannelMessageStore {
       );
       return;
     }
-    final jsonList = messages.map((msg) => _messageToJson(msg)).toList();
+    // Merge into the persisted full history rather than overwriting it. The
+    // in-memory list is windowed to the most recent N for memory, so a plain
+    // overwrite would truncate the store to N and erode old history (#343).
+    // Upsert by identity: keep older persisted messages, add new ones, and let
+    // the in-memory copy win so edits/reactions/status updates are captured.
+    // Deletion has its own path (removeChannelMessage) so this never
+    // resurrects a message the user deleted.
+    final key = _storageKey(channelIndex);
+    final byKey = <String, ChannelMessage>{};
+
+    final existing = await BlobStore.instance.readWithPrefsFallback(key);
+    if (existing != null && existing.isNotEmpty) {
+      try {
+        for (final e in jsonDecode(existing) as List<dynamic>) {
+          final m = _messageFromJson(e as Map<String, dynamic>);
+          byKey[_mergeKey(m)] = m;
+        }
+      } catch (e) {
+        // SAFELANE 6: a decode failure here must be loud, not silently drop the
+        // persisted history by merging into an empty base.
+        appLogger.error(
+          'Failed to decode existing channel $channelIndex history before '
+          'merge; aborting save to avoid truncation: $e',
+          tag: 'Storage',
+        );
+        return;
+      }
+    }
+    for (final m in messages) {
+      byKey[_mergeKey(m)] = m;
+    }
+
+    final merged = byKey.values.toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     await BlobStore.instance.write(
-      _storageKey(channelIndex),
-      jsonEncode(jsonList),
+      key,
+      jsonEncode(merged.map(_messageToJson).toList()),
+    );
+  }
+
+  /// Stable identity for merge/dedupe. messageId when present, else a composite
+  /// that distinguishes distinct messages that share no id.
+  String _mergeKey(ChannelMessage m) {
+    if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
+    return 'x:${m.packetHash ?? ''}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
+  }
+
+  /// Removes a single message from the persisted history. The explicit delete
+  /// path (#343): save merges and never removes, so deletion cannot go through
+  /// save.
+  Future<void> removeChannelMessage(
+    int channelIndex,
+    ChannelMessage message,
+  ) async {
+    if (publicKeyHex.isEmpty) return;
+    final key = _storageKey(channelIndex);
+    final existing = await BlobStore.instance.readWithPrefsFallback(key);
+    if (existing == null || existing.isEmpty) return;
+
+    final List<dynamic> raw;
+    try {
+      raw = jsonDecode(existing) as List<dynamic>;
+    } catch (e) {
+      appLogger.error(
+        'Failed to decode channel $channelIndex history for delete: $e',
+        tag: 'Storage',
+      );
+      return;
+    }
+    final target = _mergeKey(message);
+    final kept = raw
+        .map((e) => _messageFromJson(e as Map<String, dynamic>))
+        .where((m) => _mergeKey(m) != target)
+        .toList();
+    await BlobStore.instance.write(
+      key,
+      jsonEncode(kept.map(_messageToJson).toList()),
     );
   }
 

@@ -699,7 +699,8 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _messageStore.saveMessages(contactKeyHex, messages);
+    // Explicit delete: saveMessages now merges and never removes (#343).
+    await _messageStore.removeMessage(contactKeyHex, message);
     notifyListeners();
   }
 
@@ -833,7 +834,10 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    // Explicit delete path: saveChannelMessages now MERGES and never removes
+    // (#343), so deletion must go through removeChannelMessage or the message
+    // would be resurrected on the next save.
+    await _channelMessageStore.removeChannelMessage(channelIndex, message);
     notifyListeners();
   }
 

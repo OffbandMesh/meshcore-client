@@ -24,9 +24,71 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot save messages.');
       return;
     }
+    // Merge into the persisted full history rather than overwriting it (#343).
+    // The in-memory list is windowed for memory, so a plain overwrite would
+    // truncate the store. Upsert by identity; deletion is explicit
+    // (removeMessage).
     final key = '$keyFor$contactKeyHex';
-    final jsonList = messages.map(_messageToJson).toList();
-    await BlobStore.instance.write(key, jsonEncode(jsonList));
+    final byKey = <String, Message>{};
+
+    final existing = await BlobStore.instance.readWithPrefsFallback(key);
+    if (existing != null && existing.isNotEmpty) {
+      try {
+        for (final e in jsonDecode(existing) as List<dynamic>) {
+          final m = _messageFromJson(e as Map<String, dynamic>);
+          byKey[_mergeKey(m)] = m;
+        }
+      } catch (e) {
+        appLogger.error(
+          'Failed to decode existing DM history before merge; aborting save '
+          'to avoid truncation: $e',
+          tag: 'Storage',
+        );
+        return;
+      }
+    }
+    for (final m in messages) {
+      byKey[_mergeKey(m)] = m;
+    }
+
+    final merged = byKey.values.toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    await BlobStore.instance.write(
+      key,
+      jsonEncode(merged.map(_messageToJson).toList()),
+    );
+  }
+
+  String _mergeKey(Message m) {
+    if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
+    return 'x:${m.senderKeyHex}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
+  }
+
+  /// Explicit delete path (#343): save merges and never removes.
+  Future<void> removeMessage(String contactKeyHex, Message message) async {
+    if (publicKeyHex.isEmpty) return;
+    final key = '$keyFor$contactKeyHex';
+    final existing = await BlobStore.instance.readWithPrefsFallback(key);
+    if (existing == null || existing.isEmpty) return;
+    final List<dynamic> raw;
+    try {
+      raw = jsonDecode(existing) as List<dynamic>;
+    } catch (e) {
+      appLogger.error(
+        'Failed to decode DM history for delete: $e',
+        tag: 'Storage',
+      );
+      return;
+    }
+    final target = _mergeKey(message);
+    final kept = raw
+        .map((e) => _messageFromJson(e as Map<String, dynamic>))
+        .where((m) => _mergeKey(m) != target)
+        .toList();
+    await BlobStore.instance.write(
+      key,
+      jsonEncode(kept.map(_messageToJson).toList()),
+    );
   }
 
   Future<List<Message>> loadMessages(String contactKeyHex) async {
