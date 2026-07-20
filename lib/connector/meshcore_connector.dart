@@ -703,11 +703,30 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Aggregate cost of the per-contact conversation load, which runs once per
+  /// contact during a pull. It is fired unawaited from the contact handler, so
+  /// it escapes the frame-handler timing and has to be measured here.
+  int _convLoadCount = 0;
+  int _convLoadStoreMs = 0;
+  int _convLoadMergeMs = 0;
+
   Future<void> _loadMessagesForContact(String contactKeyHex) async {
     if (_loadedConversationKeys.contains(contactKeyHex)) return;
     _loadedConversationKeys.add(contactKeyHex);
 
+    final storeWatch = Stopwatch()..start();
     final allMessages = await _messageStore.loadMessages(contactKeyHex);
+    storeWatch.stop();
+    final mergeWatch = Stopwatch()..start();
+    _convLoadCount++;
+    _convLoadStoreMs += storeWatch.elapsedMilliseconds;
+    if (_convLoadCount % 25 == 0) {
+      appLogger.info(
+        'conversation loads: $_convLoadCount contacts, '
+        'store=${_convLoadStoreMs}ms merge=${_convLoadMergeMs}ms cumulative',
+        tag: 'Perf',
+      );
+    }
     if (allMessages.isNotEmpty) {
       // Keep only the most recent N messages in memory to bound memory usage
       final windowedMessages = allMessages.length > _messageWindowSize
@@ -748,6 +767,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _conversations[contactKeyHex] = windowedMergedMessages;
       notifyListeners();
     }
+    mergeWatch.stop();
+    _convLoadMergeMs += mergeWatch.elapsedMilliseconds;
   }
 
   String _messageMergeKey(Message message) {
