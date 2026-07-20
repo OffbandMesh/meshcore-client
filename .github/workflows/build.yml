@@ -34,7 +34,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: offband-android-r${{ github.run_number }}-${{ github.sha }}
+          name: offband-android-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
@@ -65,7 +65,7 @@ jobs:
       - name: Upload Linux bundle
         uses: actions/upload-artifact@v4
         with:
-          name: offband-linux-r${{ github.run_number }}-${{ github.sha }}
+          name: offband-linux-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/linux/x64/release/bundle/
           if-no-files-found: error
           retention-days: 14
@@ -94,7 +94,7 @@ jobs:
       - name: Upload web build
         uses: actions/upload-artifact@v4
         with:
-          name: offband-web-r${{ github.run_number }}-${{ github.sha }}
+          name: offband-web-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/web/
           if-no-files-found: error
           retention-days: 14
@@ -112,7 +112,7 @@ jobs:
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: offband-windows-r${{ github.run_number }}-${{ github.sha }}
+          name: offband-windows-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
