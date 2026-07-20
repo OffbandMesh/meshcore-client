@@ -3412,6 +3412,12 @@ abstract class AppLocalizations {
   /// **'Repeater Key Overlaps'**
   String get map_showOverlaps;
 
+  /// No description provided for @map_alwaysShowNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Always show names'**
+  String get map_alwaysShowNames;
+
   /// No description provided for @map_keyPrefix.
   ///
   /// In en, this message translates to:

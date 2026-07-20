@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/l10n.dart';
 import '../services/ui_view_state_service.dart';
+import '../utils/app_backgrounder.dart';
 import 'quick_switch_bar.dart';
 
 /// Shared shell for the primary views (Contacts / Channels / Map).
@@ -11,7 +13,7 @@ import 'quick_switch_bar.dart';
 /// dockable pane that can be pinned open on wide ones.
 ///
 /// The bottom bar stays a bottom bar at every width; it never becomes a rail.
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   static const double wideBreakpoint = 720;
   static const double _drawerWidth = 300;
 
@@ -36,6 +38,12 @@ class AppShell extends StatelessWidget {
   /// List content for the active view. Null renders an empty drawer body.
   final Widget? drawerContent;
 
+  /// App-level actions, pinned to the bottom of the panel. These are not
+  /// contextual, which is why they were duplicated in three screens' overflow
+  /// menus before. Screen-level actions stay in their own overflow menu.
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
+
   const AppShell({
     super.key,
     required this.body,
@@ -45,48 +53,98 @@ class AppShell extends StatelessWidget {
     this.appBarBuilder,
     this.floatingActionButton,
     this.drawerContent,
+    this.onDisconnect,
+    this.onSettings,
     this.contactsUnreadCount = 0,
     this.channelsUnreadCount = 0,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= wideBreakpoint;
-        final pinned =
-            isWide && context.watch<UiViewStateService>().navDrawerPinned;
+  State<AppShell> createState() => _AppShellState();
+}
 
-        return pinned
-            ? _buildPinned(context)
-            : _buildTransient(context, isWide);
+class _AppShellState extends State<AppShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  /// System back, in priority order:
+  ///   1. an open drawer closes,
+  ///   2. on a detail screen, pop back to the list it came from,
+  ///   3. on a primary view, send the app to the background so Android
+  ///      returns to the home screen or the previous app.
+  ///
+  /// Step 3 must NOT pop, even though the route below can be popped. The
+  /// primary views sit on top of the scanner, so popping would dump a
+  /// connected user back onto the radio-connect list. Reaching the scanner is
+  /// what Disconnect is for, not what Back is for.
+  ///
+  /// A primary view is one carrying the bottom bar; a detail screen (a channel
+  /// chat) has no [selectedIndex] and is genuinely pushed.
+  Future<void> _handleBack() async {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold?.isDrawerOpen ?? false) {
+      scaffold!.closeDrawer();
+      return;
+    }
+
+    final isPrimaryView = widget.selectedIndex != null;
+    final navigator = Navigator.of(context);
+    if (!isPrimaryView && navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+
+    // Background, do NOT finish. SystemNavigator.pop() would call finish() on
+    // the activity, tearing down the Flutter engine and dropping the radio
+    // connection, so reopening the app would show a disconnected radio.
+    await AppBackgrounder.moveToBackground();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack();
       },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= AppShell.wideBreakpoint;
+          final pinned =
+              isWide && context.watch<UiViewStateService>().navDrawerPinned;
+
+          return pinned
+              ? _buildPinned(context)
+              : _buildTransient(context, isWide);
+        },
+      ),
     );
   }
 
   /// Null on detail screens, which show the panel but no bottom bar.
   Widget? _bottomBar() {
-    final index = selectedIndex;
-    final onSelected = onDestinationSelected;
+    final index = widget.selectedIndex;
+    final onSelected = widget.onDestinationSelected;
     if (index == null || onSelected == null) return null;
     return SafeArea(
       top: false,
       child: QuickSwitchBar(
         selectedIndex: index,
         onDestinationSelected: onSelected,
-        contactsUnreadCount: contactsUnreadCount,
-        channelsUnreadCount: channelsUnreadCount,
+        contactsUnreadCount: widget.contactsUnreadCount,
+        channelsUnreadCount: widget.channelsUnreadCount,
       ),
     );
   }
 
   PreferredSizeWidget? _appBar(BuildContext context, bool pinned) {
-    return appBarBuilder?.call(context, pinned) ?? appBar;
+    return widget.appBarBuilder?.call(context, pinned) ?? widget.appBar;
   }
 
   /// Wide + pinned: the panel is laid out beside the body, not overlaid.
   Widget _buildPinned(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: _appBar(context, true),
       body: SafeArea(
         top: false,
@@ -94,15 +152,20 @@ class AppShell extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              width: _drawerWidth,
-              child: _NavPanel(isWide: true, content: drawerContent),
+              width: AppShell._drawerWidth,
+              child: _NavPanel(
+                isWide: true,
+                content: widget.drawerContent,
+                onDisconnect: widget.onDisconnect,
+                onSettings: widget.onSettings,
+              ),
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: body),
+            Expanded(child: widget.body),
           ],
         ),
       ),
-      floatingActionButton: floatingActionButton,
+      floatingActionButton: widget.floatingActionButton,
       bottomNavigationBar: _bottomBar(),
     );
   }
@@ -111,13 +174,19 @@ class AppShell extends StatelessWidget {
   /// the hamburger into the app bar automatically.
   Widget _buildTransient(BuildContext context, bool isWide) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: _appBar(context, false),
       drawer: Drawer(
-        width: _drawerWidth,
-        child: _NavPanel(isWide: isWide, content: drawerContent),
+        width: AppShell._drawerWidth,
+        child: _NavPanel(
+          isWide: isWide,
+          content: widget.drawerContent,
+          onDisconnect: widget.onDisconnect,
+          onSettings: widget.onSettings,
+        ),
       ),
-      body: body,
-      floatingActionButton: floatingActionButton,
+      body: widget.body,
+      floatingActionButton: widget.floatingActionButton,
       bottomNavigationBar: _bottomBar(),
     );
   }
@@ -128,8 +197,15 @@ class AppShell extends StatelessWidget {
 class _NavPanel extends StatelessWidget {
   final bool isWide;
   final Widget? content;
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
 
-  const _NavPanel({required this.isWide, this.content});
+  const _NavPanel({
+    required this.isWide,
+    this.content,
+    this.onDisconnect,
+    this.onSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +240,51 @@ class _NavPanel extends StatelessWidget {
             ),
           if (isWide) const Divider(height: 1),
           Expanded(child: content ?? const SizedBox.shrink()),
+          if (onDisconnect != null || onSettings != null) ...[
+            const Divider(height: 1),
+            _Footer(onDisconnect: onDisconnect, onSettings: onSettings),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// App-level actions pinned to the bottom of the panel.
+class _Footer extends StatelessWidget {
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
+
+  const _Footer({this.onDisconnect, this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Row(
+        children: [
+          if (onDisconnect != null)
+            Expanded(
+              child: TextButton.icon(
+                // Kept visually distinct: this drops the radio connection,
+                // and it was a red menu entry before the move.
+                style: TextButton.styleFrom(foregroundColor: colors.error),
+                icon: const Icon(Icons.logout, size: 18),
+                label: Text(l10n.common_disconnect),
+                onPressed: onDisconnect,
+              ),
+            ),
+          if (onSettings != null)
+            Expanded(
+              child: TextButton.icon(
+                icon: const Icon(Icons.settings, size: 18),
+                label: Text(l10n.settings_title),
+                onPressed: onSettings,
+              ),
+            ),
         ],
       ),
     );

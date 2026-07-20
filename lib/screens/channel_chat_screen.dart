@@ -29,6 +29,8 @@ import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
 import '../utils/route_transitions.dart';
+import 'settings_screen.dart';
+import '../utils/dialog_utils.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
 import '../widgets/mention_autocomplete.dart';
@@ -287,6 +289,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  Future<void> _disconnect(BuildContext context) async {
+    final connector = context.read<MeshCoreConnector>();
+    await showDisconnectDialog(context, connector);
+  }
+
   /// Bottom-bar navigation out of an open channel.
   ///
   /// Tapping Channels returns to the channel list. Tapping Contacts or Map
@@ -350,6 +357,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       drawerContent: ChannelDrawerList(
         currentChannelIndex: _currentChannel.index,
         onChannelSelected: _switchChannel,
+      ),
+      // Present here too: the footer is app-level, so it belongs on every
+      // screen carrying the panel, not just the primary views.
+      onDisconnect: () => _disconnect(context),
+      onSettings: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
       appBarBuilder: (context, pinned) => AppBar(
         // Pinned: the panel is already docked, so no hamburger is needed.

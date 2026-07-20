@@ -76,6 +76,10 @@ class AppSettingsService extends ChangeNotifier {
     await updateSettings(_settings.copyWith(mapShowOverlaps: value));
   }
 
+  Future<void> setMapAlwaysShowNames(bool value) async {
+    await updateSettings(_settings.copyWith(mapAlwaysShowNames: value));
+  }
+
   Future<void> setMapTimeFilterHours(double value) async {
     await updateSettings(_settings.copyWith(mapTimeFilterHours: value));
   }

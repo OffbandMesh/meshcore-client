@@ -1891,6 +1891,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get map_showOverlaps => 'Покриване на ключа на повтаряча';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Префикс на ключа';
 
   @override
