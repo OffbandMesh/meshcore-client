@@ -1191,10 +1191,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _contacts
       ..clear()
       ..addAll(cached);
-    for (final contact in cached) {
-      _ensureContactSmazSettingLoaded(contact.publicKeyHex);
-      _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex);
-    }
+    // Load every contact's settings without notifying per contact, then
+    // notify once. Per-contact notification rebuilt the whole tree 2x per
+    // contact (600 rebuilds for 300 contacts), and each rebuild walks the
+    // contact list, which is what stalled the UI for ~44s on connect.
+    await Future.wait([
+      for (final contact in cached) ...[
+        _ensureContactSmazSettingLoaded(contact.publicKeyHex, notify: false),
+        _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex, notify: false),
+      ],
+    ]);
+    notifyListeners();
   }
 
   Future<void> _loadDiscoveredContactCache() async {
@@ -5625,22 +5632,32 @@ class MeshCoreConnector extends ChangeNotifier {
     return frame.sublist(prefixOffset, prefixOffset + prefixLen);
   }
 
-  void _ensureContactSmazSettingLoaded(String contactKeyHex) {
+  /// [notify] is false for bulk loads, which notify once at the end instead.
+  /// Notifying per contact rebuilds the whole tree once per contact, and each
+  /// rebuild itself walks the contact list, so a large address book turns this
+  /// into O(contacts^2) work on the UI isolate.
+  Future<void> _ensureContactSmazSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactSmazEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadSmazEnabled(contactKeyHex).then((enabled) {
-      if (_contactSmazEnabled[contactKeyHex] == enabled) return;
-      _contactSmazEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadSmazEnabled(contactKeyHex);
+    if (_contactSmazEnabled[contactKeyHex] == enabled) return;
+    _contactSmazEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
-  void _ensureContactCyr2LatSettingLoaded(String contactKeyHex) {
+  Future<void> _ensureContactCyr2LatSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactCyr2LatEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadCyr2LatEnabled(contactKeyHex).then((enabled) {
-      if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
-      _contactCyr2LatEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadCyr2LatEnabled(
+      contactKeyHex,
+    );
+    if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
+    _contactCyr2LatEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
   void _ensureContactCyr2LatProfileLoaded(String contactKeyHex) {
