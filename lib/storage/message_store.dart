@@ -40,13 +40,18 @@ class MessageStore {
     String? jsonString = prefs.getString(key);
     if (jsonString == null || jsonString.isEmpty) {
       // Attempt migration from legacy unscoped key on first load
+      // Only touch storage when a legacy key actually exists. This ran
+      // unconditionally, and loadMessages is called once per contact during a
+      // contact pull. On Windows shared_preferences rewrites the WHOLE prefs
+      // file on every mutation, so each no-op remove cost a full multi-MB
+      // write - hundreds of them back to back on a large address book.
       final legacyJsonString = prefs.getString(oldKey);
-      prefs.remove(oldKey);
       if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
         appLogger.info(
           'Migrating messages from legacy key $oldKey to scoped key $key',
         );
         await prefs.setString(key, legacyJsonString);
+        await prefs.remove(oldKey);
         jsonString = legacyJsonString;
       }
     }
