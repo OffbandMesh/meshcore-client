@@ -1,0 +1,27 @@
+name: Release gate
+
+# Fails a PR whose pubspec version lacks any of the four human-authored release
+# texts (CHANGELOG section, release-notes, play blurb <=500 chars, discord).
+#
+# This runs on EVERY PR so a release-cut PR goes red before merge if a note is
+# missing. It is cheap and platform-agnostic. The tag workflow runs the same
+# script as its first job (a backstop before build/sign).
+#
+# rc.2 and rc.3 shipped with only a pubspec bump. This makes that unmergeable.
+#
+# #342, epic #312.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release texts for the pubspec version
+        run: bash .github/scripts/release-gate.sh
