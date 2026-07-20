@@ -127,7 +127,32 @@ jobs:
             echo "::error::Signing cert MISMATCH. expected ${EXPECTED_SHA256} actual ${ACTUAL}"
             exit 1
           fi
-          echo "Signing certificate verified: ${ACTUAL}"
+          echo "APK signing certificate verified: ${ACTUAL}"
+
+      # The AAB is the artifact that goes to Play, so verify IT directly rather
+      # than trusting the APK as a proxy. apksigner cannot read an AAB; keytool
+      # can, and reports the same SHA-256 fingerprint. Same pin as the APK.
+      # (Gemini review, #342.)
+      - name: Verify AAB signing certificate
+        env:
+          EXPECTED_SHA256: e7da8cd5bf22ac3eda7cb954b8b120a18b6c4382d1b6e6fdd204ddedddaf5488
+        run: |
+          set -eu
+          AAB=build/app/outputs/bundle/release/app-release.aab
+          # keytool comes from the JDK that setup-java put on PATH in this job.
+          AAB_SHA=$(keytool -printcert -jarfile "${AAB}" \
+            | grep -i 'SHA256:' | head -1 \
+            | sed 's/.*SHA256:[[:space:]]*//' | tr -d ': ' | tr 'A-F' 'a-f')
+          if [ -z "${AAB_SHA}" ]; then
+            echo "::error::Could not read a SHA-256 from the AAB signing cert."
+            exit 1
+          fi
+          if [ "${AAB_SHA}" != "${EXPECTED_SHA256}" ]; then
+            echo "::error::AAB signing cert MISMATCH. expected ${EXPECTED_SHA256} actual ${AAB_SHA}"
+            echo "::error::This AAB would be rejected by Play App Signing or break cross-channel updates."
+            exit 1
+          fi
+          echo "AAB signing certificate verified: ${AAB_SHA}"
 
       - name: Stage signed artifacts
         run: |
@@ -229,20 +254,32 @@ jobs:
           cp incoming/release-linux/* out/
           echo "Assets for the release:"
           ls -la out/
-      - name: Create GitHub release
+      # Draft-first so publication is ATOMIC: the release is not visible to
+      # anyone until every asset is uploaded. Creating-then-uploading would
+      # leave a public release with missing assets if an upload stalls or the
+      # runner dies mid-way — the exact partial-release failure this pipeline
+      # exists to prevent. `gh release create --help` documents this pattern.
+      # The final `--draft=false` is applied in BOTH branches so a run retried
+      # after a mid-way death still ends published, never stuck as a draft.
+      - name: Create GitHub release (draft → upload → publish)
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.v.outputs.notes }}
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           set -eu
           TAG="${GITHUB_REF_NAME}"
-          # Idempotent: if a run is retried, update rather than fail.
           if gh release view "${TAG}" >/dev/null 2>&1; then
+            # Retry / re-run: refresh assets and notes, then ensure published.
             gh release upload "${TAG}" out/* --clobber
-            gh release edit "${TAG}" --notes-file "${{ steps.v.outputs.notes }}"
+            gh release edit "${TAG}" --notes-file "${NOTES}" --prerelease --draft=false
           else
-            gh release create "${TAG}" out/* \
-              --title "Offband Meshcore ${{ steps.v.outputs.version }}" \
-              --notes-file "${{ steps.v.outputs.notes }}" \
+            gh release create "${TAG}" \
+              --draft \
+              --title "Offband Meshcore ${VERSION}" \
+              --notes-file "${NOTES}" \
               --prerelease
+            gh release upload "${TAG}" out/*
+            gh release edit "${TAG}" --draft=false
           fi
           echo "Release ${TAG} published with $(ls out | wc -l) assets."
