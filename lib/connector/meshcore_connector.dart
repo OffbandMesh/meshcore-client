@@ -4646,10 +4646,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _loadChannelOrder();
     loadContactCache();
     loadChannelSettings();
-    loadCachedChannels();
 
-    // Load persisted channel messages
-    loadAllChannelMessages();
+    // Channel history is keyed by the channel's PSK (#194), and the resolver
+    // set above reads that PSK out of _channels. So the channel list MUST be
+    // loaded before the messages are: loading them concurrently leaves the
+    // resolver returning null, _storageKey() silently falls back to the legacy
+    // slot-index key, and every channel reads as empty even though its history
+    // is intact under the PSK key.
+    unawaited(loadCachedChannels().then((_) => loadAllChannelMessages()));
     loadUnreadState();
     _loadDiscoveredContactCache();
 
