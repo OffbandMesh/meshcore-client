@@ -1,0 +1,111 @@
+name: Deploy web (Cloudflare Pages)
+
+# Publishes the Flutter web client to Cloudflare Pages.
+#
+#   push to main  ->  --branch=main  ->  PRODUCTION  ->  offband.app
+#   push to dev   ->  --branch=dev   ->  dev tier    ->  dev.offband.app
+#
+# WHY THE TRIGGER LIST IS THE SAFETY MECHANISM:
+# Direct-upload Pages projects cannot configure production branch controls
+# in the Cloudflare dashboard, so the "never auto-deploy arbitrary branches
+# to prod" requirement (#122) is enforced HERE, by the trigger scope. Adding
+# a branch to `on.push.branches` is what grants it deploy rights. Do not add
+# one casually, and never add `pull_request`.
+#
+# DO NOT enable Cloudflare's dashboard "Connect to Git" for this project. It
+# creates a second, git-integrated project that races with this workflow.
+# Deploys are Actions direct-upload only, matching offband-site.
+#
+# The marketing site (offband.org) is a SEPARATE Pages project in the same
+# account, deployed from OffbandMesh/offband-site. Nothing here touches it.
+#
+# See #339, epic #312.
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+concurrency:
+  # Serialise per target so two pushes cannot race the same environment,
+  # but let dev and main deploy independently.
+  group: deploy-web-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the bench toolchain, same as every other workflow (#331).
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+
+      - run: flutter pub get
+
+      # Same mechanism as build.yml (#331). build_pipe's build_command in
+      # pubspec.yaml passes --dart-define-from-file, so this file must exist
+      # before the build runs or the GIF picker ships dead.
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+
+      # build_pipe, NOT a plain `flutter build web`. It appends ?v=<pubspec
+      # version> to the bootstrap/JS files, which is what stops browsers
+      # serving stale code after a deploy. A plain flutter build has no cache
+      # busting and would leave users on old bundles.
+      - name: Build web (versioned, cache-busted)
+        run: dart run build_pipe:build
+
+      - name: Verify build output
+        run: |
+          set -eu
+          test -f build/web/index.html || { echo "::error::build/web/index.html missing"; exit 1; }
+          COUNT=$(find build/web -type f | wc -l)
+          BIGGEST=$(find build/web -type f -printf '%s\n' | sort -rn | head -1)
+          echo "files: ${COUNT}, largest: $((BIGGEST / 1048576)) MB"
+          # Cloudflare Pages hard limits: 25 MiB per asset, 20000 files.
+          # Fail here with a clear message rather than mid-upload.
+          if [ "${BIGGEST}" -gt 26214400 ]; then
+            echo "::error::An asset exceeds the Cloudflare Pages 25 MiB limit."
+            find build/web -type f -size +25M -printf '  %s %p\n'
+            exit 1
+          fi
+          if [ "${COUNT}" -gt 20000 ]; then
+            echo "::error::More than 20000 files; exceeds the Cloudflare Pages limit."
+            exit 1
+          fi
+          grep -q 'v=' build/web/index.html \
+            && echo "cache-busting query params present" \
+            || echo "::warning::no ?v= found in index.html; check build_pipe config"
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          npx --yes wrangler@3 pages project create offband-app \
+            --production-branch=main \
+            || echo "project already exists, continuing"
+          npx --yes wrangler@3 pages deploy build/web \
+            --project-name=offband-app \
+            --branch="${GITHUB_REF_NAME}" \
+            --commit-dirty=true
+
+      - name: Report target
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "Deployed PRODUCTION -> https://offband.app"
+          else
+            echo "Deployed dev tier   -> https://dev.offband.app"
+          fi

@@ -163,7 +163,7 @@ build_pipe:
       platforms:
         web:
           build:
-            build_command: flutter build web --release --pwa-strategy=none
+            build_command: flutter build web --release --pwa-strategy=none --dart-define-from-file=dart_defines.json
             # Strongly recommended: disables the default service worker which often causes more cache headaches
             add_version_query_param: true
             # This is the key flag! It appends ?v=<your pubspec version> to bootstrap/JS files
