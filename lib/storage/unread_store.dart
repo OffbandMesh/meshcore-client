@@ -57,7 +57,11 @@ class UnreadStore {
     try {
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       return json.map((key, value) => MapEntry(key, value as int));
-    } catch (_) {
+    } catch (e) {
+      // SAFELANE 6: never swallow. A decode failure here is
+      // indistinguishable from 'no data' to the caller, which reads
+      // to the user as data loss.
+      appLogger.error('Failed to decode unread state: $e', tag: 'Storage');
       return {};
     }
   }

@@ -66,6 +66,13 @@ class MessageStore {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
       return jsonList.map((json) => _messageFromJson(json)).toList();
     } catch (e) {
+      // SAFELANE 6: never swallow. A decode failure here is
+      // indistinguishable from 'no data' to the caller, which reads
+      // to the user as data loss.
+      appLogger.error(
+        'Failed to decode messages for $contactKeyHex: $e',
+        tag: 'Storage',
+      );
       return [];
     }
   }

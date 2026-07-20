@@ -47,7 +47,11 @@ class ContactStore {
       return jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+    } catch (e) {
+      // SAFELANE 6: never swallow. A decode failure here is
+      // indistinguishable from 'no data' to the caller, which reads
+      // to the user as data loss.
+      appLogger.error('Failed to decode contacts: $e', tag: 'Storage');
       return [];
     }
   }
