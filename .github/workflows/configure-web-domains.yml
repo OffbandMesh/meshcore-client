@@ -1,0 +1,94 @@
+name: Configure offband.app domains
+
+# One-time (idempotent) setup: attaches custom domains to the offband-app
+# Pages project and creates the proxied CNAME records.
+#
+#   offband.app       -> offband-app.pages.dev       (production branch)
+#   dev.offband.app   -> dev.offband-app.pages.dev   (dev branch alias)
+#
+# The dev record deliberately targets the BRANCH ALIAS rather than the
+# project root. Cloudflare's documented behaviour: a custom domain CNAME'd
+# to <project>.pages.dev always serves production, so pointing dev at
+# dev.<project>.pages.dev is what makes it serve the dev branch. This only
+# works with Cloudflare-managed DNS and a PROXIED record; an unproxied or
+# external record silently falls through to production.
+#
+# Manual trigger only. Domains do not need reconfiguring on every deploy,
+# and this touches DNS.
+#
+# Mirrors OffbandMesh/offband-site/.github/workflows/configure-domains.yml,
+# which is the working reference for offband.org.
+#
+# NOTE: offband.org belongs to a DIFFERENT Pages project (offband-site) in
+# the same Cloudflare account. This workflow only ever touches the
+# offband.app zone. See #339.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  domains:
+    runs-on: ubuntu-latest
+    env:
+      API: https://api.cloudflare.com/client/v4
+      ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DNS_TOKEN: ${{ secrets.CLOUDFLARE_DNS_ZONE_TOKEN }}
+      PROJECT: offband-app
+      ZONE: offband.app
+    steps:
+      - name: Attach custom domains and create DNS records
+        run: |
+          set -euo pipefail
+
+          ZID=$(curl -s -H "Authorization: Bearer $DNS_TOKEN" \
+            "$API/zones?name=$ZONE" | jq -r '.result[0].id // empty')
+          if [ -z "$ZID" ]; then
+            echo "::error::Could not resolve zone id for $ZONE. Check CLOUDFLARE_DNS_ZONE_TOKEN has Zone:Read."
+            exit 1
+          fi
+          echo "zone $ZONE -> ${ZID:0:6}…"
+
+          # name -> CNAME target. Apex serves production; dev serves the
+          # dev branch alias. Cloudflare flattens the apex CNAME.
+          attach() {
+            NAME="$1"; TARGET="$2"
+            echo "── $NAME -> $TARGET ──"
+
+            REC=$(curl -s -H "Authorization: Bearer $DNS_TOKEN" \
+              "$API/zones/$ZID/dns_records?type=CNAME&name=$NAME" \
+              | jq -r '.result[0].id // empty')
+            BODY=$(jq -n --arg n "$NAME" --arg c "$TARGET" \
+              '{type:"CNAME",name:$n,content:$c,proxied:true}')
+
+            if [ -n "$REC" ]; then
+              curl -s -X PUT -H "Authorization: Bearer $DNS_TOKEN" \
+                -H "Content-Type: application/json" \
+                "$API/zones/$ZID/dns_records/$REC" --data "$BODY" \
+                | jq -r 'if .success then "  DNS: updated" else "  DNS ERR: " + (.errors|tostring) end'
+            else
+              curl -s -X POST -H "Authorization: Bearer $DNS_TOKEN" \
+                -H "Content-Type: application/json" \
+                "$API/zones/$ZID/dns_records" --data "$BODY" \
+                | jq -r 'if .success then "  DNS: created" else "  DNS ERR: " + (.errors|tostring) end'
+            fi
+
+            curl -s -X POST -H "Authorization: Bearer $PAGES_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$API/accounts/$ACCOUNT_ID/pages/projects/$PROJECT/domains" \
+              --data "$(jq -n --arg n "$NAME" '{name:$n}')" \
+              | jq -r 'if .success then "  Pages: attached (" + (.result.status // "pending") + ")" else "  Pages: " + (.errors|tostring) end'
+          }
+
+          attach "$ZONE"          "${PROJECT}.pages.dev"
+          attach "dev.$ZONE"      "dev.${PROJECT}.pages.dev"
+
+          curl -s -X PATCH -H "Authorization: Bearer $DNS_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$API/zones/$ZID/settings/always_use_https" --data '{"value":"on"}' \
+            | jq -r 'if .success then "AlwaysHTTPS: on" else "AlwaysHTTPS (skip): " + (.errors|tostring) end'
+
+          echo "configure-web-domains complete"
