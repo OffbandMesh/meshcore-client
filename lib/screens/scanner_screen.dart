@@ -45,13 +45,18 @@ class _ScannerScreenState extends State<ScannerScreen> {
       if (_connector.state == MeshCoreConnectionState.disconnected) {
         _changedNavigation = false;
       } else if (_connector.state == MeshCoreConnectionState.connected &&
-          _connector.activeTransport == MeshCoreTransportType.bluetooth &&
           isCurrentRoute &&
           !_routingIntoApp) {
         // Route in whenever this screen is showing while connected, not just
         // on the first connect. Otherwise landing back here with a live
         // connection is a dead end: Connect does nothing, because there is
         // nothing left to connect.
+        //
+        // Deliberately transport-agnostic. This was bluetooth-only, which left
+        // the same dead end for USB and TCP users, who cannot connect their way
+        // out of it either. The first-connect path for those transports is not
+        // affected: their own screen sits on top while connecting, so
+        // isCurrentRoute is false here and they still navigate themselves.
         _changedNavigation = true;
         _routingIntoApp = true;
         if (mounted) {
