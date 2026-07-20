@@ -109,24 +109,22 @@ class _ChannelsScreenState extends State<ChannelsScreen>
         drawerContent: ChannelDrawerList(
           onChannelSelected: (channel) => _openChannel(context, channel),
         ),
+        onDisconnect: () => _disconnect(context),
+        onSettings: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+        ),
         appBar: AppBar(
           title: AppBarTitle(context.l10n.channels_title),
           centerTitle: true,
           bottom: const SyncProgressAppBarBottom(),
           actions: [
-            PopupMenuButton(
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.logout, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.common_disconnect),
-                    ],
-                  ),
-                  onTap: () => _disconnect(context),
-                ),
-                if (_communities.isNotEmpty)
+            // Disconnect and Settings moved to the panel footer (#290); only
+            // the screen-level Communities entry remains, and it already only
+            // appears once a community has been joined.
+            if (_communities.isNotEmpty)
+              PopupMenuButton(
+                itemBuilder: (context) => [
                   PopupMenuItem(
                     child: Row(
                       children: [
@@ -137,24 +135,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     ),
                     onTap: () => _showManageCommunitiesDialog(context),
                   ),
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.settings),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.settings_title),
-                    ],
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsScreen(),
-                    ),
-                  ),
-                ),
-              ],
-              icon: const Icon(Icons.more_vert),
-            ),
+                ],
+                icon: const Icon(Icons.more_vert),
+              ),
           ],
         ),
         body: RefreshIndicator(

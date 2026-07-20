@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/l10n.dart';
 import '../services/ui_view_state_service.dart';
 import 'quick_switch_bar.dart';
 
@@ -36,6 +37,12 @@ class AppShell extends StatelessWidget {
   /// List content for the active view. Null renders an empty drawer body.
   final Widget? drawerContent;
 
+  /// App-level actions, pinned to the bottom of the panel. These are not
+  /// contextual, which is why they were duplicated in three screens' overflow
+  /// menus before. Screen-level actions stay in their own overflow menu.
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
+
   const AppShell({
     super.key,
     required this.body,
@@ -45,6 +52,8 @@ class AppShell extends StatelessWidget {
     this.appBarBuilder,
     this.floatingActionButton,
     this.drawerContent,
+    this.onDisconnect,
+    this.onSettings,
     this.contactsUnreadCount = 0,
     this.channelsUnreadCount = 0,
   });
@@ -95,7 +104,12 @@ class AppShell extends StatelessWidget {
           children: [
             SizedBox(
               width: _drawerWidth,
-              child: _NavPanel(isWide: true, content: drawerContent),
+              child: _NavPanel(
+                isWide: true,
+                content: drawerContent,
+                onDisconnect: onDisconnect,
+                onSettings: onSettings,
+              ),
             ),
             const VerticalDivider(width: 1),
             Expanded(child: body),
@@ -114,7 +128,12 @@ class AppShell extends StatelessWidget {
       appBar: _appBar(context, false),
       drawer: Drawer(
         width: _drawerWidth,
-        child: _NavPanel(isWide: isWide, content: drawerContent),
+        child: _NavPanel(
+          isWide: isWide,
+          content: drawerContent,
+          onDisconnect: onDisconnect,
+          onSettings: onSettings,
+        ),
       ),
       body: body,
       floatingActionButton: floatingActionButton,
@@ -128,8 +147,15 @@ class AppShell extends StatelessWidget {
 class _NavPanel extends StatelessWidget {
   final bool isWide;
   final Widget? content;
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
 
-  const _NavPanel({required this.isWide, this.content});
+  const _NavPanel({
+    required this.isWide,
+    this.content,
+    this.onDisconnect,
+    this.onSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +190,51 @@ class _NavPanel extends StatelessWidget {
             ),
           if (isWide) const Divider(height: 1),
           Expanded(child: content ?? const SizedBox.shrink()),
+          if (onDisconnect != null || onSettings != null) ...[
+            const Divider(height: 1),
+            _Footer(onDisconnect: onDisconnect, onSettings: onSettings),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// App-level actions pinned to the bottom of the panel.
+class _Footer extends StatelessWidget {
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onSettings;
+
+  const _Footer({this.onDisconnect, this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Row(
+        children: [
+          if (onDisconnect != null)
+            Expanded(
+              child: TextButton.icon(
+                // Kept visually distinct: this drops the radio connection,
+                // and it was a red menu entry before the move.
+                style: TextButton.styleFrom(foregroundColor: colors.error),
+                icon: const Icon(Icons.logout, size: 18),
+                label: Text(l10n.common_disconnect),
+                onPressed: onDisconnect,
+              ),
+            ),
+          if (onSettings != null)
+            Expanded(
+              child: TextButton.icon(
+                icon: const Icon(Icons.settings, size: 18),
+                label: Text(l10n.settings_title),
+                onPressed: onSettings,
+              ),
+            ),
         ],
       ),
     );

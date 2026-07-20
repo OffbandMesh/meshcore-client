@@ -418,6 +418,11 @@ class _MapScreenState extends State<MapScreen> {
                 _handleQuickSwitch(index, context),
             contactsUnreadCount: connector.getTotalContactsUnreadCount(),
             channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
+            onDisconnect: () => _disconnect(context, connector),
+            onSettings: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SettingsScreen()),
+            ),
             appBar: AppBar(
               title: AppBarTitle(context.l10n.map_title),
               centerTitle: true,
@@ -472,36 +477,6 @@ class _MapScreenState extends State<MapScreen> {
                     },
                     tooltip: context.l10n.map_lineOfSight,
                   ),
-                PopupMenuButton(
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.logout, color: Colors.red),
-                          const SizedBox(width: 8),
-                          Text(context.l10n.common_disconnect),
-                        ],
-                      ),
-                      onTap: () => _disconnect(context, connector),
-                    ),
-                    PopupMenuItem(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.settings),
-                          const SizedBox(width: 8),
-                          Text(context.l10n.settings_title),
-                        ],
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SettingsScreen(),
-                        ),
-                      ),
-                    ),
-                  ],
-                  icon: const Icon(Icons.more_vert),
-                ),
               ],
             ),
             body: Stack(
