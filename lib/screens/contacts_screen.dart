@@ -317,107 +317,103 @@ class _ContactsScreenState extends State<ContactsScreen>
       return const SizedBox.shrink();
     }
 
-    final allowBack = !connector.isConnected;
-    return PopScope(
-      canPop: allowBack,
-      child: AppShell(
-        selectedIndex: 0,
-        onDestinationSelected: (index) => _handleQuickSwitch(index, context),
-        contactsUnreadCount: connector.getTotalContactsUnreadCount(),
-        channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
-        drawerContent: const ContactFilterRail(),
-        onDisconnect: () => _disconnect(context, connector),
-        onSettings: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SettingsScreen()),
-        ),
-        appBar: AppBar(
-          title: AppBarTitle(context.l10n.contacts_title),
-          bottom: const SyncProgressAppBarBottom(),
-          actions: [
-            PopupMenuButton(
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.connect_without_contact),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.contacts_zeroHopAdvert),
-                    ],
-                  ),
-                  onTap: () => {
-                    connector.sendSelfAdvert(flood: false),
-                    showDismissibleSnackBar(
-                      context,
-                      content: Text(context.l10n.settings_advertisementSent),
-                    ),
-                  },
-                ),
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.cell_tower),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.contacts_floodAdvert),
-                    ],
-                  ),
-                  onTap: () => {
-                    connector.sendSelfAdvert(flood: true),
-                    showDismissibleSnackBar(
-                      context,
-                      content: Text(context.l10n.settings_advertisementSent),
-                    ),
-                  },
-                ),
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.copy),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.contacts_copyAdvertToClipboard),
-                    ],
-                  ),
-                  onTap: () => _contactExport(Uint8List.fromList([])),
-                ),
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.paste),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.contacts_addContactFromClipboard),
-                    ],
-                  ),
-                  onTap: () => _contactImport(),
-                ),
-              ],
-              icon: const Icon(Icons.connect_without_contact),
-            ),
-            // Disconnect and Settings moved to the panel footer (#290).
-            // Discovered contacts is screen-level and stays here.
-            PopupMenuButton(
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_add_rounded),
-                      const SizedBox(width: 8),
-                      Text(context.l10n.discoveredContacts_Title),
-                    ],
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DiscoveryScreen(),
-                    ),
-                  ),
-                ),
-              ],
-              icon: const Icon(Icons.more_vert),
-            ),
-          ],
-        ),
-        body: _buildContactsBody(context, connector),
+    return AppShell(
+      selectedIndex: 0,
+      onDestinationSelected: (index) => _handleQuickSwitch(index, context),
+      contactsUnreadCount: connector.getTotalContactsUnreadCount(),
+      channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
+      drawerContent: const ContactFilterRail(),
+      onDisconnect: () => _disconnect(context, connector),
+      onSettings: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
+      appBar: AppBar(
+        title: AppBarTitle(context.l10n.contacts_title),
+        bottom: const SyncProgressAppBarBottom(),
+        actions: [
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.connect_without_contact),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_zeroHopAdvert),
+                  ],
+                ),
+                onTap: () => {
+                  connector.sendSelfAdvert(flood: false),
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(context.l10n.settings_advertisementSent),
+                  ),
+                },
+              ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.cell_tower),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_floodAdvert),
+                  ],
+                ),
+                onTap: () => {
+                  connector.sendSelfAdvert(flood: true),
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(context.l10n.settings_advertisementSent),
+                  ),
+                },
+              ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.copy),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_copyAdvertToClipboard),
+                  ],
+                ),
+                onTap: () => _contactExport(Uint8List.fromList([])),
+              ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.paste),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_addContactFromClipboard),
+                  ],
+                ),
+                onTap: () => _contactImport(),
+              ),
+            ],
+            icon: const Icon(Icons.connect_without_contact),
+          ),
+          // Disconnect and Settings moved to the panel footer (#290).
+          // Discovered contacts is screen-level and stays here.
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.person_add_rounded),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.discoveredContacts_Title),
+                  ],
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DiscoveryScreen(),
+                  ),
+                ),
+              ),
+            ],
+            icon: const Icon(Icons.more_vert),
+          ),
+        ],
+      ),
+      body: _buildContactsBody(context, connector),
     );
   }
 

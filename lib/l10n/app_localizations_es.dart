@@ -1886,6 +1886,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get map_showOverlaps => 'Superposiciones de tecla repetidora';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Prefijo de clave';
 
   @override

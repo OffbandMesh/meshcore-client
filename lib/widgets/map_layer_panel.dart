@@ -46,6 +46,13 @@ class MapLayerPanel extends StatelessWidget {
           onChanged: service.setMapShowOtherNodes,
         ),
         const Divider(height: 1),
+        _toggle(
+          label: l10n.map_alwaysShowNames,
+          icon: Icons.label_outline,
+          value: settings.mapAlwaysShowNames,
+          onChanged: service.setMapAlwaysShowNames,
+        ),
+        const Divider(height: 1),
         _sectionHeader(theme, l10n.map_filterNodes),
         _toggle(
           label: l10n.map_showDiscoveryContacts,

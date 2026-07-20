@@ -1779,6 +1779,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get map_showOverlaps => '重复键重叠';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => '关键字前缀';
 
   @override

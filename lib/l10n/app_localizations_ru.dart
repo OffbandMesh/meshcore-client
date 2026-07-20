@@ -1890,6 +1890,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get map_showOverlaps => 'Перекрытия ключа повтора';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Префикс ключа';
 
   @override

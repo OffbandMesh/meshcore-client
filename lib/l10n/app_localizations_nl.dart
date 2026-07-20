@@ -1875,6 +1875,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get map_showOverlaps => 'Herhalingssleutel overlapt';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Prefix sleutel';
 
   @override

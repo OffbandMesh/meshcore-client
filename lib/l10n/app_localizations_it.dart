@@ -1889,6 +1889,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get map_showOverlaps => 'Sovrapposizioni della chiave ripetitore';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Prefisso Chiave';
 
   @override

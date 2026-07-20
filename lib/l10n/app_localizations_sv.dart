@@ -1865,6 +1865,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get map_showOverlaps => 'Repeater-nyckelöverlappningar';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Nyckelprefix';
 
   @override

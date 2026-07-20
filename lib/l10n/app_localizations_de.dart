@@ -1888,6 +1888,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get map_showOverlaps => 'Überlappungen der Repeater-Taste';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Schlüsselpräfix';
 
   @override
