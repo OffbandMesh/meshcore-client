@@ -1174,6 +1174,12 @@ abstract class AppLocalizations {
   /// **'Model'**
   String get settings_infoModel;
 
+  /// No description provided for @settings_infoOffbandCaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband capabilities'**
+  String get settings_infoOffbandCaps;
+
   /// No description provided for @settings_infoBattery.
   ///
   /// In en, this message translates to:

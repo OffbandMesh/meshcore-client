@@ -583,6 +583,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Batéria';
 
   @override

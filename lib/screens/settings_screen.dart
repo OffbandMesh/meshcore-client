@@ -403,6 +403,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildInfoRow(l10n.settings_infoFirmware, firmwareVersion),
             if (deviceModel != null)
               _buildInfoRow(l10n.settings_infoModel, deviceModel),
+            // Capability-gated controls vanish silently when a bit is clear,
+            // which is indistinguishable from a bug. Surface the raw inputs so
+            // "missing feature" can be diagnosed without enabling logging. (#304)
+            if (connector.offbandCaps != null)
+              _buildInfoRow(
+                l10n.settings_infoOffbandCaps,
+                '0x${connector.offbandCaps!.toRadixString(16).padLeft(2, '0')}'
+                ' (v${connector.firmwareVerCode ?? 0})'
+                '${connector.supportsOffbandFemLna ? ' · FEM LNA' : ''}'
+                '${connector.supportsOffbandBlock ? ' · block' : ''}',
+              ),
             _buildBatteryInfoRow(context, connector),
             if (connector.selfName != null)
               _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
