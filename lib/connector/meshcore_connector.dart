@@ -723,7 +723,8 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_convLoadCount % 25 == 0) {
       appLogger.info(
         'conversation loads: $_convLoadCount contacts, '
-        'store=${_convLoadStoreMs}ms merge=${_convLoadMergeMs}ms cumulative',
+        'store=${_convLoadStoreMs}ms(WALL, spans await - includes event-loop '
+        'queueing, NOT pure work) merge=${_convLoadMergeMs}ms(sync work)',
         tag: 'Perf',
       );
     }
@@ -4376,16 +4377,54 @@ class MeshCoreConnector extends ChangeNotifier {
   /// once. Logged rather than assumed, so the offending code is named.
   static const Duration _slowHandlerThreshold = Duration(milliseconds: 100);
 
+  /// Cumulative synchronous time per frame code. A single handler under the
+  /// slow threshold can still dominate if it runs hundreds of times, which a
+  /// per-call threshold cannot see.
+  final Map<int, int> _frameCodeMicros = {};
+  final Map<int, int> _frameCodeCount = {};
+  int _frameTotalMicros = 0;
+
   void _handleFrame(List<int> data) {
     final handlerWatch = Stopwatch()..start();
     _handleFrameInner(data);
     handlerWatch.stop();
-    if (handlerWatch.elapsed > _slowHandlerThreshold && data.isNotEmpty) {
+    if (data.isEmpty) return;
+
+    final code = data[0];
+    final micros = handlerWatch.elapsedMicroseconds;
+    _frameCodeMicros[code] = (_frameCodeMicros[code] ?? 0) + micros;
+    _frameCodeCount[code] = (_frameCodeCount[code] ?? 0) + 1;
+    _frameTotalMicros += micros;
+
+    if (handlerWatch.elapsed > _slowHandlerThreshold) {
       appLogger.info(
-        'slow frame handler: code=${data[0]} blocked UI for '
+        'slow frame handler: code=$code blocked UI for '
         '${handlerWatch.elapsedMilliseconds}ms',
         tag: 'Perf',
       );
+    }
+
+    // Periodic cumulative report: names the code that owns the most isolate
+    // time even when no single call is slow.
+    if (_frameTotalMicros > 2000000) {
+      final ranked = _frameCodeMicros.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top = ranked
+          .take(4)
+          .map(
+            (e) =>
+                'code=${e.key} ${(e.value / 1000).round()}ms'
+                '/${_frameCodeCount[e.key]}calls',
+          )
+          .join('  ');
+      appLogger.info(
+        'frame handler cumulative (${(_frameTotalMicros / 1000).round()}ms '
+        'total sync): $top',
+        tag: 'Perf',
+      );
+      _frameTotalMicros = 0;
+      _frameCodeMicros.clear();
+      _frameCodeCount.clear();
     }
   }
 
