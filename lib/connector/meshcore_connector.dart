@@ -492,21 +492,30 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int get pathHashByteWidth => _pathHashByteWidth;
 
-  /// Compact path rendering for logs: the raw byte length, the width it is
-  /// being sliced at, the resulting hop count, and the hop-grouped bytes.
+  /// Compact path rendering for logs: hop count, applied width, the bytes we
+  /// actually hold versus the bytes that hop count implies, and the hex.
   ///
-  /// Captures previously logged only the byte length, which made it impossible
-  /// to tell a single 2-byte hop from two 1-byte hops. That is the exact
-  /// question #240/#279 turn on. One line, existing log sites only, no new
-  /// per-frame logging. (#298)
-  String _pathDiag(List<int> pathBytes, int byteLen) {
-    if (byteLen < 0) return 'flood';
+  /// Captures previously logged only a length, which made it impossible to tell
+  /// a single 2-byte hop from two 1-byte hops. That is the exact question
+  /// #240/#279 turn on.
+  ///
+  /// [pathLenField] is the firmware path-len field's low 6 bits, which is a HOP
+  /// COUNT, not a byte length: firmware `src/Packet.h:79-84` defines
+  /// `getPathByteLen() == getPathHashCount() * getPathHashSize()`. Logging the
+  /// held byte count next to the implied one makes the #309 decode truncation
+  /// self-evident in any capture, without the device present.
+  ///
+  /// One line, existing log sites only, no new per-frame logging. (#298)
+  String _pathDiag(List<int> pathBytes, int pathLenField) {
+    if (pathLenField < 0) return 'flood';
     final w = _pathHashByteWidth;
-    final hops = realHopCount(byteLen, w);
-    final bytes = pathBytes.isEmpty
+    final expectedBytes = pathLenField * w;
+    final hex = pathBytes.isEmpty
         ? 'none'
         : PathHelper.formatPathHex(pathBytes, w);
-    return 'len=$byteLen w=$w hops=$hops [$bytes]';
+    final short = pathBytes.length < expectedBytes ? ' TRUNCATED' : '';
+    return 'hops=$pathLenField w=$w '
+        'bytes=${pathBytes.length}/$expectedBytes$short [$hex]';
   }
 
   CompanionRadioStats? get latestRadioStats => _latestRadioStats;
