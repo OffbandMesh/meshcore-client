@@ -4349,7 +4349,26 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Any frame handler that occupies the UI isolate long enough to drop
+  /// frames is a bug: it stalls rendering, so progress bars freeze and input
+  /// stops responding while sync appears to do nothing and then finish at
+  /// once. Logged rather than assumed, so the offending code is named.
+  static const Duration _slowHandlerThreshold = Duration(milliseconds: 100);
+
   void _handleFrame(List<int> data) {
+    final handlerWatch = Stopwatch()..start();
+    _handleFrameInner(data);
+    handlerWatch.stop();
+    if (handlerWatch.elapsed > _slowHandlerThreshold && data.isNotEmpty) {
+      appLogger.info(
+        'slow frame handler: code=${data[0]} blocked UI for '
+        '${handlerWatch.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+  }
+
+  void _handleFrameInner(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
 
@@ -4649,20 +4668,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelStore.setPublicKeyHex = selfPublicKeyHex;
     _unreadStore.setPublicKeyHex = selfPublicKeyHex;
 
-    // Now that we have self info, we can load all the persisted data for this node
-    _loadChannelOrder();
-    loadContactCache();
-    loadChannelSettings();
-
-    // Channel history is keyed by the channel's PSK (#194), and the resolver
-    // set above reads that PSK out of _channels. So the channel list MUST be
-    // loaded before the messages are: loading them concurrently leaves the
-    // resolver returning null, _storageKey() silently falls back to the legacy
-    // slot-index key, and every channel reads as empty even though its history
-    // is intact under the PSK key.
-    unawaited(loadCachedChannels().then((_) => loadAllChannelMessages()));
-    loadUnreadState();
-    _loadDiscoveredContactCache();
+    // Now that we have self info, we can load all the persisted data for this
+    // node. Each step is timed: this sequence has stalled the UI isolate for
+    // ~40s on a large store, and the timings say which step is responsible.
+    unawaited(_timedStartupLoad());
 
     _awaitingSelfInfo = false;
     _selfInfoRetryTimer?.cancel();
@@ -4671,6 +4680,26 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Start the serialized initial sync pipeline after SELF_INFO.
     _maybeStartInitialChannelSync();
+  }
+
+  Future<void> _timedStartupLoad() async {
+    Future<void> step(String name, Future<void> Function() body) async {
+      final sw = Stopwatch()..start();
+      await body();
+      sw.stop();
+      appLogger.info(
+        'startup-load $name took ${sw.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+
+    await step('channelOrder', () async => _loadChannelOrder());
+    await step('contactCache', loadContactCache);
+    await step('channelSettings', () => loadChannelSettings());
+    await step('cachedChannels', loadCachedChannels);
+    await step('channelMessages', () => loadAllChannelMessages());
+    await step('unreadState', loadUnreadState);
+    await step('discoveredContacts', _loadDiscoveredContactCache);
   }
 
   /// Extract the additive `offband_caps` byte from a device-info reply.
