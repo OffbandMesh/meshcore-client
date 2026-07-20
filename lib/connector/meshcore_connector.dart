@@ -506,9 +506,13 @@ class MeshCoreConnector extends ChangeNotifier {
   /// self-evident in any capture, without the device present.
   ///
   /// One line, existing log sites only, no new per-frame logging. (#298)
-  String _pathDiag(List<int> pathBytes, int pathLenField) {
+  /// [pathHashWidth] must be the width the path was CAPTURED at (each Contact
+  /// carries its own), not the connected device's current global width. Using
+  /// the global one falsely flags a complete 1-byte-width path as TRUNCATED
+  /// when the client is connected to a 2-byte device. (#309, Gemini review)
+  String _pathDiag(List<int> pathBytes, int pathLenField, int pathHashWidth) {
     if (pathLenField < 0) return 'flood';
-    final w = _pathHashByteWidth;
+    final w = pathHashWidth < 1 ? 1 : pathHashWidth;
     final expectedBytes = pathLenField * w;
     final hex = pathBytes.isEmpty
         ? 'none'
@@ -4971,7 +4975,7 @@ class MeshCoreConnector extends ChangeNotifier {
             : contact.lastMessageAt;
 
         appLogger.info(
-          'Refreshing contact ${contact.name}: devicePath=${_pathDiag(contact.path, contact.pathLength)}, existingOverride=${existing.pathOverride}',
+          'Refreshing contact ${contact.name}: devicePath=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}, existingOverride=${existing.pathOverride}',
           tag: 'Connector',
         );
 
@@ -4986,7 +4990,7 @@ class MeshCoreConnector extends ChangeNotifier {
         );
 
         appLogger.info(
-          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
+          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
           tag: 'Connector',
         );
       } else {
@@ -4997,7 +5001,7 @@ class MeshCoreConnector extends ChangeNotifier {
             isContact) {
           _contacts.add(contact);
           appLogger.info(
-            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength)}',
+            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
             tag: 'Connector',
           );
         } else {
@@ -5085,7 +5089,7 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
         tag: 'Connector',
       );
     } else {
@@ -7207,7 +7211,7 @@ class MeshCoreConnector extends ChangeNotifier {
           : existing.lastMessageAt;
 
       appLogger.info(
-        'Refreshing contact ${existing.name}: devicePath=${_pathDiag(existing.path, existing.pathLength)}, existingOverride=${existing.pathOverride}',
+        'Refreshing contact ${existing.name}: devicePath=${_pathDiag(existing.path, existing.pathLength, existing.pathHashWidth)}, existingOverride=${existing.pathOverride}',
         tag: 'Connector',
       );
 
@@ -7233,7 +7237,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _updateDirectRepeater(_contacts[existingIndex], snr, path);
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength)}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
         tag: 'Connector',
       );
     }
