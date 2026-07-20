@@ -24,10 +24,14 @@ void main() {
           'reproducible; the drift web assets are matched against it.',
     );
 
+    // Normalise line endings first: pubspec.lock is CRLF on Windows and LF in
+    // CI, and a newline-sensitive pattern would pass on one and fail on the
+    // other. A guard that is itself platform-fragile is worse than none.
+    final lockText = lock.readAsStringSync().replaceAll('\r\n', '\n');
     final resolved = RegExp(
       r'^  drift:\n(?:.*\n)*?    version: "([^"]+)"',
       multiLine: true,
-    ).firstMatch(lock.readAsStringSync())?.group(1);
+    ).firstMatch(lockText)?.group(1);
     expect(resolved, isNotNull, reason: 'drift not found in pubspec.lock');
 
     final stamp = File('$root/web/drift_assets.version');
