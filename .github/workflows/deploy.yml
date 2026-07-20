@@ -18,9 +18,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          # Match local development version which provides Dart 3.11.0
-          flutter-version: '3.41.2'
+          # Pinned to the bench toolchain (Dart 3.12.1). Was 3.41.2 with a
+          # comment claiming local parity that had not been true for months.
+          flutter-version: "3.44.1"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
