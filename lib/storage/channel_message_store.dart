@@ -5,7 +5,7 @@ import 'package:meshcore_open/utils/app_logger.dart';
 import '../models/channel_message.dart';
 import '../models/translation_support.dart';
 import '../helpers/smaz.dart';
-import 'prefs_manager.dart';
+import 'drift/blob_store.dart';
 
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
@@ -65,9 +65,11 @@ class ChannelMessageStore {
       );
       return;
     }
-    final prefs = PrefsManager.instance;
     final jsonList = messages.map((msg) => _messageToJson(msg)).toList();
-    await prefs.setString(_storageKey(channelIndex), jsonEncode(jsonList));
+    await BlobStore.instance.write(
+      _storageKey(channelIndex),
+      jsonEncode(jsonList),
+    );
   }
 
   /// Load messages for a specific channel
@@ -78,9 +80,11 @@ class ChannelMessageStore {
       );
       return [];
     }
-    final prefs = PrefsManager.instance;
+    final blobs = BlobStore.instance;
     final key = _storageKey(channelIndex);
-    String? jsonString = prefs.getString(key);
+    // Bulk data lives in drift (#335); the fallback covers an unmigrated key
+    // and logs loudly if it fires.
+    String? jsonString = await blobs.readWithPrefsFallback(key);
 
     // One-time migration into the PSK-identity key. Only runs when the PSK is
     // known (key != index key). Adopts pre-#194 history keyed by slot index —
@@ -93,13 +97,15 @@ class ChannelMessageStore {
         _indexKey(channelIndex),
         '$_keyPrefix$channelIndex', // pre-device-scoping, unscoped index key
       ]) {
-        final legacy = prefs.getString(legacyKey);
+        // Legacy keys may sit in either backend depending on when this
+        // install last ran, so check both.
+        final legacy = await blobs.readWithPrefsFallback(legacyKey);
         if (legacy != null && legacy.isNotEmpty) {
           appLogger.info(
             'Migrating channel messages $legacyKey -> $key (PSK-keyed, #194)',
           );
-          await prefs.setString(key, legacy);
-          await prefs.remove(legacyKey);
+          await blobs.write(key, legacy);
+          await blobs.deleteEverywhere(legacyKey);
           jsonString = legacy;
           break;
         }
@@ -122,17 +128,16 @@ class ChannelMessageStore {
   /// history gone, and setChannel's reuse-clear (#193) needs any stale
   /// slot-index history gone so it can't be migrated onto the new occupant.
   Future<void> clearChannelMessages(int channelIndex) async {
-    final prefs = PrefsManager.instance;
-    await prefs.remove(_storageKey(channelIndex));
-    await prefs.remove(_indexKey(channelIndex));
+    final blobs = BlobStore.instance;
+    await blobs.deleteEverywhere(_storageKey(channelIndex));
+    await blobs.deleteEverywhere(_indexKey(channelIndex));
   }
 
   /// Clear all channel messages
   Future<void> clearAllChannelMessages() async {
-    final prefs = PrefsManager.instance;
-    final keys = prefs.getKeys().where((k) => k.startsWith(keyFor)).toList();
-    for (var key in keys) {
-      await prefs.remove(key);
+    final blobs = BlobStore.instance;
+    for (final key in await blobs.keysWithPrefix(keyFor)) {
+      await blobs.deleteEverywhere(key);
     }
   }
 

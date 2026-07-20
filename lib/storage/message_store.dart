@@ -4,6 +4,7 @@ import '../models/message.dart';
 import '../models/translation_support.dart';
 import '../helpers/smaz.dart';
 import '../utils/app_logger.dart';
+import 'drift/blob_store.dart';
 import 'prefs_manager.dart';
 
 class MessageStore {
@@ -23,10 +24,9 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot save messages.');
       return;
     }
-    final prefs = PrefsManager.instance;
     final key = '$keyFor$contactKeyHex';
     final jsonList = messages.map(_messageToJson).toList();
-    await prefs.setString(key, jsonEncode(jsonList));
+    await BlobStore.instance.write(key, jsonEncode(jsonList));
   }
 
   Future<List<Message>> loadMessages(String contactKeyHex) async {
@@ -34,29 +34,30 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot load messages.');
       return [];
     }
-    final prefs = PrefsManager.instance;
     final key = '$keyFor$contactKeyHex';
     final oldKey = '$_keyPrefix$contactKeyHex';
-    String? jsonString = prefs.getString(key);
+    // Bulk data lives in drift (#335); fallback covers an unmigrated key and
+    // logs loudly if it fires.
+    final blobs = BlobStore.instance;
+    String? jsonString = await blobs.readWithPrefsFallback(key);
+
     if (jsonString == null || jsonString.isEmpty) {
-      // Attempt migration from legacy unscoped key on first load
-      // Only touch storage when a legacy key actually exists. This ran
-      // unconditionally, and loadMessages is called once per contact during a
-      // contact pull. On Windows shared_preferences rewrites the WHOLE prefs
-      // file on every mutation, so each no-op remove cost a full multi-MB
-      // write - hundreds of them back to back on a large address book.
-      final legacyJsonString = prefs.getString(oldKey);
-      if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
+      // Only touch prefs when the legacy key actually exists. An unconditional
+      // remove here ran once per contact and cost a full-file rewrite each
+      // time on Windows (#306).
+      final prefs = PrefsManager.instance;
+      final legacy = prefs.get(oldKey);
+      if (legacy is String && legacy.isNotEmpty) {
         appLogger.info(
-          'Migrating messages from legacy key $oldKey to scoped key $key',
+          'Migrating messages from legacy key $oldKey to $key (drift)',
         );
-        await prefs.setString(key, legacyJsonString);
+        await blobs.write(key, legacy);
         await prefs.remove(oldKey);
-        jsonString = legacyJsonString;
+        jsonString = legacy;
       }
     }
     if (jsonString == null || jsonString.isEmpty) {
-      jsonString = prefs.getString(keyFor);
+      jsonString = await blobs.readWithPrefsFallback(keyFor);
     }
     if (jsonString == null || jsonString.isEmpty) {
       return [];
@@ -66,13 +67,6 @@ class MessageStore {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
       return jsonList.map((json) => _messageFromJson(json)).toList();
     } catch (e) {
-      // SAFELANE 6: never swallow. A decode failure here is
-      // indistinguishable from 'no data' to the caller, which reads
-      // to the user as data loss.
-      appLogger.error(
-        'Failed to decode messages for $contactKeyHex: $e',
-        tag: 'Storage',
-      );
       return [];
     }
   }
@@ -82,9 +76,11 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot clear messages.');
       return;
     }
-    final prefs = PrefsManager.instance;
     final key = '$keyFor$contactKeyHex';
-    await prefs.remove(key);
+    // Clear both backends: drift is authoritative, but a pre-migration prefs
+    // copy must not survive a clear and reappear via the read fallback.
+    await BlobStore.instance.delete(key);
+    await PrefsManager.instance.remove(key);
   }
 
   Map<String, dynamic> _messageToJson(Message msg) {

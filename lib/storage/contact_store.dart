@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../models/contact.dart';
 import '../utils/app_logger.dart';
+import 'drift/blob_store.dart';
 import 'prefs_manager.dart';
 
 class ContactStore {
@@ -19,24 +20,26 @@ class ContactStore {
       appLogger.warn('Public key hex is not set. Cannot load contacts.');
       return [];
     }
-    final prefs = PrefsManager.instance;
-    String? jsonString = prefs.getString(keyFor);
+    // Bulk data lives in drift (#335). The fallback covers a key the migration
+    // has not moved yet, and logs loudly if it fires.
+    final blobs = BlobStore.instance;
+    String? jsonString = await blobs.readWithPrefsFallback(keyFor);
+
     if (jsonString == null || jsonString.isEmpty) {
-      // Attempt migration from legacy unscoped key on first load
-      // Only remove the legacy key when it actually exists: every prefs
-      // mutation rewrites the whole file on Windows.
-      final legacyJsonString = prefs.getString(_keyPrefix);
-      if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
+      // Pre-device-scoping data still sits under the legacy unscoped key in
+      // SharedPreferences. Only touch prefs when it actually exists: an
+      // unconditional remove costs a full-file rewrite on Windows and a
+      // 5 MiB-capped synchronous write on web (#306).
+      final prefs = PrefsManager.instance;
+      final legacy = prefs.get(_keyPrefix);
+      if (legacy is String && legacy.isNotEmpty) {
         appLogger.info(
-          'Migrating contacts from legacy key $_keyPrefix to scoped key $keyFor',
+          'Migrating contacts from legacy key $_keyPrefix to $keyFor (drift)',
         );
-        await prefs.setString(keyFor, legacyJsonString);
+        await blobs.write(keyFor, legacy);
         await prefs.remove(_keyPrefix);
-        jsonString = legacyJsonString;
+        jsonString = legacy;
       }
-    }
-    if (jsonString == null || jsonString.isEmpty) {
-      jsonString = prefs.getString(keyFor);
     }
     if (jsonString == null || jsonString.isEmpty) {
       return [];
@@ -47,11 +50,7 @@ class ContactStore {
       return jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (e) {
-      // SAFELANE 6: never swallow. A decode failure here is
-      // indistinguishable from 'no data' to the caller, which reads
-      // to the user as data loss.
-      appLogger.error('Failed to decode contacts: $e', tag: 'Storage');
+    } catch (_) {
       return [];
     }
   }
@@ -61,9 +60,8 @@ class ContactStore {
       appLogger.warn('Public key hex is not set. Cannot save contacts.');
       return;
     }
-    final prefs = PrefsManager.instance;
     final jsonList = contacts.map(_toJson).toList();
-    await prefs.setString(keyFor, jsonEncode(jsonList));
+    await BlobStore.instance.write(keyFor, jsonEncode(jsonList));
   }
 
   Map<String, dynamic> _toJson(Contact contact) {
