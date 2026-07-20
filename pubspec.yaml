@@ -79,6 +79,7 @@ dependencies:
   # re-download both assets. tool/check_drift_assets.dart enforces the match.
   drift: 2.34.2
   drift_flutter: 0.3.1
+  path: ^1.9.1
 
 hooks:
   user_defines:

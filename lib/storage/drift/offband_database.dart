@@ -1,5 +1,11 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+import '../../utils/app_logger.dart';
 
 part 'offband_database.g.dart';
 
@@ -23,12 +29,25 @@ class OffbandDatabase extends _$OffbandDatabase {
   OffbandDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
 
+  static const String _dbName = 'offband_store';
+
   /// `drift_flutter` selects the platform backend: native SQLite on desktop
   /// and mobile, WASM on web. `web:` names the assets that must be shipped for
-  /// the web build (`sqlite3.wasm`, `drift_worker.dart.js`).
+  /// the web build (`sqlite3.wasm`, `drift_worker.js`).
   static QueryExecutor _defaultExecutor() {
     return driftDatabase(
-      name: 'offband_store',
+      name: _dbName,
+      // Native default is getApplicationDocumentsDirectory(), which on Windows
+      // is the user's Documents folder — redirected into OneDrive on most
+      // machines. A live SQLite file syncing to OneDrive risks lock contention
+      // and corruption, and it is the wrong place for app data. Use the
+      // application-support dir instead (%APPDATA% on Windows), where
+      // SharedPreferences already lives. path_provider has no web
+      // implementation, so this only applies off web; web ignores
+      // databaseDirectory and uses OPFS/IndexedDB.
+      native: DriftNativeOptions(
+        databaseDirectory: _appSupportDatabaseDirectory,
+      ),
       web: DriftWebOptions(
         sqlite3Wasm: Uri.parse('sqlite3.wasm'),
         // Filename matches the asset published by the drift release, which is
@@ -38,6 +57,51 @@ class OffbandDatabase extends _$OffbandDatabase {
         driftWorker: Uri.parse('drift_worker.js'),
       ),
     );
+  }
+
+  /// Resolves the application-support directory, and relocates a database left
+  /// in the old documents location by an earlier build.
+  ///
+  /// Builds before this fix opened the DB under getApplicationDocumentsDirectory
+  /// (OneDrive on Windows). Existing installs already have data there, so this
+  /// moves the file - and its `-wal` / `-shm` sidecars - to the new location on
+  /// first run, once, before drift opens it. Never deletes the source without a
+  /// successful move; a failed move leaves the old file so no data is stranded.
+  static Future<Directory> _appSupportDatabaseDirectory() async {
+    final support = await getApplicationSupportDirectory();
+    final newPath = p.join(support.path, '$_dbName.sqlite');
+
+    if (!File(newPath).existsSync()) {
+      try {
+        final docs = await getApplicationDocumentsDirectory();
+        final oldPath = p.join(docs.path, '$_dbName.sqlite');
+        if (File(oldPath).existsSync() && oldPath != newPath) {
+          for (final suffix in ['', '-wal', '-shm']) {
+            final src = File('$oldPath$suffix');
+            if (src.existsSync()) {
+              src.copySync('$newPath$suffix');
+              src.deleteSync();
+            }
+          }
+          appLogger.info(
+            'Relocated drift DB out of the documents dir (OneDrive on '
+            'Windows) into the app-support dir: $oldPath -> $newPath',
+            tag: 'Storage',
+          );
+        }
+      } catch (e) {
+        // Relocation is best-effort: if it fails, drift opens a fresh DB at the
+        // correct location and the migration re-runs from SharedPreferences.
+        // Loud, never silent (SAFELANE 6).
+        appLogger.error(
+          'Failed to relocate the drift DB from the documents dir: $e. '
+          'A fresh DB will be created at the app-support location.',
+          tag: 'Storage',
+        );
+      }
+    }
+
+    return support;
   }
 
   @override
