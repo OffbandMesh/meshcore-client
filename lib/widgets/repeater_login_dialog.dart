@@ -116,14 +116,18 @@ class _RepeaterLoginDialogState extends State<RepeaterLoginDialog> {
       );
       final timeoutSeconds = (timeoutMs / 1000).ceil();
       final timeout = Duration(milliseconds: timeoutMs + 2000);
-      // selection.hopCount is a BYTE count, not hops (#279). Log bytes, the
-      // applied width, the derived hop count and the hop-grouped bytes so a
-      // capture is unambiguous. (#298)
+      // `selection.hopCount` is ambiguous by construction: a device-discovered
+      // path carries a HOP count, a user override carries a BYTE count (#279).
+      // Do not assert hops here. Log the raw field, the width, and the actual
+      // byte length so a capture discriminates them:
+      //   bytes == field      -> byte-count semantics (override)
+      //   bytes == field * w  -> hop-count semantics (device)
+      // (#298)
       final routingWidth = _connector.pathHashByteWidth;
       final selectionLabel = selection.useFlood
           ? 'flood'
-          : 'bytes=${selection.hopCount} w=$routingWidth '
-                'hops=${realHopCount(selection.hopCount, routingWidth)} '
+          : 'field=${selection.hopCount} w=$routingWidth '
+                'bytes=${selection.pathBytes.length} '
                 '[${PathHelper.formatPathHex(selection.pathBytes, routingWidth)}]';
       appLogger.info('Login routing: $selectionLabel', tag: 'RepeaterLogin');
       bool? loginResult;
