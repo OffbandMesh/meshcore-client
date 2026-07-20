@@ -1,0 +1,150 @@
+name: Release (signed)
+
+# Produces RELEASE-SIGNED Android artifacts using the project's real keystore.
+#
+# SECURITY: this repo is PUBLIC and this workflow has access to the signing
+# keystore, which is the single most irreplaceable credential in the project.
+# If it leaks, the app can never be updated again on any channel (GitHub,
+# F-Droid, Play all require a matching signature).
+#
+# Therefore:
+#   - NEVER add a `pull_request` trigger here. A PR (including from a fork)
+#     must never be able to run a job that can read these secrets.
+#   - The job is pinned to the `release-signing` Environment, which carries a
+#     required reviewer, so a signing run cannot proceed unattended.
+#   - The keystore is written to disk only for the duration of the build and
+#     deleted in a step that runs even when the build fails.
+#   - Signing values are passed via `env:`, never interpolated into a command
+#     line (where they would be visible in process listings) and never echoed.
+#
+# Debug-signed artifacts for day-to-day PR testing continue to come from
+# build.yml and are unaffected by this workflow. See #330, epic #312.
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-signed-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  android-signed:
+    runs-on: ubuntu-latest
+    # Required-reviewer gate. Do not remove.
+    environment: release-signing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties', 'android/build.gradle', 'android/settings.gradle', 'android/app/build.gradle', 'pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # The keystore is PKCS12 (despite the .jks extension), which does not
+      # support a key password distinct from the store password. One secret
+      # therefore correctly populates both fields. See #330.
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${KEYSTORE_BASE64}" ] || [ -z "${KEYSTORE_PASSWORD}" ]; then
+            echo "::error::Signing secrets are not available to this run."
+            exit 1
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > android/app/release.jks
+          # Fail loudly if the decode produced something implausible rather
+          # than letting Gradle fall back to debug signing silently.
+          SIZE=$(stat -c%s android/app/release.jks)
+          if [ "${SIZE}" -lt 1000 ]; then
+            echo "::error::Decoded keystore is ${SIZE} bytes; expected ~2.8 KB. Secret is malformed."
+            exit 1
+          fi
+          umask 077
+          cat > android/key.properties <<'PROPS'
+          storeFile=release.jks
+          keyAlias=meshcore
+          PROPS
+          {
+            printf 'storePassword=%s\n' "${KEYSTORE_PASSWORD}"
+            printf 'keyPassword=%s\n' "${KEYSTORE_PASSWORD}"
+          } >> android/key.properties
+          echo "Keystore decoded (${SIZE} bytes), key.properties written."
+
+      - run: flutter pub get
+
+      - name: Build signed APK
+        run: flutter build apk --release --no-pub
+
+      - name: Build signed AAB
+        run: flutter build appbundle --release --no-pub
+
+      # The load-bearing check. A green build does NOT prove the artifact is
+      # release-signed: build.gradle.kts silently falls back to the debug
+      # signing config when key.properties is missing or malformed (#111),
+      # which is exactly the failure this workflow exists to prevent. So we
+      # read the certificate off the built APK and fail if it is the debug key.
+      - name: Verify APK is signed with the release certificate
+        run: |
+          set -eu
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          BUILD_TOOLS=$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)
+          APKSIGNER="${BUILD_TOOLS}/apksigner"
+          echo "Using ${APKSIGNER}"
+          CERTS=$("${APKSIGNER}" verify --print-certs "${APK}")
+          echo "${CERTS}"
+          if echo "${CERTS}" | grep -qi "CN=Android Debug"; then
+            echo "::error::APK is DEBUG-SIGNED. key.properties was not picked up; see #111."
+            exit 1
+          fi
+          echo "${CERTS}" | grep -i "SHA-256 digest" | head -1
+          echo "Release certificate confirmed (not the Android Debug key)."
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: offband-signed-apk-r${{ github.run_number }}-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: offband-signed-aab-r${{ github.run_number }}-${{ github.sha }}
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      # Runs even when an earlier step failed. Without `if: always()` a build
+      # failure would leave the keystore and its password on the runner.
+      - name: Remove keystore material
+        if: always()
+        run: |
+          rm -f android/app/release.jks android/key.properties
+          echo "Keystore material removed."
