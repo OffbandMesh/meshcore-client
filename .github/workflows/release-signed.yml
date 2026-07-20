@@ -110,6 +110,17 @@ jobs:
       # which is exactly the failure this workflow exists to prevent. So we
       # read the certificate off the built APK and fail if it is the debug key.
       - name: Verify APK is signed with the release certificate
+        env:
+          # SHA-256 of the strycher-personal.jks signing certificate, taken
+          # from artifacts already published and installed by users: releases
+          # b55 and b58, and a local release build. Established without the
+          # keystore password, since reading a certificate off a signed APK
+          # needs no password.
+          #
+          # Pinning the exact value (rather than only rejecting the debug key)
+          # also catches a DIFFERENT key being substituted, which would break
+          # cross-channel updates against Play just as badly as debug signing.
+          EXPECTED_SHA256: e7da8cd5bf22ac3eda7cb954b8b120a18b6c4382d1b6e6fdd204ddedddaf5488
         run: |
           set -eu
           APK=build/app/outputs/flutter-apk/app-release.apk
@@ -117,13 +128,35 @@ jobs:
           APKSIGNER="${BUILD_TOOLS}/apksigner"
           echo "Using ${APKSIGNER}"
           CERTS=$("${APKSIGNER}" verify --print-certs "${APK}")
-          echo "${CERTS}"
+
+          # Debug fallback is the #111 failure mode and the reason this check
+          # exists: build.gradle.kts silently signs with the debug config when
+          # key.properties is absent, and a green build hides it completely.
           if echo "${CERTS}" | grep -qi "CN=Android Debug"; then
             echo "::error::APK is DEBUG-SIGNED. key.properties was not picked up; see #111."
             exit 1
           fi
-          echo "${CERTS}" | grep -i "SHA-256 digest" | head -1
-          echo "Release certificate confirmed (not the Android Debug key)."
+
+          ACTUAL=$(echo "${CERTS}" \
+            | grep -i "Signer #1 certificate SHA-256 digest" \
+            | head -1 \
+            | awk -F': ' '{print $2}' \
+            | tr -d '[:space:]')
+
+          if [ -z "${ACTUAL}" ]; then
+            echo "::error::Could not read a certificate SHA-256 from the APK."
+            exit 1
+          fi
+
+          if [ "${ACTUAL}" != "${EXPECTED_SHA256}" ]; then
+            echo "::error::Signing certificate MISMATCH."
+            echo "::error::expected ${EXPECTED_SHA256}"
+            echo "::error::actual   ${ACTUAL}"
+            echo "::error::This APK would not install over an existing Offband install."
+            exit 1
+          fi
+
+          echo "Signing certificate verified: ${ACTUAL}"
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
