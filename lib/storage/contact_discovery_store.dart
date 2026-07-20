@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../models/contact.dart';
 import 'prefs_manager.dart';
+import '../utils/app_logger.dart';
 
 class ContactDiscoveryStore {
   static const String _keyPrefix = 'discovered_contacts';
@@ -17,7 +18,14 @@ class ContactDiscoveryStore {
       return jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+    } catch (e) {
+      // SAFELANE 6: never swallow. A decode failure here is
+      // indistinguishable from 'no data' to the caller, which reads
+      // to the user as data loss.
+      appLogger.error(
+        'Failed to decode discovered contacts: $e',
+        tag: 'Storage',
+      );
       return [];
     }
   }

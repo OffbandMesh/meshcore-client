@@ -32,10 +32,24 @@ class ChannelMessageStore {
   String _indexKey(int channelIndex) => '$keyFor$channelIndex';
 
   /// Active storage key: PSK identity when known, else the slot index.
+  ///
+  /// The index fallback is legitimate before a channel list has loaded, but it
+  /// reads a DIFFERENT key: if history was already migrated to the PSK key, the
+  /// caller gets an empty list that is indistinguishable from data loss.
+  /// SAFELANE 6 - this must never be silent. Falling back where a resolver
+  /// exists means the channel list was not ready, which is the #333 race.
   String _storageKey(int channelIndex) {
     final pskHex = channelPskResolver?.call(channelIndex);
     if (pskHex != null && pskHex.isNotEmpty) {
       return '$keyFor$_pskMarker$pskHex';
+    }
+    if (channelPskResolver != null) {
+      appLogger.warn(
+        'Channel $channelIndex has no PSK yet; falling back to the slot-index '
+        'key. Any history already migrated to the PSK key will read as EMPTY. '
+        'This means the channel list was not loaded first (#333).',
+        tag: 'Storage',
+      );
     }
     return _indexKey(channelIndex);
   }
