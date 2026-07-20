@@ -24,6 +24,7 @@ import '../services/map_tile_cache_service.dart';
 import '../utils/contact_search.dart';
 import '../utils/route_transitions.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/map_layer_panel.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../icons/los_icon.dart';
 import 'channels_screen.dart';
@@ -418,6 +419,7 @@ class _MapScreenState extends State<MapScreen> {
                 _handleQuickSwitch(index, context),
             contactsUnreadCount: connector.getTotalContactsUnreadCount(),
             channelsUnreadCount: connector.getTotalChannelsUnreadCount(),
+            drawerContent: const MapLayerPanel(),
             onDisconnect: () => _disconnect(context, connector),
             onSettings: () => Navigator.push(
               context,
