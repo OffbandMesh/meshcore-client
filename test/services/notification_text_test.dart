@@ -64,4 +64,33 @@ void main() {
       );
     });
   });
+
+  group('allowlisted media URLs summarise too (#283 consistency)', () {
+    test('a pasted i.giphy.com link summarises', () {
+      expect(
+        NotificationService.formatNotificationText(
+          'https://i.giphy.com/$gifId.webp',
+        ),
+        'Sent a GIF',
+      );
+    });
+
+    test('a pasted Tenor CDN link summarises', () {
+      expect(
+        NotificationService.formatNotificationText(
+          'https://media.tenor.com/abc123XYZ/happy-dance.gif',
+        ),
+        'Sent a GIF',
+      );
+    });
+
+    test('an off-allowlist image URL does NOT summarise', () {
+      expect(
+        NotificationService.formatNotificationText(
+          'https://evil.example.com/tracker.gif',
+        ),
+        'https://evil.example.com/tracker.gif',
+      );
+    });
+  });
 }
