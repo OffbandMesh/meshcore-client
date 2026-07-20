@@ -155,7 +155,9 @@ class NotificationService {
     if (reaction != null) {
       return 'Reacted ${reaction.emoji}';
     }
-    if (GifHelper.parseGif(trimmed) != null) {
+    // resolveGifUrl, not parseGif: the tray must summarise exactly the set the
+    // chat renders inline, or an allowlisted Tenor GIF shows as a raw URL. (#283)
+    if (GifHelper.resolveGifUrl(trimmed) != null) {
       return 'Sent a GIF';
     }
     return text;
