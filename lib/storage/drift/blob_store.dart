@@ -35,6 +35,29 @@ class BlobStore {
 
   static bool isBulkKey(String key) => migratedPrefixes.any(key.startsWith);
 
+  /// Reads a bulk key, falling back to SharedPreferences if drift does not
+  /// have it.
+  ///
+  /// Belt and braces for the switchover: if migration ever missed a key, the
+  /// data must still be reachable rather than silently reading as empty, which
+  /// is exactly how #333 presented. The fallback is LOUD, because a fallback
+  /// that fires in normal operation means the migration is incomplete and
+  /// somebody needs to know.
+  Future<String?> readWithPrefsFallback(String key) async {
+    final fromDrift = await read(key);
+    if (fromDrift != null) return fromDrift;
+
+    final raw = PrefsManager.instance.get(key);
+    if (raw is! String || raw.isEmpty) return null;
+
+    appLogger.warn(
+      'Blob read for $key fell back to SharedPreferences: it is NOT in drift. '
+      'Migration is incomplete for this key; serving the prefs copy.',
+      tag: 'Storage',
+    );
+    return raw;
+  }
+
   Future<String?> read(String key) async {
     final row = await (_db.select(
       _db.storedBlobs,
@@ -48,6 +71,30 @@ class BlobStore {
         .insertOnConflictUpdate(
           StoredBlobsCompanion.insert(key: key, value: value),
         );
+  }
+
+  /// Keys beginning with [prefix], across BOTH backends.
+  ///
+  /// Callers that clear a family of keys must see prefs-resident keys too, or
+  /// a pre-migration copy survives the clear and reappears through the read
+  /// fallback.
+  Future<List<String>> keysWithPrefix(String prefix) async {
+    // Filtered in Dart rather than SQL: the table holds tens of rows, so the
+    // cost is irrelevant and it avoids depending on a version-specific LIKE
+    // API for a pinned dependency.
+    final rows = await _db.select(_db.storedBlobs).get();
+
+    return {
+      ...rows.map((r) => r.key).where((k) => k.startsWith(prefix)),
+      ...PrefsManager.instance.getKeys().where((k) => k.startsWith(prefix)),
+    }.toList();
+  }
+
+  /// Removes a key from BOTH backends, so a clear cannot be undone by a
+  /// leftover prefs copy surfacing through the fallback.
+  Future<void> deleteEverywhere(String key) async {
+    await delete(key);
+    await PrefsManager.instance.remove(key);
   }
 
   Future<void> delete(String key) async {

@@ -2,14 +2,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../models/contact.dart';
-import 'prefs_manager.dart';
+import '../utils/app_logger.dart';
+import 'drift/blob_store.dart';
 
 class ContactDiscoveryStore {
   static const String _keyPrefix = 'discovered_contacts';
 
   Future<List<Contact>> loadContacts() async {
-    final prefs = PrefsManager.instance;
-    final jsonStr = prefs.getString(_keyPrefix);
+    // Bulk data lives in drift (#335), not SharedPreferences. The fallback
+    // covers a key the migration has not moved yet and logs loudly if it fires.
+    final jsonStr = await BlobStore.instance.readWithPrefsFallback(_keyPrefix);
     if (jsonStr == null) return [];
 
     try {
@@ -17,15 +19,19 @@ class ContactDiscoveryStore {
       return jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+    } catch (e) {
+      // SAFELANE 6: a decode failure is not "no data".
+      appLogger.error(
+        'Failed to decode discovered contacts: $e',
+        tag: 'Storage',
+      );
       return [];
     }
   }
 
   Future<void> saveContacts(List<Contact> contacts) async {
-    final prefs = PrefsManager.instance;
     final jsonList = contacts.map(_toJson).toList();
-    await prefs.setString(_keyPrefix, jsonEncode(jsonList));
+    await BlobStore.instance.write(_keyPrefix, jsonEncode(jsonList));
   }
 
   Map<String, dynamic> _toJson(Contact contact) {
