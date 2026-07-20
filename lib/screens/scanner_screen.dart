@@ -25,6 +25,11 @@ class ScannerScreen extends StatefulWidget {
 
 class _ScannerScreenState extends State<ScannerScreen> {
   bool _changedNavigation = false;
+
+  /// Re-entrancy guard for routing into the app. Distinct from
+  /// [_changedNavigation], which records that we entered at least once and
+  /// gates the disconnect-on-dispose cleanup.
+  bool _routingIntoApp = false;
   late final MeshCoreConnector _connector;
   late final VoidCallback _connectionListener;
   BluetoothAdapterState _bluetoothState = BluetoothAdapterState.unknown;
@@ -42,12 +47,21 @@ class _ScannerScreenState extends State<ScannerScreen> {
       } else if (_connector.state == MeshCoreConnectionState.connected &&
           _connector.activeTransport == MeshCoreTransportType.bluetooth &&
           isCurrentRoute &&
-          !_changedNavigation) {
+          !_routingIntoApp) {
+        // Route in whenever this screen is showing while connected, not just
+        // on the first connect. Otherwise landing back here with a live
+        // connection is a dead end: Connect does nothing, because there is
+        // nothing left to connect.
         _changedNavigation = true;
+        _routingIntoApp = true;
         if (mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const ChannelsScreen()),
-          );
+          Navigator.of(context)
+              .push(
+                MaterialPageRoute(builder: (context) => const ChannelsScreen()),
+              )
+              .then((_) {
+                if (mounted) _routingIntoApp = false;
+              });
         }
       }
     };

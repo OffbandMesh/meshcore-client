@@ -68,21 +68,27 @@ class _AppShellState extends State<AppShell> {
 
   /// System back, in priority order:
   ///   1. an open drawer closes,
-  ///   2. otherwise pop the route (a pushed chat returns to its list),
-  ///   3. otherwise hand back to the OS, so Android returns to the home
-  ///      screen or the previous app rather than sitting on a dead press.
+  ///   2. on a detail screen, pop back to the list it came from,
+  ///   3. on a primary view, hand back to the OS so Android returns to the
+  ///      home screen or the previous app.
   ///
-  /// Screens previously did this with `PopScope(canPop: !isConnected)`, which
-  /// swallowed back entirely while connected: the drawer would not close and
-  /// the app would never background.
+  /// Step 3 must NOT pop, even though the route below can be popped. The
+  /// primary views sit on top of the scanner, so popping would dump a
+  /// connected user back onto the radio-connect list. Reaching the scanner is
+  /// what Disconnect is for, not what Back is for.
+  ///
+  /// A primary view is one carrying the bottom bar; a detail screen (a channel
+  /// chat) has no [selectedIndex] and is genuinely pushed.
   void _handleBack() {
     final scaffold = _scaffoldKey.currentState;
     if (scaffold?.isDrawerOpen ?? false) {
       scaffold!.closeDrawer();
       return;
     }
+
+    final isPrimaryView = widget.selectedIndex != null;
     final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
+    if (!isPrimaryView && navigator.canPop()) {
       navigator.pop();
       return;
     }
