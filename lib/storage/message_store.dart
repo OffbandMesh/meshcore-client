@@ -29,34 +29,32 @@ class MessageStore {
     // truncate the store. Upsert by identity; deletion is explicit
     // (removeMessage).
     final key = '$keyFor$contactKeyHex';
-    final byKey = <String, Message>{};
-
-    final existing = await BlobStore.instance.readWithPrefsFallback(key);
-    if (existing != null && existing.isNotEmpty) {
-      try {
-        for (final e in jsonDecode(existing) as List<dynamic>) {
-          final m = _messageFromJson(e as Map<String, dynamic>);
-          byKey[_mergeKey(m)] = m;
+    final blobs = BlobStore.instance;
+    await blobs.synchronized(key, () async {
+      final byKey = <String, Message>{};
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing != null && existing.isNotEmpty) {
+        try {
+          for (final e in jsonDecode(existing) as List<dynamic>) {
+            final m = _messageFromJson(e as Map<String, dynamic>);
+            byKey[_mergeKey(m)] = m;
+          }
+        } catch (e) {
+          appLogger.error(
+            'Failed to decode existing DM history before merge; aborting save '
+            'to avoid truncation: $e',
+            tag: 'Storage',
+          );
+          return;
         }
-      } catch (e) {
-        appLogger.error(
-          'Failed to decode existing DM history before merge; aborting save '
-          'to avoid truncation: $e',
-          tag: 'Storage',
-        );
-        return;
       }
-    }
-    for (final m in messages) {
-      byKey[_mergeKey(m)] = m;
-    }
-
-    final merged = byKey.values.toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    await BlobStore.instance.write(
-      key,
-      jsonEncode(merged.map(_messageToJson).toList()),
-    );
+      for (final m in messages) {
+        byKey[_mergeKey(m)] = m;
+      }
+      final merged = byKey.values.toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
+    });
   }
 
   String _mergeKey(Message m) {

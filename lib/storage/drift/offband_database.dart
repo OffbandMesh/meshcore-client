@@ -76,26 +76,59 @@ class OffbandDatabase extends _$OffbandDatabase {
         final docs = await getApplicationDocumentsDirectory();
         final oldPath = p.join(docs.path, '$_dbName.sqlite');
         if (File(oldPath).existsSync() && oldPath != newPath) {
-          for (final suffix in ['', '-wal', '-shm']) {
-            final src = File('$oldPath$suffix');
-            if (src.existsSync()) {
-              src.copySync('$newPath$suffix');
-              src.deleteSync();
+          // Copy ALL files first, verify, and only then delete the sources.
+          // Deleting per-file mid-loop (Gemini review) could strand the main
+          // .sqlite in one place and its -wal in another if a later copy
+          // failed, corrupting the DB. Copy-all-then-delete-all makes a
+          // partial failure recoverable: the original stays intact and the
+          // half-written destination is cleaned up.
+          final suffixes = ['', '-wal', '-shm'];
+          final present = suffixes
+              .where((s) => File('$oldPath$s').existsSync())
+              .toList();
+          try {
+            for (final s in present) {
+              File('$oldPath$s').copySync('$newPath$s');
             }
+            // Verify every copy exists with a matching size before deleting.
+            for (final s in present) {
+              final src = File('$oldPath$s');
+              final dst = File('$newPath$s');
+              if (!dst.existsSync() || dst.lengthSync() != src.lengthSync()) {
+                throw StateError('copy verification failed for $newPath$s');
+              }
+            }
+            for (final s in present) {
+              File('$oldPath$s').deleteSync();
+            }
+            appLogger.info(
+              'Relocated drift DB out of the documents dir (OneDrive on '
+              'Windows) into the app-support dir: $oldPath -> $newPath',
+              tag: 'Storage',
+            );
+          } catch (e) {
+            // Roll back any partial destination so drift does not open a
+            // half-copied DB; the original in the documents dir is untouched.
+            for (final s in present) {
+              final dst = File('$newPath$s');
+              if (dst.existsSync()) {
+                try {
+                  dst.deleteSync();
+                } catch (_) {}
+              }
+            }
+            rethrow;
           }
-          appLogger.info(
-            'Relocated drift DB out of the documents dir (OneDrive on '
-            'Windows) into the app-support dir: $oldPath -> $newPath',
-            tag: 'Storage',
-          );
         }
       } catch (e) {
-        // Relocation is best-effort: if it fails, drift opens a fresh DB at the
-        // correct location and the migration re-runs from SharedPreferences.
-        // Loud, never silent (SAFELANE 6).
+        // Relocation is best-effort. On failure the ORIGINAL DB is left intact
+        // in the documents dir (the destination was rolled back), so no data is
+        // lost - drift opens a fresh DB at the support location and the user's
+        // history remains recoverable from the old path. Loud, never silent.
         appLogger.error(
-          'Failed to relocate the drift DB from the documents dir: $e. '
-          'A fresh DB will be created at the app-support location.',
+          'Failed to relocate the drift DB from the documents dir: $e. The '
+          'original at the old path is intact; a fresh DB will open at the '
+          'app-support location. Recover the old DB manually if needed.',
           tag: 'Storage',
         );
       }

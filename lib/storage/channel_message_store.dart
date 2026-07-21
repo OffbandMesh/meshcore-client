@@ -73,43 +73,49 @@ class ChannelMessageStore {
     // Deletion has its own path (removeChannelMessage) so this never
     // resurrects a message the user deleted.
     final key = _storageKey(channelIndex);
-    final byKey = <String, ChannelMessage>{};
-
-    final existing = await BlobStore.instance.readWithPrefsFallback(key);
-    if (existing != null && existing.isNotEmpty) {
-      try {
-        for (final e in jsonDecode(existing) as List<dynamic>) {
-          final m = _messageFromJson(e as Map<String, dynamic>);
-          byKey[_mergeKey(m)] = m;
+    final blobs = BlobStore.instance;
+    // Serialise the whole read-modify-write against other saves/deletes on this
+    // key so two concurrent saves cannot clobber each other (Gemini review).
+    await blobs.synchronized(key, () async {
+      final byKey = <String, ChannelMessage>{};
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing != null && existing.isNotEmpty) {
+        try {
+          for (final e in jsonDecode(existing) as List<dynamic>) {
+            final m = _messageFromJson(e as Map<String, dynamic>);
+            byKey[_mergeKey(m)] = m;
+          }
+        } catch (e) {
+          // SAFELANE 6: never merge into an empty base and truncate silently.
+          appLogger.error(
+            'Failed to decode existing channel $channelIndex history before '
+            'merge; aborting save to avoid truncation: $e',
+            tag: 'Storage',
+          );
+          return;
         }
-      } catch (e) {
-        // SAFELANE 6: a decode failure here must be loud, not silently drop the
-        // persisted history by merging into an empty base.
-        appLogger.error(
-          'Failed to decode existing channel $channelIndex history before '
-          'merge; aborting save to avoid truncation: $e',
-          tag: 'Storage',
-        );
-        return;
       }
-    }
-    for (final m in messages) {
-      byKey[_mergeKey(m)] = m;
-    }
-
-    final merged = byKey.values.toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    await BlobStore.instance.write(
-      key,
-      jsonEncode(merged.map(_messageToJson).toList()),
-    );
+      for (final m in messages) {
+        byKey[_mergeKey(m)] = m;
+      }
+      final merged = byKey.values.toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
+    });
   }
 
   /// Stable identity for merge/dedupe. messageId when present, else a composite
   /// that distinguishes distinct messages that share no id.
   String _mergeKey(ChannelMessage m) {
     if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
-    return 'x:${m.packetHash ?? ''}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
+    // Include the sender: two different senders can post identical text at the
+    // same timestamp without a messageId, and would otherwise collide and lose
+    // one (Gemini review, 2026-07-20).
+    final sender = m.senderKey == null
+        ? ''
+        : m.senderKey!.map((b) => b.toRadixString(16)).join();
+    return 'x:$sender:${m.packetHash ?? ''}:'
+        '${m.timestamp.millisecondsSinceEpoch}:${m.text}';
   }
 
   /// Removes a single message from the persisted history. The explicit delete
@@ -121,28 +127,27 @@ class ChannelMessageStore {
   ) async {
     if (publicKeyHex.isEmpty) return;
     final key = _storageKey(channelIndex);
-    final existing = await BlobStore.instance.readWithPrefsFallback(key);
-    if (existing == null || existing.isEmpty) return;
-
-    final List<dynamic> raw;
-    try {
-      raw = jsonDecode(existing) as List<dynamic>;
-    } catch (e) {
-      appLogger.error(
-        'Failed to decode channel $channelIndex history for delete: $e',
-        tag: 'Storage',
-      );
-      return;
-    }
-    final target = _mergeKey(message);
-    final kept = raw
-        .map((e) => _messageFromJson(e as Map<String, dynamic>))
-        .where((m) => _mergeKey(m) != target)
-        .toList();
-    await BlobStore.instance.write(
-      key,
-      jsonEncode(kept.map(_messageToJson).toList()),
-    );
+    final blobs = BlobStore.instance;
+    await blobs.synchronized(key, () async {
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing == null || existing.isEmpty) return;
+      final List<dynamic> raw;
+      try {
+        raw = jsonDecode(existing) as List<dynamic>;
+      } catch (e) {
+        appLogger.error(
+          'Failed to decode channel $channelIndex history for delete: $e',
+          tag: 'Storage',
+        );
+        return;
+      }
+      final target = _mergeKey(message);
+      final kept = raw
+          .map((e) => _messageFromJson(e as Map<String, dynamic>))
+          .where((m) => _mergeKey(m) != target)
+          .toList();
+      await blobs.write(key, jsonEncode(kept.map(_messageToJson).toList()));
+    });
   }
 
   /// Load messages for a specific channel
@@ -177,9 +182,30 @@ class ChannelMessageStore {
           appLogger.info(
             'Migrating channel messages $legacyKey -> $key (PSK-keyed, #194)',
           );
-          await blobs.write(key, legacy);
+          // Under the key lock, and MERGE rather than overwrite: a save may
+          // have landed on the PSK key between the read above and here, and a
+          // blind write would clobber it (Gemini review). Union keeps both the
+          // adopted legacy history and any freshly-saved message.
+          jsonString = await blobs.synchronized(key, () async {
+            final byKey = <String, ChannelMessage>{};
+            for (final srcJson in [await blobs.read(key), legacy]) {
+              if (srcJson == null || srcJson.isEmpty) continue;
+              try {
+                for (final e in jsonDecode(srcJson) as List<dynamic>) {
+                  final m = _messageFromJson(e as Map<String, dynamic>);
+                  byKey[_mergeKey(m)] = m;
+                }
+              } catch (_) {
+                // Skip an undecodable source rather than aborting the adoption.
+              }
+            }
+            final merged = byKey.values.toList()
+              ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            final encoded = jsonEncode(merged.map(_messageToJson).toList());
+            await blobs.write(key, encoded);
+            return encoded;
+          });
           await blobs.deleteEverywhere(legacyKey);
-          jsonString = legacy;
           break;
         }
       }

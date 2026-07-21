@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../utils/app_logger.dart';
@@ -45,6 +47,24 @@ class BlobStore {
   ];
 
   static bool isBulkKey(String key) => migratedPrefixes.any(key.startsWith);
+
+  /// Per-key operation chain. Merge-on-save and the legacy-key migration are
+  /// read-modify-write sequences with an await gap; two of them racing on the
+  /// same key would let the second clobber the first and silently lose
+  /// messages (Gemini review, 2026-07-20). Every RMW on a key runs through
+  /// [synchronized], which serialises operations per key while leaving
+  /// different keys concurrent.
+  final Map<String, Future<void>> _keyChains = {};
+
+  /// Serialises [action] against other synchronized actions on the same [key].
+  Future<T> synchronized<T>(String key, Future<T> Function() action) {
+    final prior = _keyChains[key] ?? Future<void>.value();
+    final result = prior.then((_) => action());
+    // Next op waits for this one; swallow errors so one failure does not wedge
+    // the chain for the key.
+    _keyChains[key] = result.then((_) {}, onError: (_) {});
+    return result;
+  }
 
   /// Reads a bulk key, falling back to SharedPreferences if drift does not
   /// have it.

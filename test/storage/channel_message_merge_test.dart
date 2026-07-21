@@ -79,6 +79,25 @@ void main() {
     expect(all.single.reactions['thumbsup'], 2);
   });
 
+  test(
+    'concurrent saves to one channel do not lose messages (Gemini)',
+    () async {
+      await store.saveChannelMessages(0, [msg(0)]);
+      // Fire two saves without awaiting between them: they race on the same key.
+      // Serialisation must make the result the union, not last-writer-wins.
+      final a = store.saveChannelMessages(0, [msg(1)]);
+      final b = store.saveChannelMessages(0, [msg(2)]);
+      await Future.wait([a, b]);
+      final all = await store.loadChannelMessages(0);
+      expect(
+        all.map((m) => m.text),
+        containsAll(['m0', 'm1', 'm2']),
+        reason: 'neither concurrent save may clobber the other',
+      );
+      expect(all, hasLength(3));
+    },
+  );
+
   test('deleting a message does NOT resurrect it on the next save', () async {
     await store.saveChannelMessages(0, [for (var i = 0; i < 5; i++) msg(i)]);
 
