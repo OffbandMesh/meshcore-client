@@ -50,6 +50,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
 
       # Same mechanism as build.yml (#331). build_pipe's build_command in
       # pubspec.yaml passes --dart-define-from-file, so this file must exist

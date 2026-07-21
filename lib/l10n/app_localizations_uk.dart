@@ -1885,6 +1885,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get map_showOverlaps => 'Перекриття ключів ретрансляторів';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Префікс ключа';
 
   @override

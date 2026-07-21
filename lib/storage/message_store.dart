@@ -4,6 +4,7 @@ import '../models/message.dart';
 import '../models/translation_support.dart';
 import '../helpers/smaz.dart';
 import '../utils/app_logger.dart';
+import 'drift/blob_store.dart';
 import 'prefs_manager.dart';
 
 class MessageStore {
@@ -23,10 +24,69 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot save messages.');
       return;
     }
-    final prefs = PrefsManager.instance;
+    // Merge into the persisted full history rather than overwriting it (#343).
+    // The in-memory list is windowed for memory, so a plain overwrite would
+    // truncate the store. Upsert by identity; deletion is explicit
+    // (removeMessage).
     final key = '$keyFor$contactKeyHex';
-    final jsonList = messages.map(_messageToJson).toList();
-    await prefs.setString(key, jsonEncode(jsonList));
+    final blobs = BlobStore.instance;
+    await blobs.synchronized(key, () async {
+      final byKey = <String, Message>{};
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing != null && existing.isNotEmpty) {
+        try {
+          for (final e in jsonDecode(existing) as List<dynamic>) {
+            final m = _messageFromJson(e as Map<String, dynamic>);
+            byKey[_mergeKey(m)] = m;
+          }
+        } catch (e) {
+          appLogger.error(
+            'Failed to decode existing DM history before merge; aborting save '
+            'to avoid truncation: $e',
+            tag: 'Storage',
+          );
+          return;
+        }
+      }
+      for (final m in messages) {
+        byKey[_mergeKey(m)] = m;
+      }
+      final merged = byKey.values.toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
+    });
+  }
+
+  String _mergeKey(Message m) {
+    if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
+    return 'x:${m.senderKeyHex}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
+  }
+
+  /// Explicit delete path (#343): save merges and never removes.
+  Future<void> removeMessage(String contactKeyHex, Message message) async {
+    if (publicKeyHex.isEmpty) return;
+    final key = '$keyFor$contactKeyHex';
+    final existing = await BlobStore.instance.readWithPrefsFallback(key);
+    if (existing == null || existing.isEmpty) return;
+    final List<dynamic> raw;
+    try {
+      raw = jsonDecode(existing) as List<dynamic>;
+    } catch (e) {
+      appLogger.error(
+        'Failed to decode DM history for delete: $e',
+        tag: 'Storage',
+      );
+      return;
+    }
+    final target = _mergeKey(message);
+    final kept = raw
+        .map((e) => _messageFromJson(e as Map<String, dynamic>))
+        .where((m) => _mergeKey(m) != target)
+        .toList();
+    await BlobStore.instance.write(
+      key,
+      jsonEncode(kept.map(_messageToJson).toList()),
+    );
   }
 
   Future<List<Message>> loadMessages(String contactKeyHex) async {
@@ -34,24 +94,30 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot load messages.');
       return [];
     }
-    final prefs = PrefsManager.instance;
     final key = '$keyFor$contactKeyHex';
     final oldKey = '$_keyPrefix$contactKeyHex';
-    String? jsonString = prefs.getString(key);
+    // Bulk data lives in drift (#335); fallback covers an unmigrated key and
+    // logs loudly if it fires.
+    final blobs = BlobStore.instance;
+    String? jsonString = await blobs.readWithPrefsFallback(key);
+
     if (jsonString == null || jsonString.isEmpty) {
-      // Attempt migration from legacy unscoped key on first load
-      final legacyJsonString = prefs.getString(oldKey);
-      prefs.remove(oldKey);
-      if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
+      // Only touch prefs when the legacy key actually exists. An unconditional
+      // remove here ran once per contact and cost a full-file rewrite each
+      // time on Windows (#306).
+      final prefs = PrefsManager.instance;
+      final legacy = prefs.get(oldKey);
+      if (legacy is String && legacy.isNotEmpty) {
         appLogger.info(
-          'Migrating messages from legacy key $oldKey to scoped key $key',
+          'Migrating messages from legacy key $oldKey to $key (drift)',
         );
-        await prefs.setString(key, legacyJsonString);
-        jsonString = legacyJsonString;
+        await blobs.write(key, legacy);
+        await prefs.remove(oldKey);
+        jsonString = legacy;
       }
     }
     if (jsonString == null || jsonString.isEmpty) {
-      jsonString = prefs.getString(keyFor);
+      jsonString = await blobs.readWithPrefsFallback(keyFor);
     }
     if (jsonString == null || jsonString.isEmpty) {
       return [];
@@ -70,9 +136,11 @@ class MessageStore {
       appLogger.warn('Public key hex is not set. Cannot clear messages.');
       return;
     }
-    final prefs = PrefsManager.instance;
     final key = '$keyFor$contactKeyHex';
-    await prefs.remove(key);
+    // Clear both backends: drift is authoritative, but a pre-migration prefs
+    // copy must not survive a clear and reappear via the read fallback.
+    await BlobStore.instance.delete(key);
+    await PrefsManager.instance.remove(key);
   }
 
   Map<String, dynamic> _messageToJson(Message msg) {

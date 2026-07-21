@@ -1812,6 +1812,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get map_showOverlaps => 'リピーターキーの重複';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => '主要なプレフィックス';
 
   @override

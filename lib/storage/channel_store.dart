@@ -22,13 +22,15 @@ class ChannelStore {
     String? jsonString = prefs.getString(keyFor);
     if (jsonString == null || jsonString.isEmpty) {
       // Attempt migration from legacy unscoped key on first load
+      // Only remove the legacy key when it actually exists: every prefs
+      // mutation rewrites the whole file on Windows.
       final legacyJsonString = prefs.getString(_keyPrefix);
-      prefs.remove(_keyPrefix);
       if (legacyJsonString != null && legacyJsonString.isNotEmpty) {
         appLogger.info(
           'Migrating channel messages from legacy key $_keyPrefix to scoped key $keyFor',
         );
         await prefs.setString(keyFor, legacyJsonString);
+        await prefs.remove(_keyPrefix);
         jsonString = legacyJsonString;
       }
     }
@@ -45,7 +47,11 @@ class ChannelStore {
       return jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+    } catch (e) {
+      // SAFELANE 6: never swallow. A decode failure here is
+      // indistinguishable from 'no data' to the caller, which reads
+      // to the user as data loss.
+      appLogger.error('Failed to decode channels: $e', tag: 'Storage');
       return [];
     }
   }

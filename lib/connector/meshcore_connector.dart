@@ -699,15 +699,36 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _messageStore.saveMessages(contactKeyHex, messages);
+    // Explicit delete: saveMessages now merges and never removes (#343).
+    await _messageStore.removeMessage(contactKeyHex, message);
     notifyListeners();
   }
+
+  /// Aggregate cost of the per-contact conversation load, which runs once per
+  /// contact during a pull. It is fired unawaited from the contact handler, so
+  /// it escapes the frame-handler timing and has to be measured here.
+  int _convLoadCount = 0;
+  int _convLoadStoreMs = 0;
+  int _convLoadMergeMs = 0;
 
   Future<void> _loadMessagesForContact(String contactKeyHex) async {
     if (_loadedConversationKeys.contains(contactKeyHex)) return;
     _loadedConversationKeys.add(contactKeyHex);
 
+    final storeWatch = Stopwatch()..start();
     final allMessages = await _messageStore.loadMessages(contactKeyHex);
+    storeWatch.stop();
+    final mergeWatch = Stopwatch()..start();
+    _convLoadCount++;
+    _convLoadStoreMs += storeWatch.elapsedMilliseconds;
+    if (_convLoadCount % 25 == 0) {
+      appLogger.info(
+        'conversation loads: $_convLoadCount contacts, '
+        'store=${_convLoadStoreMs}ms(WALL, spans await - includes event-loop '
+        'queueing, NOT pure work) merge=${_convLoadMergeMs}ms(sync work)',
+        tag: 'Perf',
+      );
+    }
     if (allMessages.isNotEmpty) {
       // Keep only the most recent N messages in memory to bound memory usage
       final windowedMessages = allMessages.length > _messageWindowSize
@@ -748,6 +769,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _conversations[contactKeyHex] = windowedMergedMessages;
       notifyListeners();
     }
+    mergeWatch.stop();
+    _convLoadMergeMs += mergeWatch.elapsedMilliseconds;
   }
 
   String _messageMergeKey(Message message) {
@@ -811,7 +834,10 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    // Explicit delete path: saveChannelMessages now MERGES and never removes
+    // (#343), so deletion must go through removeChannelMessage or the message
+    // would be resurrected on the next save.
+    await _channelMessageStore.removeChannelMessage(channelIndex, message);
     notifyListeners();
   }
 
@@ -1191,10 +1217,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _contacts
       ..clear()
       ..addAll(cached);
-    for (final contact in cached) {
-      _ensureContactSmazSettingLoaded(contact.publicKeyHex);
-      _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex);
-    }
+    // Load every contact's settings without notifying per contact, then
+    // notify once. Per-contact notification rebuilt the whole tree 2x per
+    // contact (600 rebuilds for 300 contacts), and each rebuild walks the
+    // contact list, which is what stalled the UI for ~44s on connect.
+    await Future.wait([
+      for (final contact in cached) ...[
+        _ensureContactSmazSettingLoaded(contact.publicKeyHex, notify: false),
+        _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex, notify: false),
+      ],
+    ]);
+    notifyListeners();
   }
 
   Future<void> _loadDiscoveredContactCache() async {
@@ -4342,7 +4375,64 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Any frame handler that occupies the UI isolate long enough to drop
+  /// frames is a bug: it stalls rendering, so progress bars freeze and input
+  /// stops responding while sync appears to do nothing and then finish at
+  /// once. Logged rather than assumed, so the offending code is named.
+  static const Duration _slowHandlerThreshold = Duration(milliseconds: 100);
+
+  /// Cumulative synchronous time per frame code. A single handler under the
+  /// slow threshold can still dominate if it runs hundreds of times, which a
+  /// per-call threshold cannot see.
+  final Map<int, int> _frameCodeMicros = {};
+  final Map<int, int> _frameCodeCount = {};
+  int _frameTotalMicros = 0;
+
   void _handleFrame(List<int> data) {
+    final handlerWatch = Stopwatch()..start();
+    _handleFrameInner(data);
+    handlerWatch.stop();
+    if (data.isEmpty) return;
+
+    final code = data[0];
+    final micros = handlerWatch.elapsedMicroseconds;
+    _frameCodeMicros[code] = (_frameCodeMicros[code] ?? 0) + micros;
+    _frameCodeCount[code] = (_frameCodeCount[code] ?? 0) + 1;
+    _frameTotalMicros += micros;
+
+    if (handlerWatch.elapsed > _slowHandlerThreshold) {
+      appLogger.info(
+        'slow frame handler: code=$code blocked UI for '
+        '${handlerWatch.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+
+    // Periodic cumulative report: names the code that owns the most isolate
+    // time even when no single call is slow.
+    if (_frameTotalMicros > 2000000) {
+      final ranked = _frameCodeMicros.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top = ranked
+          .take(4)
+          .map(
+            (e) =>
+                'code=${e.key} ${(e.value / 1000).round()}ms'
+                '/${_frameCodeCount[e.key]}calls',
+          )
+          .join('  ');
+      appLogger.info(
+        'frame handler cumulative (${(_frameTotalMicros / 1000).round()}ms '
+        'total sync): $top',
+        tag: 'Perf',
+      );
+      _frameTotalMicros = 0;
+      _frameCodeMicros.clear();
+      _frameCodeCount.clear();
+    }
+  }
+
+  void _handleFrameInner(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
 
@@ -4642,16 +4732,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelStore.setPublicKeyHex = selfPublicKeyHex;
     _unreadStore.setPublicKeyHex = selfPublicKeyHex;
 
-    // Now that we have self info, we can load all the persisted data for this node
-    _loadChannelOrder();
-    loadContactCache();
-    loadChannelSettings();
-    loadCachedChannels();
-
-    // Load persisted channel messages
-    loadAllChannelMessages();
-    loadUnreadState();
-    _loadDiscoveredContactCache();
+    // Now that we have self info, we can load all the persisted data for this
+    // node. Each step is timed: this sequence has stalled the UI isolate for
+    // ~40s on a large store, and the timings say which step is responsible.
+    unawaited(_timedStartupLoad());
 
     _awaitingSelfInfo = false;
     _selfInfoRetryTimer?.cancel();
@@ -4660,6 +4744,26 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Start the serialized initial sync pipeline after SELF_INFO.
     _maybeStartInitialChannelSync();
+  }
+
+  Future<void> _timedStartupLoad() async {
+    Future<void> step(String name, Future<void> Function() body) async {
+      final sw = Stopwatch()..start();
+      await body();
+      sw.stop();
+      appLogger.info(
+        'startup-load $name took ${sw.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+
+    await step('channelOrder', () async => _loadChannelOrder());
+    await step('contactCache', loadContactCache);
+    await step('channelSettings', () => loadChannelSettings());
+    await step('cachedChannels', loadCachedChannels);
+    await step('channelMessages', () => loadAllChannelMessages());
+    await step('unreadState', loadUnreadState);
+    await step('discoveredContacts', _loadDiscoveredContactCache);
   }
 
   /// Extract the additive `offband_caps` byte from a device-info reply.
@@ -5001,6 +5105,28 @@ class MeshCoreConnector extends ChangeNotifier {
     return physicsMax;
   }
 
+  /// Coalesces notifications during a bulk contact pull.
+  ///
+  /// Outside a pull this notifies immediately, preserving live-update
+  /// behaviour for adverts arriving one at a time.
+  DateTime? _lastContactPullNotify;
+  static const Duration _contactPullNotifyInterval = Duration(
+    milliseconds: 250,
+  );
+
+  void _notifyContactPullThrottled() {
+    if (!_isLoadingContacts) {
+      notifyListeners();
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastContactPullNotify;
+    if (last == null || now.difference(last) >= _contactPullNotifyInterval) {
+      _lastContactPullNotify = now;
+      notifyListeners();
+    }
+  }
+
   void _handleContact(Uint8List frame, {bool isContact = true}) {
     final contactTmp = Contact.fromFrame(frame);
     if (contactTmp != null) {
@@ -5088,7 +5214,14 @@ class MeshCoreConnector extends ChangeNotifier {
         _pathHistoryService!.handlePathUpdated(contact);
       }
 
-      notifyListeners();
+      // During a bulk pull this fired once per contact, and each notification
+      // is a synchronous full-tree rebuild that itself walks the contact list.
+      // Measured at ~19ms per contact, which never tripped a per-call slow
+      // threshold but dominated total isolate time. The channel handler
+      // already guards its notify with _isLoadingChannels; this is the same
+      // guard, throttled rather than suppressed so the sync progress bar still
+      // advances while the pull runs.
+      _notifyContactPullThrottled();
 
       // Show notification for new contact (advertisement)
       if (isNewContact && _appSettingsService != null) {
@@ -5621,22 +5754,32 @@ class MeshCoreConnector extends ChangeNotifier {
     return frame.sublist(prefixOffset, prefixOffset + prefixLen);
   }
 
-  void _ensureContactSmazSettingLoaded(String contactKeyHex) {
+  /// [notify] is false for bulk loads, which notify once at the end instead.
+  /// Notifying per contact rebuilds the whole tree once per contact, and each
+  /// rebuild itself walks the contact list, so a large address book turns this
+  /// into O(contacts^2) work on the UI isolate.
+  Future<void> _ensureContactSmazSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactSmazEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadSmazEnabled(contactKeyHex).then((enabled) {
-      if (_contactSmazEnabled[contactKeyHex] == enabled) return;
-      _contactSmazEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadSmazEnabled(contactKeyHex);
+    if (_contactSmazEnabled[contactKeyHex] == enabled) return;
+    _contactSmazEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
-  void _ensureContactCyr2LatSettingLoaded(String contactKeyHex) {
+  Future<void> _ensureContactCyr2LatSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactCyr2LatEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadCyr2LatEnabled(contactKeyHex).then((enabled) {
-      if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
-      _contactCyr2LatEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadCyr2LatEnabled(
+      contactKeyHex,
+    );
+    if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
+    _contactCyr2LatEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
   void _ensureContactCyr2LatProfileLoaded(String contactKeyHex) {

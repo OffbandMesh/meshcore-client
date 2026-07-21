@@ -1,0 +1,28 @@
+# Cloudflare Pages response headers (#335, web storage via drift/SQLite-WASM).
+#
+# Syntax: a URL pattern, then indented headers. Cloudflare Pages reads this
+# file from the build output and can add, override or remove response headers.
+#
+# Two things drift needs on the web:
+#
+# 1. sqlite3.wasm MUST be served as Content-Type: application/wasm, or
+#    WebAssembly streaming compilation refuses it.
+#
+# 2. COOP + COEP (cross-origin isolation) unlock drift's best storage backend,
+#    OPFS (`opfsLocks`). Verified locally: with these headers drift logs
+#    "Using WasmStorageImplementation.opfsLocks". WITHOUT them it still works,
+#    falling back to IndexedDB, which is slower but still unbounded compared to
+#    localStorage's 5 MiB cap. So these are a performance tier, not a
+#    correctness requirement.
+#
+# Verify after the first deploy:
+#   curl -sI https://<host>/sqlite3.wasm | grep -i 'content-type'
+#   -> expect: content-type: application/wasm
+# and check the browser console for the opfsLocks line above.
+
+/sqlite3.wasm
+  Content-Type: application/wasm
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

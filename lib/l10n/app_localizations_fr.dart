@@ -1896,6 +1896,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get map_showOverlaps => 'Chevauchement de la touche répétitive';
 
   @override
+  String get map_alwaysShowNames => 'Always show names';
+
+  @override
   String get map_keyPrefix => 'Préfixe clé';
 
   @override
