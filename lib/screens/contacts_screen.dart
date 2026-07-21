@@ -29,6 +29,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/blocked_badge.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/contact_filter_rail.dart';
+import '../widgets/contact_settings_dialog.dart';
 import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
@@ -1252,6 +1253,16 @@ class _ContactsScreenState extends State<ContactsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Same destination as the chat ellipsis -> Contact settings (#351).
+            // First item, so the destructive Block tile stays separated below.
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: Text(context.l10n.contact_settings),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                showContactSettingsDialog(context, contact);
+              },
+            ),
             // Blocking your own node is never meaningful (#250).
             if (!isSelf)
               ListTile(
