@@ -127,6 +127,30 @@ class OffbandDatabase extends _$OffbandDatabase {
 
   static const String _pinnedFolder = 'Offband MeshCore';
 
+  /// Absolute path of the pinned database file drift opens. #367.
+  static Future<String> pinnedDatabasePath() async {
+    final dir = await _resolvePinnedDir();
+    return p.join(dir.path, '$_dbName.sqlite');
+  }
+
+  /// Every candidate store path on this machine: the known canonical locations
+  /// (metadata-derived support dir; documents/OneDrive dir) plus the bounded
+  /// app-data scan. Used to consolidate stranded stores (#367). May include the
+  /// pinned path and non-existent paths; callers filter.
+  static Future<List<String>> discoverStorePaths() async {
+    final paths = <String>{};
+    try {
+      final support = await getApplicationSupportDirectory();
+      paths.add(p.join(support.path, '$_dbName.sqlite'));
+    } catch (_) {}
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      paths.add(p.join(docs.path, '$_dbName.sqlite'));
+    } catch (_) {}
+    paths.addAll(_scanAppDataForDatabases());
+    return paths.toList();
+  }
+
   /// Snapshots the legacy DB (chosen from the known and scanned locations) into
   /// [target] (which must not yet exist), leaving the source intact. A no-op on
   /// a fresh install where no legacy DB exists.

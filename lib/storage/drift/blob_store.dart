@@ -133,6 +133,25 @@ class BlobStore {
     await (_db.delete(_db.storedBlobs)..where((t) => t.key.equals(key))).go();
   }
 
+  /// Unions an [incoming] bulk value into the stored value for [key] by element
+  /// identity (message id / public key), keeping the stored copy on conflict and
+  /// adding only what is missing. Used to consolidate stores found in old
+  /// locations (#367). Serialised per key. Returns true if anything changed.
+  Future<bool> mergeBlob(String key, String incoming) {
+    return synchronized(key, () async {
+      final current = await read(key);
+      if (current == null) {
+        await write(key, incoming);
+        return true;
+      }
+      final merged = _mergeBulk(current, incoming);
+      // null => not JSON lists (keep current); == current => nothing new.
+      if (merged == null || merged == current) return false;
+      await write(key, merged);
+      return true;
+    });
+  }
+
   /// Moves bulk keys out of SharedPreferences into drift.
   ///
   /// Ordering is deliberate and non-negotiable: **write, verify by reading
@@ -295,8 +314,10 @@ class BlobStore {
         if (pk is String && pk.isNotEmpty) return 'p:$pk';
       }
       // No stable id: fall back to the element's canonical JSON so distinct
-      // elements stay distinct and true duplicates collapse.
-      return 'j:${jsonEncode(e)}';
+      // elements stay distinct and true duplicates collapse. Keys are sorted at
+      // every level, so two objects that differ ONLY in key order (e.g. from
+      // stores serialised by different builds) hash equal and do not duplicate.
+      return 'j:${jsonEncode(_canonicalize(e))}';
     }
 
     final seen = <String>{for (final e in driftList) idOf(e)};
@@ -306,6 +327,18 @@ class BlobStore {
     }
     if (result.length == driftList.length) return drift;
     return jsonEncode(result);
+  }
+
+  /// Recursively rebuilds [value] with every map's keys in sorted order, so
+  /// `jsonEncode` yields a key-order-independent form. Used only to compute the
+  /// id-less identity above; the stored data itself is never reordered.
+  static dynamic _canonicalize(dynamic value) {
+    if (value is Map) {
+      final keys = value.keys.map((k) => k.toString()).toList()..sort();
+      return {for (final k in keys) k: _canonicalize(value[k])};
+    }
+    if (value is List) return value.map(_canonicalize).toList();
+    return value;
   }
 }
 
