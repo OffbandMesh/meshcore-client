@@ -74,12 +74,12 @@ dependencies:
   llamadart: '>=0.6.8 <0.7.0'
   flutter_langdetect: ^0.0.1
   # PINNED (#335): web ships version-matched sqlite3.wasm + drift_worker.js
-  # from the drift release. A caret here would let pub resolve a newer drift
-  # than the committed assets, breaking web silently. Bump deliberately, then
-  # re-download both assets. tool/check_drift_assets.dart enforces the match.
+  # from the drift release. Bump deliberately, then re-download both assets.
   drift: 2.34.2
   drift_flutter: 0.3.1
   path: ^1.9.1
+  window_manager: ^0.5.2
+  screen_retriever: ^0.2.2
 
 hooks:
   user_defines:
