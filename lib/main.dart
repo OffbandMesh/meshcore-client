@@ -27,6 +27,8 @@ import 'services/ui_view_state_service.dart';
 import 'services/timeout_prediction_service.dart';
 import 'services/observer_config_service.dart';
 import 'services/block_service.dart';
+import 'services/window_geometry_service.dart';
+import 'storage/drift/blob_store.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 
@@ -36,8 +38,19 @@ void main() async {
   // Initialize SharedPreferences cache
   await PrefsManager.initialize();
 
+  // Move bulk data (message history, contacts) out of SharedPreferences into
+  // drift (#335). Must run after prefs are up and BEFORE any store reads, so
+  // no code sees a half-migrated state. Idempotent: a no-op once done.
+  //
+  // Deliberately awaited: the alternative is stores racing the migration, and
+  // this is the failure mode that produced #333.
+  await BlobStore.instance.migrateFromPrefs();
+
   // Start always-on file logging (#97); no-op on web.
   await FileLogService.instance.init();
+
+  // Restore the desktop window's saved position/size (#349); no-op off desktop.
+  await WindowGeometryService.instance.initialize();
 
   // Initialize services
   final storage = StorageService();

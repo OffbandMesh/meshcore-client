@@ -25,13 +25,18 @@ class ChannelSettingsStore {
     bool? enabled = prefs.getBool(key);
     if (enabled == null) {
       // Attempt migration from legacy unscoped key on first load
+      // Only touch storage when a legacy key actually exists. This ran
+      // unconditionally, and on Windows shared_preferences re-serialises and
+      // rewrites the WHOLE prefs file on every mutation, so removing a key
+      // that was never there still cost a full multi-MB write. Repeated per
+      // channel/contact on connect, that blocked the UI isolate for ~38s.
       enabled = prefs.getBool(oldKey);
-      prefs.remove(oldKey);
       if (enabled != null) {
         appLogger.info(
           'Migrating channel settings from legacy key $oldKey to scoped key $key',
         );
         await prefs.setBool(key, enabled);
+        await prefs.remove(oldKey);
       }
     }
     return enabled ?? false;

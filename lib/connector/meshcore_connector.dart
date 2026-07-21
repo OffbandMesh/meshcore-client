@@ -22,6 +22,7 @@ import '../helpers/time_anomaly.dart';
 import '../helpers/cyr2lat.dart';
 import '../helpers/smaz.dart';
 import '../helpers/cayenne_lpp.dart';
+import '../helpers/path_helper.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/ble_debug_log_service.dart';
 import '../services/linux_ble_error_classifier.dart';
@@ -281,6 +282,7 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+  bool? _femLnaEnabled;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -491,6 +493,36 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int get pathHashByteWidth => _pathHashByteWidth;
 
+  /// Compact path rendering for logs: hop count, applied width, the bytes we
+  /// actually hold versus the bytes that hop count implies, and the hex.
+  ///
+  /// Captures previously logged only a length, which made it impossible to tell
+  /// a single 2-byte hop from two 1-byte hops. That is the exact question
+  /// #240/#279 turn on.
+  ///
+  /// [pathLenField] is the firmware path-len field's low 6 bits, which is a HOP
+  /// COUNT, not a byte length: firmware `src/Packet.h:79-84` defines
+  /// `getPathByteLen() == getPathHashCount() * getPathHashSize()`. Logging the
+  /// held byte count next to the implied one makes the #309 decode truncation
+  /// self-evident in any capture, without the device present.
+  ///
+  /// One line, existing log sites only, no new per-frame logging. (#298)
+  /// [pathHashWidth] must be the width the path was CAPTURED at (each Contact
+  /// carries its own), not the connected device's current global width. Using
+  /// the global one falsely flags a complete 1-byte-width path as TRUNCATED
+  /// when the client is connected to a 2-byte device. (#309, Gemini review)
+  String _pathDiag(List<int> pathBytes, int pathLenField, int pathHashWidth) {
+    if (pathLenField < 0) return 'flood';
+    final w = pathHashWidth < 1 ? 1 : pathHashWidth;
+    final expectedBytes = pathLenField * w;
+    final hex = pathBytes.isEmpty
+        ? 'none'
+        : PathHelper.formatPathHex(pathBytes, w);
+    final short = pathBytes.length < expectedBytes ? ' TRUNCATED' : '';
+    return 'hops=$pathLenField w=$w '
+        'bytes=${pathBytes.length}/$expectedBytes$short [$hex]';
+  }
+
   CompanionRadioStats? get latestRadioStats => _latestRadioStats;
 
   bool get supportsCompanionRadioStats => (_firmwareVerCode ?? 0) >= 8;
@@ -558,6 +590,48 @@ class MeshCoreConnector extends ChangeNotifier {
   /// True when the radio's block store hit `MAX_BLOCKED_KEYS` (32) and rejected
   /// an ADD (ok=0). Local block still applies; those keys just aren't portable.
   bool get blockOffloadStoreFull => _blockOffloadStoreFull;
+
+  /// Whether this specific radio can control its external FEM LNA (#304).
+  ///
+  /// Gated on the capability BIT alone — firmware derives it from a runtime FEM
+  /// probe, so it is a per-unit answer: two Heltec V4s can legitimately disagree
+  /// depending on the fitted chip, and `rak3401` reports false by design (its
+  /// SKY66122 gates LNA and PA off one line, so a toggle would kill TX).
+  /// Never shortcut this to a model or version check.
+  bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
+
+  /// Current FEM LNA state as last reported by the radio, or null if unknown
+  /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.
+  bool? get femLnaEnabled => _femLnaEnabled;
+
+  /// Ask the radio to enable or bypass its FEM LNA. No-op unless the capability
+  /// bit is set, so a non-capable radio never sees `0xC3` traffic. State is
+  /// updated from the reply, not optimistically.
+  Future<void> setFemLna(bool enabled) async {
+    if (!isConnected || !supportsOffbandFemLna) return;
+    await sendFrame(buildOffbandFemLnaSetFrame(enabled));
+  }
+
+  /// Fallback read; device-info (offset 83) is the primary source on connect.
+  Future<void> requestFemLnaState() async {
+    if (!isConnected || !supportsOffbandFemLna) return;
+    await sendFrame(buildOffbandFemLnaGetFrame());
+  }
+
+  /// `[0xC3][sub][value]` — the value is the post-apply hardware state, so it is
+  /// adopted verbatim rather than assuming a SET took effect (#304).
+  void _handleOffbandFemLnaReply(Uint8List frame) {
+    final reply = parseOffbandFemLnaReply(frame);
+    if (reply == null) return;
+    if (_femLnaEnabled == reply.enabled) return;
+    _femLnaEnabled = reply.enabled;
+    appLogger.info(
+      'FEM LNA now ${reply.enabled ? 'enabled' : 'bypassed'}',
+      tag: 'Connector',
+    );
+    notifyListeners();
+  }
+
   Map<String, String>? get currentCustomVars => _currentCustomVars;
   int? get batteryMillivolts => _batteryMillivolts;
   int? get storageUsedKb => _storageUsedKb;
@@ -625,15 +699,36 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _messageStore.saveMessages(contactKeyHex, messages);
+    // Explicit delete: saveMessages now merges and never removes (#343).
+    await _messageStore.removeMessage(contactKeyHex, message);
     notifyListeners();
   }
+
+  /// Aggregate cost of the per-contact conversation load, which runs once per
+  /// contact during a pull. It is fired unawaited from the contact handler, so
+  /// it escapes the frame-handler timing and has to be measured here.
+  int _convLoadCount = 0;
+  int _convLoadStoreMs = 0;
+  int _convLoadMergeMs = 0;
 
   Future<void> _loadMessagesForContact(String contactKeyHex) async {
     if (_loadedConversationKeys.contains(contactKeyHex)) return;
     _loadedConversationKeys.add(contactKeyHex);
 
+    final storeWatch = Stopwatch()..start();
     final allMessages = await _messageStore.loadMessages(contactKeyHex);
+    storeWatch.stop();
+    final mergeWatch = Stopwatch()..start();
+    _convLoadCount++;
+    _convLoadStoreMs += storeWatch.elapsedMilliseconds;
+    if (_convLoadCount % 25 == 0) {
+      appLogger.info(
+        'conversation loads: $_convLoadCount contacts, '
+        'store=${_convLoadStoreMs}ms(WALL, spans await - includes event-loop '
+        'queueing, NOT pure work) merge=${_convLoadMergeMs}ms(sync work)',
+        tag: 'Perf',
+      );
+    }
     if (allMessages.isNotEmpty) {
       // Keep only the most recent N messages in memory to bound memory usage
       final windowedMessages = allMessages.length > _messageWindowSize
@@ -674,6 +769,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _conversations[contactKeyHex] = windowedMergedMessages;
       notifyListeners();
     }
+    mergeWatch.stop();
+    _convLoadMergeMs += mergeWatch.elapsedMilliseconds;
   }
 
   String _messageMergeKey(Message message) {
@@ -737,7 +834,10 @@ class MeshCoreConnector extends ChangeNotifier {
     if (messages == null) return;
     final removed = messages.remove(message);
     if (!removed) return;
-    await _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    // Explicit delete path: saveChannelMessages now MERGES and never removes
+    // (#343), so deletion must go through removeChannelMessage or the message
+    // would be resurrected on the next save.
+    await _channelMessageStore.removeChannelMessage(channelIndex, message);
     notifyListeners();
   }
 
@@ -1117,10 +1217,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _contacts
       ..clear()
       ..addAll(cached);
-    for (final contact in cached) {
-      _ensureContactSmazSettingLoaded(contact.publicKeyHex);
-      _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex);
-    }
+    // Load every contact's settings without notifying per contact, then
+    // notify once. Per-contact notification rebuilt the whole tree 2x per
+    // contact (600 rebuilds for 300 contacts), and each rebuild walks the
+    // contact list, which is what stalled the UI for ~44s on connect.
+    await Future.wait([
+      for (final contact in cached) ...[
+        _ensureContactSmazSettingLoaded(contact.publicKeyHex, notify: false),
+        _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex, notify: false),
+      ],
+    ]);
+    notifyListeners();
   }
 
   Future<void> _loadDiscoveredContactCache() async {
@@ -3165,11 +3272,15 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Pushes a path to the device. [hopCount] is a HOP count and [hashWidth] the
+  /// bytes per hop hash; both are needed because the wire path_len byte packs
+  /// them together, and sending a bare count mislabels the width. (#309)
   Future<void> setContactPath(
     Contact contact,
     Uint8List customPath,
-    int pathLen,
-  ) async {
+    int hopCount, {
+    int hashWidth = 1,
+  }) async {
     // Serialize path operations to prevent interleaved async calls from
     // leaving in-memory state inconsistent with the device.
     final prev = _pathOpLock;
@@ -3183,7 +3294,8 @@ class MeshCoreConnector extends ChangeNotifier {
         buildUpdateContactPathFrame(
           contact.publicKey,
           customPath,
-          pathLen,
+          hopCount,
+          hashWidth: hashWidth,
           type: contact.type,
           flags: contact.flags,
           name: contact.name,
@@ -3198,8 +3310,12 @@ class MeshCoreConnector extends ChangeNotifier {
         (c) => c.publicKeyHex == contact.publicKeyHex,
       );
       if (idx != -1) {
+        // pathLength is a HOP count. This wrote customPath.length (a BYTE
+        // count), which silently redefined the field's unit after any path
+        // set and doubled it at 2-byte width. (#309)
         _contacts[idx] = _contacts[idx].copyWith(
-          pathLength: customPath.length,
+          pathLength: hopCount,
+          pathHashWidth: hashWidth,
           path: customPath,
         );
         notifyListeners();
@@ -3245,6 +3361,7 @@ class MeshCoreConnector extends ChangeNotifier {
         latestContact.publicKey,
         latestContact.path,
         latestContact.pathLength,
+        hashWidth: latestContact.pathHashWidth,
         type: latestContact.type,
         flags: updatedFlags,
         name: latestContact.name,
@@ -3588,6 +3705,7 @@ class MeshCoreConnector extends ChangeNotifier {
         contact.publicKey,
         contact.path,
         contact.pathLength,
+        hashWidth: contact.pathHashWidth,
         type: contact.type,
         flags: contact.flags,
         name: contact.name,
@@ -4257,7 +4375,64 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Any frame handler that occupies the UI isolate long enough to drop
+  /// frames is a bug: it stalls rendering, so progress bars freeze and input
+  /// stops responding while sync appears to do nothing and then finish at
+  /// once. Logged rather than assumed, so the offending code is named.
+  static const Duration _slowHandlerThreshold = Duration(milliseconds: 100);
+
+  /// Cumulative synchronous time per frame code. A single handler under the
+  /// slow threshold can still dominate if it runs hundreds of times, which a
+  /// per-call threshold cannot see.
+  final Map<int, int> _frameCodeMicros = {};
+  final Map<int, int> _frameCodeCount = {};
+  int _frameTotalMicros = 0;
+
   void _handleFrame(List<int> data) {
+    final handlerWatch = Stopwatch()..start();
+    _handleFrameInner(data);
+    handlerWatch.stop();
+    if (data.isEmpty) return;
+
+    final code = data[0];
+    final micros = handlerWatch.elapsedMicroseconds;
+    _frameCodeMicros[code] = (_frameCodeMicros[code] ?? 0) + micros;
+    _frameCodeCount[code] = (_frameCodeCount[code] ?? 0) + 1;
+    _frameTotalMicros += micros;
+
+    if (handlerWatch.elapsed > _slowHandlerThreshold) {
+      appLogger.info(
+        'slow frame handler: code=$code blocked UI for '
+        '${handlerWatch.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+
+    // Periodic cumulative report: names the code that owns the most isolate
+    // time even when no single call is slow.
+    if (_frameTotalMicros > 2000000) {
+      final ranked = _frameCodeMicros.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top = ranked
+          .take(4)
+          .map(
+            (e) =>
+                'code=${e.key} ${(e.value / 1000).round()}ms'
+                '/${_frameCodeCount[e.key]}calls',
+          )
+          .join('  ');
+      appLogger.info(
+        'frame handler cumulative (${(_frameTotalMicros / 1000).round()}ms '
+        'total sync): $top',
+        tag: 'Perf',
+      );
+      _frameTotalMicros = 0;
+      _frameCodeMicros.clear();
+      _frameCodeCount.clear();
+    }
+  }
+
+  void _handleFrameInner(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
 
@@ -4280,6 +4455,9 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case cmdOffbandBlock:
         _handleOffbandBlockFrame(frame);
+        break;
+      case cmdOffbandFemLna:
+        _handleOffbandFemLnaReply(frame);
         break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
@@ -4554,16 +4732,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelStore.setPublicKeyHex = selfPublicKeyHex;
     _unreadStore.setPublicKeyHex = selfPublicKeyHex;
 
-    // Now that we have self info, we can load all the persisted data for this node
-    _loadChannelOrder();
-    loadContactCache();
-    loadChannelSettings();
-    loadCachedChannels();
-
-    // Load persisted channel messages
-    loadAllChannelMessages();
-    loadUnreadState();
-    _loadDiscoveredContactCache();
+    // Now that we have self info, we can load all the persisted data for this
+    // node. Each step is timed: this sequence has stalled the UI isolate for
+    // ~40s on a large store, and the timings say which step is responsible.
+    unawaited(_timedStartupLoad());
 
     _awaitingSelfInfo = false;
     _selfInfoRetryTimer?.cancel();
@@ -4572,6 +4744,26 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Start the serialized initial sync pipeline after SELF_INFO.
     _maybeStartInitialChannelSync();
+  }
+
+  Future<void> _timedStartupLoad() async {
+    Future<void> step(String name, Future<void> Function() body) async {
+      final sw = Stopwatch()..start();
+      await body();
+      sw.stop();
+      appLogger.info(
+        'startup-load $name took ${sw.elapsedMilliseconds}ms',
+        tag: 'Perf',
+      );
+    }
+
+    await step('channelOrder', () async => _loadChannelOrder());
+    await step('contactCache', loadContactCache);
+    await step('channelSettings', () => loadChannelSettings());
+    await step('cachedChannels', loadCachedChannels);
+    await step('channelMessages', () => loadAllChannelMessages());
+    await step('unreadState', loadUnreadState);
+    await step('discoveredContacts', _loadDiscoveredContactCache);
   }
 
   /// Extract the additive `offband_caps` byte from a device-info reply.
@@ -4584,6 +4776,14 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Bounds-checked: a truncated or hostile short frame never indexes OOB.
   static int? parseOffbandCaps(Uint8List frame) =>
       frame.length >= 83 ? frame[82] : null;
+
+  /// FEM LNA state byte, appended immediately after the caps byte in device-info
+  /// v16+ (firmware #298). Appended **unconditionally** — including on
+  /// non-capable boards, where it reads 0 — so the byte's presence indicates
+  /// firmware version, not capability. The capability BIT is what decides
+  /// whether to render the control. Null on v15 and older (shorter frame).
+  static bool? parseFemLnaState(Uint8List frame) =>
+      frame.length >= 84 ? frame[83] != femLnaBypass : null;
 
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
@@ -4599,7 +4799,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _firmwareVersion = info.version;
     _deviceModel = info.model;
     _appDebugLogService?.info(
-      'Device info: ${infoStrings.isEmpty ? '(no strings)' : infoStrings.join(' · ')}',
+      'Device info: ${infoStrings.isEmpty ? '(no strings)' : infoStrings.join(' · ')}'
+      ' (frameLen=${frame.length})',
       tag: 'Device',
     );
 
@@ -4608,15 +4809,42 @@ class MeshCoreConnector extends ChangeNotifier {
       _clientRepeat = frame[80] != 0;
     }
     // Path hash mode v10+ (byte 81): width = mode + 1 byte(s) per hop
+    final priorPathHashByteWidth = _pathHashByteWidth;
     if (frame.length >= 82) {
       final mode = (frame[81] & 0xFF).clamp(0, 2);
       _pathHashByteWidth = mode + 1;
     } else {
       _pathHashByteWidth = 1;
     }
+    // A short frame silently downgrades a known-good width to 1 (#240). Log the
+    // frame length and the before/after width so any capture shows whether that
+    // happened, without needing the device. (#298)
+    final widthChanged = _pathHashByteWidth != priorPathHashByteWidth;
+    final widthNote =
+        'Path hash width: $priorPathHashByteWidth -> $_pathHashByteWidth '
+        '(device-info frame len=${frame.length}'
+        '${frame.length < 82 ? ', SHORT: no byte 81, forced to 1' : ''})';
+    if (widthChanged) {
+      _appDebugLogService?.warn(widthNote, tag: 'Device');
+    } else {
+      _appDebugLogService?.info(widthNote, tag: 'Device');
+    }
     // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
     // testable helper; offset verified against firmware (see parseOffbandCaps).
     _offbandCaps = parseOffbandCaps(frame);
+    // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
+    // read on connect — a 0xC3 GET is only the fallback.
+    _femLnaEnabled = parseFemLnaState(frame);
+    // Capability-gated features are invisible when a bit is clear, which looks
+    // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
+    // be told apart from "this radio says it can't". (#304)
+    _appDebugLogService?.info(
+      'Offband caps=0x${(_offbandCaps ?? 0).toRadixString(16).padLeft(2, '0')} '
+      'verCode=${_firmwareVerCode ?? 0} frameLen=${frame.length} '
+      'femLnaByte=${_femLnaEnabled == null ? 'absent' : (_femLnaEnabled! ? '1' : '0')} '
+      'femCapable=$supportsOffbandFemLna blockCapable=$supportsOffbandBlock',
+      tag: 'Device',
+    );
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
@@ -4877,6 +5105,28 @@ class MeshCoreConnector extends ChangeNotifier {
     return physicsMax;
   }
 
+  /// Coalesces notifications during a bulk contact pull.
+  ///
+  /// Outside a pull this notifies immediately, preserving live-update
+  /// behaviour for adverts arriving one at a time.
+  DateTime? _lastContactPullNotify;
+  static const Duration _contactPullNotifyInterval = Duration(
+    milliseconds: 250,
+  );
+
+  void _notifyContactPullThrottled() {
+    if (!_isLoadingContacts) {
+      notifyListeners();
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastContactPullNotify;
+    if (last == null || now.difference(last) >= _contactPullNotifyInterval) {
+      _lastContactPullNotify = now;
+      notifyListeners();
+    }
+  }
+
   void _handleContact(Uint8List frame, {bool isContact = true}) {
     final contactTmp = Contact.fromFrame(frame);
     if (contactTmp != null) {
@@ -4918,7 +5168,7 @@ class MeshCoreConnector extends ChangeNotifier {
             : contact.lastMessageAt;
 
         appLogger.info(
-          'Refreshing contact ${contact.name}: devicePath=${contact.pathLength}, existingOverride=${existing.pathOverride}',
+          'Refreshing contact ${contact.name}: devicePath=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}, existingOverride=${existing.pathOverride}',
           tag: 'Connector',
         );
 
@@ -4933,7 +5183,7 @@ class MeshCoreConnector extends ChangeNotifier {
         );
 
         appLogger.info(
-          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+          'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
           tag: 'Connector',
         );
       } else {
@@ -4944,7 +5194,7 @@ class MeshCoreConnector extends ChangeNotifier {
             isContact) {
           _contacts.add(contact);
           appLogger.info(
-            'Added new contact ${contact.name}: pathLen=${contact.pathLength}',
+            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
             tag: 'Connector',
           );
         } else {
@@ -4964,7 +5214,14 @@ class MeshCoreConnector extends ChangeNotifier {
         _pathHistoryService!.handlePathUpdated(contact);
       }
 
-      notifyListeners();
+      // During a bulk pull this fired once per contact, and each notification
+      // is a synchronous full-tree rebuild that itself walks the contact list.
+      // Measured at ~19ms per contact, which never tripped a per-call slow
+      // threshold but dominated total isolate time. The channel handler
+      // already guards its notify with _isLoadingChannels; this is the same
+      // guard, throttled rather than suppressed so the sync progress bar still
+      // advances while the pull runs.
+      _notifyContactPullThrottled();
 
       // Show notification for new contact (advertisement)
       if (isNewContact && _appSettingsService != null) {
@@ -5032,7 +5289,7 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
         tag: 'Connector',
       );
     } else {
@@ -5497,22 +5754,32 @@ class MeshCoreConnector extends ChangeNotifier {
     return frame.sublist(prefixOffset, prefixOffset + prefixLen);
   }
 
-  void _ensureContactSmazSettingLoaded(String contactKeyHex) {
+  /// [notify] is false for bulk loads, which notify once at the end instead.
+  /// Notifying per contact rebuilds the whole tree once per contact, and each
+  /// rebuild itself walks the contact list, so a large address book turns this
+  /// into O(contacts^2) work on the UI isolate.
+  Future<void> _ensureContactSmazSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactSmazEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadSmazEnabled(contactKeyHex).then((enabled) {
-      if (_contactSmazEnabled[contactKeyHex] == enabled) return;
-      _contactSmazEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadSmazEnabled(contactKeyHex);
+    if (_contactSmazEnabled[contactKeyHex] == enabled) return;
+    _contactSmazEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
-  void _ensureContactCyr2LatSettingLoaded(String contactKeyHex) {
+  Future<void> _ensureContactCyr2LatSettingLoaded(
+    String contactKeyHex, {
+    bool notify = true,
+  }) async {
     if (_contactCyr2LatEnabled.containsKey(contactKeyHex)) return;
-    _contactSettingsStore.loadCyr2LatEnabled(contactKeyHex).then((enabled) {
-      if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
-      _contactCyr2LatEnabled[contactKeyHex] = enabled;
-      notifyListeners();
-    });
+    final enabled = await _contactSettingsStore.loadCyr2LatEnabled(
+      contactKeyHex,
+    );
+    if (_contactCyr2LatEnabled[contactKeyHex] == enabled) return;
+    _contactCyr2LatEnabled[contactKeyHex] = enabled;
+    if (notify) notifyListeners();
   }
 
   void _ensureContactCyr2LatProfileLoaded(String contactKeyHex) {
@@ -7154,7 +7421,7 @@ class MeshCoreConnector extends ChangeNotifier {
           : existing.lastMessageAt;
 
       appLogger.info(
-        'Refreshing contact ${existing.name}: devicePath=${existing.pathLength}, existingOverride=${existing.pathOverride}',
+        'Refreshing contact ${existing.name}: devicePath=${_pathDiag(existing.path, existing.pathLength, existing.pathHashWidth)}, existingOverride=${existing.pathOverride}',
         tag: 'Connector',
       );
 
@@ -7180,7 +7447,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _updateDirectRepeater(_contacts[existingIndex], snr, path);
 
       appLogger.info(
-        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_contacts[existingIndex].pathLength}',
+        'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
         tag: 'Connector',
       );
     }

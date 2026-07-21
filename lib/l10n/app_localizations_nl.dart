@@ -583,6 +583,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Batterij';
 
   @override
@@ -633,6 +636,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Laat dit apparaat de berichten van andere apparaten doorsturen.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1863,6 +1873,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Herhalingssleutel overlapt';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Prefix sleutel';

@@ -112,6 +112,9 @@ class AppSettings {
   final bool mapShowChatNodes;
   final bool mapShowOtherNodes;
   final bool mapShowOverlaps;
+
+  /// Show node names at any zoom, instead of only past the zoom threshold.
+  final bool mapAlwaysShowNames;
   final double mapTimeFilterHours; // 0 = all time
   final bool mapKeyPrefixEnabled;
   final String mapKeyPrefix;
@@ -188,6 +191,7 @@ class AppSettings {
     this.mapShowChatNodes = true,
     this.mapShowOtherNodes = true,
     this.mapShowOverlaps = false,
+    this.mapAlwaysShowNames = false,
     this.mapTimeFilterHours = 0, // Default to all time
     this.mapKeyPrefixEnabled = false,
     this.mapKeyPrefix = '',
@@ -252,6 +256,7 @@ class AppSettings {
       'map_show_chat_nodes': mapShowChatNodes,
       'map_show_other_nodes': mapShowOtherNodes,
       'map_show_overlaps': mapShowOverlaps,
+      'map_always_show_names': mapAlwaysShowNames,
       'map_time_filter_hours': mapTimeFilterHours,
       'map_key_prefix_enabled': mapKeyPrefixEnabled,
       'map_key_prefix': mapKeyPrefix,
@@ -338,6 +343,7 @@ class AppSettings {
       mapShowChatNodes: json['map_show_chat_nodes'] as bool? ?? true,
       mapShowOtherNodes: json['map_show_other_nodes'] as bool? ?? true,
       mapShowOverlaps: json['map_show_overlaps'] as bool? ?? false,
+      mapAlwaysShowNames: json['map_always_show_names'] as bool? ?? false,
       mapTimeFilterHours:
           (json['map_time_filter_hours'] as num?)?.toDouble() ?? 0,
       mapKeyPrefixEnabled: json['map_key_prefix_enabled'] as bool? ?? false,
@@ -462,6 +468,7 @@ class AppSettings {
     bool? mapShowChatNodes,
     bool? mapShowOtherNodes,
     bool? mapShowOverlaps,
+    bool? mapAlwaysShowNames,
     double? mapTimeFilterHours,
     bool? mapKeyPrefixEnabled,
     String? mapKeyPrefix,
@@ -510,6 +517,7 @@ class AppSettings {
       mapShowChatNodes: mapShowChatNodes ?? this.mapShowChatNodes,
       mapShowOtherNodes: mapShowOtherNodes ?? this.mapShowOtherNodes,
       mapShowOverlaps: mapShowOverlaps ?? this.mapShowOverlaps,
+      mapAlwaysShowNames: mapAlwaysShowNames ?? this.mapAlwaysShowNames,
       mapTimeFilterHours: mapTimeFilterHours ?? this.mapTimeFilterHours,
       mapKeyPrefixEnabled: mapKeyPrefixEnabled ?? this.mapKeyPrefixEnabled,
       mapKeyPrefix: mapKeyPrefix ?? this.mapKeyPrefix,

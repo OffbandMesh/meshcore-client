@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.1.2-rc.3+60
+version: 1.2.0+61
 
 environment:
   sdk: ^3.9.2
@@ -62,7 +62,7 @@ dependencies:
   url_launcher: ^6.3.0    # Launch URLs in system browser
   flutter_linkify: ^6.0.0 # Auto-detect and linkify URLs in text
   gpx: ^2.3.0
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
   share_plus: ^12.0.1
   build_pipe: ^0.3.1
   material_symbols_icons: ^4.2906.0
@@ -73,6 +73,13 @@ dependencies:
   ml_dataframe: ^1.0.0
   llamadart: '>=0.6.8 <0.7.0'
   flutter_langdetect: ^0.0.1
+  # PINNED (#335): web ships version-matched sqlite3.wasm + drift_worker.js
+  # from the drift release. Bump deliberately, then re-download both assets.
+  drift: 2.34.2
+  drift_flutter: 0.3.1
+  path: ^1.9.1
+  window_manager: ^0.5.2
+  screen_retriever: ^0.2.2
 
 hooks:
   user_defines:
@@ -95,6 +102,8 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  drift_dev: 2.34.0
+  build_runner: ^2.15.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -163,7 +172,7 @@ build_pipe:
       platforms:
         web:
           build:
-            build_command: flutter build web --release --pwa-strategy=none
+            build_command: flutter build web --release --pwa-strategy=none --dart-define-from-file=dart_defines.json
             # Strongly recommended: disables the default service worker which often causes more cache headaches
             add_version_query_param: true
             # This is the key flag! It appends ?v=<your pubspec version> to bootstrap/JS files

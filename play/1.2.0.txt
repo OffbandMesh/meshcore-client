@@ -1,0 +1,8 @@
+What's new in 1.2.0. A major update.
+
+- Your data now lives in a real database. Existing messages and contacts migrate automatically on first launch, nothing lost.
+- New navigation drawer you can pin open, with the channel list built in and in-place channel switching.
+- GIFs share as links now, so people on other MeshCore apps can see them.
+- Desktop remembers its window size and position.
+- Reach contact settings from the long-press menu.
+- Back-button, path decoding, and connect-speed fixes.

@@ -589,6 +589,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Akku';
 
   @override
@@ -641,6 +644,13 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Engedje, hogy ez a eszköz mások számára is ismételje a hálózati csomagokat.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1885,6 +1895,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Az ismétlő kulcsok ütköznek';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Kulcsfontosságú előtag';

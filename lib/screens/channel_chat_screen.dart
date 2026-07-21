@@ -29,6 +29,8 @@ import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
 import '../utils/route_transitions.dart';
+import 'settings_screen.dart';
+import '../utils/dialog_utils.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
 import '../widgets/mention_autocomplete.dart';
@@ -287,6 +289,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  Future<void> _disconnect(BuildContext context) async {
+    final connector = context.read<MeshCoreConnector>();
+    await showDisconnectDialog(context, connector);
+  }
+
   /// Bottom-bar navigation out of an open channel.
   ///
   /// Tapping Channels returns to the channel list. Tapping Contacts or Map
@@ -350,6 +357,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       drawerContent: ChannelDrawerList(
         currentChannelIndex: _currentChannel.index,
         onChannelSelected: _switchChannel,
+      ),
+      // Present here too: the footer is app-level, so it belongs on every
+      // screen carrying the panel, not just the primary views.
+      onDisconnect: () => _disconnect(context),
+      onSettings: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
       appBarBuilder: (context, pinned) => AppBar(
         // Pinned: the panel is already docked, so no hamburger is needed.
@@ -642,8 +656,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final enableTracing = settingsService.settings.enableMessageTracing;
     final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
     final isOutgoing = message.isOutgoing;
-    final gifId = GifHelper.parseGif(message.text);
-    final gifReplyName = gifId != null
+    final gifUrl = GifHelper.resolveGifUrl(message.text);
+    final gifReplyName = gifUrl != null
         ? TranslatedMessageContent.leadingReplyName(message.text)
         : null;
     final poi = parseMarkerText(message.text);
@@ -689,7 +703,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     ? (_) => _showMessageActions(message)
                     : null,
                 child: Container(
-                  padding: gifId != null
+                  padding: gifUrl != null
                       ? const EdgeInsets.all(4)
                       : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   constraints: BoxConstraints(
@@ -706,7 +720,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     children: [
                       if (!isOutgoing) ...[
                         Padding(
-                          padding: gifId != null
+                          padding: gifUrl != null
                               ? const EdgeInsets.only(
                                   left: 8,
                                   top: 4,
@@ -722,7 +736,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                             ),
                           ),
                         ),
-                        if (gifId == null) const SizedBox(height: 4),
+                        if (gifUrl == null) const SizedBox(height: 4),
                       ],
                       if (poi != null)
                         _buildPoiMessage(
@@ -732,7 +746,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                           textScale,
                           message.senderName,
                         )
-                      else if (gifId != null)
+                      else if (gifUrl != null)
                         Column(
                           crossAxisAlignment: isOutgoing
                               ? CrossAxisAlignment.end
@@ -752,8 +766,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: GifMessage(
-                                    url:
-                                        'https://media.giphy.com/media/$gifId/giphy.gif',
+                                    url: gifUrl,
                                     backgroundColor: Colors.transparent,
                                     fallbackTextColor: isOutgoing
                                         ? Theme.of(context)
@@ -797,7 +810,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       if (enableTracing && displayPath.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Padding(
-                          padding: gifId != null
+                          padding: gifUrl != null
                               ? const EdgeInsets.symmetric(horizontal: 8)
                               : EdgeInsets.zero,
                           child: Text(
@@ -1161,8 +1174,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 child: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _textController,
                   builder: (context, value, child) {
-                    final gifId = GifHelper.parseGif(value.text);
-                    if (gifId != null) {
+                    final gifUrl = GifHelper.resolveGifUrl(value.text);
+                    if (gifUrl != null) {
                       return Focus(
                         autofocus: true,
                         onKeyEvent: (node, event) {
@@ -1181,8 +1194,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: GifMessage(
-                                  url:
-                                      'https://media.giphy.com/media/$gifId/giphy.gif',
+                                  url: gifUrl,
                                   backgroundColor: Theme.of(
                                     context,
                                   ).colorScheme.surfaceContainerHighest,
@@ -1530,8 +1542,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   Widget _buildHopBadge(BuildContext context, ChannelMessage message) {
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
-    final hops = realHopCount(message.hopCount, hashWidth) ?? 0;
+    // message.hopCount is already a hop count (path-len low 6 bits). It used to
+    // be divided by the device width, which halved it at 2-byte width. (#309)
+    final hops = message.hopCount ?? 0;
     final color = Theme.of(context).brightness == Brightness.dark
         ? Colors.grey[400]
         : Colors.grey[600];

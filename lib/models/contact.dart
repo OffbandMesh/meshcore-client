@@ -8,8 +8,22 @@ class Contact {
   final String name;
   final int type;
   final int flags;
-  final int pathLength; // -1 = flood, 0+ = direct hops (from device)
-  final Uint8List path; // Path bytes from device
+
+  /// Hop count for [path]: -1 = flood, 0+ = number of hops.
+  ///
+  /// This is the firmware path-len field's low 6 bits, which firmware defines
+  /// as a hash COUNT, not a byte length (`src/Packet.h:79-84`). It was
+  /// previously treated as a byte count, which truncated every path at widths
+  /// above 1. (#309)
+  final int pathLength;
+
+  /// Bytes per hop hash in [path] (1..3), from the path-len byte's high 2 bits.
+  ///
+  /// Carried per-path rather than read from the connector's global width, so a
+  /// stored path can never be re-sliced at a width it was not captured at.
+  final int pathHashWidth;
+
+  final Uint8List path; // Path bytes from device (pathLength * pathHashWidth)
   final int?
   pathOverride; // User's path override: -1 = force flood, null = auto
   final Uint8List? pathOverrideBytes; // User's path override bytes
@@ -28,6 +42,7 @@ class Contact {
     required this.type,
     this.flags = 0,
     required this.pathLength,
+    this.pathHashWidth = 1,
     required this.path,
     this.pathOverride,
     this.pathOverrideBytes,
@@ -80,6 +95,7 @@ class Contact {
     int? type,
     int? flags,
     int? pathLength,
+    int? pathHashWidth,
     Uint8List? path,
     int? pathOverride,
     Uint8List? pathOverrideBytes,
@@ -98,6 +114,7 @@ class Contact {
       type: type ?? this.type,
       flags: flags ?? this.flags,
       pathLength: pathLength ?? this.pathLength,
+      pathHashWidth: pathHashWidth ?? this.pathHashWidth,
       path: path ?? this.path,
       pathOverride: clearPathOverride
           ? null
@@ -133,8 +150,8 @@ class Contact {
     return parts.join(',');
   }
 
-  /// Default grouping uses legacy single-byte hop hash width.
-  String get pathIdList => pathFormattedIdList(pathHashSize);
+  /// Groups by this path's own captured width, not a global or legacy default.
+  String get pathIdList => pathFormattedIdList(pathHashWidth);
 
   String get shortPubKeyHex {
     return "<${publicKeyHex.substring(0, 8)}...${publicKeyHex.substring(publicKeyHex.length - 8)}>";
@@ -166,14 +183,20 @@ class Contact {
       final type = reader.readByte();
       final flags = reader.readByte();
       final pathLen = reader.readByte();
-      // The firmware path-len byte packs a hash-mode hint in the high 2 bits and
-      // the path BYTE length in the low 6 (#222). Decode before use: a direct
-      // node at 2-byte mode sends 0x40, whose raw value would otherwise read as
-      // 64 hops and pull 64 junk bytes into the path. 0xFF stays the flood
-      // sentinel; the device-configured pathHashByteWidth converts bytes->hops
-      // at display time.
-      final byteLen = pathLen == 0xFF ? -1 : pathHopCount(pathLen);
-      final safePathLen = byteLen > 0 ? byteLen : 0;
+      // The firmware path-len byte packs hash size in the high 2 bits and hash
+      // COUNT (hops) in the low 6; the byte length is count * size
+      // (`src/Packet.h:79-84`). 0xFF stays the flood sentinel.
+      //
+      // This previously read `count` BYTES, so at 2-byte width it kept half of
+      // every path and discarded the rest — the truncation behind #240's failed
+      // repeater logins. The width is taken from the path itself rather than the
+      // connector's global width, so a path is always sliced at the width it was
+      // captured at. (#309)
+      final isFlood = pathLen == 0xFF;
+      final hopCount = isFlood ? -1 : pathHopCount(pathLen);
+      final hashWidth = isFlood ? 1 : pathHashSizeBytes(pathLen);
+      final byteLen = isFlood ? 0 : (hopCount * hashWidth);
+      final safePathLen = byteLen.clamp(0, maxPathSize);
       final pathBytes = reader.readBytes(maxPathSize).sublist(0, safePathLen);
       final name = reader.readCStringGreedy(maxNameSize);
 
@@ -218,7 +241,9 @@ class Contact {
         name: name.isEmpty ? 'Unknown' : name,
         type: type,
         flags: flags,
-        pathLength: byteLen, // decoded low-6-bit byte length; -1 = flood (#222)
+        pathLength:
+            hopCount, // hop count from the low 6 bits; -1 = flood (#309)
+        pathHashWidth: hashWidth, // bytes/hop from the high 2 bits (#309)
         path: pathBytes,
         latitude: lat,
         longitude: lon,

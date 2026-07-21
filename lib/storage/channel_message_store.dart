@@ -5,7 +5,7 @@ import 'package:meshcore_open/utils/app_logger.dart';
 import '../models/channel_message.dart';
 import '../models/translation_support.dart';
 import '../helpers/smaz.dart';
-import 'prefs_manager.dart';
+import 'drift/blob_store.dart';
 
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
@@ -32,10 +32,24 @@ class ChannelMessageStore {
   String _indexKey(int channelIndex) => '$keyFor$channelIndex';
 
   /// Active storage key: PSK identity when known, else the slot index.
+  ///
+  /// The index fallback is legitimate before a channel list has loaded, but it
+  /// reads a DIFFERENT key: if history was already migrated to the PSK key, the
+  /// caller gets an empty list that is indistinguishable from data loss.
+  /// SAFELANE 6 - this must never be silent. Falling back where a resolver
+  /// exists means the channel list was not ready, which is the #333 race.
   String _storageKey(int channelIndex) {
     final pskHex = channelPskResolver?.call(channelIndex);
     if (pskHex != null && pskHex.isNotEmpty) {
       return '$keyFor$_pskMarker$pskHex';
+    }
+    if (channelPskResolver != null) {
+      appLogger.warn(
+        'Channel $channelIndex has no PSK yet; falling back to the slot-index '
+        'key. Any history already migrated to the PSK key will read as EMPTY. '
+        'This means the channel list was not loaded first (#333).',
+        tag: 'Storage',
+      );
     }
     return _indexKey(channelIndex);
   }
@@ -51,9 +65,89 @@ class ChannelMessageStore {
       );
       return;
     }
-    final prefs = PrefsManager.instance;
-    final jsonList = messages.map((msg) => _messageToJson(msg)).toList();
-    await prefs.setString(_storageKey(channelIndex), jsonEncode(jsonList));
+    // Merge into the persisted full history rather than overwriting it. The
+    // in-memory list is windowed to the most recent N for memory, so a plain
+    // overwrite would truncate the store to N and erode old history (#343).
+    // Upsert by identity: keep older persisted messages, add new ones, and let
+    // the in-memory copy win so edits/reactions/status updates are captured.
+    // Deletion has its own path (removeChannelMessage) so this never
+    // resurrects a message the user deleted.
+    final key = _storageKey(channelIndex);
+    final blobs = BlobStore.instance;
+    // Serialise the whole read-modify-write against other saves/deletes on this
+    // key so two concurrent saves cannot clobber each other (Gemini review).
+    await blobs.synchronized(key, () async {
+      final byKey = <String, ChannelMessage>{};
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing != null && existing.isNotEmpty) {
+        try {
+          for (final e in jsonDecode(existing) as List<dynamic>) {
+            final m = _messageFromJson(e as Map<String, dynamic>);
+            byKey[_mergeKey(m)] = m;
+          }
+        } catch (e) {
+          // SAFELANE 6: never merge into an empty base and truncate silently.
+          appLogger.error(
+            'Failed to decode existing channel $channelIndex history before '
+            'merge; aborting save to avoid truncation: $e',
+            tag: 'Storage',
+          );
+          return;
+        }
+      }
+      for (final m in messages) {
+        byKey[_mergeKey(m)] = m;
+      }
+      final merged = byKey.values.toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
+    });
+  }
+
+  /// Stable identity for merge/dedupe. messageId when present, else a composite
+  /// that distinguishes distinct messages that share no id.
+  String _mergeKey(ChannelMessage m) {
+    if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
+    // Include the sender: two different senders can post identical text at the
+    // same timestamp without a messageId, and would otherwise collide and lose
+    // one (Gemini review, 2026-07-20).
+    final sender = m.senderKey == null
+        ? ''
+        : m.senderKey!.map((b) => b.toRadixString(16)).join();
+    return 'x:$sender:${m.packetHash ?? ''}:'
+        '${m.timestamp.millisecondsSinceEpoch}:${m.text}';
+  }
+
+  /// Removes a single message from the persisted history. The explicit delete
+  /// path (#343): save merges and never removes, so deletion cannot go through
+  /// save.
+  Future<void> removeChannelMessage(
+    int channelIndex,
+    ChannelMessage message,
+  ) async {
+    if (publicKeyHex.isEmpty) return;
+    final key = _storageKey(channelIndex);
+    final blobs = BlobStore.instance;
+    await blobs.synchronized(key, () async {
+      final existing = await blobs.readWithPrefsFallback(key);
+      if (existing == null || existing.isEmpty) return;
+      final List<dynamic> raw;
+      try {
+        raw = jsonDecode(existing) as List<dynamic>;
+      } catch (e) {
+        appLogger.error(
+          'Failed to decode channel $channelIndex history for delete: $e',
+          tag: 'Storage',
+        );
+        return;
+      }
+      final target = _mergeKey(message);
+      final kept = raw
+          .map((e) => _messageFromJson(e as Map<String, dynamic>))
+          .where((m) => _mergeKey(m) != target)
+          .toList();
+      await blobs.write(key, jsonEncode(kept.map(_messageToJson).toList()));
+    });
   }
 
   /// Load messages for a specific channel
@@ -64,9 +158,11 @@ class ChannelMessageStore {
       );
       return [];
     }
-    final prefs = PrefsManager.instance;
+    final blobs = BlobStore.instance;
     final key = _storageKey(channelIndex);
-    String? jsonString = prefs.getString(key);
+    // Bulk data lives in drift (#335); the fallback covers an unmigrated key
+    // and logs loudly if it fires.
+    String? jsonString = await blobs.readWithPrefsFallback(key);
 
     // One-time migration into the PSK-identity key. Only runs when the PSK is
     // known (key != index key). Adopts pre-#194 history keyed by slot index —
@@ -79,14 +175,37 @@ class ChannelMessageStore {
         _indexKey(channelIndex),
         '$_keyPrefix$channelIndex', // pre-device-scoping, unscoped index key
       ]) {
-        final legacy = prefs.getString(legacyKey);
+        // Legacy keys may sit in either backend depending on when this
+        // install last ran, so check both.
+        final legacy = await blobs.readWithPrefsFallback(legacyKey);
         if (legacy != null && legacy.isNotEmpty) {
           appLogger.info(
             'Migrating channel messages $legacyKey -> $key (PSK-keyed, #194)',
           );
-          await prefs.setString(key, legacy);
-          await prefs.remove(legacyKey);
-          jsonString = legacy;
+          // Under the key lock, and MERGE rather than overwrite: a save may
+          // have landed on the PSK key between the read above and here, and a
+          // blind write would clobber it (Gemini review). Union keeps both the
+          // adopted legacy history and any freshly-saved message.
+          jsonString = await blobs.synchronized(key, () async {
+            final byKey = <String, ChannelMessage>{};
+            for (final srcJson in [await blobs.read(key), legacy]) {
+              if (srcJson == null || srcJson.isEmpty) continue;
+              try {
+                for (final e in jsonDecode(srcJson) as List<dynamic>) {
+                  final m = _messageFromJson(e as Map<String, dynamic>);
+                  byKey[_mergeKey(m)] = m;
+                }
+              } catch (_) {
+                // Skip an undecodable source rather than aborting the adoption.
+              }
+            }
+            final merged = byKey.values.toList()
+              ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            final encoded = jsonEncode(merged.map(_messageToJson).toList());
+            await blobs.write(key, encoded);
+            return encoded;
+          });
+          await blobs.deleteEverywhere(legacyKey);
           break;
         }
       }
@@ -108,17 +227,16 @@ class ChannelMessageStore {
   /// history gone, and setChannel's reuse-clear (#193) needs any stale
   /// slot-index history gone so it can't be migrated onto the new occupant.
   Future<void> clearChannelMessages(int channelIndex) async {
-    final prefs = PrefsManager.instance;
-    await prefs.remove(_storageKey(channelIndex));
-    await prefs.remove(_indexKey(channelIndex));
+    final blobs = BlobStore.instance;
+    await blobs.deleteEverywhere(_storageKey(channelIndex));
+    await blobs.deleteEverywhere(_indexKey(channelIndex));
   }
 
   /// Clear all channel messages
   Future<void> clearAllChannelMessages() async {
-    final prefs = PrefsManager.instance;
-    final keys = prefs.getKeys().where((k) => k.startsWith(keyFor)).toList();
-    for (var key in keys) {
-      await prefs.remove(key);
+    final blobs = BlobStore.instance;
+    for (final key in await blobs.keysWithPrefix(keyFor)) {
+      await blobs.deleteEverywhere(key);
     }
   }
 

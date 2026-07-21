@@ -562,6 +562,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => '배터리';
 
   @override
@@ -612,6 +615,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       '이 장치가 다른 사람들을 위해 메시 패킷을 반복하도록 허용합니다.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1796,6 +1806,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get map_showOverlaps => '반복 키 중복';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => '핵심 접두사';

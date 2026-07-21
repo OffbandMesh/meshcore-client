@@ -32,6 +32,7 @@ import '../services/chat_text_scale_service.dart';
 import '../services/path_history_service.dart';
 import '../services/translation_service.dart';
 import '../widgets/chat_zoom_wrapper.dart';
+import '../widgets/contact_settings_dialog.dart';
 import '../widgets/elements_ui.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
@@ -621,8 +622,8 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ValueListenableBuilder<TextEditingValue>(
                 valueListenable: _textController,
                 builder: (context, value, child) {
-                  final gifId = GifHelper.parseGif(value.text);
-                  if (gifId != null) {
+                  final gifUrl = GifHelper.resolveGifUrl(value.text);
+                  if (gifUrl != null) {
                     return Focus(
                       autofocus: true,
                       onKeyEvent: (node, event) {
@@ -641,8 +642,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
                               child: GifMessage(
-                                url:
-                                    'https://media.giphy.com/media/$gifId/giphy.gif',
+                                url: gifUrl,
                                 backgroundColor:
                                     colorScheme.surfaceContainerHighest,
                                 fallbackTextColor: colorScheme.onSurface
@@ -1274,15 +1274,11 @@ class _ChatScreenState extends State<ChatScreen> {
       return context.l10n.chat_hopsForced(contact.pathOverride!);
     }
 
-    // Use device's path. pathLength is a BYTE length; divide by the device's
-    // configured hash width to get the true hop count (#222).
+    // Use device's path. pathLength is a HOP count straight from the path-len
+    // byte's low 6 bits; it used to be divided by the device width, which
+    // halved it at 2-byte width. (#309)
     if (contact.pathLength < 0) return context.l10n.chat_floodAuto;
-    final hops =
-        realHopCount(
-          contact.pathLength,
-          context.read<MeshCoreConnector>().pathHashByteWidth,
-        ) ??
-        0;
+    final hops = contact.pathLength;
     if (hops == 0) return context.l10n.chat_direct;
     return context.l10n.chat_hopsCount(hops);
   }
@@ -1354,166 +1350,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showContactSettings(BuildContext context) {
-    final connector = Provider.of<MeshCoreConnector>(context, listen: false);
-    final appSettingsService = Provider.of<AppSettingsService>(
-      context,
-      listen: false,
-    );
-    connector.ensureContactSmazSettingLoaded(widget.contact.publicKeyHex);
-    connector.ensureContactCyr2LatSettingLoaded(widget.contact.publicKeyHex);
-    final contact = widget.contact;
-    bool smazEnabled = connector.isContactSmazEnabled(contact.publicKeyHex);
-    bool cyr2latEnabled = connector.isContactCyr2LatEnabled(
-      contact.publicKeyHex,
-    );
-    String? selectedCyr2LatProfileId = connector.getContactCyr2LatProfileId(
-      contact.publicKeyHex,
-    );
-    bool teleBaseEnabled = contact.teleBaseEnabled;
-    bool teleLocEnabled = contact.teleLocEnabled;
-    bool teleEnvEnabled = contact.teleEnvEnabled;
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(context.l10n.contact_settings),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (contact.hasLocation) ...[
-                  _buildInfoRow(
-                    context.l10n.chat_location,
-                    '${contact.latitude?.toStringAsFixed(4)}, ${contact.longitude?.toStringAsFixed(4)}',
-                  ),
-                  const Divider(height: 8),
-                ],
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(context.l10n.channels_smazCompression),
-                  subtitle: Text(context.l10n.chat_compressOutgoingMessages),
-                  value: smazEnabled,
-                  onChanged: (value) {
-                    connector.setContactSmazEnabled(
-                      contact.publicKeyHex,
-                      value,
-                    );
-                    connector.setContactCyr2LatEnabled(
-                      contact.publicKeyHex,
-                      false,
-                    );
-                    setDialogState(() {
-                      smazEnabled = value;
-                      if (smazEnabled) {
-                        cyr2latEnabled = false;
-                      }
-                    });
-                  },
-                ),
-                const Divider(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(context.l10n.channels_cyr2latCompression),
-                  subtitle: Text(context.l10n.channels_cyr2latCompressionDscr),
-                  value: cyr2latEnabled,
-                  onChanged: (value) {
-                    connector.setContactCyr2LatEnabled(
-                      contact.publicKeyHex,
-                      value,
-                    );
-                    connector.setContactSmazEnabled(
-                      contact.publicKeyHex,
-                      false,
-                    );
-                    setDialogState(() {
-                      cyr2latEnabled = value;
-                      if (cyr2latEnabled) {
-                        smazEnabled = false;
-                      }
-                    });
-                  },
-                ),
-                if (cyr2latEnabled) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-                    child: DropdownButtonFormField<String>(
-                      initialValue: selectedCyr2LatProfileId,
-                      decoration: InputDecoration(
-                        labelText:
-                            context.l10n.channels_cyr2latSettingsSubheading,
-                        border: const OutlineInputBorder(),
-                      ),
-                      items: appSettingsService.settings.cyr2latProfiles.map((
-                        profile,
-                      ) {
-                        return DropdownMenuItem(
-                          value: profile.id,
-                          child: Text(profile.name),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        connector.setContactCyr2LatProfileId(
-                          contact.publicKeyHex,
-                          value,
-                        );
-                        setDialogState(() {
-                          selectedCyr2LatProfileId = value;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-                const Divider(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(context.l10n.contact_teleBase),
-                  subtitle: Text(context.l10n.contact_teleBaseSubtitle),
-                  value: teleBaseEnabled,
-                  onChanged: (value) {
-                    setDialogState(() => teleBaseEnabled = value);
-                  },
-                ),
-                const Divider(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(context.l10n.contact_teleLoc),
-                  subtitle: Text(context.l10n.contact_teleLocSubtitle),
-                  value: teleLocEnabled,
-                  onChanged: (value) {
-                    setDialogState(() => teleLocEnabled = value);
-                  },
-                ),
-                const Divider(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(context.l10n.contact_teleEnv),
-                  subtitle: Text(context.l10n.contact_teleEnvSubtitle),
-                  value: teleEnvEnabled,
-                  onChanged: (value) {
-                    setDialogState(() => teleEnvEnabled = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                connector.setContactFlags(
-                  contact,
-                  teleBase: teleBaseEnabled,
-                  teleLoc: teleLocEnabled,
-                  teleEnv: teleEnvEnabled,
-                );
-                Navigator.pop(context);
-              },
-              child: Text(context.l10n.common_close),
-            ),
-          ],
-        ),
-      ),
-    );
+    showContactSettingsDialog(context, widget.contact);
   }
 
   Widget _buildInfoRow(String label, String value) {
@@ -1870,7 +1707,7 @@ class _MessageBubble extends StatelessWidget {
     final enableTracing = settingsService.settings.enableMessageTracing;
     final isOutgoing = message.isOutgoing;
     final colorScheme = Theme.of(context).colorScheme;
-    final gifId = GifHelper.parseGif(message.text);
+    final gifUrl = GifHelper.resolveGifUrl(message.text);
     final poi = parseMarkerText(message.text);
     final isFailed = message.status == MessageStatus.failed;
     final bubbleColor = isFailed
@@ -1919,7 +1756,7 @@ class _MessageBubble extends StatelessWidget {
                 ],
                 Flexible(
                   child: Container(
-                    padding: gifId != null
+                    padding: gifUrl != null
                         ? const EdgeInsets.all(4)
                         : const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -1937,7 +1774,7 @@ class _MessageBubble extends StatelessWidget {
                       children: [
                         if (!isOutgoing) ...[
                           Padding(
-                            padding: gifId != null
+                            padding: gifUrl != null
                                 ? const EdgeInsets.only(
                                     left: 8,
                                     top: 4,
@@ -1953,7 +1790,7 @@ class _MessageBubble extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (gifId == null) const SizedBox(height: 4),
+                          if (gifUrl == null) const SizedBox(height: 4),
                         ],
                         if (poi != null)
                           _buildPoiMessage(
@@ -1978,14 +1815,13 @@ class _MessageBubble extends StatelessWidget {
                                   )
                                 : null,
                           )
-                        else if (gifId != null)
+                        else if (gifUrl != null)
                           Stack(
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: GifMessage(
-                                  url:
-                                      'https://media.giphy.com/media/$gifId/giphy.gif',
+                                  url: gifUrl,
                                   backgroundColor: Colors.transparent,
                                   fallbackTextColor: textColor.withValues(
                                     alpha: 0.7,
@@ -2057,7 +1893,7 @@ class _MessageBubble extends StatelessWidget {
                           if (isOutgoing && message.retryCount > 0) ...[
                             const SizedBox(height: 4),
                             Padding(
-                              padding: gifId != null
+                              padding: gifUrl != null
                                   ? const EdgeInsets.symmetric(horizontal: 8)
                                   : EdgeInsets.zero,
                               child: Text(
@@ -2078,7 +1914,7 @@ class _MessageBubble extends StatelessWidget {
                           ],
                           const SizedBox(height: 4),
                           Padding(
-                            padding: gifId != null
+                            padding: gifUrl != null
                                 ? const EdgeInsets.only(
                                     left: 8,
                                     right: 8,

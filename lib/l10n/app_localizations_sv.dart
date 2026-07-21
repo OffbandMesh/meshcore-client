@@ -578,6 +578,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Batteri';
 
   @override
@@ -628,6 +631,13 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Låt enheten repetera nätpaket för andra användare.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1853,6 +1863,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Repeater-nyckelöverlappningar';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Nyckelprefix';

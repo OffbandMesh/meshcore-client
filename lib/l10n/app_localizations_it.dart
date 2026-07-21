@@ -589,6 +589,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Batteria';
 
   @override
@@ -639,6 +642,13 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Permetti a questo dispositivo di ripetere i pacchetti di rete per gli altri.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1877,6 +1887,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Sovrapposizioni della chiave ripetitore';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Prefisso Chiave';

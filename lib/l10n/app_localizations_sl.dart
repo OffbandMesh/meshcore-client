@@ -580,6 +580,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Baterija';
 
   @override
@@ -630,6 +633,13 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Omogočite temu naprave, da ponavlja paketne sporočila za druge.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1860,6 +1870,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Prekrivanje ključa ponovnega predvajanja';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Predpona ključa';

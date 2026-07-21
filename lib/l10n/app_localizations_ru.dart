@@ -588,6 +588,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => 'Батарея';
 
   @override
@@ -639,6 +642,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settings_clientRepeatSubtitle =>
       'Позвольте этому устройству повторять пакеты данных для других устройств.';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1878,6 +1888,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get map_showOverlaps => 'Перекрытия ключа повтора';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => 'Префикс ключа';

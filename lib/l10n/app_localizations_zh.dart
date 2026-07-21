@@ -554,6 +554,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settings_infoModel => 'Model';
 
   @override
+  String get settings_infoOffbandCaps => 'Offband capabilities';
+
+  @override
   String get settings_infoBattery => '电池';
 
   @override
@@ -603,6 +606,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settings_clientRepeatSubtitle => '允许此设备重复发送网状数据包给其他设备';
+
+  @override
+  String get settings_femLna => 'Receive amplifier (FEM LNA)';
+
+  @override
+  String get settings_femLnaSubtitle =>
+      'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.';
 
   @override
   String get settings_clientRepeatFreqWarning =>
@@ -1767,6 +1777,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get map_showOverlaps => '重复键重叠';
+
+  @override
+  String get map_alwaysShowNames => 'Always show names';
 
   @override
   String get map_keyPrefix => '关键字前缀';

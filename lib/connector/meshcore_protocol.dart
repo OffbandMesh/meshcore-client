@@ -263,6 +263,54 @@ const int respCodeOffbandGps = 0xC1;
 /// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
+// --- Offband FEM LNA command (0xC3) — capability-gated. Heltec V4 external
+// FEM LNA control; firmware counterpart OffbandMesh/meshcore-firmware#298.
+//
+// Deliberately a fork-private command rather than an extra byte on the stock
+// CMD_SET_OTHER_PARAMS (38): that frame is shared with upstream MeshCore and is
+// sent to every radio regardless of fork, so widening it would perturb stock
+// firmware. Nothing here is emitted unless the capability bit is set. (#304)
+const int cmdOffbandFemLna = 0xC3;
+const int offbandFemLnaSet = 0x01;
+const int offbandFemLnaGet = 0x02;
+
+/// `0` = FEM LNA bypassed, `1` = enabled. Firmware default is enabled.
+const int femLnaBypass = 0x00;
+const int femLnaEnabled = 0x01;
+
+Uint8List buildOffbandFemLnaSetFrame(bool enabled) => Uint8List.fromList([
+  cmdOffbandFemLna,
+  offbandFemLnaSet,
+  enabled ? femLnaEnabled : femLnaBypass,
+]);
+
+Uint8List buildOffbandFemLnaGetFrame() =>
+    Uint8List.fromList([cmdOffbandFemLna, offbandFemLnaGet]);
+
+/// Reply to a `0xC3` request: `[0xC3][sub][value]`.
+///
+/// The value is the **post-apply hardware state, not an echo of the request**
+/// (firmware #298 as-built): if the FEM ever refused a write, this reports the
+/// truth rather than confirming a change that didn't take. Always render from
+/// this value; never assume the written value stuck.
+///
+/// Error replies are never 0xC3-prefixed, so they don't reach this parser:
+/// malformed → `[respCodeErr][errCodeIllegalArg]`; a request to a non-capable
+/// board → `[respCodeErr][errCodeUnsupportedCmd]` (unreachable when gated on
+/// the capability bit, but firmware answers it defensively).
+class OffbandFemLnaReply {
+  const OffbandFemLnaReply(this.subType, this.value);
+  final int subType;
+  final int value;
+
+  bool get enabled => value != femLnaBypass;
+}
+
+OffbandFemLnaReply? parseOffbandFemLnaReply(Uint8List frame) {
+  if (frame.length < 3 || frame[0] != cmdOffbandFemLna) return null;
+  return OffbandFemLnaReply(frame[1], frame[2]);
+}
+
 // --- Offband block command (0xC2) — capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
 const int cmdOffbandBlock = 0xC2;
@@ -275,6 +323,12 @@ const int offbandBlockClear = 0x04;
 /// frame `[respCodeErr(1)][errCodeIllegalArg(6)]` — NOT 0xC2-prefixed, so the
 /// app must recognise the 2-byte error frame and not wait for a 0xC2 echo.
 const int errCodeIllegalArg = 6;
+
+/// `ERR_CODE_UNSUPPORTED_CMD` — returned for an Offband command the connected
+/// board can't service (e.g. a `0xC3` FEM LNA request to a board without FEM
+/// control). Unreachable when the capability bit is respected; firmware answers
+/// it defensively against a stale or mis-gated client. (#304)
+const int errCodeUnsupportedCmd = 1;
 
 Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
     Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
@@ -318,6 +372,21 @@ bool firmwareSupportsOffbandGps(int? offbandCaps) => offbandCaps != null;
 /// presence-gate above, block requires the **explicit bit** set AND
 /// `FIRMWARE_VER_CODE >= 15`; absent → app-only mode (no sync, no firmware drop).
 const int offbandCapBlock = 0x02;
+
+/// `OFFBAND_CAP_FEM_LNA` bit (bit 2) in the `offband_caps` byte: this radio can
+/// control its external FEM LNA (firmware #298).
+///
+/// PROVISIONAL — firmware owns the caps byte and has not yet confirmed 0x04 as
+/// free. Do not ship against this without that confirmation (#304).
+///
+/// Gate on the BIT ONLY, never on model or version: firmware derives it at
+/// runtime from the auto-detected FEM chip (KCT8103L vs GC1109), so it is a
+/// per-unit answer — two Heltec V4s can legitimately disagree, and other
+/// FEM-bearing boards report false today.
+const int offbandCapFemLna = 0x04;
+
+bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
+    offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
 
 bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
@@ -514,24 +583,50 @@ int readInt32LE(Uint8List data, int offset) {
   return val;
 }
 
-// Path-length byte from the firmware. Low 6 bits = the path length field
-// (a BYTE count of the hop-hash array, 0-63); high 2 bits carry an optional
-// hash-size mode hint (0..2 -> 1..3 bytes/hop) that is not reliably populated,
-// so the device's configured hash width (MeshCoreConnector.pathHashByteWidth)
-// is authoritative for slicing the path. realHopCount() converts the byte
-// length to a true hop count at that width. (#112)
-// TX counterpart: buildSetPathHashModeFrame (CMD_SET_PATH_HASH_MODE).
+// Path-length byte from the firmware. This is a PACKED field, and both halves
+// are authoritative — the path is self-describing on the wire:
+//
+//   high 2 bits = hash size - 1  (0..2 -> 1..3 bytes per hop hash)
+//   low  6 bits = hash COUNT     (the number of HOPS, 0-63)
+//   byte length = count * size
+//
+// Verified against firmware `src/Packet.h:79-84`:
+//   getPathHashSize()  == (path_len >> 6) + 1
+//   getPathHashCount() == path_len & 63
+//   getPathByteLen()   == getPathHashCount() * getPathHashSize()
+//   setPathHashSizeAndCount(sz, n) { path_len = ((sz - 1) << 6) | (n & 63); }
+//
+// The high bits are set deliberately by that setter, so the per-path width
+// travels with the path. The companion contact frame carries this same encoded
+// byte verbatim: `Packet::copyPath()` returns path_len unchanged
+// (`src/Packet.cpp:32-35`) into `ContactInfo.out_path_len`
+// (`src/helpers/BaseChatMesh.cpp:319`), which `writeContactRespFrame` emits
+// as-is (`examples/companion_radio/MyMesh.cpp:205-212`).
+//
+// A prior comment here claimed the low 6 bits were a BYTE count and that the
+// high bits were "not reliably populated". Both were wrong, and #222 plus the
+// Contact decode were built on them: the app read `count` bytes where firmware
+// meant `count` hops, keeping half of every path at 2-byte width. (#309)
+//
+// TX counterparts: buildSetPathHashModeFrame (CMD_SET_PATH_HASH_MODE) sets the
+// device-wide default width; encodePathLen() packs a per-path value to send.
 int pathHopCount(int pathLenRaw) => pathLenRaw & 0x3F;
 int pathHashSizeBytes(int pathLenRaw) => ((pathLenRaw >> 6) & 0x03) + 1;
 
-/// Real hop count from the firmware path byte-length and the device hash width.
-/// `pathHopCount` returns the path BYTE length, so at a 2-byte hash width a
-/// single 2-byte hop reports 2 — divide by the width to get the true hop count.
-/// Null (unknown) and negative (flood) sentinels pass through unchanged. (#112)
-int? realHopCount(int? rawByteLen, int hashWidth) {
-  if (rawByteLen == null || rawByteLen < 0) return rawByteLen;
-  final w = hashWidth < 1 ? 1 : hashWidth;
-  return rawByteLen ~/ w;
+/// Byte length of the hop-hash array described by a raw path-length byte.
+int pathByteLength(int pathLenRaw) =>
+    pathHopCount(pathLenRaw) * pathHashSizeBytes(pathLenRaw);
+
+/// Packs a hop count and per-hop hash width into the firmware path-length byte.
+///
+/// Mirrors firmware `Packet::setPathHashSizeAndCount`. Sending a bare hop count
+/// (mode bits 00) tells the radio "1-byte hashes", so a 2-byte path routed that
+/// way is read one byte per hop and goes to nodes that were never on the route.
+/// Width is clamped to 1..3; mode 3 is reserved by firmware
+/// (`isValidPathLen` rejects hash_size == 4). (#309)
+int encodePathLen(int hopCount, int hashWidth) {
+  final w = hashWidth.clamp(1, 3);
+  return ((w - 1) << 6) | (hopCount & 0x3F);
 }
 
 /// Readable strings from a RESP_CODE_DEVICE_INFO frame: build date, model, and
@@ -824,10 +919,19 @@ Uint8List buildResetPathFrame(Uint8List pubKey) {
 
 // Build CMD_ADD_UPDATE_CONTACT frame to set custom path
 // Format: [cmd][pub_key x32][type][flags][path_len][path x64][name x32][Lat? x4, Lon? x4][timestamp? x4]
+//
+// [hopCount] is a HOP count and [hashWidth] the bytes per hop hash; the two are
+// packed into the single wire path_len byte via encodePathLen().
+//
+// This previously wrote the count raw, leaving the mode bits 00 — which tells
+// the radio "1-byte hashes". On a 2-byte net that handed the firmware 2-byte
+// hash data labelled as 1-byte hops, so it routed to nodes that were never on
+// the route. That is the send-side half of #240's misrouting. (#309)
 Uint8List buildUpdateContactPathFrame(
   Uint8List pubKey,
   Uint8List path,
-  int pathLen, {
+  int hopCount, {
+  int hashWidth = 1,
   int type = 1, // ADV_TYPE_CHAT
   int flags = 0,
   String name = '',
@@ -840,7 +944,8 @@ Uint8List buildUpdateContactPathFrame(
   writer.writeBytes(pubKey);
   writer.writeByte(type);
   writer.writeByte(flags);
-  writer.writeByte(pathLen);
+  // Negative = flood sentinel, passed through as the firmware's 0xFF.
+  writer.writeByte(hopCount < 0 ? 0xFF : encodePathLen(hopCount, hashWidth));
 
   writer.writeBytesPadded(path, maxPathSize);
 

@@ -403,6 +403,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildInfoRow(l10n.settings_infoFirmware, firmwareVersion),
             if (deviceModel != null)
               _buildInfoRow(l10n.settings_infoModel, deviceModel),
+            // Capability-gated controls vanish silently when a bit is clear,
+            // which is indistinguishable from a bug. Surface the raw inputs so
+            // "missing feature" can be diagnosed without enabling logging. (#304)
+            if (connector.offbandCaps != null)
+              _buildInfoRow(
+                l10n.settings_infoOffbandCaps,
+                '0x${connector.offbandCaps!.toRadixString(16).padLeft(2, '0')}'
+                ' (v${connector.firmwareVerCode ?? 0})'
+                '${connector.supportsOffbandFemLna ? ' · FEM LNA' : ''}'
+                '${connector.supportsOffbandBlock ? ' · block' : ''}',
+              ),
             _buildBatteryInfoRow(context, connector),
             if (connector.selfName != null)
               _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
@@ -2190,6 +2201,23 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
             value: _clientRepeat,
             onChanged: _handleClientRepeatChanged,
             contentPadding: EdgeInsets.zero,
+          ),
+        ],
+        // Only this radio's own FEM probe decides whether this appears — never
+        // model or version (#304). Deliberately not mirrored into local state:
+        // firmware returns post-apply hardware truth, so the switch renders
+        // what the radio reports rather than what we asked for.
+        if (widget.connector.supportsOffbandFemLna) ...[
+          const SizedBox(height: 16),
+          ListenableBuilder(
+            listenable: widget.connector,
+            builder: (context, _) => SwitchListTile(
+              title: Text(l10n.settings_femLna),
+              subtitle: Text(l10n.settings_femLnaSubtitle),
+              value: widget.connector.femLnaEnabled ?? true,
+              onChanged: (value) => widget.connector.setFemLna(value),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
         ],
         const SizedBox(height: 16),

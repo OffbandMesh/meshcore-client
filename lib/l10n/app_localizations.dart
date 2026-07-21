@@ -1174,6 +1174,12 @@ abstract class AppLocalizations {
   /// **'Model'**
   String get settings_infoModel;
 
+  /// No description provided for @settings_infoOffbandCaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband capabilities'**
+  String get settings_infoOffbandCaps;
+
   /// No description provided for @settings_infoBattery.
   ///
   /// In en, this message translates to:
@@ -1275,6 +1281,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow this device to repeat mesh packets for others'**
   String get settings_clientRepeatSubtitle;
+
+  /// No description provided for @settings_femLna.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive amplifier (FEM LNA)'**
+  String get settings_femLna;
+
+  /// No description provided for @settings_femLnaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Boosts receive sensitivity. Leave on unless you are troubleshooting a strong nearby signal.'**
+  String get settings_femLnaSubtitle;
 
   /// No description provided for @settings_clientRepeatFreqWarning.
   ///
@@ -3393,6 +3411,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Repeater Key Overlaps'**
   String get map_showOverlaps;
+
+  /// No description provided for @map_alwaysShowNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Always show names'**
+  String get map_alwaysShowNames;
 
   /// No description provided for @map_keyPrefix.
   ///

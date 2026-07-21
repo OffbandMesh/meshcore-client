@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../utils/app_logger.dart';
+import '../helpers/path_helper.dart';
 import 'path_management_dialog.dart';
 
 class RepeaterLoginDialog extends StatefulWidget {
@@ -115,9 +116,19 @@ class _RepeaterLoginDialogState extends State<RepeaterLoginDialog> {
       );
       final timeoutSeconds = (timeoutMs / 1000).ceil();
       final timeout = Duration(milliseconds: timeoutMs + 2000);
+      // `selection.hopCount` is ambiguous by construction: a device-discovered
+      // path carries a HOP count, a user override carries a BYTE count (#279).
+      // Do not assert hops here. Log the raw field, the width, and the actual
+      // byte length so a capture discriminates them:
+      //   bytes == field      -> byte-count semantics (override)
+      //   bytes == field * w  -> hop-count semantics (device)
+      // (#298)
+      final routingWidth = _connector.pathHashByteWidth;
       final selectionLabel = selection.useFlood
           ? 'flood'
-          : '${selection.hopCount} hops';
+          : 'field=${selection.hopCount} w=$routingWidth '
+                'bytes=${selection.pathBytes.length} '
+                '[${PathHelper.formatPathHex(selection.pathBytes, routingWidth)}]';
       appLogger.info('Login routing: $selectionLabel', tag: 'RepeaterLogin');
       bool? loginResult;
       bool isAdmin = false;

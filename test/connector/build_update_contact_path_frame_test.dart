@@ -16,6 +16,59 @@ void main() {
   final pubKey = Uint8List.fromList(List<int>.generate(32, (i) => i));
   final path = Uint8List.fromList([0xAA, 0xBB]);
 
+  // Byte offset of path_len in the frame: 1 cmd + 32 pubKey + 1 type + 1 flags.
+  const int pathLenOffset = 35;
+
+  group('buildUpdateContactPathFrame path_len encoding (#309)', () {
+    test('packs the hash width into the high 2 bits', () {
+      // One 2-byte hop must go out as 0x41, not a bare 1. Writing the count
+      // raw leaves mode bits 00, which tells the radio "1-byte hashes" while
+      // handing it 2-byte hash data, so it routes to nodes that were never on
+      // the route. That is the send-side half of #240's misrouting.
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List.fromList([0xC6, 0x5C]),
+        1,
+        hashWidth: 2,
+      );
+      expect(frame[pathLenOffset], 0x41);
+      expect(pathHopCount(frame[pathLenOffset]), 1);
+      expect(pathHashSizeBytes(frame[pathLenOffset]), 2);
+    });
+
+    test('two 2-byte hops encode as 0x42', () {
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List.fromList([0xC6, 0x5C, 0xA1, 0xB2]),
+        2,
+        hashWidth: 2,
+      );
+      expect(frame[pathLenOffset], 0x42);
+      expect(pathByteLength(frame[pathLenOffset]), 4);
+    });
+
+    test('1-byte width is byte-identical to the pre-fix encoding', () {
+      // Legacy 1-byte nets must see no change on the wire.
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List.fromList([0xAA, 0xBB, 0xCC]),
+        3,
+        hashWidth: 1,
+      );
+      expect(frame[pathLenOffset], 3);
+    });
+
+    test('negative hop count emits the 0xFF flood sentinel', () {
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List(0),
+        -1,
+        hashWidth: 2,
+      );
+      expect(frame[pathLenOffset], 0xFF);
+    });
+  });
+
   group('buildUpdateContactPathFrame', () {
     test('omits lat/lon and timestamp tail when neither is provided', () {
       final frame = buildUpdateContactPathFrame(
