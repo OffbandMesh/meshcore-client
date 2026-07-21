@@ -11,3 +11,15 @@ void vacuumInto(String source, String target) {
     db.close();
   }
 }
+
+/// Reads every row of a store's `stored_blobs` table into a key→value map.
+/// Native only (#367 consolidation reads other stores this way).
+Map<String, String> readStoredBlobs(String path) {
+  final db = sqlite3.open(path, mode: OpenMode.readOnly);
+  try {
+    final rows = db.select('SELECT key, value FROM stored_blobs');
+    return {for (final r in rows) r['key'] as String: r['value'] as String};
+  } finally {
+    db.close();
+  }
+}

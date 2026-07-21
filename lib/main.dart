@@ -28,6 +28,7 @@ import 'services/timeout_prediction_service.dart';
 import 'services/observer_config_service.dart';
 import 'services/block_service.dart';
 import 'services/window_geometry_service.dart';
+import 'services/store_consolidation_service.dart';
 import 'storage/drift/blob_store.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
@@ -45,6 +46,11 @@ void main() async {
   // Deliberately awaited: the alternative is stores racing the migration, and
   // this is the failure mode that produced #333.
   await BlobStore.instance.migrateFromPrefs();
+
+  // Consolidate message stores left in other locations by differently-built
+  // copies (#367): union their messages into the pinned store so nothing shows
+  // as a gap. One-time, native-only, and before any store is read into memory.
+  await StoreConsolidationService.run();
 
   // Start always-on file logging (#97); no-op on web.
   await FileLogService.instance.init();
