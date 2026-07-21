@@ -5,9 +5,11 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqlite3/sqlite3.dart';
 
 import '../../utils/app_logger.dart';
+// sqlite3 uses dart:ffi, which is unavailable on web; import the native impl
+// only off web so `flutter build web` still compiles (#363).
+import 'db_snapshot_web.dart' if (dart.library.io) 'db_snapshot_io.dart';
 
 part 'offband_database.g.dart';
 
@@ -178,12 +180,7 @@ class OffbandDatabase extends _$OffbandDatabase {
   @visibleForTesting
   static void snapshotDatabase(String source, String target) {
     try {
-      final db = sqlite3.open(source, mode: OpenMode.readOnly);
-      try {
-        db.execute("VACUUM INTO '${target.replaceAll("'", "''")}'");
-      } finally {
-        db.close();
-      }
+      vacuumInto(source, target);
       final out = File(target);
       if (!out.existsSync() || out.lengthSync() == 0) {
         throw StateError('VACUUM INTO produced no output at $target');
