@@ -2,6 +2,64 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.2.0] - 2026-07-21
+
+A major uplift: the storage engine moved to a real database, the app got a new
+navigation shell, and GIFs are now shareable across MeshCore clients. First
+release cut end-to-end through CI (signed, all platforms).
+
+### Storage
+
+- **Bulk data (messages, contacts, channels, and more) now lives in a drift /
+  SQLite database** instead of individual SharedPreferences entries. Existing
+  data is **migrated automatically on first launch** and preserved, not
+  discarded (#335, #355, #348).
+- The database is stored in the app-support directory, so it is not caught up in
+  OneDrive/Documents sync on desktop (#335).
+- Message history is kept in full; only the in-memory window is bounded, so
+  reopening a conversation no longer risks losing older messages (#343).
+- Storage failures that used to fail silently now surface (#306, #333).
+
+### Navigation
+
+- **New app shell with a hamburger nav drawer that can be pinned open** (#292).
+- The channel list lives in the drawer and is switchable from inside a channel;
+  channels swap in place so a pinned panel stays put (#289).
+- Map layer toggles moved into the nav panel; Disconnect and Settings moved into
+  the panel footer (#291, #290).
+- Contacts gained a prebuilt filter rail, including a Sensors type (#307, #308).
+- Back-button behavior fixed: back now backgrounds the app instead of killing
+  it, and no longer drops a user off a connected radio (#291).
+
+### GIFs
+
+- GIFs are now shared as a **Giphy URL** instead of the Offband-only `g:<code>`,
+  so other MeshCore clients can open them (#282).
+- Pasted Giphy / Tenor URLs render inline, behind a trusted-host allowlist
+  (#283, #284).
+
+### Other features
+
+- Desktop window position and size are remembered across launches (#349).
+- Reach a contact's settings from its long-press menu (#351).
+- FEM LNA toggle in Radio Settings and Offband capabilities shown in Device Info,
+  gated on firmware support (#304).
+- Message arrival time (rxTime) is logged and persisted, distinct from the
+  claimed send time (#285).
+
+### Fixes
+
+- You can no longer accidentally block your own node (#250).
+- Path length decodes per the firmware contract (width-aware), and path
+  diagnostics report units truthfully (#309, #298).
+- Connecting no longer rewrites the entire preferences file per channel (#306).
+
+### Under the hood
+
+- Offband is now buildable and deployable as a web app (offband.app), and every
+  release is built, signed, and published across Android, Windows, Linux, and web
+  through CI.
+
 ## [1.1.2-rc.3] - 2026-07-17
 
 Combined entry for rc.2 (versionCode 59) and rc.3 (versionCode 60). Both shipped
