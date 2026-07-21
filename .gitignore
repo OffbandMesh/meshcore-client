@@ -93,6 +93,3 @@ keystore.properties
 
 # Local build secrets (Giphy etc.) — injected via --dart-define-from-file
 dart_defines.json
-
-# drift generated code is committed so CI needs no build_runner step (#335)
-!/lib/storage/drift/offband_database.g.dart
