@@ -45,6 +45,10 @@ class WindowGeometryService with WindowListener {
       await windowManager.focus();
     });
     windowManager.addListener(this);
+    // Intercept close so the final geometry is saved even if the user moves
+    // then closes inside the debounce window; onWindowClose does the save and
+    // then destroys the window (Gemini review).
+    await windowManager.setPreventClose(true);
   }
 
   Future<void> _restore() async {
@@ -88,10 +92,19 @@ class WindowGeometryService with WindowListener {
   Future<bool> _isReachable(Rect saved) async {
     final displays = await screenRetriever.getAllDisplays();
     for (final d in displays) {
-      final origin = d.visiblePosition ?? Offset.zero;
-      final size = d.visibleSize ?? d.size;
-      final display = origin & size; // Rect from an Offset and a Size.
+      // Use the visible pair when BOTH are known, else the total pair. Mixing a
+      // visible origin with a total size makes a rect offset from the real
+      // area (Gemini review). visiblePosition can be negative for a monitor
+      // left of / above the primary, which intersect handles correctly.
+      final Rect display;
+      if (d.visiblePosition != null && d.visibleSize != null) {
+        display = d.visiblePosition! & d.visibleSize!;
+      } else {
+        display = Offset.zero & d.size;
+      }
       final overlap = saved.intersect(display);
+      // intersect() can return negative width/height when the rects miss; only
+      // a genuine overlap on both axes counts.
       if (overlap.width >= _minVisible && overlap.height >= _minVisible) {
         return true;
       }
@@ -121,4 +134,17 @@ class WindowGeometryService with WindowListener {
 
   @override
   void onWindowResized() => _scheduleSave();
+
+  /// Fires because setPreventClose(true) intercepted the close. Save the final
+  /// geometry, release resources, then actually close the window.
+  @override
+  Future<void> onWindowClose() async {
+    _saveDebounce?.cancel();
+    try {
+      await _save();
+    } finally {
+      windowManager.removeListener(this);
+      await windowManager.destroy();
+    }
+  }
 }
