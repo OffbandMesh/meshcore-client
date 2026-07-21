@@ -56,9 +56,8 @@ release cut end-to-end through CI (signed, all platforms).
 
 ### Under the hood
 
-- Offband is now buildable and deployable as a web app (offband.app), and every
-  release is built, signed, and published across Android, Windows, Linux, and web
-  through CI.
+- Every release is now built, signed, and published across Android, Windows, and
+  Linux automatically through CI. A web build is wired up and coming soon.
 
 ## [1.1.2-rc.3] - 2026-07-17
 
