@@ -2,6 +2,21 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.2.1] - 2026-07-21
+
+A patch fixing a desktop data-location bug in 1.2.0.
+
+### Fixed
+
+- Desktop (Windows/Linux): the drift / SQLite database was stored in a directory
+  derived from the executable's build metadata, so a differently-built copy read
+  a different, empty-looking database and history appeared missing. The database
+  is now pinned to one fixed path (Windows `%APPDATA%\Offband MeshCore`; Linux
+  likewise), and any existing database is migrated in on first launch via a safe
+  SQLite `VACUUM INTO` snapshot, aborting cleanly on failure with the source left
+  intact. Messages were never deleted. Android, web, and macOS were unaffected
+  (#363, #364).
+
 ## [1.2.0] - 2026-07-21
 
 A major uplift: the storage engine moved to a real database, the app got a new
