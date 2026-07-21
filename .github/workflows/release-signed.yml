@@ -100,7 +100,6 @@ jobs:
           echo "Keystore decoded (${SIZE} bytes), key.properties written."
 
       - run: flutter pub get
-      - run: dart run build_runner build --delete-conflicting-outputs
 
       # Same mechanism as build.yml (#331). A signed release that shipped
       # without the Giphy key would have a dead GIF picker.
