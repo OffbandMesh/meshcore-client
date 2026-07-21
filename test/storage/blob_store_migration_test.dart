@@ -75,18 +75,78 @@ void main() {
     expect(await store.read('contacts_dev'), '[{"c":1}]');
   });
 
-  test('a re-added prefs key does not clobber migrated data', () async {
-    // Simulates an older build writing the key again after migration. The
-    // migrated copy must win; the stale prefs copy is discarded, not promoted.
-    await seedPrefs({'contacts_dev': '[{"c":"new"}]'});
-    await store.write('contacts_dev', '[{"c":"migrated"}]');
+  test(
+    '#355: prefs messages absent from drift are merged, not discarded',
+    () async {
+      // The bug: an in-between build (non-drift, or any build that writes prefs)
+      // accumulates NEW messages in prefs. On the next drift run the key is
+      // "already present", so the old code discarded the prefs copy and the new
+      // messages were gapped out of history. They must be UNIONED in instead.
+      await store.write(
+        'channel_messages_devpsk_abc',
+        '[{"messageId":"a"},{"messageId":"b"}]',
+      );
+      await seedPrefs({
+        'channel_messages_devpsk_abc':
+            '[{"messageId":"a"},{"messageId":"c"},{"messageId":"d"}]',
+      });
 
-    final report = await store.migrateFromPrefs();
+      final report = await store.migrateFromPrefs();
 
-    expect(report.alreadyPresent, 1);
-    expect(await store.read('contacts_dev'), '[{"c":"migrated"}]');
-    expect(PrefsManager.instance.getString('contacts_dev'), isNull);
-  });
+      expect(report.merged, 1);
+      expect(report.failed, 0);
+      final ids = (await store.read('channel_messages_devpsk_abc'))!;
+      // Drift's a,b kept; prefs-only c,d appended; shared a not duplicated.
+      expect(
+        ids,
+        '[{"messageId":"a"},{"messageId":"b"},'
+        '{"messageId":"c"},{"messageId":"d"}]',
+      );
+      expect(
+        PrefsManager.instance.getString('channel_messages_devpsk_abc'),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'merge keeps the drift copy of a shared entity, adds prefs-only ones',
+    () async {
+      // Contacts collide by publicKey: the live drift copy wins for a shared key,
+      // and a contact seen only on the in-between build is still added.
+      await store.write('contacts_dev', '[{"publicKey":"A","name":"drift"}]');
+      await seedPrefs({
+        'contacts_dev':
+            '[{"publicKey":"A","name":"stale"},{"publicKey":"B","name":"new"}]',
+      });
+
+      final report = await store.migrateFromPrefs();
+
+      expect(report.merged, 1);
+      expect(
+        await store.read('contacts_dev'),
+        '[{"publicKey":"A","name":"drift"},{"publicKey":"B","name":"new"}]',
+      );
+      expect(PrefsManager.instance.getString('contacts_dev'), isNull);
+    },
+  );
+
+  test(
+    'already-present with nothing new to add reports alreadyPresent',
+    () async {
+      // Prefs is a subset of drift: union changes nothing, and the stale prefs
+      // copy is dropped without a needless rewrite.
+      await store.write('contacts_dev', '[{"publicKey":"A"}]');
+      await seedPrefs({'contacts_dev': '[{"publicKey":"A"}]'});
+
+      final report = await store.migrateFromPrefs();
+
+      expect(report.alreadyPresent, 1);
+      expect(report.merged, 0);
+      expect(await store.read('contacts_dev'), '[{"publicKey":"A"}]');
+      expect(PrefsManager.instance.getString('contacts_dev'), isNull);
+    },
+  );
 
   test('preserves a payload larger than the 5 MiB localStorage cap', () async {
     // 4 chars per element, so >1.4M elements clears 5 MiB.

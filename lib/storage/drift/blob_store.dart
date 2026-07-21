@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -176,12 +177,41 @@ class BlobStore {
         }
         final source = raw;
 
-        if (await read(key) != null) {
-          // Already migrated on a previous run. Leave the prefs copy for the
-          // sweep below rather than assuming; the read-back proved the data is
-          // present in drift.
-          report.alreadyPresent++;
+        final existing = await read(key);
+        if (existing != null) {
+          // Drift already holds this key. Do NOT discard the prefs copy: a
+          // build that writes to SharedPreferences (a non-drift build, or any
+          // in-between test build) accumulates NEW messages there, and throwing
+          // them away silently gaps the history across test cycles (#355). Union
+          // the prefs copy into drift by message identity, keeping drift's live
+          // entries, then verify before removing the source.
+          final merged = _mergeBulk(existing, source);
+          if (merged == null) {
+            // Not a JSON list (e.g. a scalar under a bulk prefix): drift's copy
+            // stands, nothing to union. Safe to drop the prefs duplicate.
+            report.alreadyPresent++;
+            await prefs.remove(key);
+            continue;
+          }
+          if (merged == existing) {
+            // Prefs added nothing new; drift is already a superset.
+            report.alreadyPresent++;
+            await prefs.remove(key);
+            continue;
+          }
+          await write(key, merged);
+          final readBack = await read(key);
+          if (readBack != merged) {
+            report.failed++;
+            appLogger.error(
+              'Blob merge FAILED for $key: wrote ${merged.length} chars, '
+              'read back ${readBack?.length ?? "null"}. Prefs copy left intact.',
+              tag: 'Storage',
+            );
+            continue;
+          }
           await prefs.remove(key);
+          report.merged++;
           continue;
         }
 
@@ -216,6 +246,7 @@ class BlobStore {
     final level = report.failed > 0 ? 'WITH FAILURES' : 'ok';
     appLogger.info(
       'Blob migration complete ($level): ${report.migrated} moved, '
+      '${report.merged} merged, '
       '${report.alreadyPresent} already present, ${report.skipped} skipped, '
       '${report.failed} failed, '
       '${(report.bytes / 1024 / 1024).toStringAsFixed(2)} MB',
@@ -230,11 +261,58 @@ class BlobStore {
     }
     return report;
   }
+
+  /// Unions the [prefs] copy of a bulk key into the [drift] copy by element
+  /// identity, keeping drift's entries where both hold the same one.
+  ///
+  /// All bulk families store a JSON list of objects (messages keyed by
+  /// `messageId`, contacts by `publicKey`); identity falls back to the object's
+  /// canonical form so an id-less element is never dropped. Order is drift's
+  /// list followed by the prefs-only elements, which mirrors how the stores
+  /// append on save.
+  ///
+  /// Returns null when either side is not a JSON list of objects (a scalar
+  /// under a bulk prefix), signalling the caller to leave drift's copy as-is.
+  /// Returns the drift JSON unchanged when prefs contributes nothing new.
+  static String? _mergeBulk(String drift, String prefs) {
+    final List<dynamic> driftList;
+    final List<dynamic> prefsList;
+    try {
+      final d = jsonDecode(drift);
+      final p = jsonDecode(prefs);
+      if (d is! List || p is! List) return null;
+      driftList = d;
+      prefsList = p;
+    } catch (_) {
+      return null;
+    }
+
+    String idOf(dynamic e) {
+      if (e is Map) {
+        final id = e['messageId'];
+        if (id is String && id.isNotEmpty) return 'm:$id';
+        final pk = e['publicKey'];
+        if (pk is String && pk.isNotEmpty) return 'p:$pk';
+      }
+      // No stable id: fall back to the element's canonical JSON so distinct
+      // elements stay distinct and true duplicates collapse.
+      return 'j:${jsonEncode(e)}';
+    }
+
+    final seen = <String>{for (final e in driftList) idOf(e)};
+    final result = List<dynamic>.from(driftList);
+    for (final e in prefsList) {
+      if (seen.add(idOf(e))) result.add(e);
+    }
+    if (result.length == driftList.length) return drift;
+    return jsonEncode(result);
+  }
 }
 
 /// Mutable tally of a migration run; surfaced in the log and used by tests.
 class MigrationReport {
   int migrated = 0;
+  int merged = 0;
   int alreadyPresent = 0;
   int skipped = 0;
   int failed = 0;
