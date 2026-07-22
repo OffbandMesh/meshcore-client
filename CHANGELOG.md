@@ -2,6 +2,22 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.2.2] - 2026-07-21
+
+A follow-up to 1.2.1 that recovers desktop history left behind in other databases.
+
+### Fixed
+
+- Desktop (Windows/Linux): 1.2.1 pinned the database to one path but migrated only
+  a single prior store. A user who had run several differently-built copies could
+  have message history split across multiple databases, leaving the extras behind.
+  On launch, every discovered legacy store is now unioned into the pinned database
+  (messages by id, contacts by public key), so previously stranded history is
+  brought back in. Source databases are never deleted; a store that cannot be read
+  or is over a size guard is skipped and retried on a later launch, and a failed
+  run leaves every source intact. Android, web, and macOS were unaffected
+  (#367, #370).
+
 ## [1.2.1] - 2026-07-21
 
 A patch fixing a desktop data-location bug in 1.2.0.
