@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 
 import '../helpers/gif_helper.dart';
+import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/platform_info.dart';
@@ -154,6 +155,15 @@ class NotificationService {
     final reaction = ReactionHelper.parseReaction(trimmed);
     if (reaction != null) {
       return 'Reacted ${reaction.emoji}';
+    }
+    // The PocketMesh / MeshCore One format, or the tray still shows the raw
+    // emoji-plus-hash payload (#380). The two forms are mutually exclusive by
+    // shape, so trying both is unambiguous.
+    final foreign =
+        PocketMeshReaction.parse(trimmed, isDm: true) ??
+        PocketMeshReaction.parse(trimmed, isDm: false);
+    if (foreign != null) {
+      return 'Reacted ${foreign.emoji}';
     }
     // resolveGifUrl, not parseGif: the tray must summarise exactly the set the
     // chat renders inline, or an allowlisted Tenor GIF shows as a raw URL. (#283)
