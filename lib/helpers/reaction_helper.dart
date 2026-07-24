@@ -1,10 +1,37 @@
 import '../widgets/emoji_picker.dart';
+import 'pocketmesh_reaction.dart';
+
+/// Which client's reaction format a [ReactionInfo] came from. The two use
+/// different target hashes, so matching has to know which one it holds.
+enum ReactionDialect {
+  /// Offband's own `r:hhhh:ii`.
+  offband,
+
+  /// PocketMesh / MeshCore One, `{emoji}@[{sender}]\n{hash}`. Receive-only.
+  pocketMesh,
+}
 
 class ReactionInfo {
   final String targetHash;
   final String emoji;
+  final ReactionDialect dialect;
 
-  ReactionInfo({required this.targetHash, required this.emoji});
+  /// The target message's sender, carried by the PocketMesh channel form only.
+  /// When set, a candidate must match it as well as the hash.
+  final String? targetSenderName;
+
+  ReactionInfo({
+    required this.targetHash,
+    required this.emoji,
+    this.dialect = ReactionDialect.offband,
+    this.targetSenderName,
+  });
+
+  ReactionInfo.pocketMesh(PocketMeshReaction reaction)
+    : targetHash = reaction.targetHash,
+      emoji = reaction.emoji,
+      dialect = ReactionDialect.pocketMesh,
+      targetSenderName = reaction.targetSenderName;
 }
 
 class ReactionHelper {
@@ -32,15 +59,27 @@ class ReactionHelper {
     updateMessage,
   }) {
     final targetHash = reactionInfo.targetHash;
+    final targetSender = reactionInfo.targetSenderName;
     for (int i = messages.length - 1; i >= 0; i--) {
       final msg = messages[i];
       if (shouldSkip(msg)) continue;
 
-      final msgHash = computeReactionHash(
-        getTimestampSecs(msg),
-        getSenderName(msg),
-        getMessageText(msg),
-      );
+      // Exact compare, no normalising: a node name can carry emoji and
+      // variation selectors (a live capture used "Strycher WM\u{1F6F0}\u{FE0F}")
+      // and any folding would break the match.
+      if (targetSender != null && getSenderName(msg) != targetSender) continue;
+
+      final msgHash = switch (reactionInfo.dialect) {
+        ReactionDialect.offband => computeReactionHash(
+          getTimestampSecs(msg),
+          getSenderName(msg),
+          getMessageText(msg),
+        ),
+        ReactionDialect.pocketMesh => PocketMeshReaction.computeHash(
+          getMessageText(msg),
+          getTimestampSecs(msg),
+        ),
+      };
       if (msgHash == targetHash) {
         final currentReactions = Map<String, int>.from(getReactions(msg));
         currentReactions[reactionInfo.emoji] =

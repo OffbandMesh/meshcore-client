@@ -17,6 +17,8 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/pending_reactions.dart';
+import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/time_anomaly.dart';
 import '../helpers/cyr2lat.dart';
@@ -236,9 +238,10 @@ class MeshCoreConnector extends ChangeNotifier {
   int _reactionSendQueueSequence = 0;
   final Set<String> _loadedConversationKeys = {};
   final Map<int, Set<String>> _processedChannelReactions =
-      {}; // channelIndex -> Set of "targetHash_emoji"
+      {}; // channelIndex -> Set of "targetHash_emoji_reactingSender"
   final Map<String, Set<String>> _processedContactReactions =
       {}; // contactPubKeyHex -> Set of "targetHash_emoji"
+  final PendingReactions _pendingReactions = PendingReactions();
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
@@ -6534,8 +6537,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _conversations.putIfAbsent(pubKeyHex, () => []);
     final messages = _conversations[pubKeyHex]!;
 
-    // Parse reaction info
-    final reactionInfo = Message.parseReaction(message.text);
+    // Parse reaction info. Our own format first, then the PocketMesh /
+    // MeshCore One format (#380). A room server behaves like a channel (many
+    // senders) while 1:1 does not, and the two forms are mutually exclusive by
+    // shape, so try both rather than guessing which one applies.
+    final reactionInfo =
+        Message.parseReaction(message.text) ??
+        _parsePocketMeshReaction(message.text, isDm: true) ??
+        _parsePocketMeshReaction(message.text, isDm: false);
     if (reactionInfo != null) {
       // Check if we've already processed this exact reaction
       _processedContactReactions.putIfAbsent(pubKeyHex, () => {});
@@ -6548,7 +6557,20 @@ class MeshCoreConnector extends ChangeNotifier {
 
       if (!isDuplicate) {
         // New reaction - process it
-        _processContactReaction(messages, reactionInfo, pubKeyHex);
+        final matched = _processContactReaction(
+          messages,
+          reactionInfo,
+          pubKeyHex,
+        );
+        if (!matched) {
+          // Early arrival, not junk. Hold it for the target (#382).
+          _pendingReactions.add(
+            _contactScopeKey(pubKeyHex),
+            reactionInfo,
+            pubKeyHex,
+            DateTime.now(),
+          );
+        }
         _messageStore.saveMessages(pubKeyHex, messages);
 
         // Mark as processed
@@ -6560,11 +6582,20 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     messages.add(message);
+    // A message just landed, so a reaction that arrived before it may now have
+    // its target (#382).
+    _pendingReactions.retry(
+      _contactScopeKey(pubKeyHex),
+      (info) => _processContactReaction(messages, info, pubKeyHex),
+      DateTime.now(),
+    );
     _messageStore.saveMessages(pubKeyHex, messages);
     notifyListeners();
   }
 
-  void _processContactReaction(
+  String _contactScopeKey(String pubKeyHex) => 'contact:$pubKeyHex';
+
+  bool _processContactReaction(
     List<Message> messages,
     ReactionInfo reactionInfo,
     String contactPubKeyHex,
@@ -6575,7 +6606,7 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     final isRoomServer = contact?.type == advTypeRoom;
 
-    ReactionHelper.applyReaction<Message>(
+    return ReactionHelper.applyReaction<Message>(
       messages: messages,
       reactionInfo: reactionInfo,
       // Incoming reactions in 1:1: match against outgoing messages only
@@ -6780,13 +6811,19 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelMessages.putIfAbsent(channelIndex, () => []);
     final messages = _channelMessages[channelIndex]!;
 
-    // Parse reaction info
-    final reactionInfo = ChannelMessage.parseReaction(message.text);
+    // Parse reaction info. Our own format first, then the PocketMesh /
+    // MeshCore One format other clients send (#380).
+    final reactionInfo =
+        ChannelMessage.parseReaction(message.text) ??
+        _parsePocketMeshReaction(message.text, isDm: false);
     if (reactionInfo != null) {
       // Check if we've already processed this exact reaction
       _processedChannelReactions.putIfAbsent(channelIndex, () => {});
+      // The reacting sender belongs in the key: without it, two people sending
+      // the same emoji to the same message collapse into one and the count
+      // never leaves 1.
       final reactionIdentifier =
-          '${reactionInfo.targetHash}_${reactionInfo.emoji}';
+          '${reactionInfo.targetHash}_${reactionInfo.emoji}_${message.senderName}';
 
       final isDuplicate = _processedChannelReactions[channelIndex]!.contains(
         reactionIdentifier,
@@ -6794,7 +6831,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
       if (!isDuplicate) {
         // New reaction - process it
-        _processReaction(messages, reactionInfo);
+        final matched = _processReaction(messages, reactionInfo);
+        if (!matched) {
+          // Early arrival, not junk. Hold it for the target (#382).
+          _pendingReactions.add(
+            _channelScopeKey(channelIndex),
+            reactionInfo,
+            message.senderName,
+            DateTime.now(),
+          );
+        }
         // Save updated messages
         _channelMessageStore.saveChannelMessages(channelIndex, messages);
 
@@ -6849,16 +6895,33 @@ class MeshCoreConnector extends ChangeNotifier {
       messages.add(processedMessage);
     }
 
+    // A message just landed, so a reaction that arrived before it may now have
+    // its target (#382).
+    _pendingReactions.retry(
+      _channelScopeKey(channelIndex),
+      (info) => _processReaction(messages, info),
+      DateTime.now(),
+    );
+
     // Save to persistent storage
     _channelMessageStore.saveChannelMessages(channelIndex, messages);
     return isNew;
   }
 
-  void _processReaction(
+  String _channelScopeKey(int channelIndex) => 'channel:$channelIndex';
+
+  /// The PocketMesh / MeshCore One reaction format, wrapped for matching.
+  /// Receive-only: we never emit it.
+  ReactionInfo? _parsePocketMeshReaction(String text, {required bool isDm}) {
+    final parsed = PocketMeshReaction.parse(text, isDm: isDm);
+    return parsed == null ? null : ReactionInfo.pocketMesh(parsed);
+  }
+
+  bool _processReaction(
     List<ChannelMessage> messages,
     ReactionInfo reactionInfo,
   ) {
-    ReactionHelper.applyReaction<ChannelMessage>(
+    return ReactionHelper.applyReaction<ChannelMessage>(
       messages: messages,
       reactionInfo: reactionInfo,
       shouldSkip: (_) => false,
