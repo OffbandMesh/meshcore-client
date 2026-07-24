@@ -142,6 +142,50 @@ void main() {
         expect(PocketMeshReaction.parse('\ndyps6yf0', isDm: true), isNull);
       });
 
+      test('a sentence starting with an arrow is not a reaction', () {
+        // Arrows carry the Unicode Emoji property but are ordinary punctuation.
+        // A live capture from this mesh had U+2192 mid-sentence in a normal
+        // channel message, so the range is excluded outright.
+        expect(
+          PocketMeshReaction.parse(
+            '\u{2190} Turn left at the fork\ndyps6yf0',
+            isDm: true,
+          ),
+          isNull,
+        );
+        expect(
+          PocketMeshReaction.parse('\u{2192}\ndyps6yf0', isDm: true),
+          isNull,
+        );
+      });
+
+      test('a long run of text after a real emoji is not a reaction', () {
+        // The swallow risk the rune cap exists for: without it the whole body
+        // would become the reaction "emoji".
+        expect(
+          PocketMeshReaction.parse(
+            '\u{1F44D} thanks, that fixed it for me\ndyps6yf0',
+            isDm: true,
+          ),
+          isNull,
+        );
+      });
+
+      test('accepts a multi-rune emoji sequence', () {
+        // Skin tone modifier, then a ZWJ family sequence.
+        expect(
+          PocketMeshReaction.parse('\u{1F44D}\u{1F3FD}\ndyps6yf0', isDm: true),
+          isNotNull,
+        );
+        expect(
+          PocketMeshReaction.parse(
+            '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\ndyps6yf0',
+            isDm: true,
+          ),
+          isNotNull,
+        );
+      });
+
       test('the leading character is not an emoji', () {
         // The realistic false positive: a two-line message whose last line
         // happens to be eight Crockford characters.

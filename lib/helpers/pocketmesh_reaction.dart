@@ -87,7 +87,7 @@ class PocketMeshReaction {
     required String? sender,
     required String hash,
   }) {
-    if (emoji.isEmpty || !_startsWithEmoji(emoji)) return null;
+    if (!_isReactionEmoji(emoji)) return null;
     return PocketMeshReaction(
       emoji: emoji,
       targetSenderName: sender,
@@ -95,23 +95,35 @@ class PocketMeshReaction {
     );
   }
 
+  /// A reaction is one emoji, possibly with a variation selector, a skin-tone
+  /// modifier or ZWJ joins. Eight runes is well clear of the longest such
+  /// sequence and nowhere near a sentence.
+  ///
+  /// This cap is the guard that matters: without it, any multi-line message
+  /// starting with a symbol and ending in eight Crockford characters would be
+  /// swallowed whole and shown as the reaction "emoji".
+  static const int _maxEmojiRunes = 8;
+
   /// Deliberately conservative: a missed emoji only means the reaction renders
   /// as text, which is the behaviour we have today, while a false positive
   /// would swallow a real message.
+  ///
+  /// Arrows (U+2190-U+21FF, U+2934-U+2935) are excluded on purpose even though
+  /// they carry the Unicode Emoji property. They are ordinary punctuation in
+  /// prose, and a live capture from this mesh contained U+2192 mid-sentence in
+  /// a normal channel message.
   static const List<List<int>> _emojiRanges = [
     [0x1F000, 0x1FAFF],
     [0x2600, 0x27BF],
     [0x2B00, 0x2BFF],
-    [0x2190, 0x21FF],
-    [0x2934, 0x2935],
     [0x3030, 0x3030],
     [0x303D, 0x303D],
     [0x3297, 0x3299],
   ];
 
-  static bool _startsWithEmoji(String text) {
+  static bool _isReactionEmoji(String text) {
     final runes = text.runes;
-    if (runes.isEmpty) return false;
+    if (runes.isEmpty || runes.length > _maxEmojiRunes) return false;
     final first = runes.first;
     for (final range in _emojiRanges) {
       if (first >= range[0] && first <= range[1]) return true;
