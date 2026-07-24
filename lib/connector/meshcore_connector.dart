@@ -6546,10 +6546,16 @@ class MeshCoreConnector extends ChangeNotifier {
         _parsePocketMeshReaction(message.text, isDm: true) ??
         _parsePocketMeshReaction(message.text, isDm: false);
     if (reactionInfo != null) {
-      // Check if we've already processed this exact reaction
+      // Check if we've already processed this exact reaction. A room server is
+      // many-party over the 1:1 transport, so the reacting author belongs in
+      // the key or two members sending the same emoji collapse into one; in a
+      // true 1:1 the author prefix is empty and the key is unchanged.
       _processedContactReactions.putIfAbsent(pubKeyHex, () => {});
+      final reactingAuthor = message.fourByteRoomContactKey
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
       final reactionIdentifier =
-          '${reactionInfo.targetHash}_${reactionInfo.emoji}';
+          '${reactionInfo.targetHash}_${reactionInfo.emoji}_$reactingAuthor';
 
       final isDuplicate = _processedContactReactions[pubKeyHex]!.contains(
         reactionIdentifier,
