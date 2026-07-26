@@ -4635,4 +4635,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get block_composerNotice => 'You\'ve blocked this contact';
+
+  @override
+  String get storageUnavailableTitle => 'Message storage unavailable';
+
+  @override
+  String get storageUnavailableBody =>
+      'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.';
 }

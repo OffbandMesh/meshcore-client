@@ -97,6 +97,11 @@ class BlobStore {
     return row?.value;
   }
 
+  /// Proves the database opens and round-trips a write. Throws (or returns
+  /// false) if storage is unusable — e.g. the native sqlite library can't load
+  /// (#385). Used by the startup health probe.
+  Future<bool> verifyReadWrite() => _db.verifyReadWrite();
+
   Future<void> write(String key, String value) async {
     await _db
         .into(_db.storedBlobs)

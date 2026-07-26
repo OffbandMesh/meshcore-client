@@ -7953,6 +7953,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'ve blocked this contact'**
   String get block_composerNotice;
+
+  /// Persistent banner title shown when the storage/database layer fails to open (#385).
+  ///
+  /// In en, this message translates to:
+  /// **'Message storage unavailable'**
+  String get storageUnavailableTitle;
+
+  /// Persistent banner body explaining that storage is unavailable and messages are not being saved (#385).
+  ///
+  /// In en, this message translates to:
+  /// **'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.'**
+  String get storageUnavailableBody;
 }
 
 class _AppLocalizationsDelegate
