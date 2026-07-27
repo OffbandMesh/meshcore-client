@@ -4,6 +4,7 @@ import 'package:meshcore_open/utils/app_logger.dart';
 
 import '../models/channel_message.dart';
 import '../models/translation_support.dart';
+import '../helpers/reaction_helper.dart';
 import '../helpers/smaz.dart';
 import 'drift/blob_store.dart';
 
@@ -267,6 +268,7 @@ class ChannelMessageStore {
       'replyToSenderName': msg.replyToSenderName,
       'replyToText': msg.replyToText,
       'reactions': msg.reactions,
+      'reactionSenders': msg.reactionSenders,
     };
   }
 
@@ -317,6 +319,9 @@ class ChannelMessageStore {
             (key, value) => MapEntry(key, value as int),
           ) ??
           {},
+      reactionSenders: ReactionHelper.reactionSendersFromJson(
+        json['reactionSenders'],
+      ),
     );
   }
 
