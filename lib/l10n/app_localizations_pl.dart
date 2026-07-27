@@ -600,6 +600,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settings_infoPublicKey => 'Klucz Publiczny';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override

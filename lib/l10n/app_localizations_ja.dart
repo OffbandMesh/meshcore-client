@@ -571,6 +571,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settings_infoPublicKey => '公開鍵';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override
