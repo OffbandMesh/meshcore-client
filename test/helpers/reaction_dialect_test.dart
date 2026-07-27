@@ -7,31 +7,43 @@ class _Msg {
   final String senderName;
   final String text;
   Map<String, int> reactions = {};
+  Map<String, List<String>> reactionSenders = {};
 
   _Msg(this.timestampSecs, this.senderName, this.text);
 }
 
 /// Runs applyReaction over [messages] and reports the match plus the resulting
-/// reaction map of whichever message was updated.
-({bool matched, Map<String, int>? reactions}) _apply(
-  List<_Msg> messages,
-  ReactionInfo info,
-) {
-  Map<String, int>? updated;
+/// count and sender maps of whichever message was updated.
+({
+  bool matched,
+  Map<String, int>? reactions,
+  Map<String, List<String>>? senders,
+})
+_apply(List<_Msg> messages, ReactionInfo info, {String reactingSender = 'R'}) {
+  Map<String, int>? updatedReactions;
+  Map<String, List<String>>? updatedSenders;
   final matched = ReactionHelper.applyReaction<_Msg>(
     messages: messages,
     reactionInfo: info,
+    reactingSender: reactingSender,
     getTimestampSecs: (m) => m.timestampSecs,
     getSenderName: (m) => m.senderName,
     getMessageText: (m) => m.text,
     getReactions: (m) => m.reactions,
+    getReactionSenders: (m) => m.reactionSenders,
     shouldSkip: (_) => false,
-    updateMessage: (i, reactions) {
+    updateMessage: (i, reactions, senders) {
       messages[i].reactions = reactions;
-      updated = reactions;
+      messages[i].reactionSenders = senders;
+      updatedReactions = reactions;
+      updatedSenders = senders;
     },
   );
-  return (matched: matched, reactions: updated);
+  return (
+    matched: matched,
+    reactions: updatedReactions,
+    senders: updatedSenders,
+  );
 }
 
 void main() {
@@ -124,7 +136,7 @@ void main() {
       expect(_apply(messages, info).matched, isFalse);
     });
 
-    test('counts accumulate for the same emoji', () {
+    test('two different reactors count as 2 and both names are kept', () {
       final messages = [_Msg(capturedTs, capturedSender, capturedText)];
       final info = ReactionInfo.pocketMesh(
         PocketMeshReaction.parse(
@@ -133,10 +145,52 @@ void main() {
         )!,
       );
 
-      _apply(messages, info);
-      final second = _apply(messages, info);
+      _apply(messages, info, reactingSender: 'Alice');
+      final second = _apply(messages, info, reactingSender: 'Bob');
 
       expect(second.reactions, {'\u{1F44D}': 2});
+      expect(second.senders, {
+        '\u{1F44D}': ['Alice', 'Bob'],
+      });
+    });
+
+    test('the same reactor with the same emoji does not double-count', () {
+      final messages = [_Msg(capturedTs, capturedSender, capturedText)];
+      final info = ReactionInfo.pocketMesh(
+        PocketMeshReaction.parse(
+          '\u{1F44D}@[$capturedSender]\n$capturedHash',
+          isDm: false,
+        )!,
+      );
+
+      final first = _apply(messages, info, reactingSender: 'Alice');
+      expect(first.reactions, {'\u{1F44D}': 1});
+
+      // Same reactor again: still matched, but no change to count or senders.
+      final again = _apply(messages, info, reactingSender: 'Alice');
+      expect(again.matched, isTrue);
+      expect(messages.single.reactions, {'\u{1F44D}': 1});
+      expect(messages.single.reactionSenders, {
+        '\u{1F44D}': ['Alice'],
+      });
+    });
+
+    test('a pre-#383 count with no sender list is preserved, not reset', () {
+      final messages = [_Msg(capturedTs, capturedSender, capturedText)];
+      // Simulate a message loaded from an old store: a count, no sender names.
+      messages.single.reactions = {'\u{1F44D}': 3};
+
+      final result = _apply(messages, _pm(capturedSender, capturedHash));
+
+      // The old three are kept and the new reactor adds one.
+      expect(result.reactions, {'\u{1F44D}': 4});
+      expect(result.senders, {
+        '\u{1F44D}': ['R'],
+      });
     });
   });
 }
+
+ReactionInfo _pm(String sender, String hash) => ReactionInfo.pocketMesh(
+  PocketMeshReaction.parse('\u{1F44D}@[$sender]\n$hash', isDm: false)!,
+);

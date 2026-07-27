@@ -47,13 +47,18 @@ class PendingReactions {
     );
   }
 
-  /// Re-attempt every live entry for [scopeKey]. [apply] reports whether the
-  /// reaction found its target; matched entries are removed, the rest stay.
-  void retry(String scopeKey, bool Function(ReactionInfo) apply, DateTime now) {
+  /// Re-attempt every live entry for [scopeKey]. [apply] receives the queued
+  /// reaction and the name of whoever sent it, and reports whether it found its
+  /// target; matched entries are removed, the rest stay.
+  void retry(
+    String scopeKey,
+    bool Function(ReactionInfo info, String reactingSender) apply,
+    DateTime now,
+  ) {
     expire(now);
     _entries.removeWhere((entry) {
       if (entry.scopeKey != scopeKey) return false;
-      if (!apply(entry.info)) return false;
+      if (!apply(entry.info, entry.reactingSender)) return false;
       appLogger.info(
         'Late-matched reaction ${entry.info.emoji} from ${entry.reactingSender} '
         'to ${entry.info.targetHash} in $scopeKey after '

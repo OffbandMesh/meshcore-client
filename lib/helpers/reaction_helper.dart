@@ -35,6 +35,23 @@ class ReactionInfo {
 }
 
 class ReactionHelper {
+  /// Deserialize the additive `reactionSenders` map from stored JSON (#383).
+  ///
+  /// Returns an empty map for records written before the field existed, so an
+  /// old store loads cleanly (its counts still come from the `reactions` key).
+  /// Malformed or wrongly-typed entries are skipped rather than thrown, because
+  /// a single bad entry must never fail the whole message-list load.
+  static Map<String, List<String>> reactionSendersFromJson(Object? raw) {
+    if (raw is! Map) return {};
+    final result = <String, List<String>>{};
+    raw.forEach((key, value) {
+      if (key is String && value is List) {
+        result[key] = value.whereType<String>().toList();
+      }
+    });
+    return result;
+  }
+
   /// Apply a reaction to a list of messages by matching the reaction hash.
   ///
   /// [messages] - the message list to search
@@ -43,23 +60,40 @@ class ReactionHelper {
   /// [getSenderName] - extract sender name for hash (null for 1:1 implicit)
   /// [getMessageText] - extract message text
   /// [getReactions] - extract current reactions map
+  /// [getReactionSenders] - extract current emoji->reactor-names map (#383)
+  /// [reactingSender] - the name of whoever sent this reaction
   /// [shouldSkip] - filter function to skip messages (e.g., skip outgoing for incoming reactions)
-  /// [updateMessage] - callback to update the message at index with new reactions
+  /// [updateMessage] - callback to update the message at index with the new
+  ///   count map and the new sender map
   ///
   /// Returns whether a match was found.
+  ///
+  /// [reactionSenders] is the persistent per-reactor record. A given reactor is
+  /// counted once per emoji: if their name is already in the list, the reaction
+  /// is a no-op on both maps (this survives restart, unlike the connector's
+  /// in-memory dedup set). Counts recorded before #383 have no sender list, so
+  /// the count is still incremented from its stored value rather than being
+  /// recomputed from the (partial) sender list, which would lose those.
   static bool applyReaction<T>({
     required List<T> messages,
     required ReactionInfo reactionInfo,
+    required String reactingSender,
     required int Function(T) getTimestampSecs,
     required String? Function(T) getSenderName,
     required String Function(T) getMessageText,
     required Map<String, int> Function(T) getReactions,
+    required Map<String, List<String>> Function(T) getReactionSenders,
     required bool Function(T) shouldSkip,
-    required void Function(int index, Map<String, int> newReactions)
+    required void Function(
+      int index,
+      Map<String, int> newReactions,
+      Map<String, List<String>> newSenders,
+    )
     updateMessage,
   }) {
     final targetHash = reactionInfo.targetHash;
     final targetSender = reactionInfo.targetSenderName;
+    final emoji = reactionInfo.emoji;
     for (int i = messages.length - 1; i >= 0; i--) {
       final msg = messages[i];
       if (shouldSkip(msg)) continue;
@@ -81,10 +115,20 @@ class ReactionHelper {
         ),
       };
       if (msgHash == targetHash) {
+        final senders = <String, List<String>>{
+          for (final e in getReactionSenders(msg).entries)
+            e.key: List<String>.from(e.value),
+        };
+        final list = senders.putIfAbsent(emoji, () => <String>[]);
+        if (list.contains(reactingSender)) {
+          // Already recorded this reactor for this emoji; matched, no change.
+          return true;
+        }
+        list.add(reactingSender);
+
         final currentReactions = Map<String, int>.from(getReactions(msg));
-        currentReactions[reactionInfo.emoji] =
-            (currentReactions[reactionInfo.emoji] ?? 0) + 1;
-        updateMessage(i, currentReactions);
+        currentReactions[emoji] = (currentReactions[emoji] ?? 0) + 1;
+        updateMessage(i, currentReactions, senders);
         return true;
       }
     }

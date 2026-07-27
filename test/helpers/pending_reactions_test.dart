@@ -20,12 +20,17 @@ void main() {
       pending.add('channel:0', _info('dyps6yf0'), 'Node', now);
 
       final applied = <String>[];
-      pending.retry('channel:0', (info) {
+      final reactors = <String>[];
+      pending.retry('channel:0', (info, reactingSender) {
         applied.add(info.targetHash);
+        reactors.add(reactingSender);
         return true;
       }, now.add(const Duration(seconds: 5)));
 
       expect(applied, ['dyps6yf0']);
+      expect(reactors, [
+        'Node',
+      ], reason: 'the queued reactor is passed through');
       expect(pending.length, 0);
     });
 
@@ -35,7 +40,7 @@ void main() {
 
       pending.retry(
         'channel:0',
-        (_) => false,
+        (_, _) => false,
         now.add(const Duration(seconds: 5)),
       );
 
@@ -47,7 +52,7 @@ void main() {
       pending.add('channel:0', _info('dyps6yf0'), 'Node', now);
 
       var called = false;
-      pending.retry('channel:1', (_) {
+      pending.retry('channel:1', (_, _) {
         called = true;
         return true;
       }, now);
@@ -90,7 +95,7 @@ void main() {
       expect(pending.length, PendingReactions.maxEntries);
 
       final seen = <String>[];
-      pending.retry('channel:0', (info) {
+      pending.retry('channel:0', (info, _) {
         seen.add(info.targetHash);
         return true;
       }, now.add(const Duration(minutes: 1)));

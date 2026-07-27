@@ -31,6 +31,14 @@ class Message {
   final int? pathLength;
   final Uint8List pathBytes;
   final Map<String, int> reactions;
+
+  /// Emoji to the list of sender names who reacted with it (#383).
+  ///
+  /// Additive over [reactions]: the count map is still written and read so an
+  /// older build degrades to "counts work, names missing" rather than failing
+  /// to load. Reactions recorded before this field existed appear in
+  /// [reactions] with no matching entry here.
+  final Map<String, List<String>> reactionSenders;
   final Map<String, MessageStatus> reactionStatuses;
   final Uint8List fourByteRoomContactKey;
 
@@ -62,6 +70,7 @@ class Message {
     Uint8List? pathBytes,
     Uint8List? fourByteRoomContactKey,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     Map<String, MessageStatus>? reactionStatuses,
     this.rxTime,
   }) : messageId =
@@ -70,6 +79,7 @@ class Message {
        pathBytes = pathBytes ?? Uint8List(0),
        fourByteRoomContactKey = fourByteRoomContactKey ?? Uint8List(0),
        reactions = reactions ?? {},
+       reactionSenders = reactionSenders ?? {},
        reactionStatuses = reactionStatuses ?? {};
 
   String get senderKeyHex => pubKeyToHex(senderKey);
@@ -91,6 +101,7 @@ class Message {
     MessageTranslationStatus? translationStatus,
     Object? translationModelId = _unset,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     Map<String, MessageStatus>? reactionStatuses,
     Uint8List? fourByteRoomContactKey,
     DateTime? rxTime,
@@ -125,6 +136,7 @@ class Message {
       pathLength: pathLength ?? this.pathLength,
       pathBytes: pathBytes ?? this.pathBytes,
       reactions: reactions ?? this.reactions,
+      reactionSenders: reactionSenders ?? this.reactionSenders,
       reactionStatuses: reactionStatuses ?? this.reactionStatuses,
       fourByteRoomContactKey:
           fourByteRoomContactKey ?? this.fourByteRoomContactKey,

@@ -51,6 +51,14 @@ class ChannelMessage {
   final String? replyToText;
   final Map<String, int> reactions;
 
+  /// Emoji to the list of sender names who reacted with it (#383).
+  ///
+  /// Additive over [reactions]: the count map is still written and read so an
+  /// older build degrades to "counts work, names missing" rather than failing
+  /// to load. Reactions recorded before this field existed appear in
+  /// [reactions] with no matching entry here.
+  final Map<String, List<String>> reactionSenders;
+
   /// Local wall-clock time this message's frame arrived, set at ingest.
   /// Null for outgoing messages and records stored before #285 — never
   /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
@@ -80,11 +88,13 @@ class ChannelMessage {
     this.replyToSenderName,
     this.replyToText,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     this.rxTime,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${senderName.hashCode}_${text.hashCode}',
        reactions = reactions ?? {},
+       reactionSenders = reactionSenders ?? {},
        pathBytes = pathBytes ?? Uint8List(0),
        pathVariants = _mergePathVariants(
          pathBytes ?? Uint8List(0),
@@ -129,6 +139,7 @@ class ChannelMessage {
     MessageTranslationStatus? translationStatus,
     Object? translationModelId = _unset,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     DateTime? rxTime,
   }) {
     return ChannelMessage(
@@ -163,6 +174,7 @@ class ChannelMessage {
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
       reactions: reactions ?? this.reactions,
+      reactionSenders: reactionSenders ?? this.reactionSenders,
       rxTime: rxTime ?? this.rxTime,
     );
   }

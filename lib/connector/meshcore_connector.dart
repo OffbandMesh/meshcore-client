@@ -3610,8 +3610,9 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelMessages.putIfAbsent(channel.index, () => []);
       final messages = _channelMessages[channel.index]!;
 
-      // Process reaction locally to update the UI immediately
-      _processReaction(messages, reactionInfo);
+      // Process reaction locally to update the UI immediately. This is our own
+      // outgoing reaction, so the reactor is us.
+      _processReaction(messages, reactionInfo, _selfName ?? 'Me');
       await _channelMessageStore.saveChannelMessages(channel.index, messages);
 
       // Mark this reaction as processed
@@ -6551,11 +6552,23 @@ class MeshCoreConnector extends ChangeNotifier {
       // the key or two members sending the same emoji collapse into one; in a
       // true 1:1 the author prefix is empty and the key is unchanged.
       _processedContactReactions.putIfAbsent(pubKeyHex, () => {});
-      final reactingAuthor = message.fourByteRoomContactKey
+      // The reactor's display name: in a room the frame's own author field
+      // identifies them; in a true 1:1 it is simply the contact. Falls back to
+      // the hex author prefix, then the pubkey, so it is never empty (#383).
+      final reactionContact = _contacts.cast<Contact?>().firstWhere(
+        (c) => c?.publicKeyHex == pubKeyHex,
+        orElse: () => null,
+      );
+      final isRoomReaction = reactionContact?.type == advTypeRoom;
+      final reactingAuthorHex = message.fourByteRoomContactKey
           .map((b) => b.toRadixString(16).padLeft(2, '0'))
           .join();
+      final reactorName =
+          _resolveContactSenderName(message, reactionContact, isRoomReaction) ??
+          reactionContact?.name ??
+          (reactingAuthorHex.isNotEmpty ? reactingAuthorHex : pubKeyHex);
       final reactionIdentifier =
-          '${reactionInfo.targetHash}_${reactionInfo.emoji}_$reactingAuthor';
+          '${reactionInfo.targetHash}_${reactionInfo.emoji}_$reactingAuthorHex';
 
       final isDuplicate = _processedContactReactions[pubKeyHex]!.contains(
         reactionIdentifier,
@@ -6567,13 +6580,14 @@ class MeshCoreConnector extends ChangeNotifier {
           messages,
           reactionInfo,
           pubKeyHex,
+          reactorName,
         );
         if (!matched) {
           // Early arrival, not junk. Hold it for the target (#382).
           _pendingReactions.add(
             _contactScopeKey(pubKeyHex),
             reactionInfo,
-            pubKeyHex,
+            reactorName,
             DateTime.now(),
           );
         }
@@ -6592,7 +6606,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // its target (#382).
     _pendingReactions.retry(
       _contactScopeKey(pubKeyHex),
-      (info) => _processContactReaction(messages, info, pubKeyHex),
+      (info, reactingSender) =>
+          _processContactReaction(messages, info, pubKeyHex, reactingSender),
       DateTime.now(),
     );
     _messageStore.saveMessages(pubKeyHex, messages);
@@ -6605,6 +6620,7 @@ class MeshCoreConnector extends ChangeNotifier {
     List<Message> messages,
     ReactionInfo reactionInfo,
     String contactPubKeyHex,
+    String reactingSender,
   ) {
     final contact = _contacts.cast<Contact?>().firstWhere(
       (c) => c?.publicKeyHex == contactPubKeyHex,
@@ -6615,6 +6631,7 @@ class MeshCoreConnector extends ChangeNotifier {
     return ReactionHelper.applyReaction<Message>(
       messages: messages,
       reactionInfo: reactionInfo,
+      reactingSender: reactingSender,
       // Incoming reactions in 1:1: match against outgoing messages only
       shouldSkip: (msg) => isRoomServer != true && !msg.isOutgoing,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
@@ -6622,8 +6639,12 @@ class MeshCoreConnector extends ChangeNotifier {
           _resolveContactSenderName(msg, contact, isRoomServer == true),
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
       },
     );
   }
@@ -6638,6 +6659,8 @@ class MeshCoreConnector extends ChangeNotifier {
     ReactionHelper.applyReaction<Message>(
       messages: messages,
       reactionInfo: reactionInfo,
+      // Our own outgoing reaction, so the reactor is us.
+      reactingSender: _selfName ?? 'Me',
       // Outgoing reactions in 1:1: match against incoming messages
       shouldSkip: (msg) => !isRoomServer && msg.isOutgoing,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
@@ -6645,8 +6668,12 @@ class MeshCoreConnector extends ChangeNotifier {
           _resolveContactSenderName(msg, contact, isRoomServer),
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
       },
     );
   }
@@ -6836,8 +6863,12 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       if (!isDuplicate) {
-        // New reaction - process it
-        final matched = _processReaction(messages, reactionInfo);
+        // New reaction - process it. The reactor is the frame's sender.
+        final matched = _processReaction(
+          messages,
+          reactionInfo,
+          message.senderName,
+        );
         if (!matched) {
           // Early arrival, not junk. Hold it for the target (#382).
           _pendingReactions.add(
@@ -6905,7 +6936,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // its target (#382).
     _pendingReactions.retry(
       _channelScopeKey(channelIndex),
-      (info) => _processReaction(messages, info),
+      (info, reactingSender) =>
+          _processReaction(messages, info, reactingSender),
       DateTime.now(),
     );
 
@@ -6926,17 +6958,23 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _processReaction(
     List<ChannelMessage> messages,
     ReactionInfo reactionInfo,
+    String reactingSender,
   ) {
     return ReactionHelper.applyReaction<ChannelMessage>(
       messages: messages,
       reactionInfo: reactionInfo,
+      reactingSender: reactingSender,
       shouldSkip: (_) => false,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
       getSenderName: (msg) => msg.senderName,
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
         notifyListeners();
       },
     );
