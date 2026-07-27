@@ -42,7 +42,16 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
             actions: [
               IconButton(
                 tooltip: isMobile ? 'Share logs' : 'Open logs folder',
-                icon: Icon(isMobile ? Icons.ios_share : Icons.folder_open),
+                // Platform-standard share glyph: Android uses Icons.share
+                // (connected nodes), iOS uses Icons.ios_share (square+arrow),
+                // desktop reveals the saved file (folder). #396
+                icon: Icon(
+                  defaultTargetPlatform == TargetPlatform.android
+                      ? Icons.share
+                      : isMobile
+                      ? Icons.ios_share
+                      : Icons.folder_open,
+                ),
                 onPressed: () => _exportLogs(context),
               ),
               IconButton(
