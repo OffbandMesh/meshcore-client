@@ -6,6 +6,9 @@ import '../services/ui_view_state_service.dart';
 import '../utils/app_backgrounder.dart';
 import 'quick_switch_bar.dart';
 
+/// What the system Back button should do inside an [AppShell] (#389).
+enum AppShellBackAction { closeDrawer, pop, background }
+
 /// Shared shell for the primary views (Contacts / Channels / Map).
 ///
 /// Owns the bottom [QuickSwitchBar] that each view previously mounted itself,
@@ -17,9 +20,18 @@ class AppShell extends StatefulWidget {
   static const double wideBreakpoint = 720;
   static const double _drawerWidth = 300;
 
-  /// Bottom bar tab. Null on pushed detail screens (a channel chat), which
-  /// carry the nav panel but no bottom bar.
+  /// Bottom bar tab to highlight. A pushed detail screen (a channel chat) still
+  /// sets this so the bar stays visible; it is NOT what decides Back behavior —
+  /// [isTopLevel] is. Null renders no bottom bar.
   final int? selectedIndex;
+
+  /// Whether this is a genuine top-level landing screen — a bottom-bar tab
+  /// (Contacts/Channels/Map). On a top-level screen, Back sends the app to the
+  /// background; on a pushed detail screen (a channel chat, the LOS map) Back
+  /// pops to the list it came from. Kept separate from [selectedIndex] so a
+  /// detail can keep the bar visible without Back treating it as top-level
+  /// (#389). Defaults to true.
+  final bool isTopLevel;
   final ValueChanged<int>? onDestinationSelected;
   final int contactsUnreadCount;
   final int channelsUnreadCount;
@@ -48,6 +60,7 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.body,
     this.selectedIndex,
+    this.isTopLevel = true,
     this.onDestinationSelected,
     this.appBar,
     this.appBarBuilder,
@@ -59,6 +72,23 @@ class AppShell extends StatefulWidget {
     this.channelsUnreadCount = 0,
   });
 
+  /// Pure back-button decision (#389), extracted so it is testable without the
+  /// widget tree. An open drawer closes first; a pushed detail ([isTopLevel]
+  /// false) that has a route below pops to its list; anything else — a
+  /// top-level tab, or a detail with nothing to pop — backgrounds the app. A
+  /// top-level tab CAN pop (the scanner sits below it) but must not, or Back
+  /// would strand the user on the radio-connect screen.
+  @visibleForTesting
+  static AppShellBackAction backAction({
+    required bool drawerOpen,
+    required bool isTopLevel,
+    required bool canPop,
+  }) {
+    if (drawerOpen) return AppShellBackAction.closeDrawer;
+    if (!isTopLevel && canPop) return AppShellBackAction.pop;
+    return AppShellBackAction.background;
+  }
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -68,35 +98,43 @@ class _AppShellState extends State<AppShell> {
 
   /// System back, in priority order:
   ///   1. an open drawer closes,
-  ///   2. on a detail screen, pop back to the list it came from,
-  ///   3. on a primary view, send the app to the background so Android
-  ///      returns to the home screen or the previous app.
+  ///   2. on a pushed detail screen (a channel chat), pop back to the list it
+  ///      came from,
+  ///   3. on a top-level tab, send the app to the background so Android returns
+  ///      to the home screen or the previous app.
   ///
-  /// Step 3 must NOT pop, even though the route below can be popped. The
-  /// primary views sit on top of the scanner, so popping would dump a
-  /// connected user back onto the radio-connect list. Reaching the scanner is
-  /// what Disconnect is for, not what Back is for.
-  ///
-  /// A primary view is one carrying the bottom bar; a detail screen (a channel
-  /// chat) has no [selectedIndex] and is genuinely pushed.
+  /// Top-level is decided by [AppShell.isTopLevel], NOT by whether a route can
+  /// be popped: a top-level tab sits on top of the scanner, so it CAN pop, but
+  /// popping would dump a connected user back onto the radio-connect list.
+  /// Reaching the scanner is what Disconnect is for, not what Back is for. A
+  /// detail screen keeps the bottom bar ([selectedIndex]) yet is not top-level,
+  /// so Back pops it (#389).
   Future<void> _handleBack() async {
     final scaffold = _scaffoldKey.currentState;
-    if (scaffold?.isDrawerOpen ?? false) {
-      scaffold!.closeDrawer();
-      return;
+    // Guardrail (#389): a screen marked as a pushed detail must actually be
+    // poppable, or Back would fall through to backgrounding the app instead of
+    // returning to its list. Catches a detail wired without a route below it.
+    assert(
+      widget.isTopLevel || Navigator.of(context).canPop(),
+      'AppShell(isTopLevel: false) must be a pushed route so Back pops to its '
+      'list',
+    );
+    final action = AppShell.backAction(
+      drawerOpen: scaffold?.isDrawerOpen ?? false,
+      isTopLevel: widget.isTopLevel,
+      canPop: Navigator.of(context).canPop(),
+    );
+    switch (action) {
+      case AppShellBackAction.closeDrawer:
+        scaffold!.closeDrawer();
+      case AppShellBackAction.pop:
+        Navigator.of(context).pop();
+      case AppShellBackAction.background:
+        // Background, do NOT finish. SystemNavigator.pop() would call finish()
+        // on the activity, tearing down the Flutter engine and dropping the
+        // radio connection, so reopening would show a disconnected radio.
+        await AppBackgrounder.moveToBackground();
     }
-
-    final isPrimaryView = widget.selectedIndex != null;
-    final navigator = Navigator.of(context);
-    if (!isPrimaryView && navigator.canPop()) {
-      navigator.pop();
-      return;
-    }
-
-    // Background, do NOT finish. SystemNavigator.pop() would call finish() on
-    // the activity, tearing down the Flutter engine and dropping the radio
-    // connection, so reopening the app would show a disconnected radio.
-    await AppBackgrounder.moveToBackground();
   }
 
   @override

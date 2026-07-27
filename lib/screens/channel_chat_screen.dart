@@ -347,6 +347,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       // a channel on desktop, where there is no system back button and the
       // hamburger has taken the back arrow's place.
       selectedIndex: 1,
+      // Pushed detail: Back pops to the channel list, not to the background
+      // (#389). The bar above is only for tab highlighting/switching.
+      isTopLevel: false,
       onDestinationSelected: _handleQuickSwitch,
       contactsUnreadCount: context
           .watch<MeshCoreConnector>()
