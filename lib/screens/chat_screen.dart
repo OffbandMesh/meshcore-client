@@ -595,7 +595,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (context.watch<BlockService>().isBlocked(widget.contact.publicKeyHex)) {
       return _buildBlockedBar();
     }
-    final maxBytes = maxContactMessageBytes();
+    final maxBytes = maxContactMessageBytes(
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final colorScheme = Theme.of(context).colorScheme;
     final settings = context.watch<AppSettingsService>().settings;
     return Container(
@@ -815,7 +817,9 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     }
-    final maxBytes = maxContactMessageBytes();
+    final maxBytes = maxContactMessageBytes(
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final outboundText = connector.prepareContactOutboundText(
       _resolveContact(connector),
       outgoingText,

@@ -431,6 +431,23 @@ class MeshCoreConnector extends ChangeNotifier {
   // Getters
   MeshCoreConnectionState get state => _state;
   BluetoothDevice? get device => _device;
+
+  /// Largest frame (in bytes) the active transport can write in a single
+  /// operation. BLE caps one characteristic write at ATT_MTU - 3 (ATT opcode +
+  /// handle); a device that negotiates a smaller MTU than [maxFrameSize] assumes
+  /// would otherwise reject a max-length message and wedge the send path (#395).
+  /// USB/TCP have no such per-write cap, so they take the full [maxFrameSize].
+  int get effectiveMaxFrameSize {
+    if (_activeTransport != MeshCoreTransportType.bluetooth) {
+      return maxFrameSize;
+    }
+    final mtu = _device?.mtuNow ?? 0;
+    if (mtu <= 0) return maxFrameSize;
+    final writable = mtu - 3;
+    if (writable >= maxFrameSize) return maxFrameSize;
+    return writable < 23 ? 23 : writable;
+  }
+
   String? get deviceId => _deviceId;
   String get deviceIdLabel => _deviceId ?? 'Unknown';
 
@@ -1381,6 +1398,10 @@ class MeshCoreConnector extends ChangeNotifier {
       );
     } catch (e) {
       appLogger.error('Failed to send message: $e', tag: 'Connector');
+      // Propagate so MessageRetryService marks the message failed and drains the
+      // per-contact queue. Swallowing here left the message "active" forever and
+      // silently blocked every later DM to the contact until reconnect (#395).
+      rethrow;
     }
   }
 
@@ -3638,11 +3659,22 @@ class MeshCoreConnector extends ChangeNotifier {
       final reactionQueueId = _nextReactionSendQueueId();
       _pendingChannelSentQueue.add(reactionQueueId);
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
-      await sendFrame(
-        buildSendChannelTextMsgFrame(channel.index, text),
-        channelSendQueueId: reactionQueueId,
-        expectsGenericAck: true,
-      );
+      try {
+        await sendFrame(
+          buildSendChannelTextMsgFrame(channel.index, text),
+          channelSendQueueId: reactionQueueId,
+          expectsGenericAck: true,
+        );
+      } catch (e) {
+        // A failed write must not leave a stale id at the head of the FIFO
+        // queue, or the next channel message's OK would be credited to it and
+        // the real message would never clear (#395).
+        _pendingChannelSentQueue.remove(reactionQueueId);
+        appLogger.error(
+          'Failed to send channel reaction: $e',
+          tag: 'Connector',
+        );
+      }
       return;
     }
 
@@ -3660,11 +3692,19 @@ class MeshCoreConnector extends ChangeNotifier {
 
     final outboundText = prepareChannelOutboundText(channel.index, text);
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
-    await sendFrame(
-      buildSendChannelTextMsgFrame(channel.index, outboundText),
-      channelSendQueueId: message.messageId,
-      expectsGenericAck: true,
-    );
+    try {
+      await sendFrame(
+        buildSendChannelTextMsgFrame(channel.index, outboundText),
+        channelSendQueueId: message.messageId,
+        expectsGenericAck: true,
+      );
+    } catch (e) {
+      // Clear the stuck queue id and surface the failure in the chat bubble
+      // instead of leaving the message pending and blocking the queue (#395).
+      _pendingChannelSentQueue.remove(message.messageId);
+      _markChannelMessageFailed(channel.index, message.messageId);
+      appLogger.error('Failed to send channel message: $e', tag: 'Connector');
+    }
   }
 
   Future<void> removeContact(Contact contact) async {
@@ -6446,6 +6486,29 @@ class MeshCoreConnector extends ChangeNotifier {
       }
     }
     return false;
+  }
+
+  void _markChannelMessageFailed(int channelIndex, String messageId) {
+    final channelMessages = _channelMessages[channelIndex];
+    if (channelMessages == null) return;
+    for (int i = channelMessages.length - 1; i >= 0; i--) {
+      final message = channelMessages[i];
+      if (message.messageId != messageId) {
+        continue;
+      }
+      if (!message.isOutgoing ||
+          message.status != ChannelMessageStatus.pending) {
+        return;
+      }
+      channelMessages[i] = message.copyWith(
+        status: ChannelMessageStatus.failed,
+      );
+      unawaited(
+        _channelMessageStore.saveChannelMessages(channelIndex, channelMessages),
+      );
+      notifyListeners();
+      return;
+    }
   }
 
   void _handleOk() {

@@ -1155,7 +1155,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   Widget _buildMessageComposer() {
     final connector = context.watch<MeshCoreConnector>();
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final settings = context.watch<AppSettingsService>().settings;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1388,7 +1391,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       messageText = '@[${_replyingToMessage!.senderName}] $messageText';
     }
 
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final outboundText = connector.prepareChannelOutboundText(
       _currentChannel.index,
       messageText,
@@ -1430,7 +1436,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final hops = message.pathBytes.length ~/ (w < 1 ? 1 : w);
     final prefix =
         '@[${message.senderName}] ↩ ${context.l10n.chat_hopsCount(hops)} · via ';
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
 
     var path = _formatPathPrefixes(message.pathBytes, w);
     var truncated = false;

@@ -34,7 +34,7 @@ typedef AckHashMapping = ({
 });
 
 class RetryServiceConfig {
-  final void Function(Contact, String, int, int) sendMessage;
+  final Future<void> Function(Contact, String, int, int) sendMessage;
   final void Function(String, Message) addMessage;
   final void Function(Message) updateMessage;
   final Function(Contact)? clearContactPath;
@@ -74,10 +74,14 @@ class RetryServiceConfig {
 
 class MessageRetryService extends ChangeNotifier {
   static const int maxAckHistorySize = 100;
+  // How long to wait for the radio's RESP_CODE_SENT before treating an
+  // apparently-sent message as failed so it can't wedge the queue (#395).
+  static const int _sentConfirmationTimeoutMs = 8000;
   int _maxRetries = 5;
   int get maxRetries => _maxRetries;
 
   final Map<String, Timer> _timeoutTimers = {};
+  final Map<String, Timer> _sentConfirmationTimers = {};
   final Map<String, Message> _pendingMessages = {};
   final Map<String, Contact> _pendingContacts = {};
   final Map<String, List<PathSelection>> _attemptPathHistory = {};
@@ -348,7 +352,43 @@ class MessageRetryService extends ChangeNotifier {
       );
     }
 
-    config.sendMessage(contact, message.text, attempt, timestampSeconds);
+    // Await so a send failure (e.g. an oversized BLE write) propagates to the
+    // catchError in _sendNextForContact, which marks the message failed and
+    // drains the per-contact queue instead of wedging it (#395).
+    await config.sendMessage(contact, message.text, attempt, timestampSeconds);
+
+    // The write reached the transport; now guard the window until the radio
+    // returns RESP_CODE_SENT. If it never does (frame dropped on the wire), this
+    // message would otherwise stay "active" forever and block the queue (#395).
+    _startSentConfirmationTimer(messageId);
+  }
+
+  void _startSentConfirmationTimer(String messageId) {
+    _sentConfirmationTimers[messageId]?.cancel();
+    _sentConfirmationTimers[messageId] = Timer(
+      const Duration(milliseconds: _sentConfirmationTimeoutMs),
+      () => _handleSentConfirmationTimeout(messageId),
+    );
+  }
+
+  void _handleSentConfirmationTimeout(String messageId) {
+    _sentConfirmationTimers.remove(messageId);
+    final message = _pendingMessages[messageId];
+    final contact = _pendingContacts[messageId];
+    if (message == null || contact == null) return;
+    // RESP_CODE_SENT would have moved the status to sent (and cancelled this
+    // timer); still-pending here means the radio never confirmed the send.
+    if (message.status != MessageStatus.pending) return;
+
+    final failed = message.copyWith(status: MessageStatus.failed);
+    _pendingMessages[messageId] = failed;
+    _config?.updateMessage(failed);
+    _config?.debugLogService?.warn(
+      'No RESP_CODE_SENT within ${_sentConfirmationTimeoutMs}ms — marking send failed',
+      tag: 'AckHash',
+    );
+    notifyListeners();
+    _onMessageResolved(messageId, contact.publicKeyHex);
   }
 
   bool updateMessageFromSent(int ackHash, int timeoutMs) {
@@ -424,6 +464,8 @@ class MessageRetryService extends ChangeNotifier {
     _pendingMessages[messageId] = updatedMessage;
     config.updateMessage(updatedMessage);
 
+    // Radio confirmed the send — the delivery-ack timer takes over from here.
+    _sentConfirmationTimers.remove(messageId)?.cancel();
     _startTimeoutTimer(messageId, actualTimeout);
     return true;
   }
@@ -459,6 +501,7 @@ class MessageRetryService extends ChangeNotifier {
     _pendingContacts.remove(messageId);
     _attemptPathHistory.remove(messageId);
     _timeoutTimers.remove(messageId);
+    _sentConfirmationTimers.remove(messageId)?.cancel();
     _resolvedMessages.remove(messageId);
   }
 
@@ -747,6 +790,10 @@ class MessageRetryService extends ChangeNotifier {
       timer.cancel();
     }
     _timeoutTimers.clear();
+    for (var timer in _sentConfirmationTimers.values) {
+      timer.cancel();
+    }
+    _sentConfirmationTimers.clear();
     _pendingMessages.clear();
     _pendingContacts.clear();
     _attemptPathHistory.clear();

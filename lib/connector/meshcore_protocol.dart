@@ -587,16 +587,26 @@ const int _sendTextMsgOverheadBytes =
 const int _sendChannelTextMsgOverheadBytes =
     1 + 1 + 1 + 4 + 1 + 2; // +2 safety margin
 
-int maxContactMessageBytes() {
-  final byFrame = maxFrameSize - _sendTextMsgOverheadBytes;
+// [maxFrameBytes] is the largest frame the active transport can write in one
+// operation. On BLE that is ATT_MTU - 3, which can be smaller than [maxFrameSize];
+// pass it so a max-length message never overflows the characteristic write (#395).
+// Defaults to [maxFrameSize] for callers without a live transport (USB/TCP, tests).
+int maxContactMessageBytes({int? maxFrameBytes}) {
+  final frameBudget = maxFrameBytes ?? maxFrameSize;
+  final byFrame = frameBudget - _sendTextMsgOverheadBytes;
   return _minPositive(byFrame, maxTextPayloadBytes);
 }
 
-int maxChannelMessageBytes(String? senderName) {
+int maxChannelMessageBytes(String? senderName, {int? maxFrameBytes}) {
+  final frameBudget = maxFrameBytes ?? maxFrameSize;
   final nameLength = _senderNameBytes(senderName);
   final prefixBytes = nameLength + 2; // "<name>: "
   final byPayload = maxTextPayloadBytes - prefixBytes;
-  final byFrame = maxFrameSize - _sendChannelTextMsgOverheadBytes;
+  // The wire text is "<name>: <userText>", so the prefix eats into the frame
+  // budget too. At maxFrameSize the payload limit always governed and this went
+  // unnoticed; with a smaller BLE budget the frame limit can govern, so the
+  // prefix must be subtracted here or a channel frame can still overflow (#395).
+  final byFrame = frameBudget - _sendChannelTextMsgOverheadBytes - prefixBytes;
   return _minPositive(byPayload, byFrame);
 }
 
