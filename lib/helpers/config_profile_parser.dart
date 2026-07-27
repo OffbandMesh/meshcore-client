@@ -5,7 +5,7 @@ import '../models/config_profile.dart';
 /// Thrown when a config-profile document is not valid (#403).
 ///
 /// Message is user-facing: the import flow shows it verbatim, so it names the
-/// offending key/value rather than a stack position.
+/// offending key/value (with its section) rather than a stack position.
 class ConfigProfileFormatException implements Exception {
   const ConfigProfileFormatException(this.message);
   final String message;
@@ -16,9 +16,9 @@ class ConfigProfileFormatException implements Exception {
 /// Parse a YAML config profile into a [ConfigProfile] (#402 model).
 ///
 /// Strict by design — profiles are untrusted input (#139 trust note), so an
-/// unknown key or a wrong type is an error, not a silent skip. Only keys present
-/// in the document appear in the model; everything else stays null so the apply
-/// engines touch only what the profile sets.
+/// unknown key, a wrong type, or an out-of-range value is an error, not a silent
+/// skip. Only keys present in the document appear in the model; everything else
+/// stays null so the apply engines touch only what the profile sets.
 ///
 /// Expected shape:
 /// ```yaml
@@ -45,9 +45,10 @@ ConfigProfile parseConfigProfile(String source) {
     throw ConfigProfileFormatException('Not valid YAML: ${e.message}');
   }
 
-  final root = _asMap(doc, 'document root');
+  const root = 'document root';
+  final map = _asMap(doc, root);
 
-  final version = _requireInt(root, 'schema_version');
+  final version = _requireInt(map, 'schema_version', root);
   if (version > kConfigProfileSchemaVersion) {
     throw ConfigProfileFormatException(
       'Profile schema_version $version is newer than this app supports '
@@ -55,33 +56,34 @@ ConfigProfile parseConfigProfile(String source) {
     );
   }
 
-  _rejectUnknownKeys(root, const {
+  _rejectUnknownKeys(map, const {
     'schema_version',
     'name',
     'wifi',
     'region',
     'status_interval',
     'brokers',
-  }, 'document root');
+  }, root);
 
   return ConfigProfile(
     schemaVersion: version,
-    name: _optString(root, 'name'),
-    wifi: _parseWifi(root['wifi']),
-    regionIata: _optString(root, 'region'),
-    statusInterval: _optInt(root, 'status_interval'),
-    brokers: _parseBrokers(root['brokers']),
+    name: _optString(map, 'name', root),
+    wifi: _parseWifi(map['wifi']),
+    regionIata: _optString(map, 'region', root),
+    statusInterval: _optUint(map, 'status_interval', root),
+    brokers: _parseBrokers(map['brokers']),
   );
 }
 
 WifiConfig? _parseWifi(dynamic node) {
   if (node == null) return null;
-  final map = _asMap(node, 'wifi');
-  _rejectUnknownKeys(map, const {'ssid', 'password', 'enabled'}, 'wifi');
+  const ctx = 'wifi';
+  final map = _asMap(node, ctx);
+  _rejectUnknownKeys(map, const {'ssid', 'password', 'enabled'}, ctx);
   return WifiConfig(
-    ssid: _optString(map, 'ssid'),
-    password: _optString(map, 'password'),
-    enabled: _optBool(map, 'enabled'),
+    ssid: _optString(map, 'ssid', ctx),
+    password: _optString(map, 'password', ctx),
+    enabled: _optBool(map, 'enabled', ctx),
   );
 }
 
@@ -93,7 +95,8 @@ List<BrokerConfig> _parseBrokers(dynamic node) {
   final seenSlots = <int>{};
   final brokers = <BrokerConfig>[];
   for (var i = 0; i < node.length; i++) {
-    final map = _asMap(node[i], 'brokers[$i]');
+    final ctx = 'brokers[$i]';
+    final map = _asMap(node[i], ctx);
     _rejectUnknownKeys(map, const {
       'slot',
       'enabled',
@@ -111,53 +114,62 @@ List<BrokerConfig> _parseBrokers(dynamic node) {
       'ca_cert',
       'topic_prefix',
       'iata_override',
-    }, 'brokers[$i]');
+    }, ctx);
 
-    final slot = _requireInt(map, 'slot', context: 'brokers[$i]');
+    final slot = _requireInt(map, 'slot', ctx);
     if (slot < 0 || slot >= kMaxBrokerSlots) {
       throw ConfigProfileFormatException(
-        'brokers[$i].slot must be 0..${kMaxBrokerSlots - 1}, got $slot',
+        '$ctx.slot must be 0..${kMaxBrokerSlots - 1}, got $slot',
       );
     }
     if (!seenSlots.add(slot)) {
       throw ConfigProfileFormatException('duplicate broker slot $slot');
     }
 
+    final port = _optUint(map, 'port', ctx);
+    if (port != null && (port < 1 || port > 65535)) {
+      throw ConfigProfileFormatException(
+        '$ctx.port must be 1..65535, got $port',
+      );
+    }
+
     brokers.add(
       BrokerConfig(
         slot: slot,
-        enabled: _optBool(map, 'enabled'),
-        url: _optString(map, 'url'),
-        port: _optInt(map, 'port'),
+        enabled: _optBool(map, 'enabled', ctx),
+        url: _optString(map, 'url', ctx),
+        port: port,
         transport: _optEnum(
           map,
           'transport',
+          ctx,
           MqttTransport.fromWire,
           'tcp/tls/wss',
         ),
         authType: _optEnum(
           map,
           'auth_type',
+          ctx,
           MqttAuthType.fromWire,
           'none/basic/jwt',
         ),
-        username: _optString(map, 'username'),
-        password: _optString(map, 'password'),
-        jwtToken: _optString(map, 'jwt_token'),
-        jwtAudience: _optString(map, 'jwt_aud'),
-        jwtRefresh: _optInt(map, 'jwt_refresh'),
-        jwtOwner: _optString(map, 'jwt_owner'),
-        jwtEmail: _optString(map, 'jwt_email'),
-        caCert: _optString(map, 'ca_cert'),
-        topicPrefix: _optString(map, 'topic_prefix'),
-        iataOverride: _optString(map, 'iata_override'),
+        username: _optString(map, 'username', ctx),
+        password: _optString(map, 'password', ctx),
+        jwtToken: _optString(map, 'jwt_token', ctx),
+        jwtAudience: _optString(map, 'jwt_aud', ctx),
+        jwtRefresh: _optUint(map, 'jwt_refresh', ctx),
+        jwtOwner: _optString(map, 'jwt_owner', ctx),
+        jwtEmail: _optString(map, 'jwt_email', ctx),
+        caCert: _optString(map, 'ca_cert', ctx),
+        topicPrefix: _optString(map, 'topic_prefix', ctx),
+        iataOverride: _optString(map, 'iata_override', ctx),
       ),
     );
   }
   return brokers;
 }
 
-// --- typed accessors -------------------------------------------------------
+// --- typed accessors (all name their section for user-facing errors) --------
 
 Map _asMap(dynamic node, String what) {
   if (node is Map) return node;
@@ -172,40 +184,45 @@ void _rejectUnknownKeys(Map map, Set<String> allowed, String what) {
   }
 }
 
-int _requireInt(Map map, String key, {String context = 'document root'}) {
+int _requireInt(Map map, String key, String ctx) {
   final v = map[key];
   if (v == null) {
-    throw ConfigProfileFormatException('$context is missing required "$key"');
+    throw ConfigProfileFormatException('$ctx is missing required "$key"');
   }
   if (v is! int) {
-    throw ConfigProfileFormatException('$context."$key" must be an integer');
+    throw ConfigProfileFormatException('$ctx."$key" must be an integer');
   }
   return v;
 }
 
-String? _optString(Map map, String key) {
+String? _optString(Map map, String key, String ctx) {
   final v = map[key];
   if (v == null) return null;
   if (v is! String) {
-    throw ConfigProfileFormatException('"$key" must be a string');
+    throw ConfigProfileFormatException('$ctx."$key" must be a string');
   }
   return v;
 }
 
-int? _optInt(Map map, String key) {
+/// Optional non-negative integer (durations, ports, counts). Rejects negatives
+/// since every integer field in a profile is a count/port/interval.
+int? _optUint(Map map, String key, String ctx) {
   final v = map[key];
   if (v == null) return null;
   if (v is! int) {
-    throw ConfigProfileFormatException('"$key" must be an integer');
+    throw ConfigProfileFormatException('$ctx."$key" must be an integer');
+  }
+  if (v < 0) {
+    throw ConfigProfileFormatException('$ctx."$key" must not be negative');
   }
   return v;
 }
 
-bool? _optBool(Map map, String key) {
+bool? _optBool(Map map, String key, String ctx) {
   final v = map[key];
   if (v == null) return null;
   if (v is! bool) {
-    throw ConfigProfileFormatException('"$key" must be true or false');
+    throw ConfigProfileFormatException('$ctx."$key" must be true or false');
   }
   return v;
 }
@@ -213,18 +230,21 @@ bool? _optBool(Map map, String key) {
 T? _optEnum<T>(
   Map map,
   String key,
+  String ctx,
   T? Function(String?) fromWire,
   String allowed,
 ) {
   final v = map[key];
   if (v == null) return null;
   if (v is! String) {
-    throw ConfigProfileFormatException('"$key" must be a string ($allowed)');
+    throw ConfigProfileFormatException(
+      '$ctx."$key" must be a string ($allowed)',
+    );
   }
   final parsed = fromWire(v);
   if (parsed == null) {
     throw ConfigProfileFormatException(
-      '"$key" must be one of $allowed, got "$v"',
+      '$ctx."$key" must be one of $allowed, got "$v"',
     );
   }
   return parsed;
