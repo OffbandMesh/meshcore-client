@@ -596,6 +596,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settings_infoPublicKey => 'Clave Pública';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override

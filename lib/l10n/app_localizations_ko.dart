@@ -571,6 +571,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_infoPublicKey => '공개 키';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override

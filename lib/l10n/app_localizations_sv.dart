@@ -587,6 +587,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settings_infoPublicKey => 'Allmänt nyckel';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override

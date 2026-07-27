@@ -600,6 +600,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get settings_infoPublicKey => 'Общ публичен ключ';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override

@@ -1192,6 +1192,12 @@ abstract class AppLocalizations {
   /// **'Public Key'**
   String get settings_infoPublicKey;
 
+  /// No description provided for @settings_infoBuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Build'**
+  String get settings_infoBuild;
+
   /// No description provided for @settings_infoDataScope.
   ///
   /// In en, this message translates to:

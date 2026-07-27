@@ -15,6 +15,7 @@ import '../services/app_debug_log_service.dart';
 import '../services/app_settings_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
+import '../utils/build_info.dart';
 import 'settings/settings_shell.dart';
 import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
@@ -456,6 +457,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildInfoRow(
               l10n.settings_infoChannelCount,
               '${connector.channels.length}',
+            ),
+            // #397: identity of the running binary, injected at build time and
+            // independent of the marketing version. Its own line so "which build
+            // am I on" is answerable at a glance; copyable for bug reports.
+            _buildInfoRow(
+              l10n.settings_infoBuild,
+              BuildInfo.stamp,
+              copyValue: BuildInfo.stamp,
             ),
           ],
         ),

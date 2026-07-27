@@ -598,6 +598,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get settings_infoPublicKey => 'Chave Pública';
 
   @override
+  String get settings_infoBuild => 'Build';
+
+  @override
   String get settings_infoDataScope => 'Data scope';
 
   @override
