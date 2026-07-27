@@ -6563,10 +6563,18 @@ class MeshCoreConnector extends ChangeNotifier {
       final reactingAuthorHex = message.fourByteRoomContactKey
           .map((b) => b.toRadixString(16).padLeft(2, '0'))
           .join();
+      // In a room, reactionContact is the room server, NOT the reactor, so its
+      // name must never be the fallback: it would attribute every unknown-author
+      // reaction to the room and then dedup distinct authors into one, dropping
+      // reactions (#383). Fall back to the per-author hex, which is unique per
+      // reactor. In a true 1:1 the author hex is empty and the contact IS the
+      // reactor, so its name is correct.
+      final fallbackName = (isRoomReaction && reactingAuthorHex.isNotEmpty)
+          ? reactingAuthorHex
+          : (reactionContact?.name ?? pubKeyHex);
       final reactorName =
           _resolveContactSenderName(message, reactionContact, isRoomReaction) ??
-          reactionContact?.name ??
-          (reactingAuthorHex.isNotEmpty ? reactingAuthorHex : pubKeyHex);
+          fallbackName;
       final reactionIdentifier =
           '${reactionInfo.targetHash}_${reactionInfo.emoji}_$reactingAuthorHex';
 
