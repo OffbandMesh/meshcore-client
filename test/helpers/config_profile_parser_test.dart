@@ -127,5 +127,44 @@ brokers:
         throwsA(isA<ConfigProfileFormatException>()),
       );
     });
+
+    test('rejects an out-of-range broker port', () {
+      expect(
+        () => parseConfigProfile(
+          'schema_version: 1\nbrokers:\n  - slot: 0\n    port: 70000\n',
+        ),
+        throwsA(isA<ConfigProfileFormatException>()),
+      );
+      expect(
+        () => parseConfigProfile(
+          'schema_version: 1\nbrokers:\n  - slot: 0\n    port: 0\n',
+        ),
+        throwsA(isA<ConfigProfileFormatException>()),
+      );
+    });
+
+    test('rejects negative integer fields', () {
+      expect(
+        () => parseConfigProfile('schema_version: 1\nstatus_interval: -60\n'),
+        throwsA(isA<ConfigProfileFormatException>()),
+      );
+      expect(
+        () => parseConfigProfile(
+          'schema_version: 1\nbrokers:\n  - slot: 0\n    jwt_refresh: -1\n',
+        ),
+        throwsA(isA<ConfigProfileFormatException>()),
+      );
+    });
+
+    test('nested type errors name the broker section', () {
+      try {
+        parseConfigProfile(
+          'schema_version: 1\nbrokers:\n  - slot: 0\n    port: "x"\n',
+        );
+        fail('expected throw');
+      } on ConfigProfileFormatException catch (e) {
+        expect(e.message, contains('brokers[0]'));
+      }
+    });
   });
 }
