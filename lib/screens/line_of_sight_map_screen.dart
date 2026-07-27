@@ -411,6 +411,9 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
 
     return AppShell(
       selectedIndex: 2,
+      // Pushed detail (LOS analysis over the map): Back pops to the map, not to
+      // the background (#389).
+      isTopLevel: false,
       onDestinationSelected: (index) => _handleQuickSwitch(index, context),
       contactsUnreadCount: context
           .watch<MeshCoreConnector>()
