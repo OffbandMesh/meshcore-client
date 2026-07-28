@@ -331,10 +331,88 @@ const int caplogSubStart = 0x01;
 const int caplogSubChunk = 0x02;
 const int caplogSubEnd = 0x03;
 
+// Caplog request sub-codes in cmd_frame[1]. A bare [0xC4] (len 1) is DOWNLOAD
+// for back-compat. Firmware #417/#408. (#430)
+const int caplogReqDownload = 0x01;
+const int caplogReqEnable =
+    0x02; // [0xC4,0x02,(level)] — omit level for default
+const int caplogReqDisable = 0x03;
+const int caplogReqErase = 0x04;
+const int caplogReqStatus = 0x05;
+
+// Caplog CONTROL response sub-codes in out_frame[1] (download stream sub-codes
+// caplogSubStart/Chunk/End are above).
+const int caplogRespAck = 0x10; // [0xC4,0x10, req_op, ok(0|1)]
+const int caplogRespStatus =
+    0x11; // [0xC4,0x11, enabled, level, used(4B LE), cap(4B LE)]
+
 /// Request frame to download the device's serial-capture buffer — a bare 1-byte
-/// command, no payload. (#430)
+/// command, no payload (firmware treats bare [0xC4] as DOWNLOAD). (#430)
 Uint8List buildOffbandCaplogRequestFrame() =>
     Uint8List.fromList([cmdOffbandCaplog]);
+
+/// Enable capture on the device (default verbosity level). (#430)
+Uint8List buildOffbandCaplogEnableFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqEnable]);
+
+/// Disable (stop) capture on the device. (#430)
+Uint8List buildOffbandCaplogDisableFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqDisable]);
+
+/// Erase the device's capture buffer. (#430)
+Uint8List buildOffbandCaplogEraseFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqErase]);
+
+/// Query capture status (enabled / level / used / capacity). (#430)
+Uint8List buildOffbandCaplogStatusFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqStatus]);
+
+/// Parsed `[0xC4,0x10, req_op, ok]` control acknowledgement. [reqOp] echoes the
+/// request sub-code (enable/disable/erase); [ok] is the device's result. (#430)
+class CaplogAck {
+  const CaplogAck(this.reqOp, {required this.ok});
+  final int reqOp;
+  final bool ok;
+}
+
+/// Parse a caplog control ACK; null if [frame] isn't one. (#430)
+CaplogAck? parseCaplogAck(Uint8List frame) {
+  if (frame.length < 4 ||
+      frame[0] != respCodeOffbandCaplog ||
+      frame[1] != caplogRespAck) {
+    return null;
+  }
+  return CaplogAck(frame[2], ok: frame[3] == 1);
+}
+
+/// Parsed `[0xC4,0x11, enabled, level, used(4B LE), cap(4B LE)]` status. (#430)
+class CaplogDeviceStatus {
+  const CaplogDeviceStatus({
+    required this.enabled,
+    required this.level,
+    required this.usedBytes,
+    required this.capacityBytes,
+  });
+  final bool enabled;
+  final int level;
+  final int usedBytes;
+  final int capacityBytes;
+}
+
+/// Parse a caplog STATUS reply; null if [frame] isn't one. (#430)
+CaplogDeviceStatus? parseCaplogStatus(Uint8List frame) {
+  if (frame.length < 12 ||
+      frame[0] != respCodeOffbandCaplog ||
+      frame[1] != caplogRespStatus) {
+    return null;
+  }
+  return CaplogDeviceStatus(
+    enabled: frame[2] != 0,
+    level: frame[3],
+    usedBytes: readUint32LE(frame, 4),
+    capacityBytes: readUint32LE(frame, 8),
+  );
+}
 
 // --- Offband block command (0xC2) — capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
