@@ -288,6 +288,8 @@ class MeshCoreConnector extends ChangeNotifier {
   Completer<Uint8List>? _caplogCompleter;
   CaplogReassembler? _caplogReassembler;
   bool _caplogAwaitingStart = false;
+  Completer<CaplogAck>? _caplogAckCompleter;
+  Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -4323,6 +4325,23 @@ class MeshCoreConnector extends ChangeNotifier {
   /// START/CHUNK/END are reassembled by [CaplogReassembler]; frames arriving
   /// with no download in flight are ignored. (#430)
   void _handleOffbandCaplogFrame(Uint8List frame) {
+    // Control replies (ACK / STATUS) go to their own pending completers,
+    // independent of any download in flight. (#430)
+    if (frame.length >= 2) {
+      if (frame[1] == caplogRespAck) {
+        final ack = parseCaplogAck(frame);
+        final c = _caplogAckCompleter;
+        if (ack != null && c != null && !c.isCompleted) c.complete(ack);
+        return;
+      }
+      if (frame[1] == caplogRespStatus) {
+        final status = parseCaplogStatus(frame);
+        final c = _caplogStatusCompleter;
+        if (status != null && c != null && !c.isCompleted) c.complete(status);
+        return;
+      }
+    }
+    // Download stream (START/CHUNK/END).
     final completer = _caplogCompleter;
     final reassembler = _caplogReassembler;
     if (completer == null || reassembler == null || completer.isCompleted) {
@@ -4356,6 +4375,73 @@ class MeshCoreConnector extends ChangeNotifier {
       case CaplogStatus.chunk:
       case CaplogStatus.ignored:
         break;
+    }
+  }
+
+  /// Enable or disable serial capture on the device (0xC4 control). Returns the
+  /// device's `ok` result. (#430)
+  Future<bool> setDeviceCaplogEnabled(
+    bool enabled, {
+    Duration timeout = const Duration(seconds: 5),
+  }) => _caplogControl(
+    enabled
+        ? buildOffbandCaplogEnableFrame()
+        : buildOffbandCaplogDisableFrame(),
+    timeout,
+  );
+
+  /// Erase the device's serial-capture buffer (0xC4 control). Returns `ok`.
+  /// (#430)
+  Future<bool> eraseDeviceCaplog({
+    Duration timeout = const Duration(seconds: 5),
+  }) => _caplogControl(buildOffbandCaplogEraseFrame(), timeout);
+
+  Future<bool> _caplogControl(Uint8List frame, Duration timeout) async {
+    if (_caplogAckCompleter != null) {
+      throw StateError('A caplog control op is already in progress');
+    }
+    final completer = Completer<CaplogAck>();
+    _caplogAckCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog control timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(frame);
+      final ack = await completer.future;
+      return ack.ok;
+    } finally {
+      timer.cancel();
+      _caplogAckCompleter = null;
+    }
+  }
+
+  /// Query the device's capture status: enabled / level / used / capacity
+  /// (0xC4 control). (#430)
+  Future<CaplogDeviceStatus> getDeviceCaplogStatus({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (_caplogStatusCompleter != null) {
+      throw StateError('A caplog status query is already in progress');
+    }
+    final completer = Completer<CaplogDeviceStatus>();
+    _caplogStatusCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog status timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(buildOffbandCaplogStatusFrame());
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      _caplogStatusCompleter = null;
     }
   }
 
