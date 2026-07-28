@@ -525,6 +525,8 @@ const int pushCodeTraceData = 0x89;
 const int pushCodeNewAdvert = 0x8A;
 const int pushCodeTelemetryResponse = 0x8B;
 const int pushCodeBinaryResponse = 0x8C;
+const int pushCodeChannelsChanged =
+    0x91; // #429 part A: device channel table changed; re-poll getChannels
 
 // Contact/advertisement types
 const int advTypeChat = 1;

@@ -195,18 +195,17 @@ class ChannelMessage {
       int txtType;
       Uint8List pathBytes = Uint8List(0);
       int channelIdx;
+      bool isOutgoing = false;
       if (code == respCodeChannelMsgRecvV3) {
         reader.skipBytes(1); // Skip SNR
-        final flags = reader.readByte();
-        final hasPath = (flags & 0x01) != 0;
-        reader.skipBytes(1); // Skip reserved byte
+        // reserved1 bit0 = outgoing flag: set for a message composed on the
+        // device itself, so it renders as sent-by-me (#429 part B). No firmware
+        // appends path bytes to this frame, so path_len is metadata only.
+        isOutgoing = (reader.readByte() & 0x01) != 0;
+        reader.skipBytes(1); // Skip reserved2
         channelIdx = reader.readByte();
         pathLen = reader.readInt8();
         txtType = reader.readByte();
-        if (hasPath && pathLen > 0) {
-          reader.rewind(); // Rewind to read path length again for pathBytes
-          pathBytes = reader.readBytes(pathLen);
-        }
       } else {
         channelIdx = reader.readByte();
         pathLen = reader.readInt8();
@@ -244,12 +243,12 @@ class ChannelMessage {
         senderName: senderName,
         text: decodedText,
         timestamp: DateTime.fromMillisecondsSinceEpoch(timestampRaw * 1000),
-        isOutgoing: false,
+        isOutgoing: isOutgoing,
         status: ChannelMessageStatus.sent,
         pathLength: pathLen,
         pathBytes: pathBytes,
         channelIndex: channelIdx,
-        rxTime: DateTime.now(),
+        rxTime: isOutgoing ? null : DateTime.now(),
       );
     } catch (e) {
       appLogger.error('Error parsing channel message frame: $e');
