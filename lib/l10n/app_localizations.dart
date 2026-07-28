@@ -2800,6 +2800,30 @@ abstract class AppLocalizations {
   /// **'Clear log'**
   String get debugLog_clearLog;
 
+  /// No description provided for @debugLog_shareLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Share logs'**
+  String get debugLog_shareLog;
+
+  /// No description provided for @debugLog_openLogsFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open logs folder'**
+  String get debugLog_openLogsFolder;
+
+  /// No description provided for @debugLog_shareSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband Meshcore logs'**
+  String get debugLog_shareSubject;
+
+  /// No description provided for @debugLog_fileLoggingUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File logging is unavailable on this platform'**
+  String get debugLog_fileLoggingUnavailable;
+
   /// No description provided for @debugLog_copied.
   ///
   /// In en, this message translates to:
