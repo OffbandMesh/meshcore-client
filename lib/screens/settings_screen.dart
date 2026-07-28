@@ -23,6 +23,7 @@ import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'serial_capture_screen.dart';
 import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
 import '../widgets/sync_progress_overlay.dart';
@@ -675,6 +676,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AppDebugLogScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          // Serial capture (#430). English-only for now; localization follow-up.
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Serial capture'),
+            subtitle: const Text(
+              "Capture the radio's serial log and share it as a file",
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SerialCaptureScreen(),
                 ),
               );
             },
