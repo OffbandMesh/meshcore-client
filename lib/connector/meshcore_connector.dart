@@ -4794,6 +4794,11 @@ class MeshCoreConnector extends ChangeNotifier {
       case pushCodeTelemetryResponse:
         _handleSelfTelemetry(frame);
         break;
+      case pushCodeChannelsChanged:
+        // Device's channel table changed (add/update/delete). Re-poll instead
+        // of only refreshing on reconnect (#429 part A).
+        unawaited(getChannels(force: true));
+        break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);
         break;
@@ -5910,11 +5915,15 @@ class MeshCoreConnector extends ChangeNotifier {
       // Companion radio layout:
       // [code][snr?][res?][res?][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
       // double snr = 0;
+      bool isOutgoing = false;
       if (code == respCodeContactMsgRecvV3) {
         // Older firmware layout with SNR as a signed byte after the code
         // snr = reader.readInt8().toDouble() * 4; // SNR in dB, scaled by 4
         reader.skipBytes(1); // Skip SNR byte
-        reader.skipBytes(2); // Skip reserved bytes
+        // reserved1 bit0 = outgoing flag: set for a message composed on the
+        // device itself, so it renders as sent-by-me (#429 part B).
+        isOutgoing = (reader.readByte() & 0x01) != 0;
+        reader.skipBytes(1); // Skip reserved2
       }
 
       final senderPrefix = reader.readBytes(6);
@@ -5974,13 +5983,13 @@ class MeshCoreConnector extends ChangeNotifier {
         senderKey: contact.publicKey,
         text: decodedText,
         timestamp: timestamp,
-        isOutgoing: false,
+        isOutgoing: isOutgoing,
         isCli: isCli,
-        status: MessageStatus.delivered,
+        status: isOutgoing ? MessageStatus.sent : MessageStatus.delivered,
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
         fourByteRoomContactKey: roomAuthorPrefix,
-        rxTime: DateTime.now(),
+        rxTime: isOutgoing ? null : DateTime.now(),
       );
     } catch (e) {
       appLogger.warn('Error parsing contact direct message: $e');
@@ -6246,7 +6255,10 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     final parsed = ChannelMessage.fromFrame(frame);
     if (parsed != null && parsed.channelIndex != null) {
-      if (_shouldDropSelfChannelMessage(parsed.senderName, parsed.pathBytes)) {
+      // Device-composed (outgoing) messages legitimately carry our own name and
+      // no path; don't let the self-echo guard drop them (#429 part B).
+      if (!parsed.isOutgoing &&
+          _shouldDropSelfChannelMessage(parsed.senderName, parsed.pathBytes)) {
         return;
       }
       _lastChannelMsgRxTime = DateTime.now();
