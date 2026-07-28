@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n.dart';
 import '../services/file_log_service.dart';
 
 /// Shared log export for the App-log and BLE-log screens (#393, #97).
@@ -25,28 +26,25 @@ class LogExport {
       ? Icons.ios_share
       : Icons.folder_open;
 
-  static String get tooltip => _isMobile ? 'Share logs' : 'Open logs folder';
+  static String tooltip(BuildContext context) => _isMobile
+      ? context.l10n.debugLog_shareLog
+      : context.l10n.debugLog_openLogsFolder;
 
   /// Flush the on-disk log and hand it to the OS share sheet (mobile), or open
   /// the logs folder in the file manager (desktop). Shows a snackbar if file
   /// logging is unavailable (e.g. web).
   static Future<void> shareLogs(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final unavailableMessage = context.l10n.debugLog_fileLoggingUnavailable;
+    final subject = context.l10n.debugLog_shareSubject;
     final file = await FileLogService.instance.flushAndGetActiveFile();
     if (file == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('File logging is unavailable on this platform'),
-        ),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(unavailableMessage)));
       return;
     }
     if (_isMobile) {
       await SharePlus.instance.share(
-        ShareParams(
-          subject: 'Offband Meshcore logs',
-          files: [XFile(file.path)],
-        ),
+        ShareParams(subject: subject, files: [XFile(file.path)]),
       );
     } else {
       final dir = FileLogService.instance.logDir;

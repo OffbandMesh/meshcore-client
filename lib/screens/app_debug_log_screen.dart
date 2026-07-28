@@ -24,7 +24,7 @@ class AppDebugLogScreen extends StatelessWidget {
             centerTitle: true,
             actions: [
               IconButton(
-                tooltip: LogExport.tooltip,
+                tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
                 onPressed: () => LogExport.shareLogs(context),
               ),

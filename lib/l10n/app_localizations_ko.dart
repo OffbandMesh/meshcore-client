@@ -1451,6 +1451,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get debugLog_clearLog => '명확한 로그';
 
   @override
+  String get debugLog_shareLog => 'Share logs';
+
+  @override
+  String get debugLog_openLogsFolder => 'Open logs folder';
+
+  @override
+  String get debugLog_shareSubject => 'Offband Meshcore logs';
+
+  @override
+  String get debugLog_fileLoggingUnavailable =>
+      'File logging is unavailable on this platform';
+
+  @override
   String get debugLog_copied => '디버깅 로그 복사';
 
   @override

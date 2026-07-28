@@ -1507,6 +1507,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String get debugLog_clearLog => 'Log wissen';
 
   @override
+  String get debugLog_shareLog => 'Share logs';
+
+  @override
+  String get debugLog_openLogsFolder => 'Open logs folder';
+
+  @override
+  String get debugLog_shareSubject => 'Offband Meshcore logs';
+
+  @override
+  String get debugLog_fileLoggingUnavailable =>
+      'File logging is unavailable on this platform';
+
+  @override
   String get debugLog_copied => 'Debuglog gekopieerd';
 
   @override

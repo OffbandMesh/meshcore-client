@@ -35,7 +35,7 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
             title: AdaptiveAppBarTitle(context.l10n.debugLog_bleTitle),
             actions: [
               IconButton(
-                tooltip: LogExport.tooltip,
+                tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
                 onPressed: () => LogExport.shareLogs(context),
               ),
