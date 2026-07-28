@@ -58,6 +58,7 @@ import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
 import 'meshcore_protocol.dart';
+import 'caplog_reassembler.dart';
 
 class DirectRepeater {
   static const int maxAgeMinutes = 30; // Max age for direct repeater info
@@ -283,6 +284,10 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _blockOffloadStoreFull = false;
   bool _blockDumpInFlight = false;
   final Set<String> _blockKeysTouchedDuringDump = {};
+  // Caplog serial-capture download (0xC4) streamed reassembly (#430).
+  Completer<Uint8List>? _caplogCompleter;
+  CaplogReassembler? _caplogReassembler;
+  bool _caplogAwaitingStart = false;
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -4277,6 +4282,83 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Download the device's serial-capture buffer over the companion protocol
+  /// (0xC4). Sends the request and reassembles the START/CHUNK*/END stream into
+  /// the raw captured bytes.
+  ///
+  /// Throws [StateError] if a download is already in flight,
+  /// [CaplogBusyException] if the device rejects because another stream is
+  /// already in flight, [CaplogTruncatedException] if the byte count doesn't
+  /// match the announced length, or [TimeoutException] if it never finishes.
+  /// (#430)
+  Future<Uint8List> downloadCaplog({
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    if (_caplogCompleter != null) {
+      throw StateError('A caplog download is already in progress');
+    }
+    final completer = Completer<Uint8List>();
+    _caplogCompleter = completer;
+    _caplogReassembler = CaplogReassembler();
+    _caplogAwaitingStart = true;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog download timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(buildOffbandCaplogRequestFrame());
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      _caplogCompleter = null;
+      _caplogReassembler = null;
+      _caplogAwaitingStart = false;
+    }
+  }
+
+  /// Route an incoming 0xC4 caplog frame into the in-flight download, if any.
+  /// START/CHUNK/END are reassembled by [CaplogReassembler]; frames arriving
+  /// with no download in flight are ignored. (#430)
+  void _handleOffbandCaplogFrame(Uint8List frame) {
+    final completer = _caplogCompleter;
+    final reassembler = _caplogReassembler;
+    if (completer == null || reassembler == null || completer.isCompleted) {
+      return;
+    }
+    final event = reassembler.accept(frame);
+    switch (event.status) {
+      case CaplogStatus.started:
+        _caplogAwaitingStart = false;
+        break;
+      case CaplogStatus.completed:
+        _appDebugLogService?.info(
+          'Caplog download complete: ${event.bytes!.length} bytes',
+          tag: 'Caplog',
+        );
+        completer.complete(event.bytes);
+        break;
+      case CaplogStatus.truncated:
+        _appDebugLogService?.warn(
+          'Caplog download truncated: ${event.bytes!.length} of '
+          '${event.expected} bytes',
+          tag: 'Caplog',
+        );
+        completer.completeError(
+          CaplogTruncatedException(
+            received: event.bytes!.length,
+            expected: event.expected!,
+          ),
+        );
+        break;
+      case CaplogStatus.chunk:
+      case CaplogStatus.ignored:
+        break;
+    }
+  }
+
   /// Called when a BLOCK_LIST dump ends. A truncated dump (early-END) is
   /// re-requested once the link settles; never derive removals from a partial
   /// pull. The union reconcile against the local list is wired in B4.
@@ -4466,6 +4548,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case cmdOffbandFemLna:
         _handleOffbandFemLnaReply(frame);
         break;
+      case respCodeOffbandCaplog:
+        _handleOffbandCaplogFrame(frame);
+        break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
         _handleSelfInfo(frame);
@@ -4607,6 +4692,19 @@ class MeshCoreConnector extends ChangeNotifier {
   }) => isSyncingChannels && channelSyncInFlight && !hasPendingGenericAck;
 
   void _handleErrorFrame(Uint8List frame) {
+    // A caplog download awaiting its START frame: the firmware answers the
+    // generic RESP_CODE_ERR when another stream (block-list / contacts /
+    // observer config) is already in flight. Fail the download fast with a
+    // typed error instead of waiting out the timeout. Falling through to the
+    // normal handling below is harmless — it no-ops unless a channel sync is
+    // active. (#430)
+    if (_caplogAwaitingStart) {
+      _caplogAwaitingStart = false;
+      final caplog = _caplogCompleter;
+      if (caplog != null && !caplog.isCompleted) {
+        caplog.completeError(const CaplogBusyException());
+      }
+    }
     final errCode = frame.length > 1 ? frame[1] : -1;
     _appDebugLogService?.warn(
       'Firmware responded with error code: $errCode',

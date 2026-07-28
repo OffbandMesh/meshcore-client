@@ -312,6 +312,30 @@ OffbandFemLnaReply? parseOffbandFemLnaReply(Uint8List frame) {
   return OffbandFemLnaReply(frame[1], frame[2]);
 }
 
+// --- Offband caplog serial-capture download (0xC4) — companion-API only; NEVER
+// on the mesh. Firmware counterpart OffbandMesh/meshcore-firmware#406.
+//
+// 0xC4, NOT 0xC3: the firmware first merged this on 0xC3, which collides with
+// cmdOffbandFemLna (0xC3, #298) — the caplog handler swallowed every 0xC3 frame
+// before FEM/LNA dispatch. Reassigned to 0xC4, the next free code in the 0xC0+
+// space (0xC0 config, 0xC1 GPS, 0xC2 block, 0xC3 FEM LNA).
+//
+// Request: bare [0xC4], no payload (mirrors cmdOffbandGps). Reply is a streamed
+// dump: START [0xC4, 0x01, total_len(uint32 LE)] → CHUNK [0xC4, 0x02, <bytes>]*
+// → END [0xC4, 0x03]. The firmware auto-stops capture for the duration (so
+// offsets stay stable) and rejects with the generic [respCodeErr] when another
+// stream (block-list / contacts / observer config) is already in flight. (#430)
+const int cmdOffbandCaplog = 0xC4;
+const int respCodeOffbandCaplog = 0xC4;
+const int caplogSubStart = 0x01;
+const int caplogSubChunk = 0x02;
+const int caplogSubEnd = 0x03;
+
+/// Request frame to download the device's serial-capture buffer — a bare 1-byte
+/// command, no payload. (#430)
+Uint8List buildOffbandCaplogRequestFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog]);
+
 // --- Offband block command (0xC2) — capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
 const int cmdOffbandBlock = 0xC2;
