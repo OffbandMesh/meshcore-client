@@ -136,6 +136,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       _error = null;
     });
     try {
+      await _connector?.eraseDeviceCaplog(); // clean session: start from 0
       await _setEnabled(true);
       if (!mounted) return;
       _startedAt = DateTime.now();
@@ -207,6 +208,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       _error = null;
     });
     try {
+      await c.eraseDeviceCaplog(); // fresh boot log from power-on
       await _setEnabled(true); // no timer: runs until Stop
       _startedAt = DateTime.now();
       _timedWindowMinutes = null;
