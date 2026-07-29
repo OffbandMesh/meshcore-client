@@ -191,6 +191,40 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     }
   }
 
+  /// Reboot the connected radio to capture its boot log (#428). Enable capture
+  /// first, then reboot: with firmware retained-enable support the capture
+  /// resumes on boot and records the boot sequence for retrieval. Dropping the
+  /// connection is expected; the user reconnects and downloads.
+  Future<void> _rebootDevice() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reboot device?'),
+        content: const Text(
+          'This reboots the connected radio and drops the connection. '
+          'If capture is on, the boot log is recorded after reboot (requires '
+          'firmware support); reconnect and download it here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reboot'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _connector.rebootDevice();
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Reboot failed: $e');
+    }
+  }
+
   static String _pad2(int n) => n.toString().padLeft(2, '0');
 
   String _elapsed() {
@@ -340,6 +374,14 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
           onPressed: _busy || capturing ? null : _erase,
           icon: const Icon(Icons.delete_outline),
           label: const Text('Erase buffer'),
+        ),
+        const Divider(height: 24),
+        // Boot-log flow (#428): reboot the radio while capture is on to record
+        // the boot sequence. Available while capturing (that's the point).
+        TextButton.icon(
+          onPressed: _busy ? null : _rebootDevice,
+          icon: const Icon(Icons.restart_alt),
+          label: const Text('Reboot device (capture boot log)'),
         ),
       ],
     );
