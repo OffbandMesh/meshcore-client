@@ -14,11 +14,13 @@ import '../utils/log_export.dart';
 ///
 /// Controls the connected radio's serial-capture buffer over the 0xC4 companion
 /// command (enable / disable / erase / status) and downloads it as a shareable
-/// file. Support is probed on open (STATUS query); a device whose firmware
-/// doesn't answer is shown as unsupported.
+/// file. Support is gated on the device-info **capability bit** (`0x20` +
+/// `FIRMWARE_VER_CODE >= 17`), which is static and refreshes on reconnect, so
+/// the feature never latches "unsupported" after a reboot. Capture state is
+/// derived from the device STATUS, so an auto-resumed capture (post-reboot)
+/// shows STOP, not START.
 ///
-/// Strings are English-only for now; localization is a follow-up, mirroring the
-/// LogExport helper (#427).
+/// Strings are English-only for now; localization is a follow-up (#427).
 class SerialCaptureScreen extends StatefulWidget {
   const SerialCaptureScreen({super.key});
 
@@ -27,74 +29,88 @@ class SerialCaptureScreen extends StatefulWidget {
 }
 
 class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
-  /// Capture-window options in minutes; 0 means "until I stop".
+  /// Capture-window options in minutes for the timed flow; 0 = until stopped.
   static const List<int> _durations = [1, 5, 15, 30, 0];
 
-  bool? _supported; // null while probing
+  MeshCoreConnector? _connector;
   CaplogDeviceStatus? _status;
   int _durationMinutes = 5;
   bool _busy = false;
   String? _error;
+  bool _wasConnected = false;
 
   DateTime? _startedAt;
-  Timer? _tick; // 1s UI tick while capturing
-  Timer? _autoStop; // fires at the chosen window
-  Timer? _statusPoll; // refresh buffer usage while capturing
-
-  MeshCoreConnector get _connector => context.read<MeshCoreConnector>();
+  int? _timedWindowMinutes; // set while a timed capture is running (for the UI)
+  Timer? _tick;
+  Timer? _autoStop;
+  Timer? _statusPoll;
 
   @override
   void initState() {
     super.initState();
-    _probe();
+    final c = context.read<MeshCoreConnector>();
+    _connector = c;
+    c.addListener(_onConnectorChanged);
+    _wasConnected = c.isConnected;
+    if (c.isConnected && c.supportsOffbandCaplog) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshStatus());
+    }
   }
 
   @override
   void dispose() {
-    _tick?.cancel();
-    _autoStop?.cancel();
-    _statusPoll?.cancel();
+    _connector?.removeListener(_onConnectorChanged);
+    _stopTimers();
     super.dispose();
   }
 
-  Future<void> _probe() async {
-    try {
-      final status = await _connector.getDeviceCaplogStatus();
-      if (!mounted) return;
-      setState(() {
-        _supported = true;
-        _status = status;
-        _startedAt = status.enabled ? DateTime.now() : null;
-      });
-      if (status.enabled) _startTimers();
-    } catch (_) {
-      if (mounted) setState(() => _supported = false);
+  /// React to connection transitions: on reconnect re-derive device state (no
+  /// latch); on disconnect stop polling a dead link.
+  void _onConnectorChanged() {
+    final c = _connector;
+    if (c == null || !mounted) return;
+    final connected = c.isConnected;
+    if (connected && !_wasConnected) {
+      _wasConnected = true;
+      if (c.supportsOffbandCaplog) _refreshStatus();
+    } else if (!connected && _wasConnected) {
+      _wasConnected = false;
+      _stopTimers();
+      setState(() {});
     }
   }
 
   Future<void> _refreshStatus() async {
+    final c = _connector;
+    if (c == null || !c.isConnected) return;
     try {
-      final status = await _connector.getDeviceCaplogStatus();
-      if (mounted) setState(() => _status = status);
+      final status = await c.getDeviceCaplogStatus();
+      if (!mounted) return;
+      setState(() => _status = status);
+      // Keep local timers/elapsed in sync with the device's actual state, so an
+      // auto-resumed capture after a reboot is reflected as running.
+      if (status.enabled) {
+        _startedAt ??= DateTime.now();
+        _startTickers();
+      } else {
+        _startedAt = null;
+        _timedWindowMinutes = null;
+        _stopTimers();
+      }
     } catch (_) {
-      // Transient during capture; ignore and let the next poll retry.
+      // Transient (e.g. mid-reconnect); keep last-known state and retry on the
+      // next poll / reconnect rather than latching.
     }
   }
 
-  void _startTimers() {
-    _tick?.cancel();
-    _autoStop?.cancel();
-    _statusPoll?.cancel();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+  void _startTickers() {
+    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _statusPoll = Timer.periodic(
+    _statusPoll ??= Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refreshStatus(),
     );
-    if (_durationMinutes > 0) {
-      _autoStop = Timer(Duration(minutes: _durationMinutes), _stop);
-    }
   }
 
   void _stopTimers() {
@@ -104,17 +120,31 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     _tick = _autoStop = _statusPoll = null;
   }
 
-  Future<void> _start() async {
+  Future<bool> _setEnabled(bool enabled) async {
+    final c = _connector;
+    if (c == null) return false;
+    final ok = await c.setDeviceCaplogEnabled(enabled);
+    if (!ok) {
+      throw Exception('device rejected ${enabled ? 'enable' : 'disable'}');
+    }
+    return ok;
+  }
+
+  Future<void> _startTimed() async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final ok = await _connector.setDeviceCaplogEnabled(true);
-      if (!ok) throw Exception('device rejected enable');
+      await _setEnabled(true);
       if (!mounted) return;
-      setState(() => _startedAt = DateTime.now());
-      _startTimers();
+      _startedAt = DateTime.now();
+      _timedWindowMinutes = _durationMinutes > 0 ? _durationMinutes : null;
+      _startTickers();
+      if (_durationMinutes > 0) {
+        _autoStop?.cancel();
+        _autoStop = Timer(Duration(minutes: _durationMinutes), _stop);
+      }
       await _refreshStatus();
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not start capture: $e');
@@ -125,11 +155,14 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
 
   Future<void> _stop() async {
     if (!mounted) return;
-    _stopTimers();
     setState(() => _busy = true);
     try {
-      await _connector.setDeviceCaplogEnabled(false);
-      if (mounted) setState(() => _startedAt = null);
+      await _setEnabled(false);
+      if (mounted) {
+        _startedAt = null;
+        _timedWindowMinutes = null;
+      }
+      _stopTimers();
       await _refreshStatus();
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not stop capture: $e');
@@ -138,13 +171,63 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     }
   }
 
-  Future<void> _download() async {
+  /// Boot-log flow (#428): enable capture with no timer, then reboot so the
+  /// radio records the boot sequence from power-on. The connection drops during
+  /// reboot; on reconnect `_onConnectorChanged` re-derives STATUS and (once
+  /// firmware #428 persists the flag) the capture shows as running → Stop here.
+  Future<void> _startAndReboot() async {
+    final c = _connector;
+    if (c == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Start capture & reboot?'),
+        content: const Text(
+          'Enables serial capture, then reboots the radio so the boot log is '
+          'captured from power-on. There is no timer — capture runs until you '
+          'Stop it. The connection drops during the reboot; when it reconnects, '
+          'capture is still running and you can Stop and download here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red[700]),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Start & Reboot'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final bytes = await _connector.downloadCaplog();
+      await _setEnabled(true); // no timer: runs until Stop
+      _startedAt = DateTime.now();
+      _timedWindowMinutes = null;
+      await c.rebootDevice();
+      // Connection drops now; reconnect handling re-derives STATUS.
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Start & reboot failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _download() async {
+    final c = _connector;
+    if (c == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final bytes = await c.downloadCaplog();
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now();
       final name =
@@ -177,51 +260,19 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
   }
 
   Future<void> _erase() async {
+    final c = _connector;
+    if (c == null) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await _connector.eraseDeviceCaplog();
+      await c.eraseDeviceCaplog();
       await _refreshStatus();
     } catch (e) {
       if (mounted) setState(() => _error = 'Erase failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Reboot the connected radio to capture its boot log (#428). Enable capture
-  /// first, then reboot: with firmware retained-enable support the capture
-  /// resumes on boot and records the boot sequence for retrieval. Dropping the
-  /// connection is expected; the user reconnects and downloads.
-  Future<void> _rebootDevice() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reboot device?'),
-        content: const Text(
-          'This reboots the connected radio and drops the connection. '
-          'If capture is on, the boot log is recorded after reboot (requires '
-          'firmware support); reconnect and download it here.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reboot'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    try {
-      await _connector.rebootDevice();
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Reboot failed: $e');
     }
   }
 
@@ -235,8 +286,9 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
   }
 
   String _remaining() {
-    if (_startedAt == null || _durationMinutes == 0) return '';
-    final total = _durationMinutes * 60;
+    final window = _timedWindowMinutes;
+    if (_startedAt == null || window == null) return '';
+    final total = window * 60;
     final left = (total - DateTime.now().difference(_startedAt!).inSeconds)
         .clamp(0, total);
     return '${_pad2(left ~/ 60)}:${_pad2(left % 60)}';
@@ -244,26 +296,26 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final connector = context.watch<MeshCoreConnector>();
     return Scaffold(
       appBar: AppBar(title: const Text('Serial capture'), centerTitle: true),
-      body: _body(),
+      body: _body(connector),
     );
   }
 
-  Widget _body() {
-    if (_supported == null) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Checking device support…'),
-          ],
+  Widget _body(MeshCoreConnector connector) {
+    if (!connector.isConnected) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'Connect to a device to use serial capture.',
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
-    if (_supported == false) {
+    if (!connector.supportsOffbandCaplog) {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(
@@ -275,7 +327,8 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       );
     }
 
-    final capturing = _startedAt != null;
+    final capturing = _status?.enabled ?? (_startedAt != null);
+    final timed = _timedWindowMinutes != null;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -312,7 +365,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       'Elapsed ${_elapsed()}'
-                      '${_durationMinutes > 0 ? '  ·  auto-stops in ${_remaining()}' : ''}',
+                      '${timed ? '  ·  auto-stops in ${_remaining()}' : ''}',
                     ),
                   ),
                 if (_status != null) ...[
@@ -359,7 +412,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: _busy ? null : (capturing ? _stop : _start),
+          onPressed: _busy ? null : (capturing ? _stop : _startTimed),
           icon: Icon(capturing ? Icons.stop : Icons.fiber_manual_record),
           label: Text(capturing ? 'Stop capture' : 'Start capture'),
         ),
@@ -376,12 +429,16 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
           label: const Text('Erase buffer'),
         ),
         const Divider(height: 24),
-        // Boot-log flow (#428): reboot the radio while capture is on to record
-        // the boot sequence. Available while capturing (that's the point).
-        TextButton.icon(
-          onPressed: _busy ? null : _rebootDevice,
+        // Boot-log flow (#428): enable capture (no timer) + reboot, styled as a
+        // dangerous action (it reboots the radio and drops the connection).
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red[700],
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _busy || capturing ? null : _startAndReboot,
           icon: const Icon(Icons.restart_alt),
-          label: const Text('Reboot device (capture boot log)'),
+          label: const Text('Start & Reboot (capture boot log)'),
         ),
       ],
     );

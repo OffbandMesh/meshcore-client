@@ -496,6 +496,18 @@ bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
     (offbandCaps & offbandCapBlock) != 0 &&
     (firmwareVerCode ?? 0) >= 15;
 
+/// Caplog serial-capture capability (firmware #427). The bit is compile-time
+/// static in device-info, so it's reliable across reboots — the client re-reads
+/// it on reconnect and never has to race a STATUS probe. Bit 5 (0x08/0x10 are
+/// reserved for WiFi-companion #365 / display-config); requires FIRMWARE_VER_CODE
+/// >= 17, the version that introduced it.
+const int offbandCapCaplog = 0x20;
+
+bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
+    offbandCaps != null &&
+    (offbandCaps & offbandCapCaplog) != 0 &&
+    (firmwareVerCode ?? 0) >= 17;
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;

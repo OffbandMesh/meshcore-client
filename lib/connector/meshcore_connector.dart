@@ -611,6 +611,9 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Never shortcut this to a model or version check.
   bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
 
+  bool get supportsOffbandCaplog =>
+      firmwareSupportsOffbandCaplog(_offbandCaps, _firmwareVerCode);
+
   /// Current FEM LNA state as last reported by the radio, or null if unknown
   /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.
   bool? get femLnaEnabled => _femLnaEnabled;
