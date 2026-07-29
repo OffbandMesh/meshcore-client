@@ -47,6 +47,21 @@ class Message {
   /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
   final DateTime? rxTime;
 
+  /// RX signal-to-noise in dB for the received frame, captured from the v3
+  /// contact-msg-recv frame. Null for outgoing messages, pre-v3 firmware, and
+  /// records stored before #438 — never fabricated. (#438)
+  final double? snr;
+
+  /// RX signal strength in dBm. Null until firmware populates it — the wire
+  /// currently sends a reserved 0 byte here, so we do NOT read it yet (#439).
+  final int? rssi;
+
+  /// True if this frame arrived flood-routed (path_len = hop count); false if
+  /// it came direct/point-to-point (firmware sends path_len 0xFF for that,
+  /// MyMesh.cpp:545). Null for outgoing/pre-#438 records. Drives the Path
+  /// screen's "direct (routed)" vs "flood, N hops" label. (#438)
+  final bool? isFloodRoute;
+
   Message({
     required this.senderKey,
     required this.text,
@@ -73,6 +88,9 @@ class Message {
     Map<String, List<String>>? reactionSenders,
     Map<String, MessageStatus>? reactionStatuses,
     this.rxTime,
+    this.snr,
+    this.rssi,
+    this.isFloodRoute,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${pubKeyToHex(senderKey)}_${text.hashCode}',
@@ -105,6 +123,9 @@ class Message {
     Map<String, MessageStatus>? reactionStatuses,
     Uint8List? fourByteRoomContactKey,
     DateTime? rxTime,
+    double? snr,
+    int? rssi,
+    bool? isFloodRoute,
   }) {
     return Message(
       senderKey: senderKey,
@@ -141,6 +162,9 @@ class Message {
       fourByteRoomContactKey:
           fourByteRoomContactKey ?? this.fourByteRoomContactKey,
       rxTime: rxTime ?? this.rxTime,
+      snr: snr ?? this.snr,
+      rssi: rssi ?? this.rssi,
+      isFloodRoute: isFloodRoute ?? this.isFloodRoute,
     );
   }
 

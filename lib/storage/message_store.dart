@@ -175,6 +175,9 @@ class MessageStore {
       ),
       'fourByteRoomContactKey': base64Encode(msg.fourByteRoomContactKey),
       'rxTime': msg.rxTime?.millisecondsSinceEpoch,
+      'snr': msg.snr,
+      'rssi': msg.rssi,
+      'isFloodRoute': msg.isFloodRoute,
     };
   }
 
@@ -234,6 +237,9 @@ class MessageStore {
       rxTime: json['rxTime'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['rxTime'] as int)
           : null,
+      snr: (json['snr'] as num?)?.toDouble(),
+      rssi: json['rssi'] as int?,
+      isFloodRoute: json['isFloodRoute'] as bool?,
     );
   }
 }
