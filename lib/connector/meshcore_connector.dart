@@ -442,10 +442,15 @@ class MeshCoreConnector extends ChangeNotifier {
       return maxFrameSize;
     }
     final mtu = _device?.mtuNow ?? 0;
-    if (mtu <= 0) return maxFrameSize;
+    // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
+    // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize] —
+    // defaulting an unknown link to the largest size would authorize an
+    // oversized write (#395 review).
+    const minWritable = 20;
+    if (mtu <= 0) return minWritable;
     final writable = mtu - 3;
     if (writable >= maxFrameSize) return maxFrameSize;
-    return writable < 23 ? 23 : writable;
+    return writable < minWritable ? minWritable : writable;
   }
 
   String? get deviceId => _deviceId;
