@@ -77,10 +77,17 @@ class CaplogTruncatedException implements Exception {
   const CaplogTruncatedException({
     required this.received,
     required this.expected,
+    this.chunks,
   });
   final int received;
   final int expected;
+
+  /// Number of CHUNK frames the client accumulated before END — a diagnostic to
+  /// tell client/transport frame loss apart from the firmware streaming short.
+  final int? chunks;
+
   @override
   String toString() =>
-      'CaplogTruncatedException: received $received of $expected bytes';
+      'CaplogTruncatedException: received $received of $expected bytes'
+      '${chunks != null ? ' in $chunks chunks' : ''}';
 }
