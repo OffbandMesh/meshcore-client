@@ -290,6 +290,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _caplogAwaitingStart = false;
   Completer<CaplogAck>? _caplogAckCompleter;
   Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
+  int _caplogChunks = 0; // CHUNK frames in the active download (diagnostic)
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -4354,10 +4355,15 @@ class MeshCoreConnector extends ChangeNotifier {
     switch (event.status) {
       case CaplogStatus.started:
         _caplogAwaitingStart = false;
+        _caplogChunks = 0;
+        break;
+      case CaplogStatus.chunk:
+        _caplogChunks++;
         break;
       case CaplogStatus.completed:
         _appDebugLogService?.info(
-          'Caplog download complete: ${event.bytes!.length} bytes',
+          'Caplog download complete: ${event.bytes!.length} bytes in '
+          '$_caplogChunks chunks',
           tag: 'Caplog',
         );
         completer.complete(event.bytes);
@@ -4365,17 +4371,17 @@ class MeshCoreConnector extends ChangeNotifier {
       case CaplogStatus.truncated:
         _appDebugLogService?.warn(
           'Caplog download truncated: ${event.bytes!.length} of '
-          '${event.expected} bytes',
+          '${event.expected} bytes in $_caplogChunks chunks',
           tag: 'Caplog',
         );
         completer.completeError(
           CaplogTruncatedException(
             received: event.bytes!.length,
             expected: event.expected!,
+            chunks: _caplogChunks,
           ),
         );
         break;
-      case CaplogStatus.chunk:
       case CaplogStatus.ignored:
         break;
     }
