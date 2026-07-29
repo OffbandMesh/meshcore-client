@@ -26,7 +26,15 @@ class AppDebugLogScreen extends StatelessWidget {
               IconButton(
                 tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
-                onPressed: () => LogExport.shareLogs(context),
+                onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => entries
+                      .map(
+                        (entry) =>
+                            '[${entry.formattedTime}] [${entry.levelLabel}] [${entry.tag}] ${entry.message}',
+                      )
+                      .join('\n'),
+                ),
               ),
               IconButton(
                 tooltip: context.l10n.debugLog_copyLog,

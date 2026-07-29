@@ -2806,11 +2806,17 @@ abstract class AppLocalizations {
   /// **'Share logs'**
   String get debugLog_shareLog;
 
-  /// No description provided for @debugLog_openLogsFolder.
+  /// No description provided for @debugLog_saveLog.
   ///
   /// In en, this message translates to:
-  /// **'Open logs folder'**
-  String get debugLog_openLogsFolder;
+  /// **'Save logs'**
+  String get debugLog_saveLog;
+
+  /// No description provided for @debugLog_downloadLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Download logs'**
+  String get debugLog_downloadLog;
 
   /// No description provided for @debugLog_shareSubject.
   ///
@@ -2818,11 +2824,17 @@ abstract class AppLocalizations {
   /// **'Offband Meshcore logs'**
   String get debugLog_shareSubject;
 
-  /// No description provided for @debugLog_fileLoggingUnavailable.
+  /// No description provided for @debugLog_logSaved.
   ///
   /// In en, this message translates to:
-  /// **'File logging is unavailable on this platform'**
-  String get debugLog_fileLoggingUnavailable;
+  /// **'Log saved'**
+  String get debugLog_logSaved;
+
+  /// No description provided for @debugLog_logUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No log available to export'**
+  String get debugLog_logUnavailable;
 
   /// No description provided for @debugLog_copied.
   ///

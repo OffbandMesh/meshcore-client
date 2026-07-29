@@ -37,7 +37,15 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
               IconButton(
                 tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
-                onPressed: () => LogExport.shareLogs(context),
+                onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => entries
+                      .map(
+                        (entry) =>
+                            '${entry.description}\n${entry.hexPreview}\n',
+                      )
+                      .join('\n'),
+                ),
               ),
               IconButton(
                 tooltip: context.l10n.debugLog_copyLog,
