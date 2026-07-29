@@ -1225,9 +1225,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ 압축';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat 압축';
 
   @override
@@ -1658,9 +1655,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chat_publicKey => '공개 키';
-
-  @override
-  String get chat_compressOutgoingMessages => '전송되는 메시지 압축';
 
   @override
   String get chat_floodForced => '홍수 (강제)';

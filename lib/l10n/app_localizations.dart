@@ -2380,12 +2380,6 @@ abstract class AppLocalizations {
   /// **'Edit Channel {index}'**
   String channels_editChannelTitle(int index);
 
-  /// No description provided for @channels_smazCompression.
-  ///
-  /// In en, this message translates to:
-  /// **'SMAZ compression'**
-  String get channels_smazCompression;
-
   /// No description provided for @channels_cyr2latCompression.
   ///
   /// In en, this message translates to:
@@ -3135,12 +3129,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Public Key'**
   String get chat_publicKey;
-
-  /// No description provided for @chat_compressOutgoingMessages.
-  ///
-  /// In en, this message translates to:
-  /// **'Compress outgoing messages'**
-  String get chat_compressOutgoingMessages;
 
   /// No description provided for @chat_floodForced.
   ///

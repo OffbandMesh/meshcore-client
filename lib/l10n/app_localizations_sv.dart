@@ -1264,9 +1264,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ-komprimering';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat-komprimering';
 
   @override
@@ -1711,9 +1708,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Allmänt nyckel';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Kryptera utgående meddelanden';
 
   @override
   String get chat_floodForced => 'Översvämning (tvingad)';

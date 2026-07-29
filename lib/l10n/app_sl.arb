@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "Kompresija SMAZ",
   "channels_cyr2latCompression": "Kompresija Cyr2Lat",
   "channels_cyr2latCompressionDscr": "Pri pošiljanju nekatere cirilice nadomesti z latiničnimi.",
   "channels_cyr2latSettingsHeading": "Nastavitve Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Vnesite",
   "chat_path": "Pot",
   "chat_publicKey": "Ključ javnega tipa",
-  "chat_compressOutgoingMessages": "Stisnite izhodne sporočila",
   "chat_floodForced": "Porolni (nasilje).",
   "chat_directForced": "Nezglašen (nasilje)",
   "chat_hopsForced": "{count} skoki (nasilje)",

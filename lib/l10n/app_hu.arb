@@ -550,7 +550,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ kompresszió",
   "channels_cyr2latCompression": "Cyr2Lat kompresszió",
   "channels_cyr2latCompressionDscr": "Néhány Cirill betűt Latin betűkkel helyettesít küldéskor.",
   "channels_cyr2latSettingsHeading": "Cyr2Lat beállítások",
@@ -780,7 +779,6 @@
   "chat_type": "Típus",
   "chat_path": "Út",
   "chat_publicKey": "Nyelvkönyv",
-  "chat_compressOutgoingMessages": "A küldött üzenetek tömörítése",
   "chat_floodForced": "Áradás (kényszerített)",
   "chat_directForced": "Közvetlen (erélyes)",
   "chat_hopsForced": "{count} ánusz (erővel)",

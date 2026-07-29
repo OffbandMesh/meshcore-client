@@ -1254,12 +1254,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       hintText: context.l10n.chat_typeMessage,
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
-                          (connector.isChannelSmazEnabled(
-                                _currentChannel.index,
-                              ) ||
-                              connector.isChannelCyr2LatEnabled(
-                                _currentChannel.index,
-                              ))
+                          connector.isChannelCyr2LatEnabled(
+                            _currentChannel.index,
+                          )
                           ? (text) => connector.prepareChannelOutboundText(
                               _currentChannel.index,
                               text,

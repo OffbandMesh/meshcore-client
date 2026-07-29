@@ -1279,9 +1279,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'Стиснення SMAZ';
-
-  @override
   String get channels_cyr2latCompression => 'Стиснення Cyr2Lat';
 
   @override
@@ -1730,9 +1727,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Відкритий ключ';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Стискати вихідні повідомлення';
 
   @override
   String get chat_floodForced => 'Через всю мережу (примусово)';

@@ -1283,9 +1283,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'Compressão SMAZ';
-
-  @override
   String get channels_cyr2latCompression => 'Compressão Cyr2Lat';
 
   @override
@@ -1730,9 +1727,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Chave Pública';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Comprimir mensagens enviadas';
 
   @override
   String get chat_floodForced => 'Inundação (forçada)';

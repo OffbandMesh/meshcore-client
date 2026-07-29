@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "Odstránenie kompresie SMAZ",
   "channels_cyr2latCompression": "Odstránenie kompresie Cyr2Lat",
   "channels_cyr2latCompressionDscr": "Pri odosielaní nahradí niektoré znaky cyriliky latinskými znakmi.",
   "channels_cyr2latSettingsHeading": "Nastavenia Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Napište",
   "chat_path": "Cesta",
   "chat_publicKey": "Verejný kľúč",
-  "chat_compressOutgoingMessages": "Komprimovať odoslané správy",
   "chat_floodForced": "Povodňová (nutená)",
   "chat_directForced": "Priame (donútené)",
   "chat_hopsForced": "{count} skokov (nutené)",

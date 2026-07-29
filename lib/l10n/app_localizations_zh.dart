@@ -1211,9 +1211,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ 压缩';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat 压缩';
 
   @override
@@ -1629,9 +1626,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chat_publicKey => '公钥';
-
-  @override
-  String get chat_compressOutgoingMessages => '压缩发送的消息';
 
   @override
   String get chat_floodForced => '泛洪（强制）';
