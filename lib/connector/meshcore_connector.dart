@@ -4795,10 +4795,22 @@ class MeshCoreConnector extends ChangeNotifier {
     // active. (#430)
     if (_caplogAwaitingStart) {
       _caplogAwaitingStart = false;
-      final caplog = _caplogCompleter;
-      if (caplog != null && !caplog.isCompleted) {
-        caplog.completeError(const CaplogBusyException());
+      final download = _caplogCompleter;
+      if (download != null && !download.isCompleted) {
+        download.completeError(const CaplogBusyException());
       }
+    }
+    // Control ops (enable / disable / erase / status) are likewise rejected with
+    // RESP_CODE_ERR while a stream is in flight; fail their pending completers
+    // fast rather than hanging until the 5s timeout. A status poll swallows the
+    // error and retries, so this is safe even for an unrelated ERR. (#430)
+    final ack = _caplogAckCompleter;
+    if (ack != null && !ack.isCompleted) {
+      ack.completeError(const CaplogBusyException());
+    }
+    final status = _caplogStatusCompleter;
+    if (status != null && !status.isCompleted) {
+      status.completeError(const CaplogBusyException());
     }
     final errCode = frame.length > 1 ? frame[1] : -1;
     _appDebugLogService?.warn(
