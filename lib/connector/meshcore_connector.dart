@@ -5920,21 +5920,27 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       // Companion radio layout:
-      // [code][snr?][res?][res?][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
-      // double snr = 0;
+      // [code][snr][res1][res2][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
+      // Firmware writes snr as (int8)(snr_dB * 4), so dB = byte / 4.0
+      // (MyMesh.cpp:512). res1 bit0 = device-composed outgoing flag (#429);
+      // res2 will carry RSSI once firmware ships it (#439/#456) — not read yet.
+      double? snr;
       bool isOutgoing = false;
       if (code == respCodeContactMsgRecvV3) {
-        // Older firmware layout with SNR as a signed byte after the code
-        // snr = reader.readInt8().toDouble() * 4; // SNR in dB, scaled by 4
-        reader.skipBytes(1); // Skip SNR byte
+        snr = reader.readInt8() / 4.0;
         // reserved1 bit0 = outgoing flag: set for a message composed on the
         // device itself, so it renders as sent-by-me (#429 part B).
         isOutgoing = (reader.readByte() & 0x01) != 0;
-        reader.skipBytes(1); // Skip reserved2
+        reader.skipBytes(1); // reserved2 (RSSI pending — #439/#456)
       }
 
       final senderPrefix = reader.readBytes(6);
-      final pathLength = reader.readByte();
+      // path_len is the flood hop count, or 0xFF when the frame arrived
+      // direct/point-to-point (MyMesh.cpp:545). Preserve that distinction for
+      // the Path screen before the 0xFF->0 normalization below. (#438)
+      final rawPathLen = reader.readByte();
+      final isFloodRoute = rawPathLen != 0xFF;
+      final pathLength = rawPathLen;
       final txtType = reader.readByte();
       final timestampRaw = reader.readUInt32LE();
       final timestamp = DateTime.fromMillisecondsSinceEpoch(
@@ -5996,7 +6002,11 @@ class MeshCoreConnector extends ChangeNotifier {
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
         fourByteRoomContactKey: roomAuthorPrefix,
+        // A device-composed outgoing message has no real RX frame, so its SNR /
+        // path-type / rxTime are meaningless — null them like rxTime (#429/#438).
         rxTime: isOutgoing ? null : DateTime.now(),
+        snr: isOutgoing ? null : snr,
+        isFloodRoute: isOutgoing ? null : isFloodRoute,
       );
     } catch (e) {
       appLogger.warn('Error parsing contact direct message: $e');

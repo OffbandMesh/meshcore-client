@@ -3688,6 +3688,30 @@ class AppLocalizationsPl extends AppLocalizations {
   String get channelPath_pathLabelTitle => 'Ścieżka';
 
   @override
+  String get channelPath_routeDirect => 'direct (routed)';
+
+  @override
+  String channelPath_routeFlood(int hops) {
+    return 'flood, $hops hops';
+  }
+
+  @override
+  String get channelPath_snrLabel => 'SNR';
+
+  @override
+  String channelPath_snrValue(String db) {
+    return '$db dB';
+  }
+
+  @override
+  String get channelPath_rssiLabel => 'RSSI';
+
+  @override
+  String channelPath_rssiValue(int dbm) {
+    return '$dbm dBm';
+  }
+
+  @override
   String get channelPath_observedPathHeader => 'Obserwowana ścieżka';
 
   @override

@@ -1956,6 +1956,33 @@
     }
   },
   "channelPath_pathLabelTitle": "Path",
+  "channelPath_routeDirect": "direct (routed)",
+  "channelPath_routeFlood": "flood, {hops} hops",
+  "@channelPath_routeFlood": {
+    "placeholders": {
+      "hops": {
+        "type": "int"
+      }
+    }
+  },
+  "channelPath_snrLabel": "SNR",
+  "channelPath_snrValue": "{db} dB",
+  "@channelPath_snrValue": {
+    "placeholders": {
+      "db": {
+        "type": "String"
+      }
+    }
+  },
+  "channelPath_rssiLabel": "RSSI",
+  "channelPath_rssiValue": "{dbm} dBm",
+  "@channelPath_rssiValue": {
+    "placeholders": {
+      "dbm": {
+        "type": "int"
+      }
+    }
+  },
   "channelPath_observedPathHeader": "Observed Path",
   "channelPath_selectedPathLabel": "{label} • {prefixes}",
   "@channelPath_selectedPathLabel": {

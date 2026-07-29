@@ -1501,7 +1501,12 @@ class _ChatScreenState extends State<ChatScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChannelMessagePathScreen(message: pathMessage),
+        builder: (context) => ChannelMessagePathScreen(
+          message: pathMessage,
+          snr: message.snr,
+          rssi: message.rssi,
+          isFloodRoute: message.isFloodRoute,
+        ),
       ),
     );
   }

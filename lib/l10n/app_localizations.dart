@@ -6368,6 +6368,42 @@ abstract class AppLocalizations {
   /// **'Path'**
   String get channelPath_pathLabelTitle;
 
+  /// No description provided for @channelPath_routeDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'direct (routed)'**
+  String get channelPath_routeDirect;
+
+  /// No description provided for @channelPath_routeFlood.
+  ///
+  /// In en, this message translates to:
+  /// **'flood, {hops} hops'**
+  String channelPath_routeFlood(int hops);
+
+  /// No description provided for @channelPath_snrLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'SNR'**
+  String get channelPath_snrLabel;
+
+  /// No description provided for @channelPath_snrValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{db} dB'**
+  String channelPath_snrValue(String db);
+
+  /// No description provided for @channelPath_rssiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI'**
+  String get channelPath_rssiLabel;
+
+  /// No description provided for @channelPath_rssiValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{dbm} dBm'**
+  String channelPath_rssiValue(int dbm);
+
   /// No description provided for @channelPath_observedPathHeader.
   ///
   /// In en, this message translates to:
