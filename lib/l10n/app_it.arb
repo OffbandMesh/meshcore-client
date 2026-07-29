@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "Compressione SMAZ",
   "channels_cyr2latCompression": "Compressione Cyr2Lat",
   "channels_cyr2latCompressionDscr": "Sostituisce alcuni caratteri cirillici con caratteri latini durante l'invio.",
   "channels_cyr2latSettingsHeading": "Impostazioni Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Digita",
   "chat_path": "Percorso",
   "chat_publicKey": "Chiave Pubblica",
-  "chat_compressOutgoingMessages": "Comprimi messaggi in uscita",
   "chat_floodForced": "Inondazione (forzata)",
   "chat_directForced": "Riavvia (forzato)",
   "chat_hopsForced": "{count} salti (forzati)",

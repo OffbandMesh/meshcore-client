@@ -407,12 +407,10 @@ class MeshCoreConnector extends ChangeNotifier {
   final ChannelStore _channelStore = ChannelStore();
   final UnreadStore _unreadStore = UnreadStore();
   List<Channel> _cachedChannels = [];
-  final Map<int, bool> _channelSmazEnabled = {};
   final Map<int, bool> _channelCyr2LatEnabled = {};
   final Map<int, String?> _channelCyr2LatProfileId = {};
   bool _lastSentWasCliCommand =
       false; // Track if last sent message was a CLI command
-  final Map<String, bool> _contactSmazEnabled = {};
   final Map<String, bool> _contactCyr2LatEnabled = {};
   final Map<String, String?> _contactCyr2LatProfileId = {};
   final Set<String> _knownContactKeys = {};
@@ -939,18 +937,6 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
-  bool isChannelSmazEnabled(int channelIndex) {
-    return _channelSmazEnabled[channelIndex] ?? false;
-  }
-
-  bool isContactSmazEnabled(String contactKeyHex) {
-    return _contactSmazEnabled[contactKeyHex] ?? false;
-  }
-
-  void ensureContactSmazSettingLoaded(String contactKeyHex) {
-    _ensureContactSmazSettingLoaded(contactKeyHex);
-  }
-
   bool isChannelCyr2LatEnabled(int channelIndex) {
     _ensureChannelCyr2LatSettingLoaded(channelIndex);
     return _channelCyr2LatEnabled[channelIndex] ?? false;
@@ -1081,28 +1067,8 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  Future<void> setChannelSmazEnabled(int channelIndex, bool enabled) async {
-    _channelSmazEnabled[channelIndex] = enabled;
-    if (enabled) {
-      _channelCyr2LatEnabled[channelIndex] = false;
-      await _channelSettingsStore.saveCyr2LatEnabled(channelIndex, false);
-    }
-    await _channelSettingsStore.saveSmazEnabled(channelIndex, enabled);
-    notifyListeners();
-  }
-
-  Future<void> setContactSmazEnabled(String contactKeyHex, bool enabled) async {
-    _contactSmazEnabled[contactKeyHex] = enabled;
-    await _contactSettingsStore.saveSmazEnabled(contactKeyHex, enabled);
-    notifyListeners();
-  }
-
   Future<void> setChannelCyr2LatEnabled(int channelIndex, bool enabled) async {
     _channelCyr2LatEnabled[channelIndex] = enabled;
-    if (enabled) {
-      _channelSmazEnabled[channelIndex] = false;
-      await _channelSettingsStore.saveSmazEnabled(channelIndex, false);
-    }
     await _channelSettingsStore.saveCyr2LatEnabled(channelIndex, enabled);
     notifyListeners();
   }
@@ -1261,7 +1227,6 @@ class MeshCoreConnector extends ChangeNotifier {
     // contact list, which is what stalled the UI for ~44s on connect.
     await Future.wait([
       for (final contact in cached) ...[
-        _ensureContactSmazSettingLoaded(contact.publicKeyHex, notify: false),
         _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex, notify: false),
       ],
     ]);
@@ -1276,11 +1241,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> loadChannelSettings({int? maxChannels}) async {
-    _channelSmazEnabled.clear();
     _channelCyr2LatEnabled.clear();
     final channelCount = maxChannels ?? _maxChannels;
     for (int i = 0; i < channelCount; i++) {
-      _channelSmazEnabled[i] = await _channelSettingsStore.loadSmazEnabled(i);
       _channelCyr2LatEnabled[i] = await _channelSettingsStore
           .loadCyr2LatEnabled(i);
     }
@@ -6041,17 +6004,6 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Notifying per contact rebuilds the whole tree once per contact, and each
   /// rebuild itself walks the contact list, so a large address book turns this
   /// into O(contacts^2) work on the UI isolate.
-  Future<void> _ensureContactSmazSettingLoaded(
-    String contactKeyHex, {
-    bool notify = true,
-  }) async {
-    if (_contactSmazEnabled.containsKey(contactKeyHex)) return;
-    final enabled = await _contactSettingsStore.loadSmazEnabled(contactKeyHex);
-    if (_contactSmazEnabled[contactKeyHex] == enabled) return;
-    _contactSmazEnabled[contactKeyHex] = enabled;
-    if (notify) notifyListeners();
-  }
-
   Future<void> _ensureContactCyr2LatSettingLoaded(
     String contactKeyHex, {
     bool notify = true,
@@ -6131,9 +6083,7 @@ class MeshCoreConnector extends ChangeNotifier {
         trimmed.startsWith('m:') ||
         trimmed.startsWith('V1|');
     if (!isStructuredPayload) {
-      if (isContactSmazEnabled(contact.publicKeyHex)) {
-        return Smaz.encodeIfSmaller(text);
-      } else if (isContactCyr2LatEnabled(contact.publicKeyHex)) {
+      if (isContactCyr2LatEnabled(contact.publicKeyHex)) {
         final profileId = getContactCyr2LatProfileId(contact.publicKeyHex);
         final profile = profileId != null && _appSettingsService != null
             ? _appSettingsService!.getCyr2LatProfileById(profileId)
@@ -6159,9 +6109,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final isStructuredPayload =
         trimmed.startsWith('g:') || trimmed.startsWith('m:');
     if (!isStructuredPayload) {
-      if (isChannelSmazEnabled(channelIndex)) {
-        return Smaz.encodeIfSmaller(text);
-      } else if (isChannelCyr2LatEnabled(channelIndex)) {
+      if (isChannelCyr2LatEnabled(channelIndex)) {
         final profileId = getChannelCyr2LatProfileId(channelIndex);
         final profile = profileId != null && _appSettingsService != null
             ? _appSettingsService!.getCyr2LatProfileById(profileId)

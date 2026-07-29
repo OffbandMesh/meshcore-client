@@ -1271,9 +1271,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'Kompresija SMAZ';
-
-  @override
   String get channels_cyr2latCompression => 'Kompresija Cyr2Lat';
 
   @override
@@ -1717,9 +1714,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Ključ javnega tipa';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Stisnite izhodne sporočila';
 
   @override
   String get chat_floodForced => 'Porolni (nasilje).';

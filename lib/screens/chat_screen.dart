@@ -674,12 +674,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     hintText: context.l10n.chat_typeMessage,
                     onSubmitted: (_) => _sendMessage(connector),
                     encoder:
-                        (connector.isContactSmazEnabled(
-                              widget.contact.publicKeyHex,
-                            ) ||
-                            connector.isContactCyr2LatEnabled(
-                              widget.contact.publicKeyHex,
-                            ))
+                        connector.isContactCyr2LatEnabled(
+                          widget.contact.publicKeyHex,
+                        )
                         ? (text) => connector.prepareContactOutboundText(
                             widget.contact,
                             text,

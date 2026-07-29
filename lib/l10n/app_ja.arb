@@ -550,7 +550,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ 圧縮",
   "channels_cyr2latCompression": "Cyr2Lat 圧縮",
   "channels_cyr2latCompressionDscr": "送信時に一部のキリル文字をラテン文字に置き換えます。",
   "channels_cyr2latSettingsHeading": "cyr2latの設定",
@@ -780,7 +779,6 @@
   "chat_type": "種類",
   "chat_path": "道",
   "chat_publicKey": "公開鍵",
-  "chat_compressOutgoingMessages": "送信されるメッセージを圧縮する",
   "chat_floodForced": "洪水（強制的な）",
   "chat_directForced": "直接的な（強制的な）",
   "chat_hopsForced": "{count} 本のホップ（強制的に採取）",

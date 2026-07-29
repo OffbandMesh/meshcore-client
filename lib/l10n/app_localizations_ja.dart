@@ -1230,9 +1230,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ 圧縮';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat 圧縮';
 
   @override
@@ -1662,9 +1659,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chat_publicKey => '公開鍵';
-
-  @override
-  String get chat_compressOutgoingMessages => '送信されるメッセージを圧縮する';
 
   @override
   String get chat_floodForced => '洪水（強制的な）';

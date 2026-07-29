@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ-komprimering",
   "channels_cyr2latCompression": "Cyr2Lat-komprimering",
   "channels_cyr2latCompressionDscr": "Ersätter vissa kyrilliska tecken med latinska tecken när du skickar.",
   "channels_cyr2latSettingsHeading": "Inställningar för Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Skriv",
   "chat_path": "Sökväg",
   "chat_publicKey": "Allmänt nyckel",
-  "chat_compressOutgoingMessages": "Kryptera utgående meddelanden",
   "chat_floodForced": "Översvämning (tvingad)",
   "chat_directForced": "Direkt (tvingad)",
   "chat_hopsForced": "{count} hopp (tvingat)",

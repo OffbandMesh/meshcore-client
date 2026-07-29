@@ -550,7 +550,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ 압축",
   "channels_cyr2latCompression": "Cyr2Lat 압축",
   "channels_cyr2latCompressionDscr": "보낼 때 일부 키릴 문자를 라틴 문자로 바꿉니다.",
   "channels_cyr2latSettingsHeading": "Cyr2Lat 설정",
@@ -780,7 +779,6 @@
   "chat_type": "종류",
   "chat_path": "경로",
   "chat_publicKey": "공개 키",
-  "chat_compressOutgoingMessages": "전송되는 메시지 압축",
   "chat_floodForced": "홍수 (강제)",
   "chat_directForced": "직접적인 (강제적인)",
   "chat_hopsForced": "{count}번 띄우기 (강제)",

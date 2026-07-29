@@ -393,7 +393,6 @@
       }
     }
   },
-  "channels_smazCompression": "Стиснення SMAZ",
   "channels_cyr2latCompression": "Стиснення Cyr2Lat",
   "channels_cyr2latCompressionDscr": "Замінює деякі кириличні символи на латиницю при відправці.",
   "channels_cyr2latSettingsHeading": "Налаштування Cyr2Lat",
@@ -611,7 +610,6 @@
   "chat_type": "Ввід",
   "chat_path": "Шлях",
   "chat_publicKey": "Відкритий ключ",
-  "chat_compressOutgoingMessages": "Стискати вихідні повідомлення",
   "chat_floodForced": "Через всю мережу (примусово)",
   "chat_directForced": "Напряму (примусово)",
   "chat_hopsForced": "{count} переходів (примусово)",

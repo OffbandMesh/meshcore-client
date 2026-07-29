@@ -1274,9 +1274,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'Odstránenie kompresie SMAZ';
-
-  @override
   String get channels_cyr2latCompression => 'Odstránenie kompresie Cyr2Lat';
 
   @override
@@ -1723,9 +1720,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Verejný kľúč';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Komprimovať odoslané správy';
 
   @override
   String get chat_floodForced => 'Povodňová (nutená)';

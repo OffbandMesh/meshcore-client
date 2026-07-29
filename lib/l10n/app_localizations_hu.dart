@@ -1289,9 +1289,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ kompresszió';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat kompresszió';
 
   @override
@@ -1742,9 +1739,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Nyelvkönyv';
-
-  @override
-  String get chat_compressOutgoingMessages => 'A küldött üzenetek tömörítése';
 
   @override
   String get chat_floodForced => 'Áradás (kényszerített)';

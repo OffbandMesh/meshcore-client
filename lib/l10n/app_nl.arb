@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ compressie",
   "channels_cyr2latCompression": "Cyr2Lat compressie",
   "channels_cyr2latCompressionDscr": "Vervangt sommige Cyrillische tekens door Latijnse tekens bij het verzenden.",
   "channels_cyr2latSettingsHeading": "Instellingen Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Typen",
   "chat_path": "Pad",
   "chat_publicKey": "Openbare Sleutel",
-  "chat_compressOutgoingMessages": "Verzenden van uitgaande berichten comprimeren",
   "chat_floodForced": "Flood (afgedwongen)",
   "chat_directForced": "Direct (afgedwongen)",
   "chat_hopsForced": "{count} hops (afgedwongen)",

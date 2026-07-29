@@ -390,7 +390,6 @@
       }
     }
   },
-  "channels_smazCompression": "Компресия SMAZ",
   "channels_cyr2latCompression": "Компресия Cyr2Lat",
   "channels_cyr2latCompressionDscr": "Заменя някои кирилични символи с латиница при изпращане.",
   "channels_cyr2latSettingsHeading": "Настройки на Cyr2Lat",
@@ -607,7 +606,6 @@
   "chat_type": "Въведете",
   "chat_path": "Пътекино",
   "chat_publicKey": "Публичен ключ",
-  "chat_compressOutgoingMessages": "Компресиране на изходящи съобщения",
   "chat_floodForced": "Потоп (принуден)",
   "chat_directForced": "Директно (принудително)",
   "chat_hopsForced": "{count} скока (принудително)",

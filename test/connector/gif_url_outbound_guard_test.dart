@@ -5,10 +5,11 @@ import 'package:meshcore_open/helpers/smaz.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// #282: the GIF payload is now a URL. Outbound text prep skips Smaz/Cyr2Lat for
-// "structured payloads" (it keyed on `g:`/`m:`/`V1|`). A transformed GIF URL
-// would arrive as opaque `s:`-prefixed base64 on a stock client, which is worse
-// than the raw text this change exists to fix. Pin that it survives intact.
+// #420: Smaz send-side compression is removed. Outbound text is no longer
+// compressed on any channel/contact (the toggle is gone), so
+// prepare*OutboundText passes text through verbatim. Decode is deliberately
+// RETAINED (Phase 2 = #421) so messages from lineage peers still sending `s:`,
+// and any legacy compressed rows, keep rendering.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -20,25 +21,32 @@ void main() {
     await PrefsManager.initialize();
   });
 
-  test('Smaz leaves the GIF URL intact on a Smaz-enabled channel', () async {
-    final connector = MeshCoreConnector();
-    await connector.setChannelSmazEnabled(0, true);
+  group('outbound text is never compressed (#420)', () {
+    test('a GIF URL passes through unchanged', () {
+      final connector = MeshCoreConnector();
+      final payload = GifHelper.encodeGif(gifId);
+      final prepared = connector.prepareChannelOutboundText(0, payload);
+      expect(prepared, payload);
+      expect(prepared.startsWith('s:'), isFalse);
+      expect(GifHelper.parseGif(prepared), gifId);
+    });
 
-    final payload = GifHelper.encodeGif(gifId);
-    final prepared = connector.prepareChannelOutboundText(0, payload);
-
-    expect(prepared, payload);
-    expect(prepared.startsWith('s:'), isFalse);
-    expect(GifHelper.parseGif(prepared), gifId);
+    test('a compressible sentence is sent verbatim, not s:-encoded', () {
+      final connector = MeshCoreConnector();
+      const sentence = 'hey are you there right now over and to the other end';
+      final prepared = connector.prepareChannelOutboundText(0, sentence);
+      expect(prepared, sentence);
+      expect(prepared.startsWith('s:'), isFalse);
+    });
   });
 
-  test('Smaz declines to compress a GIF URL at all', () {
-    // Why the outbound `g:`/`m:`/`V1|` structured-payload guard did not need
-    // widening for #282: encodeIfSmaller only swaps in the `s:`+base64 form
-    // when it is genuinely smaller, and base64 overhead exceeds any dictionary
-    // gain on a URL. Pinned so a future dictionary change cannot silently start
-    // compressing GIF URLs into something a stock client cannot read.
-    final payload = GifHelper.encodeGif(gifId);
-    expect(Smaz.encodeIfSmaller(payload), payload);
+  group('receive decode is retained for lineage peers (Phase 2 = #421)', () {
+    test('an s:-compressed payload still decodes back to plaintext', () {
+      const sentence = 'hey are you there right now over and to the other end';
+      final compressed = Smaz.encodeIfSmaller(sentence);
+      // Guard the guard: the sample must actually compress, else vacuous.
+      expect(compressed.startsWith('s:'), isTrue);
+      expect(Smaz.tryDecodePrefixed(compressed), sentence);
+    });
   });
 }
