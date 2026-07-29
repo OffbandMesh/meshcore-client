@@ -102,11 +102,16 @@ void main() {
     () {
       final decoder = UsbSerialFrameDecoder();
 
+      // A frame claiming a payload above the max must be dropped, and the
+      // decoder must resync to the next valid frame. Length is derived from the
+      // ceiling so this stays a genuine over-max after it was raised to 176
+      // (#430) — a hard-coded 173 is now a valid length.
+      final oversized = usbSerialMaxPayloadLength + 1;
       final packets = decoder.ingest(
         Uint8List.fromList(<int>[
           usbSerialRxFrameStart,
-          0xAD,
-          0x00,
+          oversized & 0xff,
+          (oversized >> 8) & 0xff,
           0x99,
           usbSerialRxFrameStart,
           0x01,
