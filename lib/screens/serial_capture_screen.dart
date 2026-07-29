@@ -53,7 +53,10 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     c.addListener(_onConnectorChanged);
     _wasConnected = c.isConnected;
     if (c.isConnected && c.supportsOffbandCaplog) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _refreshStatus());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ensureStatusPolling();
+        _refreshStatus();
+      });
     }
   }
 
@@ -72,7 +75,10 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     final connected = c.isConnected;
     if (connected && !_wasConnected) {
       _wasConnected = true;
-      if (c.supportsOffbandCaplog) _refreshStatus();
+      if (c.supportsOffbandCaplog) {
+        _ensureStatusPolling();
+        _refreshStatus();
+      }
     } else if (!connected && _wasConnected) {
       _wasConnected = false;
       _stopTimers();
@@ -91,11 +97,11 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       // auto-resumed capture after a reboot is reflected as running.
       if (status.enabled) {
         _startedAt ??= DateTime.now();
-        _startTickers();
+        _startTick();
       } else {
         _startedAt = null;
         _timedWindowMinutes = null;
-        _stopTimers();
+        _stopTick();
       }
     } catch (_) {
       // Transient (e.g. mid-reconnect); keep last-known state and retry on the
@@ -103,14 +109,26 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     }
   }
 
-  void _startTickers() {
-    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
+  /// STATUS poll runs whenever the screen is on a connected, caplog-capable
+  /// device, so the buffer readout stays live even while idle (not just during
+  /// capture). Stopped only on disconnect / dispose.
+  void _ensureStatusPolling() {
     _statusPoll ??= Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refreshStatus(),
     );
+  }
+
+  /// 1s elapsed-time tick; runs only while capturing.
+  void _startTick() {
+    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _stopTick() {
+    _tick?.cancel();
+    _tick = null;
   }
 
   void _stopTimers() {
@@ -141,7 +159,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       if (!mounted) return;
       _startedAt = DateTime.now();
       _timedWindowMinutes = _durationMinutes > 0 ? _durationMinutes : null;
-      _startTickers();
+      _startTick();
       if (_durationMinutes > 0) {
         _autoStop?.cancel();
         _autoStop = Timer(Duration(minutes: _durationMinutes), _stop);
@@ -163,7 +181,9 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
         _startedAt = null;
         _timedWindowMinutes = null;
       }
-      _stopTimers();
+      _autoStop?.cancel();
+      _autoStop = null;
+      _stopTick();
       await _refreshStatus();
     } catch (e) {
       if (mounted) setState(() => _error = 'Could not stop capture: $e');
@@ -230,6 +250,15 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     });
     try {
       final bytes = await c.downloadCaplog();
+      if (!mounted) return;
+      if (bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Buffer is empty — nothing to download.'),
+          ),
+        );
+        return;
+      }
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now();
       final name =
