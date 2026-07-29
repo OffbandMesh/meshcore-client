@@ -66,6 +66,7 @@ dependencies:
   yaml: ^3.1.2            # Parse importable device config profiles (#403)
   path_provider: ^2.1.6
   share_plus: ^12.0.1
+  file_selector: ^1.0.3  # Native Save As dialog for log export on desktop (#433)
   build_pipe: ^0.3.1
   material_symbols_icons: ^4.2906.0
   web: ^1.1.1

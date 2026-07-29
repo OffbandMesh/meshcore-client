@@ -1519,14 +1519,19 @@ class AppLocalizationsPt extends AppLocalizations {
   String get debugLog_shareLog => 'Share logs';
 
   @override
-  String get debugLog_openLogsFolder => 'Open logs folder';
+  String get debugLog_saveLog => 'Save logs';
+
+  @override
+  String get debugLog_downloadLog => 'Download logs';
 
   @override
   String get debugLog_shareSubject => 'Offband Meshcore logs';
 
   @override
-  String get debugLog_fileLoggingUnavailable =>
-      'File logging is unavailable on this platform';
+  String get debugLog_logSaved => 'Log saved';
+
+  @override
+  String get debugLog_logUnavailable => 'No log available to export';
 
   @override
   String get debugLog_copied => 'Log de depuração copiado';
