@@ -57,13 +57,18 @@ class LogExport {
       );
       return;
     }
+    // Resolve everything off `context` BEFORE the async gap so nothing touches a
+    // possibly-deactivated widget after the await.
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final file = await FileLogService.instance.flushAndGetActiveFile();
-    if (!context.mounted) return;
     await _exportFile(
-      context,
+      messenger,
       file: file,
       fileName: _defaultFileName,
-      subject: context.l10n.debugLog_shareSubject,
+      subject: l10n.debugLog_shareSubject,
+      unavailableMessage: l10n.debugLog_logUnavailable,
+      savedMessage: l10n.debugLog_logSaved,
     );
   }
 
@@ -75,25 +80,28 @@ class LogExport {
     String? subject,
     String? fileName,
   }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     await _exportFile(
-      context,
+      messenger,
       file: file,
       fileName: fileName ?? file.uri.pathSegments.last,
-      subject: subject ?? context.l10n.debugLog_shareSubject,
+      subject: subject ?? l10n.debugLog_shareSubject,
+      unavailableMessage: l10n.debugLog_logUnavailable,
+      savedMessage: l10n.debugLog_logSaved,
     );
   }
 
   static Future<void> _exportFile(
-    BuildContext context, {
+    ScaffoldMessengerState messenger, {
     required File? file,
     required String fileName,
     required String subject,
+    required String unavailableMessage,
+    required String savedMessage,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final unavailable = context.l10n.debugLog_logUnavailable;
-    final savedMessage = context.l10n.debugLog_logSaved;
     if (file == null) {
-      messenger.showSnackBar(SnackBar(content: Text(unavailable)));
+      messenger.showSnackBar(SnackBar(content: Text(unavailableMessage)));
       return;
     }
     if (_isMobile) {
