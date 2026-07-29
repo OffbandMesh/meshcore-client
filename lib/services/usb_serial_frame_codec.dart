@@ -3,7 +3,11 @@ import 'dart:typed_data';
 const int usbSerialTxFrameStart = 0x3c;
 const int usbSerialRxFrameStart = 0x3e;
 const int usbSerialHeaderLength = 3;
-const int usbSerialMaxPayloadLength = 172;
+// Max companion frame the decoder will accept, matching the firmware's
+// MAX_FRAME_SIZE (BaseSerialInterface.h = 176, "+4 for transport codes"). This
+// was 172, which silently rejected full-size frames — exposed by caplog chunks
+// (176 B), the first feature to use the full frame. Normal traffic stays <=172.
+const int usbSerialMaxPayloadLength = 176;
 
 Uint8List wrapUsbSerialTxFrame(Uint8List payload) {
   if (payload.length > usbSerialMaxPayloadLength) {
