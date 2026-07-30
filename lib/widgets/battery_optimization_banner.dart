@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../l10n/l10n.dart';
+import '../utils/app_logger.dart';
 import '../utils/platform_info.dart';
 
 /// Warns the user when the app is NOT exempt from Android battery optimization
@@ -58,15 +59,36 @@ class _BatteryOptimizationBannerState extends State<BatteryOptimizationBanner>
 
   Future<void> _check() async {
     if (!PlatformInfo.isAndroid) return;
-    final ignoring = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
-    if (!mounted) return;
-    setState(() => _ignoring = ignoring);
+    try {
+      final ignoring =
+          await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+      if (!mounted) return;
+      setState(() => _ignoring = ignoring);
+    } catch (e) {
+      // Can't confirm the status — leave the banner hidden rather than risk a
+      // false warning, but surface the failure to the log (SAFELANE §6).
+      appLogger.warn(
+        'Battery-optimization status check failed: $e',
+        tag: 'BatteryBanner',
+      );
+    }
   }
 
   Future<void> _openSettings() async {
-    await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
-    // The user returns via resume, which triggers _check() and clears the
-    // banner if they applied the change.
+    try {
+      await FlutterForegroundTask.openIgnoreBatteryOptimizationSettings();
+      // The user returns via resume, which triggers _check() and clears the
+      // banner if they applied the change.
+    } catch (e) {
+      appLogger.warn(
+        'Failed to open battery-optimization settings: $e',
+        tag: 'BatteryBanner',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.batteryOptimizationOpenFailed)),
+      );
+    }
   }
 
   @override

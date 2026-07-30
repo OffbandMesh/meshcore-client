@@ -2683,5 +2683,9 @@
   "batteryOptimizationDismiss": "Dismiss",
   "@batteryOptimizationDismiss": {
     "description": "Tooltip for the button that hides the battery-optimization banner for this session (#443)."
+  },
+  "batteryOptimizationOpenFailed": "Couldn't open battery settings",
+  "@batteryOptimizationOpenFailed": {
+    "description": "Snackbar shown when the battery-optimization settings screen could not be opened (#443)."
   }
 }
