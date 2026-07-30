@@ -6,7 +6,7 @@ import 'package:meshcore_open/connector/meshcore_connector.dart';
 void main() {
   group('DirectRepeater.ranking (SNR-first)', () {
     test('a stronger signal outranks a more-recent but weaker one', () {
-      // 5 dB better SNR, but heard 24 min earlier — signal margin must win.
+      // 5 dB better SNR, but heard 24 min earlier, signal margin must win.
       final strongOld = DirectRepeater(
         pubkeyFirstByte: 1,
         pubkeyPrefix: Uint8List.fromList([1]),
@@ -49,7 +49,7 @@ void main() {
     });
 
     test('a live repeater always outranks a stale one', () {
-      // Weak but live vs strong but stale — the live one must win, so the
+      // Weak but live vs strong but stale, the live one must win, so the
       // stale sentinel (-1) has to sit below every live ranking.
       final weakLive = DirectRepeater(
         pubkeyFirstByte: 1,
@@ -94,15 +94,15 @@ void main() {
       snr: 12.0,
     );
 
-    test('width 1 — matches on the single prefix byte', () {
+    test('width 1, matches on the single prefix byte', () {
       expect(repeater([0x84]).matchesPathStart([0x84, 0xab]), isTrue);
       expect(repeater([0x84]).matchesPathStart([0x99]), isFalse);
     });
 
-    test('width 2 — both bytes must match, so a 1-byte collision misses', () {
+    test('width 2, both bytes must match, so a 1-byte collision misses', () {
       final r = repeater([0x84, 0xab]);
       expect(r.matchesPathStart([0x84, 0xab, 0xc1]), isTrue);
-      // Shares only the first byte — the #156 collision that a 1-byte match
+      // Shares only the first byte, the #156 collision that a 1-byte match
       // would have falsely accepted.
       expect(r.matchesPathStart([0x84, 0x99]), isFalse);
     });
@@ -114,7 +114,7 @@ void main() {
   });
 
   group(
-    'DirectRepeater.recordHop (#150 — RX-fed nearest-repeater detection)',
+    'DirectRepeater.recordHop (#150, RX-fed nearest-repeater detection)',
     () {
       DirectRepeater rep(List<int> prefix, double snr) => DirectRepeater(
         pubkeyFirstByte: prefix.last,

@@ -7,7 +7,7 @@ import 'package:meshcore_open/storage/drift/offband_database.dart';
 ///
 /// This runs against an in-memory SQLite instance so it exercises the drift
 /// layer and generated code on any host. It does NOT prove the per-platform
-/// backends (native libs on desktop/mobile, WASM on web) — those are proven by
+/// backends (native libs on desktop/mobile, WASM on web), those are proven by
 /// building each target and by `verifyReadWrite()` at runtime.
 void main() {
   late OffbandDatabase db;

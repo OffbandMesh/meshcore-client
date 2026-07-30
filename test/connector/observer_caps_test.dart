@@ -23,7 +23,7 @@ void main() {
     return f;
   }
 
-  group('parseOffbandCaps — offset 82 + short-frame robustness', () {
+  group('parseOffbandCaps, offset 82 + short-frame robustness', () {
     test('pre-v14 frame without the caps byte (len 82) -> null', () {
       expect(MeshCoreConnector.parseOffbandCaps(frame(82)), isNull);
     });

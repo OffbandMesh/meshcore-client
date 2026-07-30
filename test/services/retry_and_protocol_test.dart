@@ -82,7 +82,7 @@ void main() {
   final Uint8List recipientKey = _makeRecipientKey();
 
   // -------------------------------------------------------------------------
-  group('computeExpectedAckHash — attempt masking', () {
+  group('computeExpectedAckHash, attempt masking', () {
     test('attempts 0–3 all produce different hashes', () {
       final hashes = List.generate(
         4,
@@ -239,7 +239,7 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  group('buildSendTextMsgFrame — attempt encoding', () {
+  group('buildSendTextMsgFrame, attempt encoding', () {
     // Frame layout: [cmd(1)][txtType(1)][attempt(1)][timestamp(4)][pubKeyPrefix(6)][text][null(1)]
     // So byte index 2 carries the raw attempt & 0xFF.
 
@@ -387,7 +387,7 @@ void main() {
       test(
         'attempt 3: flutter hash equals hash computed directly for attempt 3',
         () {
-          // 3 & 3 == 3, so no wrapping — both sides agree.
+          // 3 & 3 == 3, so no wrapping, both sides agree.
           final hashFor3 = MessageRetryService.computeExpectedAckHash(
             fixedTs,
             3,
@@ -486,7 +486,7 @@ void main() {
   );
 
   // -------------------------------------------------------------------------
-  group('_AckHashMapping.attemptIndex — indirect verification via public API', () {
+  group('_AckHashMapping.attemptIndex, indirect verification via public API', () {
     // _AckHashMapping is private; we validate its purpose indirectly: that
     // computeExpectedAckHash records the correct per-attempt hash so that the
     // right hash is matched when an ACK arrives.
@@ -532,7 +532,7 @@ void main() {
     );
 
     test(
-      'attempt index 1 and 5 map to the same slot — ACK from either retry is matched',
+      'attempt index 1 and 5 map to the same slot, ACK from either retry is matched',
       () {
         final hashForAttempt1 = MessageRetryService.computeExpectedAckHash(
           fixedTs,
@@ -553,7 +553,7 @@ void main() {
     );
   });
 
-  group('sendMessageWithRetry — auto path fallback', () {
+  group('sendMessageWithRetry, auto path fallback', () {
     test(
       'preserves the contact path when auto-selection returns null',
       () async {

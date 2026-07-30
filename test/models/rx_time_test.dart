@@ -49,7 +49,7 @@ void main() {
       expect(build().copyWith(rxTime: rx).rxTime, rx);
     });
 
-    test('copyWith(packetHash:) — the live ingest path — preserves rxTime', () {
+    test('copyWith(packetHash:), the live ingest path, preserves rxTime', () {
       final msg = build(rxTime: rx).copyWith(packetHash: 'abc123');
       expect(msg.rxTime, rx);
       expect(msg.timestamp, claimed);

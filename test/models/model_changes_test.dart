@@ -38,7 +38,7 @@ Uint8List _buildContactFrame({
 }
 
 void main() {
-  group('Contact.fromFrame — pathLen mapping', () {
+  group('Contact.fromFrame, pathLen mapping', () {
     test('pathLen == 0 → pathLength == 0 (direct, NOT flood)', () {
       final frame = _buildContactFrame(pathLen: 0);
       final contact = Contact.fromFrame(frame);
@@ -83,7 +83,7 @@ void main() {
     );
   });
 
-  group('Contact.fromFrame — corrupt contact guards', () {
+  group('Contact.fromFrame, corrupt contact guards', () {
     test('all-zero public key → returns null', () {
       final zeroPubKey = Uint8List(32); // all zeros
       final frame = _buildContactFrame(pubKey: zeroPubKey);
@@ -161,7 +161,7 @@ void main() {
         // Build a name with mostly printable chars and one replacement char (0xFFFD in codeUnits).
         // utf8 allowMalformed: true maps invalid sequences to U+FFFD.
         // We embed one invalid UTF-8 byte (0x80) among valid ASCII bytes.
-        // The decoded string will be "Hi\uFFFDThere" — not ALL bad, so should be accepted.
+        // The decoded string will be "Hi\uFFFDThere", not ALL bad, so should be accepted.
         final nameBytes = Uint8List(32);
         nameBytes[0] = 0x48; // 'H'
         nameBytes[1] = 0x69; // 'i'
@@ -190,7 +190,7 @@ void main() {
     );
   });
 
-  group('PathRecord — routeWeight field', () {
+  group('PathRecord, routeWeight field', () {
     test('default routeWeight is 1.0', () {
       final record = PathRecord(
         hopCount: 2,
@@ -268,7 +268,7 @@ void main() {
     );
   });
 
-  group('AppSettings — new fields', () {
+  group('AppSettings, new fields', () {
     test('default values are correct', () {
       final settings = AppSettings();
       expect(settings.maxRouteWeight, equals(5.0));

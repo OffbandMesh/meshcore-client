@@ -94,7 +94,7 @@ void main() {
     test('heals a self-block even when the self key is unchanged', () async {
       await service.setSelfKey(selfKey);
 
-      // Stale persisted state reloaded while the self key is already known —
+      // Stale persisted state reloaded while the self key is already known,
       // load() does not filter, so this lands a self-block behind the guards.
       store.keys = {selfKey, otherKey};
       await service.load();

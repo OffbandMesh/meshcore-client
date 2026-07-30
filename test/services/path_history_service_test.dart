@@ -8,7 +8,7 @@ import 'package:meshcore_open/services/path_history_service.dart';
 import 'package:meshcore_open/services/storage_service.dart';
 
 // ---------------------------------------------------------------------------
-// Fake storage — no SharedPreferences dependency, all in-memory.
+// Fake storage, no SharedPreferences dependency, all in-memory.
 // ---------------------------------------------------------------------------
 class FakeStorageService extends StorageService {
   final Map<String, ContactPathHistory> _store = {};
@@ -450,7 +450,7 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // Group 3: recordPathResult — weight adjustment
+  // Group 3: recordPathResult, weight adjustment
   // -------------------------------------------------------------------------
   group('recordPathResult weight adjustment', () {
     test('success increments weight by successIncrement', () async {

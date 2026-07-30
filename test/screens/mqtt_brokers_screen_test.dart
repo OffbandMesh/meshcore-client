@@ -23,7 +23,7 @@ class _FakeSvc extends ObserverConfigService {
   String? errorText;
 
   /// When false, the device ACKs an enabled-SET but the verify re-read reports
-  /// the slot UNCHANGED — models the HV4 ack-but-doesn't-apply bug (#89).
+  /// the slot UNCHANGED, models the HV4 ack-but-doesn't-apply bug (#89).
   bool deviceApplies = true;
   final Map<int, bool> _enabledOverride = {};
 

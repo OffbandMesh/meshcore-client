@@ -113,7 +113,7 @@ class BrokerConfig {
   final String? iataOverride;
 }
 
-/// The `mqtt` section — observer/MQTT capability. Shared by any device running
+/// The `mqtt` section, observer/MQTT capability. Shared by any device running
 /// the observer role (observer, observer-repeater, observer-companion); never a
 /// plain companion or plain repeater (#456).
 class MqttSection {
@@ -136,7 +136,7 @@ class MqttSection {
       regionIata == null && statusInterval == null && brokers.isEmpty;
 }
 
-/// A complete importable config profile — a set of capability-scoped sections
+/// A complete importable config profile, a set of capability-scoped sections
 /// (#456). A device applies the sections it supports; the apply *mechanism* is
 /// per-device, the section *schema* is per-capability and shared. Future
 /// sections (`radio`, `repeater`, `companion`, `display`) slot in alongside.
@@ -153,10 +153,10 @@ class ConfigProfile {
   /// Optional human label (not applied to the device).
   final String? name;
 
-  /// `wifi` section — any wifi-capable device.
+  /// `wifi` section, any wifi-capable device.
   final WifiConfig? wifi;
 
-  /// `mqtt` section — observer/MQTT capability.
+  /// `mqtt` section, observer/MQTT capability.
   final MqttSection? mqtt;
 }
 

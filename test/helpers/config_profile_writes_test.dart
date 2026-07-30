@@ -49,7 +49,7 @@ void main() {
       expect(b.fields[ConfigKeys.brokerUrl], 'h');
     });
 
-    test('broker enabled is never emitted (#456 — not a profile field)', () {
+    test('broker enabled is never emitted (#456, not a profile field)', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
           schemaVersion: 2,

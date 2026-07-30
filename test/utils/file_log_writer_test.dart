@@ -1,4 +1,4 @@
-// Rotating file-log writer (#97). Exercised against a real temp directory —
+// Rotating file-log writer (#97). Exercised against a real temp directory,
 // dart:io File works in flutter_test on desktop, so the rotation behaviour is
 // integration-tested, not mocked.
 

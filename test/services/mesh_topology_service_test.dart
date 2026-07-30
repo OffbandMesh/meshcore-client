@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/services/mesh_topology_service.dart';
 
-/// #186 Phase B — the passive-topology route oracle.
+/// #186 Phase B, the passive-topology route oracle.
 /// Path orientation used throughout: a received path is `origin → h1 → … → hk → us`,
 /// so `hk` (the path's LAST hop) is our direct neighbour.
 void main() {
@@ -10,7 +10,7 @@ void main() {
   const r1 = [0x11, 0x11];
   const r2 = [0x22, 0x22];
   const r3 = [0x33, 0x33];
-  const t = [0xCC, 0xCC]; // target — only ever seen relaying
+  const t = [0xCC, 0xCC]; // target, only ever seen relaying
   const u = [0x99, 0x99]; // never observed
 
   List<int> path(List<List<int>> hops) => hops.expand((h) => h).toList();
@@ -23,7 +23,7 @@ void main() {
     return s;
   }
 
-  group('observePath — orientation + graph growth', () {
+  group('observePath, orientation + graph growth', () {
     test('last hop is our neighbour (SNR); mids are relays (no SNR)', () {
       final s = svc();
       // packet: origin → R2 → T → R1 → us   (R1 = neighbour, T relayed)
@@ -36,7 +36,7 @@ void main() {
       expect(s.nodeCount, 4); // self, R2, T, R1
       expect(s.edgeCount, 3); // R2~T, T~R1, self~R1
       expect(s.neighbourSnrOf(r1), 6.5); // last hop = measured neighbour
-      expect(s.neighbourSnrOf(t), isNull); // relayed — no measurable SNR
+      expect(s.neighbourSnrOf(t), isNull); // relayed, no measurable SNR
       expect(s.neighbourSnrOf(r2), isNull);
     });
 
@@ -60,7 +60,7 @@ void main() {
 
     test('KEY: routes to a node only ever heard RELAYING', () {
       final s = svc();
-      // T never arrives as a last hop — only mid-path — yet we can reach it.
+      // T never arrives as a last hop, only mid-path, yet we can reach it.
       s.observePath(path([r2, t, r1]), width: 2); // origin→R2→T→R1→us
       expect(s.neighbourSnrOf(t), isNull); // proof T was never our neighbour
       // us → R1 → T

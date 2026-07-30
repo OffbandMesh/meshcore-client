@@ -20,7 +20,7 @@ class ConfigProfileFormatException implements Exception {
 /// skip. Only keys present in the document appear in the model; everything else
 /// stays null so the apply engines touch only what the profile sets.
 ///
-/// Expected shape (v2 — capability sections, #456):
+/// Expected shape (v2, capability sections, #456):
 /// ```yaml
 /// schema_version: 2
 /// name: "US wide-area"        # optional label, not applied
