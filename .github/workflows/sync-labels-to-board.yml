@@ -13,31 +13,82 @@ on:
     types: [labeled, unlabeled, closed]
 
 jobs:
-  # -- Auto-label closed issues board:done (mutual-exclusion cleanup) --
+  # -- Closed issue -> board:done, strip any stale board:* label, set Status --
+  #
+  # The `sync` job below only runs on labeled/unlabeled, and a label added with
+  # the default GITHUB_TOKEN does not cascade to trigger it. So the close path
+  # must be self-contained: enforce board:* mutual exclusivity AND set the
+  # project Status field itself, using PROJECT_PAT (which can write the org
+  # project). Fixes #447 (closed cards left in their old column).
   auto-label-closed:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     if: github.event.action == 'closed'
     steps:
-      - name: Auto-label closed issues
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          labels=$(gh issue view ${{ github.event.issue.number }} --json labels -q '.labels[].name')
-          if ! echo "$labels" | grep -q "board:done"; then
-            gh issue edit ${{ github.event.issue.number }} --add-label "board:done"
-          else
-            stale=$(echo "$labels" | grep '^board:' | grep -v '^board:done$' || true)
-            if [ -n "$stale" ]; then
-              for lbl in $stale; do
-                gh issue edit ${{ github.event.issue.number }} --remove-label "$lbl"
-              done
-              gh issue edit ${{ github.event.issue.number }} --remove-label "board:done"
-              gh issue edit ${{ github.event.issue.number }} --add-label "board:done"
-            fi
-          fi
+      - name: Mark closed issue Done (strip stale board:*, set Status)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            const PROJECT_ID = 'PVT_kwDOEXsS3c4BaleY';
+            const STATUS_FIELD_ID = 'PVTSSF_lADOEXsS3c4BaleYzhVcBOA';
+            const DONE_OPTION_ID = '72944195'; // board:done
+
+            const issueNumber = context.payload.issue.number;
+            const issueNodeId = context.payload.issue.node_id;
+            const labels = context.payload.issue.labels.map(l => l.name);
+
+            // 1. Strip any board:* label that is not board:done (mutual exclusion).
+            const stale = labels.filter(l => l.startsWith('board:') && l !== 'board:done');
+            for (const lbl of stale) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  name: lbl,
+                });
+                core.info(`Removed stale label: ${lbl}`);
+              } catch (e) {
+                core.warning(`Could not remove "${lbl}": ${e.message}`);
+              }
+            }
+
+            // 2. Ensure board:done is present.
+            if (!labels.includes('board:done')) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ['board:done'],
+              });
+              core.info('Added board:done');
+            }
+
+            // 3. Set the project Status field to Done directly (do not rely on a
+            //    label-add cascade the GITHUB_TOKEN path cannot trigger).
+            const addResult = await github.graphql(`
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                  item { id }
+                }
+              }`, { projectId: PROJECT_ID, contentId: issueNodeId });
+            const itemId = addResult.addProjectV2ItemById.item.id;
+
+            await github.graphql(`
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId
+                  itemId: $itemId
+                  fieldId: $fieldId
+                  value: { singleSelectOptionId: $optionId }
+                }) { projectV2Item { id } }
+              }`, {
+                projectId: PROJECT_ID,
+                itemId: itemId,
+                fieldId: STATUS_FIELD_ID,
+                optionId: DONE_OPTION_ID,
+              });
+            core.info(`#${issueNumber} Status -> Done`);
 
   # -- Sync board/priority labels to project fields --
   sync:
