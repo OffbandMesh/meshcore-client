@@ -8055,6 +8055,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.'**
   String get storageUnavailableBody;
+
+  /// Title of the persistent banner warning that Android battery optimization may drop the background radio connection (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimization is on'**
+  String get batteryOptimizationTitle;
+
+  /// Body of the battery-optimization warning banner (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Android may sleep the app when the screen is off and drop the radio connection. Set this app\'s battery usage to Unrestricted for a reliable background connection.'**
+  String get batteryOptimizationBody;
+
+  /// Button that opens the Android battery-optimization settings screen (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Open battery settings'**
+  String get batteryOptimizationOpenSettings;
+
+  /// Tooltip for the button that hides the battery-optimization banner for this session (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get batteryOptimizationDismiss;
 }
 
 class _AppLocalizationsDelegate
