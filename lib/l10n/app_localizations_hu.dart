@@ -4735,4 +4735,17 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get storageUnavailableBody =>
       'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.';
+
+  @override
+  String get batteryOptimizationTitle => 'Battery optimization is on';
+
+  @override
+  String get batteryOptimizationBody =>
+      'Android may sleep the app when the screen is off and drop the radio connection. Set this app\'s battery usage to Unrestricted for a reliable background connection.';
+
+  @override
+  String get batteryOptimizationOpenSettings => 'Open battery settings';
+
+  @override
+  String get batteryOptimizationDismiss => 'Dismiss';
 }
