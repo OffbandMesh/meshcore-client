@@ -79,11 +79,13 @@ class ConfigSourceService {
   Future<String> _get(String url) async {
     final http.Response resp;
     try {
-      // Cache-bust: config fetches must never serve a stale catalog/profile
-      // (raw.githubusercontent sits behind a CDN with a multi-minute TTL, so a
-      // re-import right after a catalog edit could otherwise return the old
-      // file). A unique query param guarantees a cache miss; the no-cache
-      // headers are belt-and-braces.
+      // Cache-bust for federated catalogs on normal servers/CDNs: a unique
+      // query param + no-cache headers get them to serve fresh content.
+      // KNOWN LIMITATION (#452): raw.githubusercontent — the DEFAULT catalog
+      // host — ignores BOTH (verified: X-Cache HIT on a unique-query request)
+      // and serves its cached copy for up to max-age=300 (~5 min). So the
+      // default catalog can lag up to 5 min after an edit; this does not defeat
+      // that. Kept because region-hosted catalogs elsewhere do honor it.
       final base = Uri.parse(url);
       final busted = base.replace(
         queryParameters: {
