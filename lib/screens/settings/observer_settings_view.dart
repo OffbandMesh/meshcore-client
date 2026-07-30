@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../connector/meshcore_connector.dart';
 import '../../models/observer_config.dart';
 import '../../services/observer_config_service.dart';
+import 'config_profile_import_screen.dart';
 import 'mqtt_brokers_screen.dart';
 
 /// Observer settings pane: WiFi / MQTT (region) / display flat settings with
@@ -295,6 +296,21 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
               MaterialPageRoute(builder: (_) => const MqttBrokersScreen()),
             ),
           ),
+        const Divider(height: 32),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.download_outlined),
+          title: const Text('Import config profile'),
+          subtitle: const Text(
+            'Apply region / WiFi / brokers from a catalog or URL',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ConfigProfileImportScreen(service: svc),
+            ),
+          ),
+        ),
       ],
     );
   }
