@@ -114,7 +114,6 @@ List<BrokerConfig> _parseBrokers(dynamic node) {
     final map = _asMap(node[i], ctx);
     _rejectUnknownKeys(map, const {
       'slot',
-      'enabled',
       'url',
       'port',
       'transport',
@@ -151,7 +150,6 @@ List<BrokerConfig> _parseBrokers(dynamic node) {
     brokers.add(
       BrokerConfig(
         slot: slot,
-        enabled: _optBool(map, 'enabled', ctx),
         url: _optString(map, 'url', ctx),
         port: port,
         transport: _optEnum(

@@ -17,7 +17,6 @@ mqtt:
   status_interval: 60
   brokers:
     - slot: 0
-      enabled: true
       url: mqtt.example.org
       port: 8883
       transport: tls
@@ -26,7 +25,6 @@ mqtt:
       password: p
       topic_prefix: meshcore
     - slot: 2
-      enabled: false
       transport: wss
       auth_type: jwt
       jwt_refresh: 3600
@@ -46,7 +44,6 @@ mqtt:
       expect(b0.authType, MqttAuthType.basic);
 
       final b2 = p.mqtt!.brokers.firstWhere((b) => b.slot == 2);
-      expect(b2.enabled, false);
       expect(b2.transport, MqttTransport.wss);
       expect(b2.authType, MqttAuthType.jwt);
       expect(b2.jwtRefresh, 3600);
@@ -114,6 +111,15 @@ mqtt:
       expect(
         () => parseConfigProfile(
           'schema_version: 2\nmqtt:\n  brokers:\n    - slot: 0\n      nope: 1\n',
+        ),
+        throwsA(isA<ConfigProfileFormatException>()),
+      );
+    });
+
+    test('rejects broker "enabled" (#456 — not a profile field)', () {
+      expect(
+        () => parseConfigProfile(
+          'schema_version: 2\nmqtt:\n  brokers:\n    - slot: 0\n      enabled: true\n',
         ),
         throwsA(isA<ConfigProfileFormatException>()),
       );

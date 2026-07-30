@@ -49,18 +49,16 @@ void main() {
       expect(b.fields[ConfigKeys.brokerUrl], 'h');
     });
 
-    test('enabled kept out of fields (executor writes it last)', () {
+    test('broker enabled is never emitted (#456 — not a profile field)', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
           schemaVersion: 2,
-          mqtt: MqttSection(
-            brokers: [BrokerConfig(slot: 1, url: 'h', enabled: true)],
-          ),
+          mqtt: MqttSection(brokers: [BrokerConfig(slot: 1, url: 'h')]),
         ),
       );
       final b = w.brokers.single;
       expect(b.fields.containsKey(ConfigKeys.brokerEnabled), isFalse);
-      expect(b.enabled, true);
+      expect(b.fields[ConfigKeys.brokerUrl], 'h');
     });
 
     test('formats enums as wire strings and ints as text', () {
@@ -135,20 +133,14 @@ void main() {
   });
 
   group('splitProfileWrites', () {
-    test('splits a mixed broker; enabled rides with safe half only', () {
+    test('splits a mixed broker into safe + danger halves', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
           schemaVersion: 2,
           wifi: WifiConfig(ssid: 'net', password: 'pw', enabled: true),
           mqtt: MqttSection(
             brokers: [
-              BrokerConfig(
-                slot: 0,
-                url: 'h',
-                username: 'u',
-                password: 'p',
-                enabled: true,
-              ),
+              BrokerConfig(slot: 0, url: 'h', username: 'u', password: 'p'),
             ],
           ),
         ),
@@ -160,7 +152,6 @@ void main() {
       expect(safeFlatKeys, contains(ConfigKeys.wifiEnabled));
       expect(safeFlatKeys.contains(ConfigKeys.wifiPassword), isFalse);
       expect(s.safe.brokers.single.fields.keys, contains(ConfigKeys.brokerUrl));
-      expect(s.safe.brokers.single.enabled, true);
 
       final dangerFlatKeys = s.danger.flats.map((f) => f.key).toSet();
       expect(dangerFlatKeys, {ConfigKeys.wifiPassword});
@@ -169,7 +160,6 @@ void main() {
         ConfigKeys.brokerUsername,
         ConfigKeys.brokerPassword,
       });
-      expect(db.enabled, isNull);
     });
   });
 }
