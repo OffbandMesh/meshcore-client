@@ -1,0 +1,3 @@
+Offband Meshcore 1.3.0
+
+Our biggest update since the redesign. Reactions now show who reacted and work with PocketMesh and MeshCore One. Import and apply Observer config profiles with a preview diff. Share your app and BLE logs, and capture a device boot log. The Path screen shows per-message SNR and RSSI. Settings are reorganized, sending a max-length message no longer wedges, and desktop builds run on a clean machine. Desktop history split across older files is reunited automatically.
