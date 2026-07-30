@@ -48,9 +48,7 @@ enum RoomLoginDestination { chat, management }
 enum ContactOperationType { import, export, zeroHopShare }
 
 class ContactsScreen extends StatefulWidget {
-  final bool hideBackButton;
-
-  const ContactsScreen({super.key, this.hideBackButton = false});
+  const ContactsScreen({super.key});
 
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -329,7 +327,11 @@ class _ContactsScreenState extends State<ContactsScreen>
         context,
         MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
-      appBar: AppBar(
+      appBarBuilder: (context, pinned) => AppBar(
+        // Top-level tab: no auto back-arrow. Hamburger when the panel is not
+        // pinned; nothing when it is (panel is docked), so no dead arrow (#390).
+        automaticallyImplyLeading: false,
+        leading: pinned ? null : AppShell.drawerMenuButton(),
         title: AppBarTitle(context.l10n.contacts_title),
         bottom: const SyncProgressAppBarBottom(),
         actions: [
@@ -949,13 +951,13 @@ class _ContactsScreenState extends State<ContactsScreen>
       case 1:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ChannelsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ChannelsScreen()),
         );
         break;
       case 2:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const MapScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const MapScreen()),
         );
         break;
     }

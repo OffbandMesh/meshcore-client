@@ -35,9 +35,7 @@ import 'map_screen.dart';
 import 'settings_screen.dart';
 
 class ChannelsScreen extends StatefulWidget {
-  final bool hideBackButton;
-
-  const ChannelsScreen({super.key, this.hideBackButton = false});
+  const ChannelsScreen({super.key});
 
   @override
   State<ChannelsScreen> createState() => _ChannelsScreenState();
@@ -110,7 +108,11 @@ class _ChannelsScreenState extends State<ChannelsScreen>
         context,
         MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
-      appBar: AppBar(
+      appBarBuilder: (context, pinned) => AppBar(
+        // Top-level tab: no auto back-arrow. Hamburger when the panel is not
+        // pinned; nothing when it is (panel is docked), so no dead arrow (#390).
+        automaticallyImplyLeading: false,
+        leading: pinned ? null : AppShell.drawerMenuButton(),
         title: AppBarTitle(context.l10n.channels_title),
         centerTitle: true,
         bottom: const SyncProgressAppBarBottom(),
@@ -570,13 +572,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       case 0:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ContactsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ContactsScreen()),
         );
         break;
       case 2:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const MapScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const MapScreen()),
         );
         break;
     }

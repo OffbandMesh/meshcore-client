@@ -89,6 +89,20 @@ class AppShell extends StatefulWidget {
     return AppShellBackAction.background;
   }
 
+  /// Hamburger for a top-level tab's app-bar leading, used when the nav panel
+  /// is NOT pinned (transient drawer). Top-level tabs must set
+  /// `automaticallyImplyLeading: false` and use this instead, so the pinned
+  /// desktop layout shows no leading at all rather than a dead back-arrow that
+  /// only backgrounds (a no-op on desktop): the #390 eyesore. A [Builder] so
+  /// `openDrawer` resolves a context beneath the Scaffold.
+  static Widget drawerMenuButton() => Builder(
+    builder: (context) => IconButton(
+      icon: const Icon(Icons.menu),
+      tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
+      onPressed: () => Scaffold.of(context).openDrawer(),
+    ),
+  );
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
