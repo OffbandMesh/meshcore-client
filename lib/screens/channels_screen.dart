@@ -157,10 +157,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
             }
 
             if (channels.isEmpty) {
-              return ListView(
-                children: [
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height - 200,
+              return LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: EmptyState(
                       icon: Icons.tag,
                       title: context.l10n.channels_noChannelsConfigured,
@@ -171,7 +174,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                       ),
                     ),
                   ),
-                ],
+                ),
               );
             }
 
@@ -232,32 +235,37 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 ),
                 Expanded(
                   child: filteredChannels.isEmpty
-                      ? ListView(
-                          children: [
-                            SizedBox(
-                              height: MediaQuery.of(context).size.height - 300,
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.search_off,
-                                      size: 64,
-                                      color: Colors.grey[400],
+                      ? LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minHeight: constraints.maxHeight,
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off,
+                                          size: 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          context.l10n.channels_noChannelsFound,
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      context.l10n.channels_noChannelsFound,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
                         )
                       : (viewState.channelsSortOption ==
                                 ChannelSortOption.manual &&
