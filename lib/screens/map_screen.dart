@@ -42,7 +42,6 @@ class MapScreen extends StatefulWidget {
   final String? highlightLabel;
   final String? highlightMarkerKey;
   final double highlightZoom;
-  final bool hideBackButton;
 
   const MapScreen({
     super.key,
@@ -50,7 +49,6 @@ class MapScreen extends StatefulWidget {
     this.highlightLabel,
     this.highlightMarkerKey,
     this.highlightZoom = 15.0,
-    this.hideBackButton = false,
   });
 
   @override
@@ -421,7 +419,12 @@ class _MapScreenState extends State<MapScreen> {
             context,
             MaterialPageRoute(builder: (context) => const SettingsScreen()),
           ),
-          appBar: AppBar(
+          appBarBuilder: (context, pinned) => AppBar(
+            // Top-level tab: no auto back-arrow. Hamburger when the panel is
+            // not pinned; nothing when pinned (panel docked), so no dead
+            // arrow (#390).
+            automaticallyImplyLeading: false,
+            leading: pinned ? null : AppShell.drawerMenuButton(),
             title: AppBarTitle(context.l10n.map_title),
             centerTitle: true,
             bottom: const SyncProgressAppBarBottom(),
@@ -1636,13 +1639,13 @@ class _MapScreenState extends State<MapScreen> {
       case 0:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ContactsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ContactsScreen()),
         );
         break;
       case 1:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ChannelsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ChannelsScreen()),
         );
         break;
     }

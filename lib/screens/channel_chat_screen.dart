@@ -309,9 +309,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     navigator.pop();
     navigator.pushReplacement(
       buildQuickSwitchRoute(
-        index == 0
-            ? const ContactsScreen(hideBackButton: true)
-            : const MapScreen(hideBackButton: true),
+        index == 0 ? const ContactsScreen() : const MapScreen(),
       ),
     );
   }

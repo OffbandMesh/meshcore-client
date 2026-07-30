@@ -1362,13 +1362,13 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
       case 0:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ContactsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ContactsScreen()),
         );
         break;
       case 1:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ChannelsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ChannelsScreen()),
         );
         break;
     }
