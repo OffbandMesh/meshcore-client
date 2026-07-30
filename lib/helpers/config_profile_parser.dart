@@ -20,22 +20,23 @@ class ConfigProfileFormatException implements Exception {
 /// skip. Only keys present in the document appear in the model; everything else
 /// stays null so the apply engines touch only what the profile sets.
 ///
-/// Expected shape:
+/// Expected shape (v2 — capability sections, #456):
 /// ```yaml
-/// schema_version: 1
-/// name: "US wide-area"      # optional label, not applied
+/// schema_version: 2
+/// name: "US wide-area"        # optional label, not applied
 /// wifi: { ssid: "...", password: "...", enabled: true }
-/// region: "IAD"             # -> mqtt.iata
-/// status_interval: 60
-/// brokers:
-///   - slot: 0
-///     enabled: true
-///     url: "..."
-///     port: 8883
-///     transport: tls        # tcp | tls | wss
-///     auth_type: basic      # none | basic | jwt
-///     username: "..."
-///     ...
+/// mqtt:
+///   region: "IAD"             # -> mqtt.iata
+///   status_interval: 60
+///   brokers:
+///     - slot: 0
+///       enabled: true
+///       url: "..."
+///       port: 8883
+///       transport: tls        # tcp | tls | wss
+///       auth_type: basic      # none | basic | jwt
+///       username: "..."
+///       ...
 /// ```
 ConfigProfile parseConfigProfile(String source) {
   final dynamic doc;
@@ -55,22 +56,36 @@ ConfigProfile parseConfigProfile(String source) {
       '($kConfigProfileSchemaVersion). Update the app.',
     );
   }
+  if (version < 2) {
+    throw ConfigProfileFormatException(
+      'Profile schema_version $version uses the old flat layout. Re-export it '
+      'in the sectioned v2 format (wifi:/mqtt:).',
+    );
+  }
 
   _rejectUnknownKeys(map, const {
     'schema_version',
     'name',
     'wifi',
-    'region',
-    'status_interval',
-    'brokers',
+    'mqtt',
   }, root);
 
   return ConfigProfile(
     schemaVersion: version,
     name: _optString(map, 'name', root),
     wifi: _parseWifi(map['wifi']),
-    regionIata: _optString(map, 'region', root),
-    statusInterval: _optUint(map, 'status_interval', root),
+    mqtt: _parseMqtt(map['mqtt']),
+  );
+}
+
+MqttSection? _parseMqtt(dynamic node) {
+  if (node == null) return null;
+  const ctx = 'mqtt';
+  final map = _asMap(node, ctx);
+  _rejectUnknownKeys(map, const {'region', 'status_interval', 'brokers'}, ctx);
+  return MqttSection(
+    regionIata: _optString(map, 'region', ctx),
+    statusInterval: _optUint(map, 'status_interval', ctx),
     brokers: _parseBrokers(map['brokers']),
   );
 }

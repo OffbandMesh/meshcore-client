@@ -7,16 +7,14 @@ void main() {
     test('emits only set keys; wifi.enabled ordered last', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
+          schemaVersion: 2,
           wifi: WifiConfig(ssid: 'net', password: 'pw', enabled: true),
-          regionIata: 'IAD',
-          statusInterval: 60,
+          mqtt: MqttSection(regionIata: 'IAD', statusInterval: 60),
         ),
       );
       final keys = w.flats.map((f) => f.key).toList();
       expect(keys, contains(ConfigKeys.wifiSsid));
       expect(keys, contains(ConfigKeys.mqttIata));
-      // wifi.enabled must come after wifi.ssid/pwd
       expect(
         keys.indexOf(ConfigKeys.wifiEnabled),
         greaterThan(keys.indexOf(ConfigKeys.wifiSsid)),
@@ -30,9 +28,8 @@ void main() {
     test('skips null and empty values (never clobbers)', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
+          schemaVersion: 2,
           wifi: WifiConfig(ssid: '', password: null, enabled: null),
-          regionIata: null,
         ),
       );
       expect(w.isEmpty, isTrue);
@@ -41,8 +38,10 @@ void main() {
     test('skips jwt_token even when present', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
-          brokers: [BrokerConfig(slot: 0, jwtToken: 'minted', url: 'h')],
+          schemaVersion: 2,
+          mqtt: MqttSection(
+            brokers: [BrokerConfig(slot: 0, jwtToken: 'minted', url: 'h')],
+          ),
         ),
       );
       final b = w.brokers.single;
@@ -53,8 +52,10 @@ void main() {
     test('enabled kept out of fields (executor writes it last)', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
-          brokers: [BrokerConfig(slot: 1, url: 'h', enabled: true)],
+          schemaVersion: 2,
+          mqtt: MqttSection(
+            brokers: [BrokerConfig(slot: 1, url: 'h', enabled: true)],
+          ),
         ),
       );
       final b = w.brokers.single;
@@ -65,16 +66,18 @@ void main() {
     test('formats enums as wire strings and ints as text', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
-          brokers: [
-            BrokerConfig(
-              slot: 0,
-              port: 8883,
-              transport: MqttTransport.tls,
-              authType: MqttAuthType.jwt,
-              jwtRefresh: 3600,
-            ),
-          ],
+          schemaVersion: 2,
+          mqtt: MqttSection(
+            brokers: [
+              BrokerConfig(
+                slot: 0,
+                port: 8883,
+                transport: MqttTransport.tls,
+                authType: MqttAuthType.jwt,
+                jwtRefresh: 3600,
+              ),
+            ],
+          ),
         ),
       );
       final f = w.brokers.single.fields;
@@ -87,19 +90,21 @@ void main() {
     test('flags danger fields (creds/identity), not plain config', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
+          schemaVersion: 2,
           wifi: WifiConfig(password: 'pw'),
-          brokers: [
-            BrokerConfig(
-              slot: 0,
-              url: 'h',
-              username: 'u',
-              password: 'p',
-              jwtOwner: 'deadbeef',
-              jwtEmail: 'a@b.c',
-              jwtAudience: 'https://host',
-            ),
-          ],
+          mqtt: MqttSection(
+            brokers: [
+              BrokerConfig(
+                slot: 0,
+                url: 'h',
+                username: 'u',
+                password: 'p',
+                jwtOwner: 'deadbeef',
+                jwtEmail: 'a@b.c',
+                jwtAudience: 'https://host',
+              ),
+            ],
+          ),
         ),
       );
       expect(w.hasDanger, isTrue);
@@ -110,10 +115,8 @@ void main() {
         ConfigKeys.brokerJwtOwner,
         ConfigKeys.brokerJwtEmail,
       });
-      // audience + url are not danger
       expect(b.dangerFields.contains(ConfigKeys.brokerJwtAudience), isFalse);
       expect(b.dangerFields.contains(ConfigKeys.brokerUrl), isFalse);
-      // wifi.pwd is a danger flat
       expect(
         w.flats.firstWhere((f) => f.key == ConfigKeys.wifiPassword).danger,
         isTrue,
@@ -122,7 +125,10 @@ void main() {
 
     test('a broker with nothing set is dropped', () {
       final w = enumerateProfileWrites(
-        const ConfigProfile(schemaVersion: 1, brokers: [BrokerConfig(slot: 3)]),
+        const ConfigProfile(
+          schemaVersion: 2,
+          mqtt: MqttSection(brokers: [BrokerConfig(slot: 3)]),
+        ),
       );
       expect(w.brokers, isEmpty);
     });
@@ -132,22 +138,23 @@ void main() {
     test('splits a mixed broker; enabled rides with safe half only', () {
       final w = enumerateProfileWrites(
         const ConfigProfile(
-          schemaVersion: 1,
+          schemaVersion: 2,
           wifi: WifiConfig(ssid: 'net', password: 'pw', enabled: true),
-          brokers: [
-            BrokerConfig(
-              slot: 0,
-              url: 'h',
-              username: 'u',
-              password: 'p',
-              enabled: true,
-            ),
-          ],
+          mqtt: MqttSection(
+            brokers: [
+              BrokerConfig(
+                slot: 0,
+                url: 'h',
+                username: 'u',
+                password: 'p',
+                enabled: true,
+              ),
+            ],
+          ),
         ),
       );
       final s = splitProfileWrites(w);
 
-      // safe: wifi.ssid + wifi.enabled flats; broker url + enabled
       final safeFlatKeys = s.safe.flats.map((f) => f.key).toSet();
       expect(safeFlatKeys, contains(ConfigKeys.wifiSsid));
       expect(safeFlatKeys, contains(ConfigKeys.wifiEnabled));
@@ -155,7 +162,6 @@ void main() {
       expect(s.safe.brokers.single.fields.keys, contains(ConfigKeys.brokerUrl));
       expect(s.safe.brokers.single.enabled, true);
 
-      // danger: wifi.pwd flat; broker username + password, enabled NOT toggled
       final dangerFlatKeys = s.danger.flats.map((f) => f.key).toSet();
       expect(dangerFlatKeys, {ConfigKeys.wifiPassword});
       final db = s.danger.brokers.single;

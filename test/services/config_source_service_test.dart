@@ -50,12 +50,15 @@ void main() {
     test('fetchProfile parses a served YAML', () async {
       final svc = ConfigSourceService(
         client: MockClient((req) async {
-          return http.Response('schema_version: 1\nregion: IAD\n', 200);
+          return http.Response(
+            'schema_version: 2\nmqtt:\n  region: IAD\n',
+            200,
+          );
         }),
       );
       final p = await svc.fetchProfile('https://h/p.yaml');
       expect(p, isA<ConfigProfile>());
-      expect(p.regionIata, 'IAD');
+      expect(p.mqtt?.regionIata, 'IAD');
     });
 
     test('fetchCatalog parses a served manifest', () async {
