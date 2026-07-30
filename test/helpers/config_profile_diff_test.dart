@@ -10,9 +10,8 @@ void main() {
     test('categorizes add vs change and drops unchanged', () {
       final w = _writes(
         const ConfigProfile(
-          schemaVersion: 1,
-          regionIata: 'IAD',
-          statusInterval: 60,
+          schemaVersion: 2,
+          mqtt: MqttSection(regionIata: 'IAD', statusInterval: 60),
         ),
       );
       final d = buildProfileDiff(
@@ -32,7 +31,10 @@ void main() {
 
     test('add when device has no current value', () {
       final w = _writes(
-        const ConfigProfile(schemaVersion: 1, regionIata: 'IAD'),
+        const ConfigProfile(
+          schemaVersion: 2,
+          mqtt: MqttSection(regionIata: 'IAD'),
+        ),
       );
       final d = buildProfileDiff(
         w,
@@ -46,11 +48,13 @@ void main() {
     test('flags danger + secret rows', () {
       final w = _writes(
         const ConfigProfile(
-          schemaVersion: 1,
+          schemaVersion: 2,
           wifi: WifiConfig(password: 'pw'),
-          brokers: [
-            BrokerConfig(slot: 0, username: 'u', password: 'p', url: 'h'),
-          ],
+          mqtt: MqttSection(
+            brokers: [
+              BrokerConfig(slot: 0, username: 'u', password: 'p', url: 'h'),
+            ],
+          ),
         ),
       );
       final d = buildProfileDiff(
@@ -76,8 +80,10 @@ void main() {
     test('broker enabled change is a plain (non-danger) row', () {
       final w = _writes(
         const ConfigProfile(
-          schemaVersion: 1,
-          brokers: [BrokerConfig(slot: 2, enabled: true, url: 'h')],
+          schemaVersion: 2,
+          mqtt: MqttSection(
+            brokers: [BrokerConfig(slot: 2, enabled: true, url: 'h')],
+          ),
         ),
       );
       final d = buildProfileDiff(

@@ -15,7 +15,8 @@ library;
 
 /// Bumped when the on-disk/YAML shape changes incompatibly. The parser (#403)
 /// rejects a profile whose declared version it does not understand.
-const int kConfigProfileSchemaVersion = 1;
+/// v2 (#456): capability sections (`wifi`, `mqtt`, …). v1 was the flat layout.
+const int kConfigProfileSchemaVersion = 2;
 
 /// Number of broker slots the firmware exposes (`mqtt_b0`..`mqtt_b5`).
 const int kMaxBrokerSlots = 6;
@@ -109,31 +110,51 @@ class BrokerConfig {
   final String? iataOverride;
 }
 
-/// A complete importable config profile.
-class ConfigProfile {
-  const ConfigProfile({
-    required this.schemaVersion,
-    this.wifi,
+/// The `mqtt` section — observer/MQTT capability. Shared by any device running
+/// the observer role (observer, observer-repeater, observer-companion); never a
+/// plain companion or plain repeater (#456).
+class MqttSection {
+  const MqttSection({
     this.regionIata,
     this.statusInterval,
     this.brokers = const [],
-    this.name,
   });
 
-  final int schemaVersion;
-  final WifiConfig? wifi;
-
-  /// `mqtt.iata`, the region/IATA code applied globally.
+  /// `mqtt.iata`, the region/IATA code.
   final String? regionIata;
 
   /// `mqtt.status_interval`, seconds between status publishes.
   final int? statusInterval;
 
-  /// Populated broker slots only (may be sparse; each carries its [BrokerConfig.slot]).
+  /// Populated broker slots only (sparse; each carries its [BrokerConfig.slot]).
   final List<BrokerConfig> brokers;
 
-  /// Optional human label for the profile (not applied to the device).
+  bool get isEmpty =>
+      regionIata == null && statusInterval == null && brokers.isEmpty;
+}
+
+/// A complete importable config profile — a set of capability-scoped sections
+/// (#456). A device applies the sections it supports; the apply *mechanism* is
+/// per-device, the section *schema* is per-capability and shared. Future
+/// sections (`radio`, `repeater`, `companion`, `display`) slot in alongside.
+class ConfigProfile {
+  const ConfigProfile({
+    required this.schemaVersion,
+    this.name,
+    this.wifi,
+    this.mqtt,
+  });
+
+  final int schemaVersion;
+
+  /// Optional human label (not applied to the device).
   final String? name;
+
+  /// `wifi` section — any wifi-capable device.
+  final WifiConfig? wifi;
+
+  /// `mqtt` section — observer/MQTT capability.
+  final MqttSection? mqtt;
 }
 
 /// Firmware config-key names. Callers (parser #403, apply engines) build keys

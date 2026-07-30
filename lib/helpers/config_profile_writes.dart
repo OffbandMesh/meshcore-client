@@ -133,15 +133,18 @@ ProfileWrites enumerateProfileWrites(ConfigProfile p) {
     }
   }
 
-  if (!_blank(p.regionIata)) {
-    flats.add(FlatWrite(ConfigKeys.mqttIata, p.regionIata!));
+  final mqtt = p.mqtt;
+  if (mqtt != null && !_blank(mqtt.regionIata)) {
+    flats.add(FlatWrite(ConfigKeys.mqttIata, mqtt.regionIata!));
   }
-  if (p.statusInterval != null) {
-    flats.add(FlatWrite(ConfigKeys.mqttStatusInterval, '${p.statusInterval}'));
+  if (mqtt != null && mqtt.statusInterval != null) {
+    flats.add(
+      FlatWrite(ConfigKeys.mqttStatusInterval, '${mqtt.statusInterval}'),
+    );
   }
 
   final brokers = <BrokerWrites>[];
-  for (final b in p.brokers) {
+  for (final b in (mqtt?.brokers ?? const <BrokerConfig>[])) {
     final fields = <String, String>{};
     void put(String key, String? value) {
       if (!_blank(value)) fields[key] = value!;
