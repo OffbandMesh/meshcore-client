@@ -72,4 +72,25 @@ void main() {
     test('0 hops is flood, not direct', () => expect(isFlood(0), isTrue));
     test('3 hops is flood', () => expect(isFlood(3), isTrue));
   });
+
+  group('RSSI reserved2 gate (#439)', () {
+    // Firmware writes reserved2 (byte[3]) = clamped int8 RX RSSI, or 0 when
+    // unset (older firmware / no-RX text). RSSI is always negative for a real
+    // RX, so 0 unambiguously means "no data" -> null. (MyMesh.cpp:550-551)
+    int? rssiFromByte(int b) {
+      final v = b.toSigned(8);
+      return v != 0 ? v : null;
+    }
+
+    test('0 means no data -> null (older firmware / no RX)', () {
+      expect(rssiFromByte(0), isNull);
+    });
+    test('typical negative dBm is decoded signed', () {
+      expect(rssiFromByte(0xAB), -85); // 0xAB as int8 = -85 dBm
+      expect(rssiFromByte(-40), -40);
+    });
+    test('int8 floor (-128) shows, per firmware clamp', () {
+      expect(rssiFromByte(-128), -128);
+    });
+  });
 }

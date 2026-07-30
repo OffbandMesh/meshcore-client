@@ -5884,17 +5884,21 @@ class MeshCoreConnector extends ChangeNotifier {
 
       // Companion radio layout:
       // [code][snr][res1][res2][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
-      // Firmware writes snr as (int8)(snr_dB * 4), so dB = byte / 4.0
-      // (MyMesh.cpp:512). res1 bit0 = device-composed outgoing flag (#429);
-      // res2 will carry RSSI once firmware ships it (#439/#456) — not read yet.
+      // snr: (int8)(snr_dB * 4), so dB = byte / 4.0 (MyMesh.cpp:512).
+      // res1 bit0 = device-composed outgoing flag (#429).
+      // res2 = RX RSSI as clamped int8 dBm, or 0 when unset (older firmware or
+      // no-RX text) — gate on != 0 (MyMesh.cpp:550-551, #465). RSSI is always
+      // negative for a real RX, so 0 unambiguously means "no data".
       double? snr;
       bool isOutgoing = false;
+      int? rssi;
       if (code == respCodeContactMsgRecvV3) {
         snr = reader.readInt8() / 4.0;
         // reserved1 bit0 = outgoing flag: set for a message composed on the
         // device itself, so it renders as sent-by-me (#429 part B).
         isOutgoing = (reader.readByte() & 0x01) != 0;
-        reader.skipBytes(1); // reserved2 (RSSI pending — #439/#456)
+        final rssiByte = reader.readInt8(); // reserved2 = RX RSSI (#439/#465)
+        rssi = rssiByte != 0 ? rssiByte : null;
       }
 
       final senderPrefix = reader.readBytes(6);
@@ -5969,6 +5973,7 @@ class MeshCoreConnector extends ChangeNotifier {
         // path-type / rxTime are meaningless — null them like rxTime (#429/#438).
         rxTime: isOutgoing ? null : DateTime.now(),
         snr: isOutgoing ? null : snr,
+        rssi: isOutgoing ? null : rssi,
         isFloodRoute: isOutgoing ? null : isFloodRoute,
       );
     } catch (e) {
