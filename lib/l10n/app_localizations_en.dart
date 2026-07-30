@@ -4648,4 +4648,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get batteryOptimizationDismiss => 'Dismiss';
+
+  @override
+  String get batteryOptimizationOpenFailed => 'Couldn\'t open battery settings';
 }

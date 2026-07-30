@@ -8079,6 +8079,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dismiss'**
   String get batteryOptimizationDismiss;
+
+  /// Snackbar shown when the battery-optimization settings screen could not be opened (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open battery settings'**
+  String get batteryOptimizationOpenFailed;
 }
 
 class _AppLocalizationsDelegate
