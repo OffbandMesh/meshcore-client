@@ -234,7 +234,9 @@ class _ConfigProfilePreviewScreenState
         ],
       ),
     );
-    if (ok == true) await _apply(dangerWrites, 'Credential changes');
+    // Guard the async gap: the screen may have been disposed while the dialog
+    // was open; _apply's setState would then throw (Gemini review).
+    if (ok == true && mounted) await _apply(dangerWrites, 'Credential changes');
   }
 }
 
