@@ -79,7 +79,22 @@ class ConfigSourceService {
   Future<String> _get(String url) async {
     final http.Response resp;
     try {
-      resp = await _client.get(Uri.parse(url));
+      // Cache-bust: config fetches must never serve a stale catalog/profile
+      // (raw.githubusercontent sits behind a CDN with a multi-minute TTL, so a
+      // re-import right after a catalog edit could otherwise return the old
+      // file). A unique query param guarantees a cache miss; the no-cache
+      // headers are belt-and-braces.
+      final base = Uri.parse(url);
+      final busted = base.replace(
+        queryParameters: {
+          ...base.queryParameters,
+          '_': DateTime.now().millisecondsSinceEpoch.toString(),
+        },
+      );
+      resp = await _client.get(
+        busted,
+        headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+      );
     } catch (e) {
       throw ConfigSourceException('Could not reach $url: $e');
     }
