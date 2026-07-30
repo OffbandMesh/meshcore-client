@@ -142,7 +142,7 @@
   "settings_title": "Settings",
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",
-  "settings_appSettingsSubtitle": "Notifications, messaging, and map preferences",
+  "settings_appSettingsSubtitle": "Appearance, translation, and map preferences",
   "settings_messageSettings": "Message Settings",
   "@settings_messageSettings": {
     "description": "Settings category title for notification and message-handling preferences"
@@ -170,13 +170,13 @@
   "settings_gpsStatusTitle": "GPS status",
   "settings_gpsStatusRefresh": "Query GPS",
   "settings_gpsStatusLiveFix": "Live GPS fix",
-  "settings_gpsStatusNoFix": "No fix — using stored/last position",
+  "settings_gpsStatusNoFix": "No fix: using stored/last position",
   "settings_gpsStatusCoords": "Coordinates",
   "settings_gpsStatusSats": "Satellites",
   "settings_gpsStatusAltitude": "Altitude",
   "settings_gpsStatusTime": "Fix time",
   "settings_gpsStatusTapRefresh": "Tap Query GPS to read the current GPS state",
-  "settings_gpsStatusNoResponse": "No response — device may need the GPS-query firmware build",
+  "settings_gpsStatusNoResponse": "No response: device may need the GPS-query firmware build",
   "settings_locationIntervalInvalid": "Interval must be at least 60 seconds, and less than 86400 seconds.",
   "settings_latitude": "Latitude",
   "settings_longitude": "Longitude",
@@ -239,6 +239,9 @@
   "settings_infoOffbandCaps": "Offband capabilities",
   "settings_infoBattery": "Battery",
   "settings_infoPublicKey": "Public Key",
+  "settings_infoBuild": "Build",
+  "settings_infoDataScope": "Data scope",
+  "settings_infoDataScopeSubtitle": "Messages, contacts, and channels are stored per radio under this key",
   "settings_publicKeyCopied": "Public key copied",
   "settings_infoContactsCount": "Contacts Count",
   "settings_infoChannelCount": "Channel Count",
@@ -304,8 +307,8 @@
   "appSettings_messageNotificationsSubtitle": "Show notification when receiving new messages",
   "appSettings_channelMessageNotifications": "Channel Message Notifications",
   "appSettings_channelMessageNotificationsSubtitle": "Show notification when receiving channel messages",
-  "appSettings_advertisementNotifications": "Advertisement Notifications",
-  "appSettings_advertisementNotificationsSubtitle": "Show notification when new nodes are discovered",
+  "appSettings_advertisementNotifications": "New node discovered",
+  "appSettings_advertisementNotificationsSubtitle": "Notify when new repeaters or contacts are heard",
   "appSettings_messaging": "Messaging",
   "appSettings_clearPathOnMaxRetry": "Clear Path on Max Retry",
   "appSettings_clearPathOnMaxRetrySubtitle": "Reset contact path after 5 failed send attempts",
@@ -350,6 +353,8 @@
   "appSettings_batteryNmc": "18650 NMC (3.0-4.2V)",
   "appSettings_batteryLifepo4": "LiFePO4 (2.6-3.65V)",
   "appSettings_batteryLipo": "LiPo (3.0-4.2V)",
+  "appSettings_keepScreenAwake": "Keep screen awake",
+  "appSettings_keepScreenAwakeSubtitle": "Prevent the display from sleeping while the app is open. Uses more battery.",
   "appSettings_mapDisplay": "Map Display",
   "appSettings_showRepeaters": "Show Repeaters",
   "appSettings_showRepeatersSubtitle": "Display repeater nodes on the map",
@@ -624,7 +629,6 @@
       }
     }
   },
-  "channels_smazCompression": "SMAZ compression",
   "channels_cyr2latCompression": "Cyr2Lat compression",
   "channels_cyr2latCompressionDscr": "Replaces some Cyrillic characters with Latin characters when sending.",
   "channels_cyr2latSettingsHeading": "Cyr2Lat Setup",
@@ -751,6 +755,12 @@
   "debugLog_bleTitle": "BLE Debug Log",
   "debugLog_copyLog": "Copy log",
   "debugLog_clearLog": "Clear log",
+  "debugLog_shareLog": "Share logs",
+  "debugLog_saveLog": "Save logs",
+  "debugLog_downloadLog": "Download logs",
+  "debugLog_shareSubject": "Offband Meshcore logs",
+  "debugLog_logSaved": "Log saved",
+  "debugLog_logUnavailable": "No log available to export",
   "debugLog_copied": "Debug log copied",
   "debugLog_bleCopied": "BLE log copied",
   "debugLog_noEntries": "No debug logs yet",
@@ -877,7 +887,6 @@
   "chat_type": "Type",
   "chat_path": "Path",
   "chat_publicKey": "Public Key",
-  "chat_compressOutgoingMessages": "Compress outgoing messages",
   "chat_floodForced": "Flood (forced)",
   "chat_directForced": "Direct (forced)",
   "chat_hopsForced": "{count} hops (forced)",
@@ -1418,13 +1427,13 @@
   "repeater_advancedSettings": "Advanced",
   "repeater_advancedSettingsSubtitle": "Tuning knobs for experienced operators",
   "repeater_pathHashMode": "Path hash mode",
-  "repeater_pathHashModeHelper": "Bytes used to encode this repeater's ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths — only raise once your network is on v1.14+.",
+  "repeater_pathHashModeHelper": "Bytes used to encode this repeater's ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths. Only raise once your network is on v1.14+.",
   "repeater_txDelay": "Flood TX delay",
   "repeater_txDelayHelper": "Retransmit spacing for flood traffic, as a multiplier of the packet's airtime (0-2, default 0.5). Higher = fewer collisions but slower delivery.",
   "repeater_directTxDelay": "Direct TX delay",
   "repeater_directTxDelayHelper": "Retransmit spacing for direct (non-flood) traffic, as a multiplier of the packet's airtime (0-2, default 0.3).",
   "repeater_intThresh": "Interference threshold",
-  "repeater_intThreshHelper": "Threshold passed to the radio's noise-floor calibration so it rejects interference above this level. 0 disables — only raise if you see RX errors in a noisy band.",
+  "repeater_intThreshHelper": "Threshold passed to the radio's noise-floor calibration so it rejects interference above this level. 0 disables. Only raise if you see RX errors in a noisy band.",
   "repeater_agcResetInterval": "AGC reset interval",
   "repeater_agcResetIntervalHelper": "How often to reset the radio's automatic gain control to recover from a stuck gain state. Seconds, snapped down to a multiple of 4. 0 disables periodic resets.",
   "repeater_actionsTitle": "Actions",
@@ -1453,7 +1462,7 @@
       }
     }
   },
-  "repeater_settingsSavedRebootNeeded": "Settings saved — reboot the repeater to apply",
+  "repeater_settingsSavedRebootNeeded": "Settings saved. Reboot the repeater to apply",
   "repeater_settingsPartialFailure": "Some settings failed: {failures}",
   "@repeater_settingsPartialFailure": {
     "placeholders": {
@@ -1945,6 +1954,33 @@
     }
   },
   "channelPath_pathLabelTitle": "Path",
+  "channelPath_routeDirect": "direct (routed)",
+  "channelPath_routeFlood": "flood, {hops} hops",
+  "@channelPath_routeFlood": {
+    "placeholders": {
+      "hops": {
+        "type": "int"
+      }
+    }
+  },
+  "channelPath_snrLabel": "SNR",
+  "channelPath_snrValue": "{db} dB",
+  "@channelPath_snrValue": {
+    "placeholders": {
+      "db": {
+        "type": "String"
+      }
+    }
+  },
+  "channelPath_rssiLabel": "RSSI",
+  "channelPath_rssiValue": "{dbm} dBm",
+  "@channelPath_rssiValue": {
+    "placeholders": {
+      "dbm": {
+        "type": "int"
+      }
+    }
+  },
   "channelPath_observedPathHeader": "Observed Path",
   "channelPath_selectedPathLabel": "{label} • {prefixes}",
   "@channelPath_selectedPathLabel": {
@@ -2414,7 +2450,7 @@
   "settings_gpxExportShareText": "Map data exported from meshcore-open",
   "settings_gpxExportShareSubject": "meshcore-open GPX map data export",
   "snrIndicator_nearByRepeaters": "Nearby Repeaters",
-  "snrIndicator_noNeighbors": "No neighbors heard currently — messages still broadcast and route.",
+  "snrIndicator_noNeighbors": "No neighbors heard currently. Messages still broadcast and route.",
   "snrIndicator_lastSeen": "Last seen",
   "contactsSettings_title": "Contacts settings",
   "contactsSettings_autoAddTitle": "Automatic Discovery",
@@ -2607,7 +2643,7 @@
       }
     }
   },
-  "block_blockedNameOnly": "Blocked \"{name}\" across all channels — name only until we learn their key",
+  "block_blockedNameOnly": "Blocked \"{name}\" across all channels. Name only until we learn their key",
   "@block_blockedNameOnly": {
     "placeholders": {
       "name": {
@@ -2620,8 +2656,36 @@
   "block_none": "No blocked users",
   "block_keysSection": "Blocked contacts",
   "block_namesSection": "Blocked names",
-  "block_namesHint": "Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.",
-  "block_offloadActive": "Firmware offload active — blocks sync to this radio",
-  "block_offloadStoreFull": "Radio block list full (32) — extra blocks stay app-only",
-  "block_composerNotice": "You've blocked this contact"
+  "block_namesHint": "Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.",
+  "block_offloadActive": "Firmware offload active: blocks sync to this radio",
+  "block_offloadStoreFull": "Radio block list full (32): extra blocks stay app-only",
+  "block_composerNotice": "You've blocked this contact",
+  "storageUnavailableTitle": "Message storage unavailable",
+  "storageUnavailableBody": "Your history is not lost, but the app can't open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.",
+  "@storageUnavailableTitle": {
+    "description": "Persistent banner title shown when the storage/database layer fails to open (#385)."
+  },
+  "@storageUnavailableBody": {
+    "description": "Persistent banner body explaining that storage is unavailable and messages are not being saved (#385)."
+  },
+  "batteryOptimizationTitle": "Battery optimization is on",
+  "@batteryOptimizationTitle": {
+    "description": "Title of the persistent banner warning that Android battery optimization may drop the background radio connection (#443)."
+  },
+  "batteryOptimizationBody": "Android may sleep the app when the screen is off and drop the radio connection. Set this app's battery usage to Unrestricted for a reliable background connection.",
+  "@batteryOptimizationBody": {
+    "description": "Body of the battery-optimization warning banner (#443)."
+  },
+  "batteryOptimizationOpenSettings": "Open battery settings",
+  "@batteryOptimizationOpenSettings": {
+    "description": "Button that opens the Android battery-optimization settings screen (#443)."
+  },
+  "batteryOptimizationDismiss": "Dismiss",
+  "@batteryOptimizationDismiss": {
+    "description": "Tooltip for the button that hides the battery-optimization banner for this session (#443)."
+  },
+  "batteryOptimizationOpenFailed": "Couldn't open battery settings",
+  "@batteryOptimizationOpenFailed": {
+    "description": "Snackbar shown when the battery-optimization settings screen could not be opened (#443)."
+  }
 }

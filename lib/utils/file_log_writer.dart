@@ -6,7 +6,7 @@ import 'dart:io';
 /// [maxBytes], it rotates: `<baseName>.log` -> `.1.log` -> `.2.log` …, keeping
 /// at most [maxFiles] files total (oldest dropped). Platform-agnostic: the
 /// caller resolves [dir] (e.g. `getApplicationSupportDirectory()`) and only
-/// constructs this where a filesystem exists — never on web. Writes are appended
+/// constructs this where a filesystem exists, never on web. Writes are appended
 /// and flushed so logs survive a crash.
 class FileLogWriter {
   FileLogWriter({

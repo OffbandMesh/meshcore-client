@@ -13,7 +13,6 @@ import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../services/app_settings_service.dart';
 import '../services/ui_view_state_service.dart';
-import '../models/app_settings.dart';
 import '../models/channel.dart';
 import '../models/community.dart';
 import '../storage/community_store.dart';
@@ -27,6 +26,8 @@ import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
+import '../widgets/channel_notify_mode.dart';
+import '../widgets/battery_optimization_banner.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channel_chat_screen.dart';
 import 'community_qr_scanner_screen.dart';
@@ -35,9 +36,7 @@ import 'map_screen.dart';
 import 'settings_screen.dart';
 
 class ChannelsScreen extends StatefulWidget {
-  final bool hideBackButton;
-
-  const ChannelsScreen({super.key, this.hideBackButton = false});
+  const ChannelsScreen({super.key});
 
   @override
   State<ChannelsScreen> createState() => _ChannelsScreenState();
@@ -110,7 +109,11 @@ class _ChannelsScreenState extends State<ChannelsScreen>
         context,
         MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
-      appBar: AppBar(
+      appBarBuilder: (context, pinned) => AppBar(
+        // Top-level tab: no auto back-arrow. Hamburger when the panel is not
+        // pinned; nothing when it is (panel is docked), so no dead arrow (#390).
+        automaticallyImplyLeading: false,
+        leading: pinned ? null : AppShell.drawerMenuButton(),
         title: AppBarTitle(context.l10n.channels_title),
         centerTitle: true,
         bottom: const SyncProgressAppBarBottom(),
@@ -136,185 +139,195 @@ class _ChannelsScreenState extends State<ChannelsScreen>
             ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await context.read<MeshCoreConnector>().getChannels(force: true);
-        },
-        child: () {
-          final channels = connector.channels;
-          final waitingForFirstChannel =
-              connector.isLoadingChannels && channels.isEmpty;
+      body: BatteryOptimizationBanner(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await context.read<MeshCoreConnector>().getChannels(force: true);
+          },
+          child: () {
+            final channels = connector.channels;
+            final waitingForFirstChannel =
+                connector.isLoadingChannels && channels.isEmpty;
 
-          // Only block the list while the first channel is actively loading.
-          // If the initial sync aborts, show cached/partial channels instead
-          // of trapping the user behind an idle spinner.
-          if (waitingForFirstChannel) {
-            return const Center(child: CircularProgressIndicator());
-          }
+            // Only block the list while the first channel is actively loading.
+            // If the initial sync aborts, show cached/partial channels instead
+            // of trapping the user behind an idle spinner.
+            if (waitingForFirstChannel) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          if (channels.isEmpty) {
-            return ListView(
-              children: [
-                SizedBox(
-                  height: MediaQuery.of(context).size.height - 200,
-                  child: EmptyState(
-                    icon: Icons.tag,
-                    title: context.l10n.channels_noChannelsConfigured,
-                    action: FilledButton.icon(
-                      onPressed: () => _addPublicChannel(context, connector),
-                      icon: const Icon(Icons.public),
-                      label: Text(context.l10n.channels_addPublicChannel),
+            if (channels.isEmpty) {
+              return LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: EmptyState(
+                      icon: Icons.tag,
+                      title: context.l10n.channels_noChannelsConfigured,
+                      action: FilledButton.icon(
+                        onPressed: () => _addPublicChannel(context, connector),
+                        icon: const Icon(Icons.public),
+                        label: Text(context.l10n.channels_addPublicChannel),
+                      ),
                     ),
                   ),
+                ),
+              );
+            }
+
+            final filteredChannels = _filterAndSortChannels(
+              channels,
+              connector,
+              viewState,
+            );
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: context.l10n.channels_searchChannels,
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (viewState.channelsSearchText.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchDebounce?.cancel();
+                                _searchDebounce = null;
+                                _searchController.clear();
+                                context
+                                    .read<UiViewStateService>()
+                                    .setChannelsSearchText('');
+                              },
+                            ),
+                          _buildFilterButton(viewState),
+                        ],
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      _searchDebounce?.cancel();
+                      _searchDebounce = Timer(
+                        const Duration(milliseconds: 300),
+                        () {
+                          if (!mounted) return;
+                          context
+                              .read<UiViewStateService>()
+                              .setChannelsSearchText(value);
+                        },
+                      );
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: filteredChannels.isEmpty
+                      ? LayoutBuilder(
+                          builder: (context, constraints) =>
+                              SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minHeight: constraints.maxHeight,
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off,
+                                          size: 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          context.l10n.channels_noChannelsFound,
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        )
+                      : (viewState.channelsSortOption ==
+                                ChannelSortOption.manual &&
+                            viewState.channelsSearchText.isEmpty)
+                      ? ReorderableListView.builder(
+                          padding: const EdgeInsets.only(
+                            left: 16,
+                            right: 16,
+                            top: 8,
+                            bottom: 88,
+                          ),
+                          buildDefaultDragHandles: false,
+                          itemCount: filteredChannels.length,
+                          onReorderItem: (oldIndex, newIndex) {
+                            // onReorderItem already adjusts newIndex after the
+                            // removed item, unlike the deprecated onReorder.
+                            final reordered = List<Channel>.from(
+                              filteredChannels,
+                            );
+                            final item = reordered.removeAt(oldIndex);
+                            reordered.insert(newIndex, item);
+                            unawaited(
+                              connector.setChannelOrder(
+                                reordered.map((c) => c.index).toList(),
+                              ),
+                            );
+                          },
+                          itemBuilder: (context, index) {
+                            final channel = filteredChannels[index];
+                            return _buildChannelTile(
+                              context,
+                              connector,
+                              channelMessageStore,
+                              channel,
+                              showDragHandle: true,
+                              dragIndex: index,
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.only(
+                            left: 16,
+                            right: 16,
+                            top: 8,
+                            bottom: 88,
+                          ),
+                          itemCount: filteredChannels.length,
+                          itemBuilder: (context, index) {
+                            final channel = filteredChannels[index];
+                            return _buildChannelTile(
+                              context,
+                              connector,
+                              channelMessageStore,
+                              channel,
+                            );
+                          },
+                        ),
                 ),
               ],
             );
-          }
-
-          final filteredChannels = _filterAndSortChannels(
-            channels,
-            connector,
-            viewState,
-          );
-
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: context.l10n.channels_searchChannels,
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (viewState.channelsSearchText.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchDebounce?.cancel();
-                              _searchDebounce = null;
-                              _searchController.clear();
-                              context
-                                  .read<UiViewStateService>()
-                                  .setChannelsSearchText('');
-                            },
-                          ),
-                        _buildFilterButton(viewState),
-                      ],
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  onChanged: (value) {
-                    _searchDebounce?.cancel();
-                    _searchDebounce = Timer(
-                      const Duration(milliseconds: 300),
-                      () {
-                        if (!mounted) return;
-                        context
-                            .read<UiViewStateService>()
-                            .setChannelsSearchText(value);
-                      },
-                    );
-                  },
-                ),
-              ),
-              Expanded(
-                child: filteredChannels.isEmpty
-                    ? ListView(
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height - 300,
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.search_off,
-                                    size: 64,
-                                    color: Colors.grey[400],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    context.l10n.channels_noChannelsFound,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : (viewState.channelsSortOption ==
-                              ChannelSortOption.manual &&
-                          viewState.channelsSearchText.isEmpty)
-                    ? ReorderableListView.builder(
-                        padding: const EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 8,
-                          bottom: 88,
-                        ),
-                        buildDefaultDragHandles: false,
-                        itemCount: filteredChannels.length,
-                        onReorderItem: (oldIndex, newIndex) {
-                          // onReorderItem already adjusts newIndex after the
-                          // removed item, unlike the deprecated onReorder.
-                          final reordered = List<Channel>.from(
-                            filteredChannels,
-                          );
-                          final item = reordered.removeAt(oldIndex);
-                          reordered.insert(newIndex, item);
-                          unawaited(
-                            connector.setChannelOrder(
-                              reordered.map((c) => c.index).toList(),
-                            ),
-                          );
-                        },
-                        itemBuilder: (context, index) {
-                          final channel = filteredChannels[index];
-                          return _buildChannelTile(
-                            context,
-                            connector,
-                            channelMessageStore,
-                            channel,
-                            showDragHandle: true,
-                            dragIndex: index,
-                          );
-                        },
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(
-                          left: 16,
-                          right: 16,
-                          top: 8,
-                          bottom: 88,
-                        ),
-                        itemCount: filteredChannels.length,
-                        itemBuilder: (context, index) {
-                          final channel = filteredChannels[index];
-                          return _buildChannelTile(
-                            context,
-                            connector,
-                            channelMessageStore,
-                            channel,
-                          );
-                        },
-                      ),
-              ),
-            ],
-          );
-        }(),
+          }(),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddChannelDialog(context),
@@ -468,71 +481,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 
-  /// Notify-mode storage key for [channel]: its PSK identity, so the setting
-  /// survives a rename and does not follow a reused slot (#259).
-  String _notifyKeyFor(Channel channel) => AppSettings.channelNotifyKey(
-    channelIndex: channel.index,
-    pskHex: channel.pskHex,
-  );
-
-  IconData _notifyModeIcon(ChannelNotifyMode mode) {
-    switch (mode) {
-      case ChannelNotifyMode.all:
-        return Icons.notifications_outlined;
-      case ChannelNotifyMode.mentionsOnly:
-        return Icons.alternate_email;
-      case ChannelNotifyMode.off:
-        return Icons.notifications_off_outlined;
-    }
-  }
-
-  String _notifyModeLabel(BuildContext context, ChannelNotifyMode mode) {
-    switch (mode) {
-      case ChannelNotifyMode.all:
-        return context.l10n.channels_notifyAll;
-      case ChannelNotifyMode.mentionsOnly:
-        return context.l10n.channels_notifyMentionsOnly;
-      case ChannelNotifyMode.off:
-        return context.l10n.channels_notifyOff;
-    }
-  }
-
-  void _showNotifyModeDialog(BuildContext context, Channel channel) {
-    final settingsService = context.read<AppSettingsService>();
-    final identityKey = _notifyKeyFor(channel);
-    final current = settingsService.channelNotifyMode(
-      identityKey: identityKey,
-      channelName: channel.name,
-    );
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(dialogContext.l10n.channels_notifications),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final mode in ChannelNotifyMode.values)
-              ListTile(
-                leading: Icon(_notifyModeIcon(mode)),
-                title: Text(_notifyModeLabel(dialogContext, mode)),
-                trailing: mode == current ? const Icon(Icons.check) : null,
-                onTap: () async {
-                  Navigator.pop(dialogContext);
-                  await settingsService.setChannelNotifyMode(
-                    identityKey: identityKey,
-                    channelName: channel.name,
-                    mode: mode,
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showChannelActions(
     BuildContext context,
     MeshCoreConnector connector,
@@ -542,7 +490,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     final parentContext = context;
     final settingsService = context.read<AppSettingsService>();
     final notifyMode = settingsService.channelNotifyMode(
-      identityKey: _notifyKeyFor(channel),
+      identityKey: channelNotifyKeyFor(channel),
       channelName: channel.name,
     );
 
@@ -575,14 +523,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
               },
             ),
             ListTile(
-              leading: Icon(_notifyModeIcon(notifyMode)),
+              leading: Icon(channelNotifyModeIcon(notifyMode)),
               title: Text(context.l10n.channels_notifications),
-              subtitle: Text(_notifyModeLabel(context, notifyMode)),
+              subtitle: Text(channelNotifyModeLabel(context, notifyMode)),
               onTap: () async {
                 Navigator.pop(sheetContext);
                 await Future.delayed(const Duration(milliseconds: 100));
                 if (parentContext.mounted) {
-                  _showNotifyModeDialog(parentContext, channel);
+                  showChannelNotifyModeDialog(parentContext, channel);
                 }
               },
             ),
@@ -635,13 +583,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       case 0:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ContactsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ContactsScreen()),
         );
         break;
       case 2:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const MapScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const MapScreen()),
         );
         break;
     }
@@ -1450,7 +1398,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
     final nameController = TextEditingController(text: channel.name);
     final pskController = TextEditingController(text: channel.pskHex);
-    bool smazEnabled = connector.isChannelSmazEnabled(channel.index);
     bool cyr2latEnabled = connector.isChannelCyr2LatEnabled(channel.index);
     String? selectedCyr2LatProfileId = connector.getChannelCyr2LatProfileId(
       channel.index,
@@ -1498,17 +1445,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 const SizedBox(height: 16),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(dialogContext.l10n.channels_smazCompression),
-                  value: smazEnabled,
-                  onChanged: (value) => setState(() {
-                    smazEnabled = value;
-                    if (smazEnabled) {
-                      cyr2latEnabled = false;
-                    }
-                  }),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
                   title: Text(dialogContext.l10n.channels_cyr2latCompression),
                   subtitle: Text(
                     dialogContext.l10n.channels_cyr2latCompressionDscr,
@@ -1516,9 +1452,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                   value: cyr2latEnabled,
                   onChanged: (value) => setState(() {
                     cyr2latEnabled = value;
-                    if (cyr2latEnabled) {
-                      smazEnabled = false;
-                    }
                   }),
                 ),
                 if (cyr2latEnabled) ...[
@@ -1573,10 +1506,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 Navigator.pop(dialogContext);
                 try {
                   await connector.setChannel(channel.index, name, psk);
-                  await connector.setChannelSmazEnabled(
-                    channel.index,
-                    smazEnabled,
-                  );
                   await connector.setChannelCyr2LatEnabled(
                     channel.index,
                     cyr2latEnabled,

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../connector/meshcore_connector.dart';
 import '../../models/observer_config.dart';
 import '../../services/observer_config_service.dart';
+import 'config_profile_import_screen.dart';
 import 'mqtt_brokers_screen.dart';
 
 /// Observer settings pane: WiFi / MQTT (region) / display flat settings with
@@ -13,10 +14,10 @@ import 'mqtt_brokers_screen.dart';
 /// Staged-save model: every control edits LOCAL state; nothing reaches the
 /// device until "Save", which sends only the changed keys (the firmware has no
 /// transaction, so each is an individual SET awaiting its ACK). Device NVS is
-/// the source of truth — Refresh re-reads it.
+/// the source of truth, Refresh re-reads it.
 ///
 /// TODO(l10n): strings are English-only pending ARB keys.
-/// The broker pool opens as its own screen (MqttBrokersScreen, #80) — tap to
+/// The broker pool opens as its own screen (MqttBrokersScreen, #80), tap to
 /// edit, long-press for Enable/Disable/Edit/Clear, + FAB to add.
 class ObserverSettingsView extends StatefulWidget {
   const ObserverSettingsView({super.key});
@@ -46,7 +47,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshWhenIdle());
   }
 
-  /// Defer the initial read until the device's channel/contact sync settles —
+  /// Defer the initial read until the device's channel/contact sync settles,
   /// observer config traffic must not compete with (and slow) that sync (#81).
   void _refreshWhenIdle() {
     final conn = context.read<MeshCoreConnector>();
@@ -170,7 +171,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
               : ok
               ? 'Observer settings saved'
               : (svc.lastError ??
-                    'Some changes failed — re-read from the device'),
+                    'Some changes failed. Re-read from the device'),
         ),
         backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
       ),
@@ -200,7 +201,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         if (svc.stale)
           _banner(
             Icons.warning_amber,
-            'Showing the last read — the device did not answer the latest refresh.',
+            'Showing the last read, the device did not answer the latest refresh.',
           ),
         if (svc.lastError != null) _banner(Icons.error_outline, svc.lastError!),
         _actionRow(),
@@ -282,7 +283,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
         if (svc.brokersUnavailable)
           _banner(
             Icons.cloud_off,
-            'Broker pool unavailable — the device did not finish sending it.',
+            'Broker pool unavailable. The device did not finish sending it.',
           )
         else
           ListTile(
@@ -295,6 +296,21 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
               MaterialPageRoute(builder: (_) => const MqttBrokersScreen()),
             ),
           ),
+        const Divider(height: 32),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.download_outlined),
+          title: const Text('Import config profile'),
+          subtitle: const Text(
+            'Apply region / WiFi / brokers from a catalog or URL',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ConfigProfileImportScreen(service: svc),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -353,7 +369,7 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
 
   String _brokerSummary(List<BrokerConfig> brokers) {
     final populated = brokers.where((b) => b.isPopulated).toList();
-    if (populated.isEmpty) return 'None configured — tap to add';
+    if (populated.isEmpty) return 'None configured. Tap to add';
     final enabled = populated.where((b) => b.enabled).length;
     return '${populated.length} configured · $enabled enabled';
   }

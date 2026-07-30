@@ -188,7 +188,7 @@ class Contact {
       // (`src/Packet.h:79-84`). 0xFF stays the flood sentinel.
       //
       // This previously read `count` BYTES, so at 2-byte width it kept half of
-      // every path and discarded the rest — the truncation behind #240's failed
+      // every path and discarded the rest, the truncation behind #240's failed
       // repeater logins. The width is taken from the path itself rather than the
       // connector's global width, so a path is always sliced at the width it was
       // captured at. (#309)

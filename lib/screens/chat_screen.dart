@@ -595,7 +595,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (context.watch<BlockService>().isBlocked(widget.contact.publicKeyHex)) {
       return _buildBlockedBar();
     }
-    final maxBytes = maxContactMessageBytes();
+    final maxBytes = maxContactMessageBytes(
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final colorScheme = Theme.of(context).colorScheme;
     final settings = context.watch<AppSettingsService>().settings;
     return Container(
@@ -672,12 +674,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     hintText: context.l10n.chat_typeMessage,
                     onSubmitted: (_) => _sendMessage(connector),
                     encoder:
-                        (connector.isContactSmazEnabled(
-                              widget.contact.publicKeyHex,
-                            ) ||
-                            connector.isContactCyr2LatEnabled(
-                              widget.contact.publicKeyHex,
-                            ))
+                        connector.isContactCyr2LatEnabled(
+                          widget.contact.publicKeyHex,
+                        )
                         ? (text) => connector.prepareContactOutboundText(
                             widget.contact,
                             text,
@@ -815,7 +814,9 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     }
-    final maxBytes = maxContactMessageBytes();
+    final maxBytes = maxContactMessageBytes(
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final outboundText = connector.prepareContactOutboundText(
       _resolveContact(connector),
       outgoingText,
@@ -1438,7 +1439,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (result == null) {
-      return; // Cancelled — keep existing path
+      return; // Cancelled, keep existing path
     }
 
     if (!mounted) {
@@ -1497,7 +1498,12 @@ class _ChatScreenState extends State<ChatScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChannelMessagePathScreen(message: pathMessage),
+        builder: (context) => ChannelMessagePathScreen(
+          message: pathMessage,
+          snr: message.snr,
+          rssi: message.rssi,
+          isFloodRoute: message.isFloodRoute,
+        ),
       ),
     );
   }

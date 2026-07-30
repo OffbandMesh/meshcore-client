@@ -319,7 +319,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settings_appSettingsSubtitle =>
-      'Уведомления, сообщения и настройки карты';
+      'Внешний вид, перевод и настройки карты';
 
   @override
   String get settings_messageSettings => 'Message Settings';
@@ -389,7 +389,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settings_gpsStatusLiveFix => 'Live GPS fix';
 
   @override
-  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+  String get settings_gpsStatusNoFix => 'No fix: using stored/last position';
 
   @override
   String get settings_gpsStatusCoords => 'Coordinates';
@@ -409,7 +409,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settings_gpsStatusNoResponse =>
-      'No response — device may need the GPS-query firmware build';
+      'No response: device may need the GPS-query firmware build';
 
   @override
   String get settings_locationIntervalInvalid =>
@@ -595,6 +595,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settings_infoPublicKey => 'Публичный ключ';
+
+  @override
+  String get settings_infoBuild => 'Build';
+
+  @override
+  String get settings_infoDataScope => 'Data scope';
+
+  @override
+  String get settings_infoDataScopeSubtitle =>
+      'Messages, contacts, and channels are stored per radio under this key';
 
   @override
   String get settings_publicKeyCopied => 'Public key copied';
@@ -784,12 +794,11 @@ class AppLocalizationsRu extends AppLocalizations {
       'Показывать уведомление при получении сообщений в каналах';
 
   @override
-  String get appSettings_advertisementNotifications =>
-      'Уведомления об анонсированиях';
+  String get appSettings_advertisementNotifications => 'Обнаружен новый узел';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      'Показывать уведомление при обнаружении новых нод';
+      'Уведомлять при обнаружении новых репитеров или контактов';
 
   @override
   String get appSettings_messaging => 'Обмен сообщениями';
@@ -893,6 +902,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appSettings_batteryLipo => 'LiPo (3.0–4.2 В)';
+
+  @override
+  String get appSettings_keepScreenAwake => 'Не выключать экран';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      'Экран не будет гаснуть, пока приложение открыто. Расходует больше заряда.';
 
   @override
   String get appSettings_mapDisplay => 'Отображение карты';
@@ -1268,9 +1284,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'Сжатие SMAZ';
-
-  @override
   String get channels_cyr2latCompression => 'Сжатие Cyr2Lat';
 
   @override
@@ -1501,6 +1514,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get debugLog_clearLog => 'Очистить журнал';
 
   @override
+  String get debugLog_shareLog => 'Share logs';
+
+  @override
+  String get debugLog_saveLog => 'Save logs';
+
+  @override
+  String get debugLog_downloadLog => 'Download logs';
+
+  @override
+  String get debugLog_shareSubject => 'Offband Meshcore logs';
+
+  @override
+  String get debugLog_logSaved => 'Log saved';
+
+  @override
+  String get debugLog_logUnavailable => 'No log available to export';
+
+  @override
   String get debugLog_copied => 'Журнал отладки скопирован';
 
   @override
@@ -1701,9 +1732,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chat_publicKey => 'Публичный ключ';
-
-  @override
-  String get chat_compressOutgoingMessages => 'Сжимать исходящие сообщения';
 
   @override
   String get chat_floodForced => 'Рассылка (принудительно)';
@@ -3643,6 +3671,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get channelPath_pathLabelTitle => 'Путь';
 
   @override
+  String get channelPath_routeDirect => 'direct (routed)';
+
+  @override
+  String channelPath_routeFlood(int hops) {
+    return 'flood, $hops hops';
+  }
+
+  @override
+  String get channelPath_snrLabel => 'SNR';
+
+  @override
+  String channelPath_snrValue(String db) {
+    return '$db dB';
+  }
+
+  @override
+  String get channelPath_rssiLabel => 'RSSI';
+
+  @override
+  String channelPath_rssiValue(int dbm) {
+    return '$dbm dBm';
+  }
+
+  @override
   String get channelPath_observedPathHeader => 'Наблюдаемый путь';
 
   @override
@@ -4295,7 +4347,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get snrIndicator_noNeighbors =>
-      'No neighbors heard currently — messages still broadcast and route.';
+      'No neighbors heard currently. Messages still broadcast and route.';
 
   @override
   String get snrIndicator_lastSeen => 'Последний раз видели';
@@ -4638,7 +4690,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String block_blockedNameOnly(String name) {
-    return 'Blocked \"$name\" across all channels — name only until we learn their key';
+    return 'Blocked \"$name\" across all channels. Name only until we learn their key';
   }
 
   @override
@@ -4658,16 +4710,39 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get block_namesHint =>
-      'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
+      'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.';
 
   @override
   String get block_offloadActive =>
-      'Firmware offload active — blocks sync to this radio';
+      'Firmware offload active: blocks sync to this radio';
 
   @override
   String get block_offloadStoreFull =>
-      'Radio block list full (32) — extra blocks stay app-only';
+      'Radio block list full (32): extra blocks stay app-only';
 
   @override
   String get block_composerNotice => 'You\'ve blocked this contact';
+
+  @override
+  String get storageUnavailableTitle => 'Message storage unavailable';
+
+  @override
+  String get storageUnavailableBody =>
+      'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.';
+
+  @override
+  String get batteryOptimizationTitle => 'Battery optimization is on';
+
+  @override
+  String get batteryOptimizationBody =>
+      'Android may sleep the app when the screen is off and drop the radio connection. Set this app\'s battery usage to Unrestricted for a reliable background connection.';
+
+  @override
+  String get batteryOptimizationOpenSettings => 'Open battery settings';
+
+  @override
+  String get batteryOptimizationDismiss => 'Dismiss';
+
+  @override
+  String get batteryOptimizationOpenFailed => 'Couldn\'t open battery settings';
 }

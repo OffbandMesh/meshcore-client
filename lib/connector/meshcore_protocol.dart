@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -255,15 +256,15 @@ const int respCodeCustomVars = 21;
 const int respCodeAutoAddConfig = 25;
 const int respCodeStats = 24;
 
-/// Offband fork-only extension space (0xC0+) — never collides with upstream,
+/// Offband fork-only extension space (0xC0+), never collides with upstream,
 /// never submitted upstream. Request and reply share the code. (#135)
 const int cmdOffbandGps = 0xC1;
 const int respCodeOffbandGps = 0xC1;
 
-/// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
+/// Request frame for [cmdOffbandGps], a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
-// --- Offband FEM LNA command (0xC3) — capability-gated. Heltec V4 external
+// --- Offband FEM LNA command (0xC3), capability-gated. Heltec V4 external
 // FEM LNA control; firmware counterpart OffbandMesh/meshcore-firmware#298.
 //
 // Deliberately a fork-private command rather than an extra byte on the stock
@@ -311,7 +312,108 @@ OffbandFemLnaReply? parseOffbandFemLnaReply(Uint8List frame) {
   return OffbandFemLnaReply(frame[1], frame[2]);
 }
 
-// --- Offband block command (0xC2) — capability-gated; see
+// --- Offband caplog serial-capture download (0xC4), companion-API only; NEVER
+// on the mesh. Firmware counterpart OffbandMesh/meshcore-firmware#406.
+//
+// 0xC4, NOT 0xC3: the firmware first merged this on 0xC3, which collides with
+// cmdOffbandFemLna (0xC3, #298), the caplog handler swallowed every 0xC3 frame
+// before FEM/LNA dispatch. Reassigned to 0xC4, the next free code in the 0xC0+
+// space (0xC0 config, 0xC1 GPS, 0xC2 block, 0xC3 FEM LNA).
+//
+// Request: bare [0xC4], no payload (mirrors cmdOffbandGps). Reply is a streamed
+// dump: START [0xC4, 0x01, total_len(uint32 LE)] → CHUNK [0xC4, 0x02, <bytes>]*
+// → END [0xC4, 0x03]. The firmware auto-stops capture for the duration (so
+// offsets stay stable) and rejects with the generic [respCodeErr] when another
+// stream (block-list / contacts / observer config) is already in flight. (#430)
+const int cmdOffbandCaplog = 0xC4;
+const int respCodeOffbandCaplog = 0xC4;
+const int caplogSubStart = 0x01;
+const int caplogSubChunk = 0x02;
+const int caplogSubEnd = 0x03;
+
+// Caplog request sub-codes in cmd_frame[1]. A bare [0xC4] (len 1) is DOWNLOAD
+// for back-compat. Firmware #417/#408. (#430)
+const int caplogReqDownload = 0x01;
+const int caplogReqEnable = 0x02; // [0xC4,0x02,(level)], omit level for default
+const int caplogReqDisable = 0x03;
+const int caplogReqErase = 0x04;
+const int caplogReqStatus = 0x05;
+
+// Caplog CONTROL response sub-codes in out_frame[1] (download stream sub-codes
+// caplogSubStart/Chunk/End are above).
+const int caplogRespAck = 0x10; // [0xC4,0x10, req_op, ok(0|1)]
+const int caplogRespStatus =
+    0x11; // [0xC4,0x11, enabled, level, used(4B LE), cap(4B LE)]
+
+/// Request frame to download the device's serial-capture buffer, a bare 1-byte
+/// command, no payload (firmware treats bare [0xC4] as DOWNLOAD). (#430)
+Uint8List buildOffbandCaplogRequestFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog]);
+
+/// Enable capture on the device (default verbosity level). (#430)
+Uint8List buildOffbandCaplogEnableFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqEnable]);
+
+/// Disable (stop) capture on the device. (#430)
+Uint8List buildOffbandCaplogDisableFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqDisable]);
+
+/// Erase the device's capture buffer. (#430)
+Uint8List buildOffbandCaplogEraseFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqErase]);
+
+/// Query capture status (enabled / level / used / capacity). (#430)
+Uint8List buildOffbandCaplogStatusFrame() =>
+    Uint8List.fromList([cmdOffbandCaplog, caplogReqStatus]);
+
+/// Parsed `[0xC4,0x10, req_op, ok]` control acknowledgement. [reqOp] echoes the
+/// request sub-code (enable/disable/erase); [ok] is the device's result. (#430)
+class CaplogAck {
+  const CaplogAck(this.reqOp, {required this.ok});
+  final int reqOp;
+  final bool ok;
+}
+
+/// Parse a caplog control ACK; null if [frame] isn't one. (#430)
+CaplogAck? parseCaplogAck(Uint8List frame) {
+  if (frame.length < 4 ||
+      frame[0] != respCodeOffbandCaplog ||
+      frame[1] != caplogRespAck) {
+    return null;
+  }
+  return CaplogAck(frame[2], ok: frame[3] == 1);
+}
+
+/// Parsed `[0xC4,0x11, enabled, level, used(4B LE), cap(4B LE)]` status. (#430)
+class CaplogDeviceStatus {
+  const CaplogDeviceStatus({
+    required this.enabled,
+    required this.level,
+    required this.usedBytes,
+    required this.capacityBytes,
+  });
+  final bool enabled;
+  final int level;
+  final int usedBytes;
+  final int capacityBytes;
+}
+
+/// Parse a caplog STATUS reply; null if [frame] isn't one. (#430)
+CaplogDeviceStatus? parseCaplogStatus(Uint8List frame) {
+  if (frame.length < 12 ||
+      frame[0] != respCodeOffbandCaplog ||
+      frame[1] != caplogRespStatus) {
+    return null;
+  }
+  return CaplogDeviceStatus(
+    enabled: frame[2] != 0,
+    level: frame[3],
+    usedBytes: readUint32LE(frame, 4),
+    capacityBytes: readUint32LE(frame, 8),
+  );
+}
+
+// --- Offband block command (0xC2), capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
 const int cmdOffbandBlock = 0xC2;
 const int offbandBlockAdd = 0x01;
@@ -320,11 +422,11 @@ const int offbandBlockList = 0x03;
 const int offbandBlockClear = 0x04;
 
 /// Result of a malformed 0xC2 request: firmware replies with the GENERIC error
-/// frame `[respCodeErr(1)][errCodeIllegalArg(6)]` — NOT 0xC2-prefixed, so the
+/// frame `[respCodeErr(1)][errCodeIllegalArg(6)]`, NOT 0xC2-prefixed, so the
 /// app must recognise the 2-byte error frame and not wait for a 0xC2 echo.
 const int errCodeIllegalArg = 6;
 
-/// `ERR_CODE_UNSUPPORTED_CMD` — returned for an Offband command the connected
+/// `ERR_CODE_UNSUPPORTED_CMD`, returned for an Offband command the connected
 /// board can't service (e.g. a `0xC3` FEM LNA request to a board without FEM
 /// control). Unreachable when the capability bit is respected; firmware answers
 /// it defensively against a stale or mis-gated client. (#304)
@@ -358,7 +460,7 @@ OffbandBlockReply? parseOffbandBlockReply(Uint8List frame) {
 /// True iff the connected firmware understands the `0xC1` GPS extension. Gated
 /// on the `offband_caps` byte being present: that byte is an Offband-fork
 /// addition (device-info v14+) which stock/upstream MeshCore never emits, so a
-/// null caps value means non-Offband firmware that couldn't answer `0xC1` — and
+/// null caps value means non-Offband firmware that couldn't answer `0xC1`, and
 /// must not be pinged with it. (#144)
 ///
 /// Interim presence-gate: a dedicated `OFFBAND_CAP_GPS` bit (firmware
@@ -376,12 +478,12 @@ const int offbandCapBlock = 0x02;
 /// `OFFBAND_CAP_FEM_LNA` bit (bit 2) in the `offband_caps` byte: this radio can
 /// control its external FEM LNA (firmware #298).
 ///
-/// PROVISIONAL — firmware owns the caps byte and has not yet confirmed 0x04 as
+/// PROVISIONAL, firmware owns the caps byte and has not yet confirmed 0x04 as
 /// free. Do not ship against this without that confirmation (#304).
 ///
 /// Gate on the BIT ONLY, never on model or version: firmware derives it at
 /// runtime from the auto-detected FEM chip (KCT8103L vs GC1109), so it is a
-/// per-unit answer — two Heltec V4s can legitimately disagree, and other
+/// per-unit answer, two Heltec V4s can legitimately disagree, and other
 /// FEM-bearing boards report false today.
 const int offbandCapFemLna = 0x04;
 
@@ -392,6 +494,18 @@ bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
     (offbandCaps & offbandCapBlock) != 0 &&
     (firmwareVerCode ?? 0) >= 15;
+
+/// Caplog serial-capture capability (firmware #427). The bit is compile-time
+/// static in device-info, so it's reliable across reboots, the client re-reads
+/// it on reconnect and never has to race a STATUS probe. Bit 5 (0x08/0x10 are
+/// reserved for WiFi-companion #365 / display-config); requires FIRMWARE_VER_CODE
+/// >= 17, the version that introduced it.
+const int offbandCapCaplog = 0x20;
+
+bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
+    offbandCaps != null &&
+    (offbandCaps & offbandCapCaplog) != 0 &&
+    (firmwareVerCode ?? 0) >= 17;
 
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
@@ -410,6 +524,8 @@ const int pushCodeTraceData = 0x89;
 const int pushCodeNewAdvert = 0x8A;
 const int pushCodeTelemetryResponse = 0x8B;
 const int pushCodeBinaryResponse = 0x8C;
+const int pushCodeChannelsChanged =
+    0x91; // #429 part A: device channel table changed; re-poll getChannels
 
 // Contact/advertisement types
 const int advTypeChat = 1;
@@ -472,16 +588,26 @@ const int _sendTextMsgOverheadBytes =
 const int _sendChannelTextMsgOverheadBytes =
     1 + 1 + 1 + 4 + 1 + 2; // +2 safety margin
 
-int maxContactMessageBytes() {
-  final byFrame = maxFrameSize - _sendTextMsgOverheadBytes;
+// [maxFrameBytes] is the largest frame the active transport can write in one
+// operation. On BLE that is ATT_MTU - 3, which can be smaller than [maxFrameSize];
+// pass it so a max-length message never overflows the characteristic write (#395).
+// Defaults to [maxFrameSize] for callers without a live transport (USB/TCP, tests).
+int maxContactMessageBytes({int? maxFrameBytes}) {
+  final frameBudget = maxFrameBytes ?? maxFrameSize;
+  final byFrame = frameBudget - _sendTextMsgOverheadBytes;
   return _minPositive(byFrame, maxTextPayloadBytes);
 }
 
-int maxChannelMessageBytes(String? senderName) {
+int maxChannelMessageBytes(String? senderName, {int? maxFrameBytes}) {
+  final frameBudget = maxFrameBytes ?? maxFrameSize;
   final nameLength = _senderNameBytes(senderName);
   final prefixBytes = nameLength + 2; // "<name>: "
   final byPayload = maxTextPayloadBytes - prefixBytes;
-  final byFrame = maxFrameSize - _sendChannelTextMsgOverheadBytes;
+  // The wire text is "<name>: <userText>", so the prefix eats into the frame
+  // budget too. At maxFrameSize the payload limit always governed and this went
+  // unnoticed; with a smaller BLE budget the frame limit can govern, so the
+  // prefix must be subtracted here or a channel frame can still overflow (#395).
+  final byFrame = frameBudget - _sendChannelTextMsgOverheadBytes - prefixBytes;
   return _minPositive(byPayload, byFrame);
 }
 
@@ -584,7 +710,7 @@ int readInt32LE(Uint8List data, int offset) {
 }
 
 // Path-length byte from the firmware. This is a PACKED field, and both halves
-// are authoritative — the path is self-describing on the wire:
+// are authoritative, the path is self-describing on the wire:
 //
 //   high 2 bits = hash size - 1  (0..2 -> 1..3 bytes per hop hash)
 //   low  6 bits = hash COUNT     (the number of HOPS, 0-63)
@@ -757,16 +883,32 @@ Uint8List buildRemoveContactFrame(Uint8List pubKey) {
   return writer.toBytes();
 }
 
+/// Byte length of the client id carried in [buildAppStartFrame] (#297).
+///
+/// 6 is load-bearing, not arbitrary: stock firmware treats `cmd_frame[1..7]` as
+/// reserved and reads the app name at a FIXED offset 8, while Wadamesh reads
+/// byte 1 as the client-id length and the app name at `2 + cid_len`. Only
+/// `cid_len == 6` puts the name at 8 for both, so one frame serves both.
+const int clientIdLength = 6;
+
 // Build CMD_APP_START frame
-// Format: [cmd][app_ver][reserved x6][app_name...]
+// Format: [cmd][cid_len=6][client_id x6][app_name...]
+// Stock reads bytes 1..7 as reserved + name at 8; Wadamesh reads the client id
+// and lands on the same name offset. See [clientIdLength].
 Uint8List buildAppStartFrame({
   String appName = 'MeshCoreOpen',
-  int appVersion = 1,
+  Uint8List? clientId,
 }) {
+  final id = Uint8List(clientIdLength);
+  if (clientId != null) {
+    // Truncate or zero-pad: the length byte must stay 6 or the app-name offset
+    // desyncs on one of the two firmwares.
+    id.setRange(0, min(clientId.length, clientIdLength), clientId);
+  }
   final writer = BufferWriter();
   writer.writeByte(cmdAppStart);
-  writer.writeByte(appVersion);
-  writer.writeBytes(Uint8List(6)); // reserved bytes
+  writer.writeByte(clientIdLength);
+  writer.writeBytes(id);
   writer.writeString(appName);
   writer.writeByte(0);
   return writer.toBytes();
@@ -923,7 +1065,7 @@ Uint8List buildResetPathFrame(Uint8List pubKey) {
 // [hopCount] is a HOP count and [hashWidth] the bytes per hop hash; the two are
 // packed into the single wire path_len byte via encodePathLen().
 //
-// This previously wrote the count raw, leaving the mode bits 00 — which tells
+// This previously wrote the count raw, leaving the mode bits 00, which tells
 // the radio "1-byte hashes". On a 2-byte net that handed the firmware 2-byte
 // hash data labelled as 1-byte hops, so it routed to nodes that were never on
 // the route. That is the send-side half of #240's misrouting. (#309)

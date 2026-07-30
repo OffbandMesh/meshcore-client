@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 // The IOSink is intentionally held open for the app's lifetime (append-only,
 // low-frequency) rather than open/close per line; the OS closes the handle on
 // process exit. `_sinkFuture ??= _openSink()` assigns synchronously before the
-// await, so concurrent callers share one sink — no double-open on the event
+// await, so concurrent callers share one sink, no double-open on the event
 // loop.
 
 Future<IOSink>? _sinkFuture;

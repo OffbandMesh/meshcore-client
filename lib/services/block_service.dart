@@ -35,14 +35,14 @@ class BlockService extends ChangeNotifier {
   }
 
   /// Called by the connector when the self key is learned (or cleared). If the
-  /// self key is already stored — blocked before this guard existed, or pulled
-  /// in from the radio's list — drop it here and tell the radio to remove it.
+  /// self key is already stored, blocked before this guard existed, or pulled
+  /// in from the radio's list, drop it here and tell the radio to remove it.
   Future<void> setSelfKey(String? publicKeyHex) async {
     final key = publicKeyHex?.toLowerCase();
     final normalized = (key == null || key.isEmpty) ? null : key;
     final changed = normalized != _selfKeyHex;
     _selfKeyHex = normalized;
-    // Heal even when the key is unchanged — a self-block can appear after the
+    // Heal even when the key is unchanged, a self-block can appear after the
     // key is already known (a union pull racing self-info, or a stale store),
     // and an unchanged-key early return would strand it.
     final healed = normalized != null && _blockedKeys.remove(normalized);
@@ -93,7 +93,7 @@ class BlockService extends ChangeNotifier {
 
   /// Merge keys learned from the firmware block list into the local set WITHOUT
   /// echoing them back to the radio (used by the connect-time union pull).
-  /// Never removes — the union only adds.
+  /// Never removes, the union only adds.
   Future<void> importKeys(Iterable<String> keysHex) async {
     var changed = false;
     for (final k in keysHex) {
@@ -134,7 +134,7 @@ class BlockService extends ChangeNotifier {
     final key = publicKeyHex.toLowerCase();
     _blockedNames.remove(n);
     // Your own name resolving to your own key must not promote into a
-    // self-block — drop the name block and stop (#250).
+    // self-block, drop the name block and stop (#250).
     if (isSelf(key)) {
       await _store.saveNames(_blockedNames);
       notifyListeners();

@@ -21,7 +21,7 @@ class SettingsCategory {
 /// Wide layouts (>= [_wideBreakpoint] logical pixels) show a pinned category
 /// rail beside the selected detail pane. Narrow layouts show the category list
 /// and push the detail onto the navigator. Same categories, same code, every
-/// platform — the layout is chosen from the available width, not the OS.
+/// platform, the layout is chosen from the available width, not the OS.
 class SettingsShell extends StatefulWidget {
   final String title;
   final List<SettingsCategory> categories;

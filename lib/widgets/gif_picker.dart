@@ -19,7 +19,7 @@ class _GifPickerState extends State<GifPicker> {
   bool _isLoading = false;
   String? _error;
 
-  // Giphy API key — injected at build time, never hardcoded. Provide it via:
+  // Giphy API key, injected at build time, never hardcoded. Provide it via:
   //   flutter build ... --dart-define-from-file=dart_defines.json
   // (or --dart-define=GIPHY_API_KEY=<key>). Empty when unset → the picker shows a hint.
   static const String _giphyApiKey = String.fromEnvironment('GIPHY_API_KEY');

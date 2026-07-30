@@ -6,7 +6,7 @@ import '../l10n/l10n.dart';
 import '../models/contact.dart';
 import '../services/app_settings_service.dart';
 
-/// The per-contact settings dialog (Smaz/Cyr2Lat compression + telemetry
+/// The per-contact settings dialog (Cyr2Lat compression + telemetry
 /// grants). Shared so it can be opened from the chat ellipsis AND the contacts
 /// long-press menu without duplicating the body (#351).
 void showContactSettingsDialog(BuildContext context, Contact contact) {
@@ -15,9 +15,7 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
     context,
     listen: false,
   );
-  connector.ensureContactSmazSettingLoaded(contact.publicKeyHex);
   connector.ensureContactCyr2LatSettingLoaded(contact.publicKeyHex);
-  bool smazEnabled = connector.isContactSmazEnabled(contact.publicKeyHex);
   bool cyr2latEnabled = connector.isContactCyr2LatEnabled(contact.publicKeyHex);
   String? selectedCyr2LatProfileId = connector.getContactCyr2LatProfileId(
     contact.publicKeyHex,
@@ -44,26 +42,6 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
               ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(context.l10n.channels_smazCompression),
-                subtitle: Text(context.l10n.chat_compressOutgoingMessages),
-                value: smazEnabled,
-                onChanged: (value) {
-                  connector.setContactSmazEnabled(contact.publicKeyHex, value);
-                  connector.setContactCyr2LatEnabled(
-                    contact.publicKeyHex,
-                    false,
-                  );
-                  setDialogState(() {
-                    smazEnabled = value;
-                    if (smazEnabled) {
-                      cyr2latEnabled = false;
-                    }
-                  });
-                },
-              ),
-              const Divider(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
                 title: Text(context.l10n.channels_cyr2latCompression),
                 subtitle: Text(context.l10n.channels_cyr2latCompressionDscr),
                 value: cyr2latEnabled,
@@ -72,12 +50,8 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
                     contact.publicKeyHex,
                     value,
                   );
-                  connector.setContactSmazEnabled(contact.publicKeyHex, false);
                   setDialogState(() {
                     cyr2latEnabled = value;
-                    if (cyr2latEnabled) {
-                      smazEnabled = false;
-                    }
                   });
                 },
               ),

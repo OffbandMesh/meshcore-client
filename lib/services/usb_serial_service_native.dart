@@ -104,7 +104,7 @@ class UsbSerialService {
   }
 
   /// Best-effort USB vendor ID for [portName] from the flserial port
-  /// enumeration, or null if it can't be determined. Enumeration only — it does
+  /// enumeration, or null if it can't be determined. Enumeration only, it does
   /// NOT open the port, so it can't trigger the reset the gate exists to avoid.
   /// Used to gate the DTR open pulse. (#244/#245)
   int? _lookupPortVid(String portName) {
@@ -194,7 +194,7 @@ class UsbSerialService {
       bool opened = false;
 
       for (final candidate in candidates) {
-        // Always create a fresh FlSerial instance — a cached instance retains
+        // Always create a fresh FlSerial instance, a cached instance retains
         // a stale flh handle from prior failed opens, which causes the native
         // fl_open() to mis-route the request and report port-not-exist even
         // when the device node is physically present.
@@ -206,7 +206,7 @@ class UsbSerialService {
             final msg =
                 'Failed to open USB port $candidate (status: $openStatus)';
             _debugLogService?.error(msg, tag: 'USB Serial');
-            // Not a FlSerialException — treat as terminal failure
+            // Not a FlSerialException, treat as terminal failure
             _status = UsbSerialStatus.disconnected;
             throw StateError(msg);
           }
@@ -224,8 +224,8 @@ class UsbSerialService {
           } else {
             // ESP32 USB-Serial/JTAG (VID 303A) maps DTR/RTS onto EN/BOOT, so a
             // DTR-low window resets the chip into ROM download mode mid-open and
-            // wedges it. Any non-nRF52 device — including an unknown/unparseable
-            // VID — opens with DTR asserted and no pulse (a stale DTR is safer
+            // wedges it. Any non-nRF52 device, including an unknown/unparseable
+            // VID, opens with DTR asserted and no pulse (a stale DTR is safer
             // than wedging the device). (#244/#245)
             serial.setDTR(true);
           }
@@ -370,7 +370,7 @@ class UsbSerialService {
       // state for all ports. The global reset is done in connect() instead,
       // before the next open, which is the safer place to do it.
 
-      // Now it is safe to cancel the Dart subscription — the native thread has
+      // Now it is safe to cancel the Dart subscription, the native thread has
       // already seen the port close and will not fire any more callbacks.
       await _dataSubscription?.cancel();
       _dataSubscription = null;
@@ -404,7 +404,7 @@ class UsbSerialService {
   void dispose() {
     // Synchronously close the native port so the SerialThread exits before
     // the Dart isolate is torn down (e.g. on hot restart). The async
-    // disconnect() path via unawaited() offers no ordering guarantee — the
+    // disconnect() path via unawaited() offers no ordering guarantee, the
     // isolate may die before the Future resolves, leaving the thread alive
     // with a dangling NativeCallable pointer.
     if (_useDesktopFlSerial) {
@@ -412,7 +412,7 @@ class UsbSerialService {
       try {
         if (serial?.isOpen() == FlOpenStatus.open) {
           serial?.setDTR(false);
-          serial?.closePort(); // synchronous C call — kills the SerialThread
+          serial?.closePort(); // synchronous C call, kills the SerialThread
         }
       } catch (_) {}
     }

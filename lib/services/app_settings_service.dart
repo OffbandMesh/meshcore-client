@@ -104,6 +104,10 @@ class AppSettingsService extends ChangeNotifier {
     await updateSettings(_settings.copyWith(enableMessageTracing: value));
   }
 
+  Future<void> setKeepScreenAwake(bool value) async {
+    await updateSettings(_settings.copyWith(keepScreenAwake: value));
+  }
+
   Future<void> setClockFormat(ClockFormat value) async {
     await updateSettings(_settings.copyWith(clockFormat: value));
   }

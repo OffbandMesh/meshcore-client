@@ -114,11 +114,20 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
-# Copy the native assets provided by the build.dart from all packages.
+# Copy the native assets provided by build.dart hooks (e.g. sqlite3, llamadart)
+# from all packages. Deferred to install time and guarded so a build where the
+# directory does not exist (native assets built after configure, or disabled)
+# does not error the way the stock unconditional install(DIRECTORY) would (#445).
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
-install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-   COMPONENT Runtime)
+install(CODE "
+  if(EXISTS \"${NATIVE_ASSETS_DIR}\")
+    file(GLOB _native_asset_libs \"${NATIVE_ASSETS_DIR}*\")
+    if(_native_asset_libs)
+      file(INSTALL DESTINATION \"${INSTALL_BUNDLE_LIB_DIR}\" TYPE FILE
+        FILES \${_native_asset_libs})
+    endif()
+  endif()
+" COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

@@ -2,6 +2,79 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.3.0] - 2026-07-30
+
+The first Offband release published to the Google Play production track. A large
+feature release on top of the 1.2.x line: cross-client reactions, Observer config
+profiles, log and serial-capture export, a reorganized Settings screen, richer
+path diagnostics, and a batch of reliability fixes.
+
+### Reactions
+
+- Incoming reactions now record **who** reacted, not just the tally, and a room's
+  own reaction is no longer misattributed to the room name (#383).
+- Emoji reactions from PocketMesh / MeshCore One are parsed and rendered instead
+  of showing as raw token text; sending is unchanged (#380).
+
+### Observer config profiles
+
+- Import an Observer config profile from the federated catalog or a URL, preview a
+  field-by-field diff against the current config, and apply it, with the wiring
+  reachable from Observer settings (#404, #405, #406, #407).
+- Profiles are defined by a YAML schema organized into capability sections; config
+  fetches are cache-busted so a re-import never serves a stale copy
+  (#402, #403, #456, #404).
+
+### Diagnostics and export
+
+- Share the App log and BLE log as a file: Save As on desktop, download on web,
+  system share sheet on mobile, using the platform-standard share icon
+  (#393, #427, #433, #396).
+- New serial / boot-log capture screen under Debug: enable/disable/erase/status
+  control, a chunked download protocol with reassembly, live status polling, and a
+  "Reboot device" action for boot-log capture (#430, #428).
+- The message Path screen now shows the path type, per-message SNR, and per-message
+  RSSI read from the reserved RX fields (#438, #439).
+- Device Info shows the running build identity (branch @ sha, build time) and the
+  active radio data scope (#397, #295).
+
+### Settings
+
+- Settings categories reordered, with Observer moved above App Settings and the app
+  debug-logging toggle moved into a Debug category (#271, #272, #273, #274).
+- Per-channel notification mode is reachable from the channel ellipsis menu (#275).
+- New keep-screen-awake setting (#269).
+- The advert notification setting was renamed to plain language and a stale
+  "Notifications" subtitle was dropped (#270, #276).
+
+### Reliability and fixes
+
+- Sending a max-length DM or channel message no longer wedges the send path: the
+  size cap is MTU-aware and a failed write is recovered instead of stalling all
+  further sends (#395).
+- Live channel-change push (0x91) with debounce so a burst of changes coalesces
+  into one re-sync instead of many (#429).
+- A storage-init failure now surfaces a persistent warning instead of failing
+  silently (#385).
+- Desktop builds bundle their native-assets DLLs (sqlite3, llamadart) so they run
+  on a clean machine, including on Linux (#445).
+- Back-button behavior refined: Back pops out of a channel and only top-level tabs
+  background the app; the dead top-level back arrow is hidden on a pinned desktop
+  layout (#389, #390).
+- Android warns when the app is under battery optimization and guides the user to
+  exempt it, including from the scanner screen (#443).
+- Send-side Smaz compression removed (phase 1), and a stable per-install client id
+  is sent in CMD_APP_START (#420, #297).
+
+### Storage
+
+- Desktop (Windows/Linux): message history that was split across several older
+  database files is now reunited. On launch, every discovered legacy store is
+  unioned into the pinned database (messages by id, contacts by public key); source
+  databases are never deleted, and a failed run leaves them intact and retries
+  (#367, #370). Builds on the earlier fix that pins the desktop database to one
+  fixed location (#363, #364).
+
 ## [1.2.2] - 2026-07-21
 
 A follow-up to 1.2.1 that recovers desktop history left behind in other databases.

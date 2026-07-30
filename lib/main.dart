@@ -29,15 +29,34 @@ import 'services/observer_config_service.dart';
 import 'services/block_service.dart';
 import 'services/window_geometry_service.dart';
 import 'services/store_consolidation_service.dart';
+import 'services/storage_health_service.dart';
 import 'storage/drift/blob_store.dart';
+import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
+import 'widgets/keep_screen_awake.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SharedPreferences cache
   await PrefsManager.initialize();
+
+  // Probe the storage layer up front (#385). If the database can't open, e.g.
+  // the native sqlite library fails to load, every read/write silently fails
+  // and the app looks wiped. Capture that here so the UI can warn loudly
+  // instead of showing an empty, normal-looking screen (SAFELANE §6).
+  final storageHealth = StorageHealthService();
+  try {
+    if (!await BlobStore.instance.verifyReadWrite()) {
+      storageHealth.markUnavailable('database read-back mismatch');
+    }
+  } catch (e) {
+    storageHealth.markUnavailable(e);
+    // appLogger is not initialized this early; debugPrint is safe here and the
+    // per-store operations still log via appLogger once it is up.
+    debugPrint('[Storage] Health probe failed; storage unavailable: $e');
+  }
 
   // Move bulk data (message history, contacts) out of SharedPreferences into
   // drift (#335). Must run after prefs are up and BEFORE any store reads, so
@@ -123,6 +142,7 @@ void main() async {
 
   runApp(
     MeshCoreApp(
+      storageHealth: storageHealth,
       connector: connector,
       retryService: retryService,
       pathHistoryService: pathHistoryService,
@@ -163,6 +183,7 @@ https://creativecommons.org/licenses/by/4.0/
 }
 
 class MeshCoreApp extends StatelessWidget {
+  final StorageHealthService storageHealth;
   final MeshCoreConnector connector;
   final MessageRetryService retryService;
   final PathHistoryService pathHistoryService;
@@ -180,6 +201,7 @@ class MeshCoreApp extends StatelessWidget {
 
   const MeshCoreApp({
     super.key,
+    required this.storageHealth,
     required this.connector,
     required this.retryService,
     required this.pathHistoryService,
@@ -200,6 +222,7 @@ class MeshCoreApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: storageHealth),
         ChangeNotifierProvider.value(value: connector),
         ChangeNotifierProvider.value(value: retryService),
         ChangeNotifierProvider.value(value: pathHistoryService),
@@ -257,7 +280,14 @@ class MeshCoreApp extends StatelessWidget {
               NotificationService().setLocale(locale);
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: _systemUiOverlayStyle(context),
-                child: child ?? const SizedBox.shrink(),
+                child: KeepScreenAwake(
+                  child: Consumer<StorageHealthService>(
+                    builder: (context, health, _) => StorageUnavailableBanner(
+                      show: !health.available,
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               );
             },
             home: (PlatformInfo.isWeb && !PlatformInfo.isChrome)

@@ -305,7 +305,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_appSettings => '앱 설정';
 
   @override
-  String get settings_appSettingsSubtitle => '알림, 메시징, 지도 설정';
+  String get settings_appSettingsSubtitle => '모양, 번역 및 지도 환경설정';
 
   @override
   String get settings_messageSettings => 'Message Settings';
@@ -373,7 +373,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_gpsStatusLiveFix => 'Live GPS fix';
 
   @override
-  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+  String get settings_gpsStatusNoFix => 'No fix: using stored/last position';
 
   @override
   String get settings_gpsStatusCoords => 'Coordinates';
@@ -393,7 +393,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settings_gpsStatusNoResponse =>
-      'No response — device may need the GPS-query firmware build';
+      'No response: device may need the GPS-query firmware build';
 
   @override
   String get settings_locationIntervalInvalid =>
@@ -569,6 +569,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settings_infoPublicKey => '공개 키';
+
+  @override
+  String get settings_infoBuild => 'Build';
+
+  @override
+  String get settings_infoDataScope => 'Data scope';
+
+  @override
+  String get settings_infoDataScopeSubtitle =>
+      'Messages, contacts, and channels are stored per radio under this key';
 
   @override
   String get settings_publicKeyCopied => 'Public key copied';
@@ -752,11 +762,11 @@ class AppLocalizationsKo extends AppLocalizations {
       '채널 메시지를 수신할 때 알림 표시';
 
   @override
-  String get appSettings_advertisementNotifications => '광고 알림';
+  String get appSettings_advertisementNotifications => '새 노드 발견';
 
   @override
   String get appSettings_advertisementNotificationsSubtitle =>
-      '새 노드가 발견되었을 때 알림 표시';
+      '새 리피터나 연락처가 감지되면 알림';
 
   @override
   String get appSettings_messaging => '메시징';
@@ -846,6 +856,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appSettings_batteryLipo => '리튬 폴리머 (3.0-4.2V)';
+
+  @override
+  String get appSettings_keepScreenAwake => '화면 켜짐 유지';
+
+  @override
+  String get appSettings_keepScreenAwakeSubtitle =>
+      '앱이 열려 있는 동안 화면이 꺼지지 않도록 합니다. 배터리를 더 소모합니다.';
 
   @override
   String get appSettings_mapDisplay => '지도 표시';
@@ -1208,9 +1225,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get channels_smazCompression => 'SMAZ 압축';
-
-  @override
   String get channels_cyr2latCompression => 'Cyr2Lat 압축';
 
   @override
@@ -1434,6 +1448,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get debugLog_clearLog => '명확한 로그';
 
   @override
+  String get debugLog_shareLog => 'Share logs';
+
+  @override
+  String get debugLog_saveLog => 'Save logs';
+
+  @override
+  String get debugLog_downloadLog => 'Download logs';
+
+  @override
+  String get debugLog_shareSubject => 'Offband Meshcore logs';
+
+  @override
+  String get debugLog_logSaved => 'Log saved';
+
+  @override
+  String get debugLog_logUnavailable => 'No log available to export';
+
+  @override
   String get debugLog_copied => '디버깅 로그 복사';
 
   @override
@@ -1623,9 +1655,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chat_publicKey => '공개 키';
-
-  @override
-  String get chat_compressOutgoingMessages => '전송되는 메시지 압축';
 
   @override
   String get chat_floodForced => '홍수 (강제)';
@@ -3459,6 +3488,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get channelPath_pathLabelTitle => '경로';
 
   @override
+  String get channelPath_routeDirect => 'direct (routed)';
+
+  @override
+  String channelPath_routeFlood(int hops) {
+    return 'flood, $hops hops';
+  }
+
+  @override
+  String get channelPath_snrLabel => 'SNR';
+
+  @override
+  String channelPath_snrValue(String db) {
+    return '$db dB';
+  }
+
+  @override
+  String get channelPath_rssiLabel => 'RSSI';
+
+  @override
+  String channelPath_rssiValue(int dbm) {
+    return '$dbm dBm';
+  }
+
+  @override
   String get channelPath_observedPathHeader => '관찰된 경로';
 
   @override
@@ -4075,7 +4128,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get snrIndicator_noNeighbors =>
-      'No neighbors heard currently — messages still broadcast and route.';
+      'No neighbors heard currently. Messages still broadcast and route.';
 
   @override
   String get snrIndicator_lastSeen => '마지막으로 목격';
@@ -4398,7 +4451,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String block_blockedNameOnly(String name) {
-    return 'Blocked \"$name\" across all channels — name only until we learn their key';
+    return 'Blocked \"$name\" across all channels. Name only until we learn their key';
   }
 
   @override
@@ -4418,16 +4471,39 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get block_namesHint =>
-      'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
+      'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.';
 
   @override
   String get block_offloadActive =>
-      'Firmware offload active — blocks sync to this radio';
+      'Firmware offload active: blocks sync to this radio';
 
   @override
   String get block_offloadStoreFull =>
-      'Radio block list full (32) — extra blocks stay app-only';
+      'Radio block list full (32): extra blocks stay app-only';
 
   @override
   String get block_composerNotice => 'You\'ve blocked this contact';
+
+  @override
+  String get storageUnavailableTitle => 'Message storage unavailable';
+
+  @override
+  String get storageUnavailableBody =>
+      'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.';
+
+  @override
+  String get batteryOptimizationTitle => 'Battery optimization is on';
+
+  @override
+  String get batteryOptimizationBody =>
+      'Android may sleep the app when the screen is off and drop the radio connection. Set this app\'s battery usage to Unrestricted for a reliable background connection.';
+
+  @override
+  String get batteryOptimizationOpenSettings => 'Open battery settings';
+
+  @override
+  String get batteryOptimizationDismiss => 'Dismiss';
+
+  @override
+  String get batteryOptimizationOpenFailed => 'Couldn\'t open battery settings';
 }

@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../services/app_debug_log_service.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../helpers/snack_bar_builder.dart';
+import '../utils/log_export.dart';
 
 class AppDebugLogScreen extends StatelessWidget {
   const AppDebugLogScreen({super.key});
@@ -22,6 +23,19 @@ class AppDebugLogScreen extends StatelessWidget {
             title: AdaptiveAppBarTitle(context.l10n.debugLog_appTitle),
             centerTitle: true,
             actions: [
+              IconButton(
+                tooltip: LogExport.tooltip(context),
+                icon: Icon(LogExport.icon),
+                onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => entries
+                      .map(
+                        (entry) =>
+                            '[${entry.formattedTime}] [${entry.levelLabel}] [${entry.tag}] ${entry.message}',
+                      )
+                      .join('\n'),
+                ),
+              ),
               IconButton(
                 tooltip: context.l10n.debugLog_copyLog,
                 icon: const Icon(Icons.copy),

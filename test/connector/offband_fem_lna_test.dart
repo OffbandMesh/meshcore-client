@@ -65,7 +65,7 @@ void main() {
 
     test('byte is present on non-capable boards and reads as bypassed', () {
       // Firmware appends it unconditionally, so presence indicates version,
-      // not capability — the cap bit is what gates the UI.
+      // not capability, the cap bit is what gates the UI.
       final frame = deviceInfo(length: 84, femByte: 0);
       frame[82] = 0x00;
       expect(MeshCoreConnector.parseFemLnaState(frame), isFalse);

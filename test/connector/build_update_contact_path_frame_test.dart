@@ -122,7 +122,7 @@ void main() {
       // 8 zero bytes for lat/lon + 4 bytes timestamp
       expect(frame.length, baseFrameLength + 8 + 4);
 
-      // Verify the lat/lon slot is actually zero — guards against a
+      // Verify the lat/lon slot is actually zero, guards against a
       // regression where the function writes garbage into those bytes.
       final tailStart = baseFrameLength;
       for (var i = tailStart; i < tailStart + 8; i++) {

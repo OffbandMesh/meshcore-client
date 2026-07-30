@@ -2,7 +2,7 @@
 // enable/disable as success but not apply it (HV4 desync,
 // meshcore-firmware#179). After a toggle/save the UI re-reads the slot and
 // compares to what it asked for; this classifier turns (intended, re-read) into
-// the outcome the UI reports. It treats every device identically — it only ever
+// the outcome the UI reports. It treats every device identically, it only ever
 // reflects the re-read, never assuming the change took.
 
 import 'package:flutter_test/flutter_test.dart';

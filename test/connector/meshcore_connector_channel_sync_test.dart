@@ -5,7 +5,7 @@
 // waits out the 2s timeout + 3 retries on EVERY empty slot, so a device with a
 // few populated channels out of a large capacity takes minutes to sync (~8s per
 // empty slot). This pins the decision: advance on ERR only while a channel GET
-// is in flight AND no generic-ack command is waiting — a pending generic-ack
+// is in flight AND no generic-ack command is waiting, a pending generic-ack
 // (a SET / channel-text send) is order-correlated to the ERR first.
 
 import 'package:flutter_test/flutter_test.dart';

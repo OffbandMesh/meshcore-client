@@ -691,7 +691,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_appSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Notifications, messaging, and map preferences'**
+  /// **'Appearance, translation, and map preferences'**
   String get settings_appSettingsSubtitle;
 
   /// Settings category title for notification and message-handling preferences
@@ -823,7 +823,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_gpsStatusNoFix.
   ///
   /// In en, this message translates to:
-  /// **'No fix — using stored/last position'**
+  /// **'No fix: using stored/last position'**
   String get settings_gpsStatusNoFix;
 
   /// No description provided for @settings_gpsStatusCoords.
@@ -859,7 +859,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_gpsStatusNoResponse.
   ///
   /// In en, this message translates to:
-  /// **'No response — device may need the GPS-query firmware build'**
+  /// **'No response: device may need the GPS-query firmware build'**
   String get settings_gpsStatusNoResponse;
 
   /// No description provided for @settings_locationIntervalInvalid.
@@ -1191,6 +1191,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Public Key'**
   String get settings_infoPublicKey;
+
+  /// No description provided for @settings_infoBuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Build'**
+  String get settings_infoBuild;
+
+  /// No description provided for @settings_infoDataScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Data scope'**
+  String get settings_infoDataScope;
+
+  /// No description provided for @settings_infoDataScopeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages, contacts, and channels are stored per radio under this key'**
+  String get settings_infoDataScopeSubtitle;
 
   /// No description provided for @settings_publicKeyCopied.
   ///
@@ -1543,13 +1561,13 @@ abstract class AppLocalizations {
   /// No description provided for @appSettings_advertisementNotifications.
   ///
   /// In en, this message translates to:
-  /// **'Advertisement Notifications'**
+  /// **'New node discovered'**
   String get appSettings_advertisementNotifications;
 
   /// No description provided for @appSettings_advertisementNotificationsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show notification when new nodes are discovered'**
+  /// **'Notify when new repeaters or contacts are heard'**
   String get appSettings_advertisementNotificationsSubtitle;
 
   /// No description provided for @appSettings_messaging.
@@ -1713,6 +1731,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'LiPo (3.0-4.2V)'**
   String get appSettings_batteryLipo;
+
+  /// No description provided for @appSettings_keepScreenAwake.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep screen awake'**
+  String get appSettings_keepScreenAwake;
+
+  /// No description provided for @appSettings_keepScreenAwakeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prevent the display from sleeping while the app is open. Uses more battery.'**
+  String get appSettings_keepScreenAwakeSubtitle;
 
   /// No description provided for @appSettings_mapDisplay.
   ///
@@ -2350,12 +2380,6 @@ abstract class AppLocalizations {
   /// **'Edit Channel {index}'**
   String channels_editChannelTitle(int index);
 
-  /// No description provided for @channels_smazCompression.
-  ///
-  /// In en, this message translates to:
-  /// **'SMAZ compression'**
-  String get channels_smazCompression;
-
   /// No description provided for @channels_cyr2latCompression.
   ///
   /// In en, this message translates to:
@@ -2770,6 +2794,42 @@ abstract class AppLocalizations {
   /// **'Clear log'**
   String get debugLog_clearLog;
 
+  /// No description provided for @debugLog_shareLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Share logs'**
+  String get debugLog_shareLog;
+
+  /// No description provided for @debugLog_saveLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Save logs'**
+  String get debugLog_saveLog;
+
+  /// No description provided for @debugLog_downloadLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Download logs'**
+  String get debugLog_downloadLog;
+
+  /// No description provided for @debugLog_shareSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband Meshcore logs'**
+  String get debugLog_shareSubject;
+
+  /// No description provided for @debugLog_logSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Log saved'**
+  String get debugLog_logSaved;
+
+  /// No description provided for @debugLog_logUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No log available to export'**
+  String get debugLog_logUnavailable;
+
   /// No description provided for @debugLog_copied.
   ///
   /// In en, this message translates to:
@@ -3069,12 +3129,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Public Key'**
   String get chat_publicKey;
-
-  /// No description provided for @chat_compressOutgoingMessages.
-  ///
-  /// In en, this message translates to:
-  /// **'Compress outgoing messages'**
-  String get chat_compressOutgoingMessages;
 
   /// No description provided for @chat_floodForced.
   ///
@@ -4697,7 +4751,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_pathHashModeHelper.
   ///
   /// In en, this message translates to:
-  /// **'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths — only raise once your network is on v1.14+.'**
+  /// **'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths. Only raise once your network is on v1.14+.'**
   String get repeater_pathHashModeHelper;
 
   /// No description provided for @repeater_txDelay.
@@ -4733,7 +4787,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_intThreshHelper.
   ///
   /// In en, this message translates to:
-  /// **'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables — only raise if you see RX errors in a noisy band.'**
+  /// **'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables. Only raise if you see RX errors in a noisy band.'**
   String get repeater_intThreshHelper;
 
   /// No description provided for @repeater_agcResetInterval.
@@ -4805,7 +4859,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_settingsSavedRebootNeeded.
   ///
   /// In en, this message translates to:
-  /// **'Settings saved — reboot the repeater to apply'**
+  /// **'Settings saved. Reboot the repeater to apply'**
   String get repeater_settingsSavedRebootNeeded;
 
   /// No description provided for @repeater_settingsPartialFailure.
@@ -6302,6 +6356,42 @@ abstract class AppLocalizations {
   /// **'Path'**
   String get channelPath_pathLabelTitle;
 
+  /// No description provided for @channelPath_routeDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'direct (routed)'**
+  String get channelPath_routeDirect;
+
+  /// No description provided for @channelPath_routeFlood.
+  ///
+  /// In en, this message translates to:
+  /// **'flood, {hops} hops'**
+  String channelPath_routeFlood(int hops);
+
+  /// No description provided for @channelPath_snrLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'SNR'**
+  String get channelPath_snrLabel;
+
+  /// No description provided for @channelPath_snrValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{db} dB'**
+  String channelPath_snrValue(String db);
+
+  /// No description provided for @channelPath_rssiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI'**
+  String get channelPath_rssiLabel;
+
+  /// No description provided for @channelPath_rssiValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{dbm} dBm'**
+  String channelPath_rssiValue(int dbm);
+
   /// No description provided for @channelPath_observedPathHeader.
   ///
   /// In en, this message translates to:
@@ -7327,7 +7417,7 @@ abstract class AppLocalizations {
   /// No description provided for @snrIndicator_noNeighbors.
   ///
   /// In en, this message translates to:
-  /// **'No neighbors heard currently — messages still broadcast and route.'**
+  /// **'No neighbors heard currently. Messages still broadcast and route.'**
   String get snrIndicator_noNeighbors;
 
   /// No description provided for @snrIndicator_lastSeen.
@@ -7897,7 +7987,7 @@ abstract class AppLocalizations {
   /// No description provided for @block_blockedNameOnly.
   ///
   /// In en, this message translates to:
-  /// **'Blocked \"{name}\" across all channels — name only until we learn their key'**
+  /// **'Blocked \"{name}\" across all channels. Name only until we learn their key'**
   String block_blockedNameOnly(String name);
 
   /// No description provided for @block_settingsTitle.
@@ -7933,19 +8023,19 @@ abstract class AppLocalizations {
   /// No description provided for @block_namesHint.
   ///
   /// In en, this message translates to:
-  /// **'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.'**
+  /// **'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.'**
   String get block_namesHint;
 
   /// No description provided for @block_offloadActive.
   ///
   /// In en, this message translates to:
-  /// **'Firmware offload active — blocks sync to this radio'**
+  /// **'Firmware offload active: blocks sync to this radio'**
   String get block_offloadActive;
 
   /// No description provided for @block_offloadStoreFull.
   ///
   /// In en, this message translates to:
-  /// **'Radio block list full (32) — extra blocks stay app-only'**
+  /// **'Radio block list full (32): extra blocks stay app-only'**
   String get block_offloadStoreFull;
 
   /// No description provided for @block_composerNotice.
@@ -7953,6 +8043,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'ve blocked this contact'**
   String get block_composerNotice;
+
+  /// Persistent banner title shown when the storage/database layer fails to open (#385).
+  ///
+  /// In en, this message translates to:
+  /// **'Message storage unavailable'**
+  String get storageUnavailableTitle;
+
+  /// Persistent banner body explaining that storage is unavailable and messages are not being saved (#385).
+  ///
+  /// In en, this message translates to:
+  /// **'Your history is not lost, but the app can\'t open its database, so new messages are NOT being saved. Restart the app after fixing the problem. See the app log for details.'**
+  String get storageUnavailableBody;
+
+  /// Title of the persistent banner warning that Android battery optimization may drop the background radio connection (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimization is on'**
+  String get batteryOptimizationTitle;
+
+  /// Body of the battery-optimization warning banner (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Android may sleep the app when the screen is off and drop the radio connection. Set this app\'s battery usage to Unrestricted for a reliable background connection.'**
+  String get batteryOptimizationBody;
+
+  /// Button that opens the Android battery-optimization settings screen (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Open battery settings'**
+  String get batteryOptimizationOpenSettings;
+
+  /// Tooltip for the button that hides the battery-optimization banner for this session (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get batteryOptimizationDismiss;
+
+  /// Snackbar shown when the battery-optimization settings screen could not be opened (#443).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open battery settings'**
+  String get batteryOptimizationOpenFailed;
 }
 
 class _AppLocalizationsDelegate

@@ -10,7 +10,7 @@ import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/helpers/cayenne_lpp.dart';
 
 void main() {
-  group('buildSendTelemetryReq(null) — the self request', () {
+  group('buildSendTelemetryReq(null), the self request', () {
     test(
       'is CMD_SEND_TELEMETRY_REQ + 3 reserved = 4-byte frame (firmware len==4)',
       () {

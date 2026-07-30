@@ -411,6 +411,9 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
 
     return AppShell(
       selectedIndex: 2,
+      // Pushed detail (LOS analysis over the map): Back pops to the map, not to
+      // the background (#389).
+      isTopLevel: false,
       onDestinationSelected: (index) => _handleQuickSwitch(index, context),
       contactsUnreadCount: context
           .watch<MeshCoreConnector>()
@@ -1359,13 +1362,13 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
       case 0:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ContactsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ContactsScreen()),
         );
         break;
       case 1:
         Navigator.pushReplacement(
           context,
-          buildQuickSwitchRoute(const ChannelsScreen(hideBackButton: true)),
+          buildQuickSwitchRoute(const ChannelsScreen()),
         );
         break;
     }

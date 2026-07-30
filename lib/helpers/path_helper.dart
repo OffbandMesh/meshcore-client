@@ -58,7 +58,7 @@ class PathHelper {
   }
 
   /// Trace `path_sz` flag for a configured hash width: floor(log2(width)), so
-  /// width 1→0, 2→1, 3→1, 4→2. The wire hop size is `1 << path_sz` bytes — the
+  /// width 1→0, 2→1, 3→1, 4→2. The wire hop size is `1 << path_sz` bytes, the
   /// firmware's trace widths are powers of two, so this is the largest power of
   /// two ≤ the configured width (width 3 sends the leading 2 bytes per hop). (#150)
   static int tracePathSz(int hashWidth) {

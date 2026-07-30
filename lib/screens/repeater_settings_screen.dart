@@ -397,7 +397,7 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
   ///
   /// Response/command pairing is guaranteed by the prefix-matching layer in
   /// RepeaterCommandService (firmware echoes the `XX|` token from MyMesh.cpp),
-  /// so no shape-based validation is needed here — `tryParse` handles any
+  /// so no shape-based validation is needed here, `tryParse` handles any
   /// malformed value by leaving state untouched.
   bool _handleGetResponse(String command, String response) {
     final normalized = command.trim().toLowerCase();
@@ -924,7 +924,7 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      // Only clear password fields if every password command succeeded —
+      // Only clear password fields if every password command succeeded,
       // otherwise the user keeps their typed value to retry.
       if (!passwordsFailed) {
         _passwordController.clear();

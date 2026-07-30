@@ -24,6 +24,7 @@ import '../models/channel_message.dart';
 import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
+import '../widgets/channel_notify_mode.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
@@ -308,9 +309,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     navigator.pop();
     navigator.pushReplacement(
       buildQuickSwitchRoute(
-        index == 0
-            ? const ContactsScreen(hideBackButton: true)
-            : const MapScreen(hideBackButton: true),
+        index == 0 ? const ContactsScreen() : const MapScreen(),
       ),
     );
   }
@@ -347,6 +346,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       // a channel on desktop, where there is no system back button and the
       // hamburger has taken the back arrow's place.
       selectedIndex: 1,
+      // Pushed detail: Back pops to the channel list, not to the background
+      // (#389). The bar above is only for tab highlighting/switching.
+      isTopLevel: false,
       onDestinationSelected: _handleQuickSwitch,
       contactsUnreadCount: context
           .watch<MeshCoreConnector>()
@@ -421,13 +423,33 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'clearChat') {
+              if (value == 'notifications') {
+                showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'clearChat') {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
                   _currentChannel.index,
                 );
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'notifications',
+                child: Row(
+                  children: [
+                    Icon(
+                      channelNotifyModeIcon(
+                        context.read<AppSettingsService>().channelNotifyMode(
+                          identityKey: channelNotifyKeyFor(widget.channel),
+                          channelName: widget.channel.name,
+                        ),
+                      ),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(context.l10n.channels_notifications),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'clearChat',
                 child: Row(
@@ -613,7 +635,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   /// Block the sender of a channel post. Resolves the claimed name to known
   /// pubkey(s) and blocks each (full block: DM + adverts + all channels); if it
   /// resolves to nothing, blocks the name globally across all channels (promotes
-  /// to a pubkey block later, once the identity is learned — #174).
+  /// to a pubkey block later, once the identity is learned, #174).
   Future<void> _blockChannelSender(ChannelMessage message) async {
     final connector = context.read<MeshCoreConnector>();
     final blockService = context.read<BlockService>();
@@ -1131,7 +1153,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   Widget _buildMessageComposer() {
     final connector = context.watch<MeshCoreConnector>();
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final settings = context.watch<AppSettingsService>().settings;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1227,12 +1252,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                       hintText: context.l10n.chat_typeMessage,
                       onSubmitted: (_) => _sendMessage(),
                       encoder:
-                          (connector.isChannelSmazEnabled(
-                                _currentChannel.index,
-                              ) ||
-                              connector.isChannelCyr2LatEnabled(
-                                _currentChannel.index,
-                              ))
+                          connector.isChannelCyr2LatEnabled(
+                            _currentChannel.index,
+                          )
                           ? (text) => connector.prepareChannelOutboundText(
                               _currentChannel.index,
                               text,
@@ -1364,7 +1386,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       messageText = '@[${_replyingToMessage!.senderName}] $messageText';
     }
 
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
     final outboundText = connector.prepareChannelOutboundText(
       _currentChannel.index,
       messageText,
@@ -1398,7 +1423,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
-  /// One-click reply quoting the route a message took — hop count + path,
+  /// One-click reply quoting the route a message took, hop count + path,
   /// truncated with … to fit the channel byte budget, fired directly. (#106)
   void _sendRouteReply(ChannelMessage message) {
     final connector = context.read<MeshCoreConnector>();
@@ -1406,7 +1431,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final hops = message.pathBytes.length ~/ (w < 1 ? 1 : w);
     final prefix =
         '@[${message.senderName}] ↩ ${context.l10n.chat_hopsCount(hops)} · via ';
-    final maxBytes = maxChannelMessageBytes(connector.selfName);
+    final maxBytes = maxChannelMessageBytes(
+      connector.selfName,
+      maxFrameBytes: connector.effectiveMaxFrameSize,
+    );
 
     var path = _formatPathPrefixes(message.pathBytes, w);
     var truncated = false;

@@ -128,7 +128,7 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
 
   void _onChanged() {
     // Cursor-driven trigger detection (same shape as multi_trigger_autocomplete's
-    // invokingTrigger). It does not special-case the IME composing region —
+    // invokingTrigger). It does not special-case the IME composing region,
     // fine for hardware keyboards; a known limitation for CJK/IME input, which
     // the reference package doesn't handle either.
     final value = widget.controller.value;
@@ -352,7 +352,7 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
       // Enter accepts the highlighted item (emoji or mention) like Tab, then
-      // sends — so `:shrug` + Enter ships the highlighted glyph, and `@Bob` +
+      // sends, so `:shrug` + Enter ships the highlighted glyph, and `@Bob` +
       // Enter inserts the mention. Tab accepts without sending; Esc dismisses
       // the dropdown to send literal text. (#231)
       if (_highlighted >= 0 && _highlighted < _matches.length) {

@@ -59,7 +59,7 @@ class PathSelectionDialog extends StatefulWidget {
 
   /// Parses comma-separated hex hop prefixes, each exactly [hashWidth] bytes
   /// wide (clamped >= 1). Wrong-length or malformed entries go to [invalid] and
-  /// are skipped — never silently truncated. (#155)
+  /// are skipped, never silently truncated. (#155)
   static List<int> parsePathPrefixes(
     String text,
     int hashWidth,

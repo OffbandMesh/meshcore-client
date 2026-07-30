@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import '../l10n/l10n.dart';
@@ -7,9 +6,7 @@ import '../services/ble_debug_log_service.dart';
 import '../connector/meshcore_protocol.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../helpers/snack_bar_builder.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/file_log_service.dart';
+import '../utils/log_export.dart';
 
 enum _BleLogView { frames, rawLogRx }
 
@@ -33,17 +30,22 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
         final hasEntries = showingFrames
             ? entries.isNotEmpty
             : rawEntries.isNotEmpty;
-        final isMobile =
-            defaultTargetPlatform == TargetPlatform.android ||
-            defaultTargetPlatform == TargetPlatform.iOS;
         return Scaffold(
           appBar: AppBar(
             title: AdaptiveAppBarTitle(context.l10n.debugLog_bleTitle),
             actions: [
               IconButton(
-                tooltip: isMobile ? 'Share logs' : 'Open logs folder',
-                icon: Icon(isMobile ? Icons.ios_share : Icons.folder_open),
-                onPressed: () => _exportLogs(context),
+                tooltip: LogExport.tooltip(context),
+                icon: Icon(LogExport.icon),
+                onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => entries
+                      .map(
+                        (entry) =>
+                            '${entry.description}\n${entry.hexPreview}\n',
+                      )
+                      .join('\n'),
+                ),
               ),
               IconButton(
                 tooltip: context.l10n.debugLog_copyLog,
@@ -170,36 +172,6 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
         );
       },
     );
-  }
-
-  /// Export the on-disk log (#97): the system share sheet on mobile, or open the
-  /// logs folder in the file manager on desktop. The file holds both the app log
-  /// and BLE frames, flushed first so it's current.
-  Future<void> _exportLogs(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final file = await FileLogService.instance.flushAndGetActiveFile();
-    if (file == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('File logging is unavailable on this platform'),
-        ),
-      );
-      return;
-    }
-    final isMobile =
-        defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS;
-    if (isMobile) {
-      await SharePlus.instance.share(
-        ShareParams(
-          subject: 'Offband Meshcore logs',
-          files: [XFile(file.path)],
-        ),
-      );
-    } else {
-      final dir = FileLogService.instance.logDir;
-      if (dir != null) await launchUrl(Uri.file(dir.path));
-    }
   }
 
   void _showRawDialog(BuildContext context, _RawPacketInfo info) {

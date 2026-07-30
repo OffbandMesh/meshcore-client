@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import '../models/message.dart';
 import '../models/translation_support.dart';
+import '../helpers/reaction_helper.dart';
 import '../helpers/smaz.dart';
 import '../utils/app_logger.dart';
 import 'drift/blob_store.dart';
@@ -168,11 +169,15 @@ class MessageStore {
           ? base64Encode(msg.pathBytes)
           : null,
       'reactions': msg.reactions,
+      'reactionSenders': msg.reactionSenders,
       'reactionStatuses': msg.reactionStatuses.map(
         (key, value) => MapEntry(key, value.index),
       ),
       'fourByteRoomContactKey': base64Encode(msg.fourByteRoomContactKey),
       'rxTime': msg.rxTime?.millisecondsSinceEpoch,
+      'snr': msg.snr,
+      'rssi': msg.rssi,
+      'isFloodRoute': msg.isFloodRoute,
     };
   }
 
@@ -216,6 +221,9 @@ class MessageStore {
             (key, value) => MapEntry(key, value as int),
           ) ??
           {},
+      reactionSenders: ReactionHelper.reactionSendersFromJson(
+        json['reactionSenders'],
+      ),
       reactionStatuses:
           (json['reactionStatuses'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(key, MessageStatus.values[value as int]),
@@ -229,6 +237,9 @@ class MessageStore {
       rxTime: json['rxTime'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['rxTime'] as int)
           : null,
+      snr: (json['snr'] as num?)?.toDouble(),
+      rssi: json['rssi'] as int?,
+      isFloodRoute: json['isFloodRoute'] as bool?,
     );
   }
 }

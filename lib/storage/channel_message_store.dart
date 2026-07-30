@@ -4,6 +4,7 @@ import 'package:meshcore_open/utils/app_logger.dart';
 
 import '../models/channel_message.dart';
 import '../models/translation_support.dart';
+import '../helpers/reaction_helper.dart';
 import '../helpers/smaz.dart';
 import 'drift/blob_store.dart';
 
@@ -18,7 +19,7 @@ class ChannelMessageStore {
   set setPublicKeyHex(String value) =>
       publicKeyHex = value.length >= 10 ? value.substring(0, 10) : '';
 
-  /// Resolves a channel slot index to its channel's PSK hex — a stable identity
+  /// Resolves a channel slot index to its channel's PSK hex, a stable identity
   /// that does not change when the channel moves slots. Set by the connector.
   /// When it yields a non-empty hex, history is keyed by PSK so reusing a slot
   /// can never surface a previous occupant's messages. Falls back to the slot
@@ -165,8 +166,8 @@ class ChannelMessageStore {
     String? jsonString = await blobs.readWithPrefsFallback(key);
 
     // One-time migration into the PSK-identity key. Only runs when the PSK is
-    // known (key != index key). Adopts pre-#194 history keyed by slot index —
-    // device-scoped first, then the oldest unscoped key — and drops the source.
+    // known (key != index key). Adopts pre-#194 history keyed by slot index,
+    // device-scoped first, then the oldest unscoped key, and drops the source.
     // Build-B (#193) clears a slot's index history on mismatched reuse, so a
     // live slot's index data is the channel's own by the time we read here.
     if ((jsonString == null || jsonString.isEmpty) &&
@@ -267,6 +268,7 @@ class ChannelMessageStore {
       'replyToSenderName': msg.replyToSenderName,
       'replyToText': msg.replyToText,
       'reactions': msg.reactions,
+      'reactionSenders': msg.reactionSenders,
     };
   }
 
@@ -317,6 +319,9 @@ class ChannelMessageStore {
             (key, value) => MapEntry(key, value as int),
           ) ??
           {},
+      reactionSenders: ReactionHelper.reactionSendersFromJson(
+        json['reactionSenders'],
+      ),
     );
   }
 

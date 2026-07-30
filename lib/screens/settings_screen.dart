@@ -12,8 +12,10 @@ import '../l10n/l10n.dart';
 import '../models/offband_gps_status.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
+import '../services/app_settings_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
+import '../utils/build_info.dart';
 import 'settings/settings_shell.dart';
 import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
@@ -21,6 +23,7 @@ import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'serial_capture_screen.dart';
 import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
 import '../widgets/sync_progress_overlay.dart';
@@ -77,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<SettingsCategory> _categories(BuildContext context) {
     final l10n = context.l10n;
-    // Rebuild ONLY when the observer gate flips — NOT on every connector update.
+    // Rebuild ONLY when the observer gate flips, NOT on every connector update.
     // A blanket context.watch here rebuilt the whole settings screen on every
     // sync frame, thrashing the UI thread and slowing the channel sync (#81).
     final showObserver = context.select<MeshCoreConnector, bool>(
@@ -87,6 +90,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     return [
+      SettingsCategory(
+        icon: Icons.badge_outlined,
+        title: l10n.settings_nodeSettings,
+        builder: _identityPane,
+      ),
       SettingsCategory(
         icon: Icons.settings_input_antenna,
         title: l10n.settings_radioSettings,
@@ -100,21 +108,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _radioStatsPane,
       ),
       SettingsCategory(
-        icon: Icons.badge_outlined,
-        title: l10n.settings_nodeSettings,
-        builder: _identityPane,
-      ),
-      SettingsCategory(
         icon: Icons.shield_outlined,
         title: l10n.settings_privacy,
         subtitle: l10n.settings_privacySubtitle,
         builder: _privacyPane,
-      ),
-      SettingsCategory(
-        icon: Icons.block,
-        title: l10n.block_settingsTitle,
-        subtitle: l10n.block_settingsSubtitle,
-        builder: _blockedPane,
       ),
       SettingsCategory(
         icon: Icons.contacts_outlined,
@@ -123,15 +120,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: _contactsPane,
       ),
       SettingsCategory(
+        icon: Icons.block,
+        title: l10n.block_settingsTitle,
+        subtitle: l10n.block_settingsSubtitle,
+        builder: _blockedPane,
+      ),
+      SettingsCategory(
         icon: Icons.sms_outlined,
         title: l10n.settings_messageSettings,
         subtitle: l10n.settings_messageSettingsSubtitle,
         builder: _messageSettingsPane,
-      ),
-      SettingsCategory(
-        icon: Icons.info_outline,
-        title: l10n.settings_deviceInfo,
-        builder: _devicePane,
       ),
       if (showObserver)
         SettingsCategory(
@@ -145,6 +143,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_appSettings,
         subtitle: l10n.settings_appSettingsSubtitle,
         builder: _appPane,
+      ),
+      SettingsCategory(
+        icon: Icons.info_outline,
+        title: l10n.settings_deviceInfo,
+        builder: _devicePane,
       ),
       SettingsCategory(
         icon: Icons.bolt_outlined,
@@ -417,12 +420,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildBatteryInfoRow(context, connector),
             if (connector.selfName != null)
               _buildInfoRow(l10n.settings_nodeName, connector.selfName!),
-            if (connector.selfPublicKey != null)
+            if (connector.selfPublicKey != null) ...[
               _buildInfoRow(
                 l10n.settings_infoPublicKey,
                 pubKeyToHex(connector.selfPublicKey!),
                 copyValue: pubKeyToHex(connector.selfPublicKey!),
               ),
+              // #295: stores are keyed by the first 10 hex of the connected
+              // radio's public key, so switching radios silently swaps which
+              // history you are looking at. Surface the key that is in effect.
+              ...() {
+                final hex = pubKeyToHex(connector.selfPublicKey!);
+                final scope = hex.length > 10 ? hex.substring(0, 10) : hex;
+                if (scope.isEmpty) return <Widget>[];
+                return <Widget>[
+                  _buildInfoRow(
+                    l10n.settings_infoDataScope,
+                    scope,
+                    copyValue: scope,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      l10n.settings_infoDataScopeSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ];
+              }(),
+            ],
             _buildInfoRow(
               l10n.settings_infoContactsCount,
               '${connector.contacts.length}',
@@ -430,6 +458,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildInfoRow(
               l10n.settings_infoChannelCount,
               '${connector.channels.length}',
+            ),
+            // #397: identity of the running binary, injected at build time and
+            // independent of the marketing version. Its own line so "which build
+            // am I on" is answerable at a glance; copyable for bug reports.
+            _buildInfoRow(
+              l10n.settings_infoBuild,
+              BuildInfo.stamp,
+              copyValue: BuildInfo.stamp,
             ),
           ],
         ),
@@ -571,6 +607,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
+    final settingsService = context.watch<AppSettingsService>();
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,6 +634,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
           const Divider(height: 1),
+          SwitchListTile(
+            secondary: const Icon(Icons.bug_report_outlined),
+            title: Text(l10n.appSettings_appDebugLogging),
+            subtitle: Text(l10n.appSettings_appDebugLoggingSubtitle),
+            value: settingsService.settings.appDebugLogEnabled,
+            onChanged: (value) async {
+              try {
+                await settingsService.setAppDebugLogEnabled(value);
+              } catch (_) {
+                if (context.mounted) {
+                  showDismissibleSnackBar(
+                    context,
+                    content: const Text(
+                      'Could not change debug logging. Please try again.',
+                    ),
+                  );
+                }
+                return;
+              }
+              if (!context.mounted) return;
+              showDismissibleSnackBar(
+                context,
+                content: Text(
+                  value
+                      ? l10n.appSettings_appDebugLoggingEnabled
+                      : l10n.appSettings_appDebugLoggingDisabled,
+                ),
+                duration: const Duration(seconds: 2),
+              );
+            },
+          ),
+          const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.code_outlined),
             title: Text(l10n.settings_appDebugLog),
@@ -607,6 +676,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const AppDebugLogScreen(),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          // Serial capture (#430). English-only for now; localization follow-up.
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Serial capture'),
+            subtitle: const Text(
+              "Capture the radio's serial log and share it as a file",
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SerialCaptureScreen(),
                 ),
               );
             },
@@ -633,7 +720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.sync_problem_outlined),
             title: const Text('Sync queued messages now'),
             subtitle: const Text(
-              'Force-pull messages the radio is holding — diagnostic for #51 '
+              'Force-pull messages the radio is holding, diagnostic for #51 '
               '(radio reports a count but the app shows none). Logs the flow '
               'for diagnostics.',
             ),
@@ -2203,7 +2290,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
             contentPadding: EdgeInsets.zero,
           ),
         ],
-        // Only this radio's own FEM probe decides whether this appears — never
+        // Only this radio's own FEM probe decides whether this appears, never
         // model or version (#304). Deliberately not mirrored into local state:
         // firmware returns post-apply hardware truth, so the switch renders
         // what the radio reports rather than what we asked for.
@@ -2249,7 +2336,7 @@ class _RadioSettingsSnapshot {
     required this.txPowerDbm,
   });
 
-  /// Frequency in integer Hz — avoids floating-point comparison issues.
+  /// Frequency in integer Hz, avoids floating-point comparison issues.
   int get frequencyHz => (frequencyMHz * 1000).round();
 
   /// Convert from the connector's raw-int snapshot to UI-enum snapshot.

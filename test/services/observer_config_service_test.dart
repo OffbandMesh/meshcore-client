@@ -1,7 +1,7 @@
 // Adversarial + correctness tests for ObserverConfigService (#64 A2).
 //
 // TDD: the concurrency and secret-redaction tests are written to FAIL on the
-// current service — they document the Gemini BLOCKER (#1 race: "one request in
+// current service, they document the Gemini BLOCKER (#1 race: "one request in
 // flight" is assumed, not enforced) and MINOR (#6: secret key names leak into
 // error strings). S1 (#73) hardens the service until these pass.
 //
@@ -198,7 +198,7 @@ void main() {
       await setF,
       isTrue,
       reason:
-          'setFlat must receive its OWN ACK, not the GET value — cross-talk means single-flight is unenforced',
+          'setFlat must receive its OWN ACK, not the GET value, cross-talk means single-flight is unenforced',
     );
   });
 
@@ -357,7 +357,7 @@ void main() {
     expect(
       setKeys(auto),
       isNot(contains('mqtt.broker.2.enabled')),
-      reason: 'a failed field must never reach enabled=1 — slot stays safe',
+      reason: 'a failed field must never reach enabled=1, slot stays safe',
     );
     auto.closeStream();
   });
@@ -395,7 +395,7 @@ void main() {
 
   // ---- #103: a slow-but-steady dump must outlast the fixed timeout ----
   test('getBrokers completes a dump that outlasts the per-frame timeout while '
-      'frames keep arriving (re-armed inactivity watchdog) — #103', () async {
+      'frames keep arriving (re-armed inactivity watchdog), #103', () async {
     svc.timeout = const Duration(milliseconds: 80);
     final future = svc.getBrokers();
     final frames = <Uint8List>[

@@ -21,10 +21,21 @@ import '../widgets/adaptive_app_bar_title.dart';
 class ChannelMessagePathScreen extends StatelessWidget {
   final ChannelMessage message;
   final bool channelMessage;
+
+  /// RF details for a direct message, sourced from the [Message] (#438). Null
+  /// for channel messages and outgoing/legacy records; each row is hidden when
+  /// its value is null. [rssi] stays null until firmware ships it (#439).
+  final double? snr;
+  final int? rssi;
+  final bool? isFloodRoute;
+
   const ChannelMessagePathScreen({
     super.key,
     required this.message,
     this.channelMessage = false,
+    this.snr,
+    this.rssi,
+    this.isFloodRoute,
   });
 
   @override
@@ -146,10 +157,24 @@ class ChannelMessagePathScreen extends StatelessWidget {
               ),
             _buildDetailRow(
               l10n.channelPath_pathLabelTitle,
-              _formatPathLabel(message.hopCount, l10n),
+              isFloodRoute == null
+                  ? _formatPathLabel(message.hopCount, l10n)
+                  : (isFloodRoute!
+                        ? l10n.channelPath_routeFlood(message.hopCount ?? 0)
+                        : l10n.channelPath_routeDirect),
             ),
             if (observedLabel != null)
               _buildDetailRow(l10n.channelPath_observedLabel, observedLabel),
+            if (snr != null)
+              _buildDetailRow(
+                l10n.channelPath_snrLabel,
+                l10n.channelPath_snrValue(snr!.toStringAsFixed(2)),
+              ),
+            if (rssi != null)
+              _buildDetailRow(
+                l10n.channelPath_rssiLabel,
+                l10n.channelPath_rssiValue(rssi!),
+              ),
           ],
         ),
       ),

@@ -82,7 +82,7 @@ void main() {
   final Uint8List recipientKey = _makeRecipientKey();
 
   // -------------------------------------------------------------------------
-  group('computeExpectedAckHash — attempt masking', () {
+  group('computeExpectedAckHash, attempt masking', () {
     test('attempts 0–3 all produce different hashes', () {
       final hashes = List.generate(
         4,
@@ -239,7 +239,7 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  group('buildSendTextMsgFrame — attempt encoding', () {
+  group('buildSendTextMsgFrame, attempt encoding', () {
     // Frame layout: [cmd(1)][txtType(1)][attempt(1)][timestamp(4)][pubKeyPrefix(6)][text][null(1)]
     // So byte index 2 carries the raw attempt & 0xFF.
 
@@ -387,7 +387,7 @@ void main() {
       test(
         'attempt 3: flutter hash equals hash computed directly for attempt 3',
         () {
-          // 3 & 3 == 3, so no wrapping — both sides agree.
+          // 3 & 3 == 3, so no wrapping, both sides agree.
           final hashFor3 = MessageRetryService.computeExpectedAckHash(
             fixedTs,
             3,
@@ -486,7 +486,7 @@ void main() {
   );
 
   // -------------------------------------------------------------------------
-  group('_AckHashMapping.attemptIndex — indirect verification via public API', () {
+  group('_AckHashMapping.attemptIndex, indirect verification via public API', () {
     // _AckHashMapping is private; we validate its purpose indirectly: that
     // computeExpectedAckHash records the correct per-attempt hash so that the
     // right hash is matched when an ACK arrives.
@@ -532,7 +532,7 @@ void main() {
     );
 
     test(
-      'attempt index 1 and 5 map to the same slot — ACK from either retry is matched',
+      'attempt index 1 and 5 map to the same slot, ACK from either retry is matched',
       () {
         final hashForAttempt1 = MessageRetryService.computeExpectedAckHash(
           fixedTs,
@@ -553,7 +553,7 @@ void main() {
     );
   });
 
-  group('sendMessageWithRetry — auto path fallback', () {
+  group('sendMessageWithRetry, auto path fallback', () {
     test(
       'preserves the contact path when auto-selection returns null',
       () async {
@@ -567,7 +567,7 @@ void main() {
 
         retryService.initialize(
           RetryServiceConfig(
-            sendMessage: (_, _, _, _) {},
+            sendMessage: (_, _, _, _) async {},
             addMessage: (_, message) => addedMessage = message,
             updateMessage: (_) {},
             clearContactPath: (_) {},
@@ -601,7 +601,7 @@ void main() {
 
       retryService.initialize(
         RetryServiceConfig(
-          sendMessage: (_, _, _, _) {},
+          sendMessage: (_, _, _, _) async {},
           addMessage: (_, message) => addedMessage = message,
           updateMessage: (_) {},
           clearContactPath: (_) {},
@@ -615,5 +615,98 @@ void main() {
       expect(addedMessage!.pathLength, equals(-1));
       expect(addedMessage!.pathBytes, isEmpty);
     });
+  });
+
+  group('MTU-aware message size caps (#395)', () {
+    test('maxContactMessageBytes shrinks with a smaller frame budget and the '
+        'built frame fits the budget', () {
+      // Omitting the budget matches passing maxFrameSize explicitly.
+      expect(
+        maxContactMessageBytes(),
+        equals(maxContactMessageBytes(maxFrameBytes: maxFrameSize)),
+      );
+      // A 169-byte writable budget (ATT_MTU 172 - 3) caps below the default.
+      final cap169 = maxContactMessageBytes(maxFrameBytes: 169);
+      expect(cap169, lessThan(maxContactMessageBytes()));
+      // Real DM frame overhead is 14 bytes; the built frame must fit 169.
+      expect(14 + cap169, lessThanOrEqualTo(169));
+    });
+
+    test(
+      'maxChannelMessageBytes subtracts the sender prefix so the frame never '
+      'exceeds a small budget',
+      () {
+        const name = 'Bob';
+        const budget = 120;
+        final cap = maxChannelMessageBytes(name, maxFrameBytes: budget);
+        expect(cap, lessThan(maxChannelMessageBytes(name)));
+        // Wire text = "Bob: " (5 bytes) + userText; real channel overhead = 8.
+        const realOverhead = 8;
+        const prefix = 5; // "Bob: "
+        expect(realOverhead + prefix + cap, lessThanOrEqualTo(budget));
+      },
+    );
+  });
+
+  group('send failure does not wedge the contact queue (#395)', () {
+    test(
+      'a throwing send marks the message failed and lets later sends proceed',
+      () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 2,
+          path: const [0x10, 0x20],
+        );
+        final updates = <Message>[];
+        var sendCalls = 0;
+        var failNext = true;
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {
+              sendCalls++;
+              if (failNext) {
+                failNext = false;
+                throw Exception(
+                  'data longer than allowed, datalen: 170 > max: 169',
+                );
+              }
+            },
+            addMessage: (_, _) {},
+            updateMessage: updates.add,
+            clearContactPath: (_) {},
+            setContactPath: (_, _, _) {},
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(
+          contact: contact,
+          text: 'too long',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          updates.any((m) => m.status == MessageStatus.failed),
+          isTrue,
+          reason: 'a failed send must mark the message failed, not swallow it',
+        );
+
+        // The prior failure must not block a later DM to the same contact.
+        await retryService.sendMessageWithRetry(
+          contact: contact,
+          text: 'ok now',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          sendCalls,
+          greaterThanOrEqualTo(2),
+          reason: 'the per-contact queue must drain after a failed send',
+        );
+
+        retryService.dispose();
+      },
+    );
   });
 }

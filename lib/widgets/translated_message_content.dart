@@ -59,7 +59,7 @@ class TranslatedMessageContent extends StatelessWidget {
     }
     // Mentions can't be interleaved with the Linkify widget, so a message that
     // contains a mention renders as rich text with chip spans (links inside a
-    // mention message are not tappable — same as the prior leading-mention
+    // mention message are not tappable, same as the prior leading-mention
     // path). Messages without a mention keep full link support above.
     final spans = <InlineSpan>[];
     var last = 0;

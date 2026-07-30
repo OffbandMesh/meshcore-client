@@ -51,8 +51,16 @@ class ChannelMessage {
   final String? replyToText;
   final Map<String, int> reactions;
 
+  /// Emoji to the list of sender names who reacted with it (#383).
+  ///
+  /// Additive over [reactions]: the count map is still written and read so an
+  /// older build degrades to "counts work, names missing" rather than failing
+  /// to load. Reactions recorded before this field existed appear in
+  /// [reactions] with no matching entry here.
+  final Map<String, List<String>> reactionSenders;
+
   /// Local wall-clock time this message's frame arrived, set at ingest.
-  /// Null for outgoing messages and records stored before #285 — never
+  /// Null for outgoing messages and records stored before #285, never
   /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
   final DateTime? rxTime;
 
@@ -80,11 +88,13 @@ class ChannelMessage {
     this.replyToSenderName,
     this.replyToText,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     this.rxTime,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${senderName.hashCode}_${text.hashCode}',
        reactions = reactions ?? {},
+       reactionSenders = reactionSenders ?? {},
        pathBytes = pathBytes ?? Uint8List(0),
        pathVariants = _mergePathVariants(
          pathBytes ?? Uint8List(0),
@@ -96,7 +106,7 @@ class ChannelMessage {
 
   /// Hop count decoded from the firmware path-length byte (low 6 bits).
   /// The raw byte also packs hash width in its high 2 bits, so the stored
-  /// pathLength is NOT the hop count — use this getter for display.
+  /// pathLength is NOT the hop count, use this getter for display.
   /// Returns null when unknown; a negative (flood) sentinel is preserved.
   int? get hopCount {
     final pl = pathLength;
@@ -129,6 +139,7 @@ class ChannelMessage {
     MessageTranslationStatus? translationStatus,
     Object? translationModelId = _unset,
     Map<String, int>? reactions,
+    Map<String, List<String>>? reactionSenders,
     DateTime? rxTime,
   }) {
     return ChannelMessage(
@@ -163,6 +174,7 @@ class ChannelMessage {
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
       reactions: reactions ?? this.reactions,
+      reactionSenders: reactionSenders ?? this.reactionSenders,
       rxTime: rxTime ?? this.rxTime,
     );
   }
@@ -183,18 +195,17 @@ class ChannelMessage {
       int txtType;
       Uint8List pathBytes = Uint8List(0);
       int channelIdx;
+      bool isOutgoing = false;
       if (code == respCodeChannelMsgRecvV3) {
         reader.skipBytes(1); // Skip SNR
-        final flags = reader.readByte();
-        final hasPath = (flags & 0x01) != 0;
-        reader.skipBytes(1); // Skip reserved byte
+        // reserved1 bit0 = outgoing flag: set for a message composed on the
+        // device itself, so it renders as sent-by-me (#429 part B). No firmware
+        // appends path bytes to this frame, so path_len is metadata only.
+        isOutgoing = (reader.readByte() & 0x01) != 0;
+        reader.skipBytes(1); // Skip reserved2
         channelIdx = reader.readByte();
         pathLen = reader.readInt8();
         txtType = reader.readByte();
-        if (hasPath && pathLen > 0) {
-          reader.rewind(); // Rewind to read path length again for pathBytes
-          pathBytes = reader.readBytes(pathLen);
-        }
       } else {
         channelIdx = reader.readByte();
         pathLen = reader.readInt8();
@@ -232,12 +243,12 @@ class ChannelMessage {
         senderName: senderName,
         text: decodedText,
         timestamp: DateTime.fromMillisecondsSinceEpoch(timestampRaw * 1000),
-        isOutgoing: false,
+        isOutgoing: isOutgoing,
         status: ChannelMessageStatus.sent,
         pathLength: pathLen,
         pathBytes: pathBytes,
         channelIndex: channelIdx,
-        rxTime: DateTime.now(),
+        rxTime: isOutgoing ? null : DateTime.now(),
       );
     } catch (e) {
       appLogger.error('Error parsing channel message frame: $e');

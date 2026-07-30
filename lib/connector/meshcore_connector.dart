@@ -17,6 +17,8 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/pending_reactions.dart';
+import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/time_anomaly.dart';
 import '../helpers/cyr2lat.dart';
@@ -45,6 +47,7 @@ import '../storage/channel_message_store.dart';
 import '../storage/channel_order_store.dart';
 import '../storage/channel_settings_store.dart';
 import '../storage/channel_store.dart';
+import '../storage/client_id_store.dart';
 import '../storage/contact_discovery_store.dart';
 import '../storage/contact_settings_store.dart';
 import '../storage/contact_store.dart';
@@ -55,6 +58,7 @@ import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
 import 'meshcore_protocol.dart';
+import 'caplog_reassembler.dart';
 
 class DirectRepeater {
   static const int maxAgeMinutes = 30; // Max age for direct repeater info
@@ -77,7 +81,7 @@ class DirectRepeater {
       pubkeyPrefix.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   /// True if [pathBytes] begins with this repeater's full configured-width
-  /// prefix — the width-aware replacement for a 1-byte first-hop match. (#156)
+  /// prefix, the width-aware replacement for a 1-byte first-hop match. (#156)
   bool matchesPathStart(List<int> pathBytes) {
     if (pathBytes.length < pubkeyPrefix.length) return false;
     for (var i = 0; i < pubkeyPrefix.length; i++) {
@@ -114,7 +118,7 @@ class DirectRepeater {
         const Duration(minutes: maxAgeMinutes);
   }
 
-  /// Records a directly-heard hop [prefix] at [snr] into [list] — the SNR-ranked
+  /// Records a directly-heard hop [prefix] at [snr] into [list], the SNR-ranked
   /// set of nearest direct repeaters, capped at [cap]. Updates an existing
   /// entry's SNR + timestamp, or adds a new one, evicting the weakest by SNR
   /// only when the newcomer is stronger. Returns true when the change is worth a
@@ -236,9 +240,10 @@ class MeshCoreConnector extends ChangeNotifier {
   int _reactionSendQueueSequence = 0;
   final Set<String> _loadedConversationKeys = {};
   final Map<int, Set<String>> _processedChannelReactions =
-      {}; // channelIndex -> Set of "targetHash_emoji"
+      {}; // channelIndex -> Set of "targetHash_emoji_reactingSender"
   final Map<String, Set<String>> _processedContactReactions =
       {}; // contactPubKeyHex -> Set of "targetHash_emoji"
+  final PendingReactions _pendingReactions = PendingReactions();
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
@@ -279,6 +284,13 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _blockOffloadStoreFull = false;
   bool _blockDumpInFlight = false;
   final Set<String> _blockKeysTouchedDuringDump = {};
+  // Caplog serial-capture download (0xC4) streamed reassembly (#430).
+  Completer<Uint8List>? _caplogCompleter;
+  CaplogReassembler? _caplogReassembler;
+  bool _caplogAwaitingStart = false;
+  Completer<CaplogAck>? _caplogAckCompleter;
+  Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
+  int _caplogChunks = 0; // CHUNK frames in the active download (diagnostic)
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
@@ -366,6 +378,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _isSyncingChannels = false;
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
+  Timer? _channelsChangedDebounce;
   int _channelSyncRetries = 0;
   int _nextChannelIndexToRequest = 0;
   int _totalChannelsToRequest = 0;
@@ -394,12 +407,10 @@ class MeshCoreConnector extends ChangeNotifier {
   final ChannelStore _channelStore = ChannelStore();
   final UnreadStore _unreadStore = UnreadStore();
   List<Channel> _cachedChannels = [];
-  final Map<int, bool> _channelSmazEnabled = {};
   final Map<int, bool> _channelCyr2LatEnabled = {};
   final Map<int, String?> _channelCyr2LatProfileId = {};
   bool _lastSentWasCliCommand =
       false; // Track if last sent message was a CLI command
-  final Map<String, bool> _contactSmazEnabled = {};
   final Map<String, bool> _contactCyr2LatEnabled = {};
   final Map<String, String?> _contactCyr2LatProfileId = {};
   final Set<String> _knownContactKeys = {};
@@ -419,6 +430,28 @@ class MeshCoreConnector extends ChangeNotifier {
   // Getters
   MeshCoreConnectionState get state => _state;
   BluetoothDevice? get device => _device;
+
+  /// Largest frame (in bytes) the active transport can write in a single
+  /// operation. BLE caps one characteristic write at ATT_MTU - 3 (ATT opcode +
+  /// handle); a device that negotiates a smaller MTU than [maxFrameSize] assumes
+  /// would otherwise reject a max-length message and wedge the send path (#395).
+  /// USB/TCP have no such per-write cap, so they take the full [maxFrameSize].
+  int get effectiveMaxFrameSize {
+    if (_activeTransport != MeshCoreTransportType.bluetooth) {
+      return maxFrameSize;
+    }
+    final mtu = _device?.mtuNow ?? 0;
+    // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
+    // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize],
+    // defaulting an unknown link to the largest size would authorize an
+    // oversized write (#395 review).
+    const minWritable = 20;
+    if (mtu <= 0) return minWritable;
+    final writable = mtu - 3;
+    if (writable >= maxFrameSize) return maxFrameSize;
+    return writable < minWritable ? minWritable : writable;
+  }
+
   String? get deviceId => _deviceId;
   String get deviceIdLabel => _deviceId ?? 'Unknown';
 
@@ -577,7 +610,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
 
-  /// Whether the connected firmware speaks the `0xC1` GPS extension — i.e. it
+  /// Whether the connected firmware speaks the `0xC1` GPS extension, i.e. it
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
   /// so 0xC1 is suppressed there rather than pinged blindly. (#144)
   bool get supportsOffbandGps => firmwareSupportsOffbandGps(_offbandCaps);
@@ -593,12 +626,15 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether this specific radio can control its external FEM LNA (#304).
   ///
-  /// Gated on the capability BIT alone — firmware derives it from a runtime FEM
+  /// Gated on the capability BIT alone, firmware derives it from a runtime FEM
   /// probe, so it is a per-unit answer: two Heltec V4s can legitimately disagree
   /// depending on the fitted chip, and `rak3401` reports false by design (its
   /// SKY66122 gates LNA and PA off one line, so a toggle would kill TX).
   /// Never shortcut this to a model or version check.
   bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
+
+  bool get supportsOffbandCaplog =>
+      firmwareSupportsOffbandCaplog(_offbandCaps, _firmwareVerCode);
 
   /// Current FEM LNA state as last reported by the radio, or null if unknown
   /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.
@@ -618,7 +654,7 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildOffbandFemLnaGetFrame());
   }
 
-  /// `[0xC3][sub][value]` — the value is the post-apply hardware state, so it is
+  /// `[0xC3][sub][value]`, the value is the post-apply hardware state, so it is
   /// adopted verbatim rather than assuming a SET took effect (#304).
   void _handleOffbandFemLnaReply(Uint8List frame) {
     final reply = parseOffbandFemLnaReply(frame);
@@ -901,18 +937,6 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
-  bool isChannelSmazEnabled(int channelIndex) {
-    return _channelSmazEnabled[channelIndex] ?? false;
-  }
-
-  bool isContactSmazEnabled(String contactKeyHex) {
-    return _contactSmazEnabled[contactKeyHex] ?? false;
-  }
-
-  void ensureContactSmazSettingLoaded(String contactKeyHex) {
-    _ensureContactSmazSettingLoaded(contactKeyHex);
-  }
-
   bool isChannelCyr2LatEnabled(int channelIndex) {
     _ensureChannelCyr2LatSettingLoaded(channelIndex);
     return _channelCyr2LatEnabled[channelIndex] ?? false;
@@ -991,7 +1015,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void setChannelUnreadCount(int channelIndex, int count) {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
@@ -1012,7 +1036,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void markChannelRead(int channelIndex) {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
@@ -1043,28 +1067,8 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  Future<void> setChannelSmazEnabled(int channelIndex, bool enabled) async {
-    _channelSmazEnabled[channelIndex] = enabled;
-    if (enabled) {
-      _channelCyr2LatEnabled[channelIndex] = false;
-      await _channelSettingsStore.saveCyr2LatEnabled(channelIndex, false);
-    }
-    await _channelSettingsStore.saveSmazEnabled(channelIndex, enabled);
-    notifyListeners();
-  }
-
-  Future<void> setContactSmazEnabled(String contactKeyHex, bool enabled) async {
-    _contactSmazEnabled[contactKeyHex] = enabled;
-    await _contactSettingsStore.saveSmazEnabled(contactKeyHex, enabled);
-    notifyListeners();
-  }
-
   Future<void> setChannelCyr2LatEnabled(int channelIndex, bool enabled) async {
     _channelCyr2LatEnabled[channelIndex] = enabled;
-    if (enabled) {
-      _channelSmazEnabled[channelIndex] = false;
-      await _channelSettingsStore.saveSmazEnabled(channelIndex, false);
-    }
     await _channelSettingsStore.saveCyr2LatEnabled(channelIndex, enabled);
     notifyListeners();
   }
@@ -1223,7 +1227,6 @@ class MeshCoreConnector extends ChangeNotifier {
     // contact list, which is what stalled the UI for ~44s on connect.
     await Future.wait([
       for (final contact in cached) ...[
-        _ensureContactSmazSettingLoaded(contact.publicKeyHex, notify: false),
         _ensureContactCyr2LatSettingLoaded(contact.publicKeyHex, notify: false),
       ],
     ]);
@@ -1238,11 +1241,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> loadChannelSettings({int? maxChannels}) async {
-    _channelSmazEnabled.clear();
     _channelCyr2LatEnabled.clear();
     final channelCount = maxChannels ?? _maxChannels;
     for (int i = 0; i < channelCount; i++) {
-      _channelSmazEnabled[i] = await _channelSettingsStore.loadSmazEnabled(i);
       _channelCyr2LatEnabled[i] = await _channelSettingsStore
           .loadCyr2LatEnabled(i);
     }
@@ -1344,7 +1345,7 @@ class MeshCoreConnector extends ChangeNotifier {
     int timestampSeconds,
   ) async {
     if (!isConnected || text.isEmpty) return;
-    // Automatic retries route here without passing sendMessage — stop them
+    // Automatic retries route here without passing sendMessage, stop them
     // too once the contact is blocked (#252).
     if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
       appLogger.info(
@@ -1366,6 +1367,10 @@ class MeshCoreConnector extends ChangeNotifier {
       );
     } catch (e) {
       appLogger.error('Failed to send message: $e', tag: 'Connector');
+      // Propagate so MessageRetryService marks the message failed and drains the
+      // per-contact queue. Swallowing here left the message "active" forever and
+      // silently blocked every later DM to the contact until reconnect (#395).
+      rethrow;
     }
   }
 
@@ -1668,8 +1673,8 @@ class MeshCoreConnector extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    // Surface radios already connected to the OS — by us or by another app such
-    // as MeshCore — so we can attach to them. A connected BLE radio stops
+    // Surface radios already connected to the OS, by us or by another app such
+    // as MeshCore, so we can attach to them. A connected BLE radio stops
     // advertising, so a scan alone never finds it; systemDevices does. Supported
     // on every native platform (Android/iOS/macOS/Linux), not web.
     if (!PlatformInfo.isWeb) {
@@ -2611,7 +2616,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Keep [BlockService]'s notion of "me" in sync with the connected node, so
-  /// it can refuse a self-block and self-heal one that already exists — the
+  /// it can refuse a self-block and self-heal one that already exists, the
   /// union pull can land before self-info arrives, so healing matters (#250).
   void _applySelfKeyToBlockService() {
     final service = _blockService;
@@ -2892,7 +2897,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Poll the radio's own GPS position every [_gpsLocationPollInterval] without
   /// resetting the session (the old `CMD_APP_START` poll re-inited the device
-  /// and broke contact/channel sync on gps=1 radios — #110/#140). Mechanism is
+  /// and broke contact/channel sync on gps=1 radios, #110/#140). Mechanism is
   /// firmware-aware: the Offband `0xC1` query where supported (#135, richer
   /// state), else standard MeshCore self-telemetry (`CMD_SEND_TELEMETRY_REQ`
   /// len==4 → `PUSH_CODE_TELEMETRY_RESPONSE`, decoded in [_handleSelfTelemetry])
@@ -2928,7 +2933,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Start or stop the GPS poll based on state: run whenever the radio reports
-  /// `gps=1` — the poll itself picks 0xC1 vs self-telemetry by firmware, so
+  /// `gps=1`, the poll itself picks 0xC1 vs self-telemetry by firmware, so
   /// stock-fw radios get the non-destructive self-telemetry refresh too (#123).
   /// Called from every input that can change `gps` or `offband_caps` (custom-var
   /// frames, the enable toggle, the device-info reply that delivers
@@ -2943,7 +2948,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Decode a self-telemetry reply
   /// (`[0x8B][reserved][self-pubkey 6][CayenneLPP]`) and update the radio's own
-  /// position from its GPS — the non-destructive replacement for the APP_START
+  /// position from its GPS, the non-destructive replacement for the APP_START
   /// GPS poll (#110). Contact telemetry (a different pubkey) is ignored here;
   /// the telemetry screen handles those.
   void _handleSelfTelemetry(List<int> frame) {
@@ -2951,7 +2956,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (selfKey == null || selfKey.length < 6) return;
     if (frame.length < 8) return; // code + reserved + 6-byte pubkey prefix
     if (!listEquals(frame.sublist(2, 8), selfKey.sublist(0, 6))) {
-      return; // not the self node — a contact telemetry reply
+      return; // not the self node, a contact telemetry reply
     }
     // Guard the parse: a malformed CayenneLPP payload from an external radio
     // must not throw out of the RX dispatch and stall the receive loop. (#123)
@@ -3053,7 +3058,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _webInitialHandshakeRequestSent = true;
     }
     await sendFrame(buildDeviceQueryFrame());
-    await sendFrame(buildAppStartFrame());
+    await sendFrame(buildAppStartFrame(clientId: ClientIdStore.load()));
     await requestBatteryStatus(force: true);
     await sendFrame(buildGetCustomVarsFrame());
     await sendFrame(buildGetAutoAddFlagsFrame());
@@ -3076,7 +3081,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _webInitialHandshakeRequestSent = true;
     }
     await sendFrame(buildDeviceQueryFrame());
-    await sendFrame(buildAppStartFrame());
+    await sendFrame(buildAppStartFrame(clientId: ClientIdStore.load()));
     await sendFrame(buildGetCustomVarsFrame());
     await requestBatteryStatus();
     await sendFrame(buildGetAutoAddFlagsFrame());
@@ -3095,7 +3100,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// and awaiting SELF_INFO, and never while an initial sync is in flight (the
   /// Web-path guard, so the retry doesn't contend with the contact/channel
   /// sync). The timer keeps rescheduling, so the skip is per-tick, not
-  /// permanent — once a sync settles, the next tick sends. (#88)
+  /// permanent, once a sync settles, the next tick sends. (#88)
   static bool shouldSendAppStartRetry({
     required bool connected,
     required bool awaitingSelfInfo,
@@ -3119,7 +3124,9 @@ class MeshCoreConnector extends ChangeNotifier {
           return;
         }
         attempts += 1;
-        unawaited(sendFrame(buildAppStartFrame()));
+        unawaited(
+          sendFrame(buildAppStartFrame(clientId: ClientIdStore.load())),
+        );
         if (attempts >= maxAttempts) {
           timer.cancel();
         }
@@ -3128,7 +3135,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     // BLE/USB: bounded backoff -> slow keep-alive (was an unbounded 3.5s
     // hammer). A slow handshake no longer churns the connect or contends with
-    // the initial sync, but the retry never hard-stops — a slow/recovering
+    // the initial sync, but the retry never hard-stops, a slow/recovering
     // device still gets prompted (#88).
     _appStartRetryAttempt = 0;
     _armAppStartRetry();
@@ -3152,7 +3159,7 @@ class MeshCoreConnector extends ChangeNotifier {
       awaitingSelfInfo: _awaitingSelfInfo,
       syncing: syncing,
     )) {
-      unawaited(sendFrame(buildAppStartFrame()));
+      unawaited(sendFrame(buildAppStartFrame(clientId: ClientIdStore.load())));
       if (_appStartRetryAttempt < 5) _appStartRetryAttempt++;
     }
     _armAppStartRetry();
@@ -3209,7 +3216,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }) async {
     if (!isConnected || text.isEmpty) return;
     // Outgoing DMs (incl. reactions and retries) to a blocked contact are
-    // dropped — mirrors the incoming DM-drop so a block is symmetric (#252).
+    // dropped, mirrors the incoming DM-drop so a block is symmetric (#252).
     if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
       appLogger.info(
         'Dropped outgoing DM to blocked contact',
@@ -3235,7 +3242,7 @@ class MeshCoreConnector extends ChangeNotifier {
       notifyListeners();
 
       // Route through retry service (same as normal messages)
-      // Don't use auto-rotation for reactions — just send directly
+      // Don't use auto-rotation for reactions, just send directly
       if (_retryService != null) {
         await _retryService!.sendMessageWithRetry(contact: contact, text: text);
       } else {
@@ -3607,8 +3614,9 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelMessages.putIfAbsent(channel.index, () => []);
       final messages = _channelMessages[channel.index]!;
 
-      // Process reaction locally to update the UI immediately
-      _processReaction(messages, reactionInfo);
+      // Process reaction locally to update the UI immediately. This is our own
+      // outgoing reaction, so the reactor is us.
+      _processReaction(messages, reactionInfo, _selfName ?? 'Me');
       await _channelMessageStore.saveChannelMessages(channel.index, messages);
 
       // Mark this reaction as processed
@@ -3620,11 +3628,22 @@ class MeshCoreConnector extends ChangeNotifier {
       final reactionQueueId = _nextReactionSendQueueId();
       _pendingChannelSentQueue.add(reactionQueueId);
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
-      await sendFrame(
-        buildSendChannelTextMsgFrame(channel.index, text),
-        channelSendQueueId: reactionQueueId,
-        expectsGenericAck: true,
-      );
+      try {
+        await sendFrame(
+          buildSendChannelTextMsgFrame(channel.index, text),
+          channelSendQueueId: reactionQueueId,
+          expectsGenericAck: true,
+        );
+      } catch (e) {
+        // A failed write must not leave a stale id at the head of the FIFO
+        // queue, or the next channel message's OK would be credited to it and
+        // the real message would never clear (#395).
+        _pendingChannelSentQueue.remove(reactionQueueId);
+        appLogger.error(
+          'Failed to send channel reaction: $e',
+          tag: 'Connector',
+        );
+      }
       return;
     }
 
@@ -3642,11 +3661,19 @@ class MeshCoreConnector extends ChangeNotifier {
 
     final outboundText = prepareChannelOutboundText(channel.index, text);
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
-    await sendFrame(
-      buildSendChannelTextMsgFrame(channel.index, outboundText),
-      channelSendQueueId: message.messageId,
-      expectsGenericAck: true,
-    );
+    try {
+      await sendFrame(
+        buildSendChannelTextMsgFrame(channel.index, outboundText),
+        channelSendQueueId: message.messageId,
+        expectsGenericAck: true,
+      );
+    } catch (e) {
+      // Clear the stuck queue id and surface the failure in the chat bubble
+      // instead of leaving the message pending and blocking the queue (#395).
+      _pendingChannelSentQueue.remove(message.messageId);
+      _markChannelMessageFailed(channel.index, message.messageId);
+      appLogger.error('Failed to send channel message: $e', tag: 'Connector');
+    }
   }
 
   Future<void> removeContact(Contact contact) async {
@@ -3758,7 +3785,7 @@ class MeshCoreConnector extends ChangeNotifier {
       );
       if (existingIndex >= 0) {
         final existing = _contacts[existingIndex];
-        // Preserve pathOverride and pathOverrideBytes — only reset device path
+        // Preserve pathOverride and pathOverrideBytes, only reset device path
         _contacts[existingIndex] = existing.copyWith(
           pathLength: -1,
           path: Uint8List(0),
@@ -4154,7 +4181,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // than the one whose history is stored here, clear the stale history so a
     // previous occupant's messages (e.g. #echo) don't surface under the newly
     // added channel. Preserve only when the slot already holds the SAME channel
-    // (same PSK) — e.g. a rename. (#193)
+    // (same PSK), e.g. a rename. (#193)
     final existing = _findChannelByIndex(index);
     final sameChannel = existing != null && listEquals(existing.psk, psk);
 
@@ -4200,7 +4227,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!supportsOffbandGps) return null;
     final existing = _offbandGpsCompleter;
     if (existing != null && !existing.isCompleted) {
-      // A query is already in flight — share it rather than orphaning it.
+      // A query is already in flight, share it rather than orphaning it.
       return existing.future.timeout(timeout, onTimeout: () => null);
     }
     final completer = Completer<OffbandGpsStatus?>();
@@ -4226,7 +4253,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final completer = _offbandGpsCompleter;
     _offbandGpsCompleter = null;
     _latestOffbandGpsStatus = status;
-    // A live fix is the device's real position — keep self-lat/lon (and the
+    // A live fix is the device's real position, keep self-lat/lon (and the
     // map) fresh from it, replacing what the old APP_START GPS poll did. (#140)
     if (status.hasLiveFix) {
       _selfLatitude = status.latitude;
@@ -4270,6 +4297,172 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Download the device's serial-capture buffer over the companion protocol
+  /// (0xC4). Sends the request and reassembles the START/CHUNK*/END stream into
+  /// the raw captured bytes.
+  ///
+  /// Throws [StateError] if a download is already in flight,
+  /// [CaplogBusyException] if the device rejects because another stream is
+  /// already in flight, [CaplogTruncatedException] if the byte count doesn't
+  /// match the announced length, or [TimeoutException] if it never finishes.
+  /// (#430)
+  Future<Uint8List> downloadCaplog({
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    if (_caplogCompleter != null) {
+      throw StateError('A caplog download is already in progress');
+    }
+    final completer = Completer<Uint8List>();
+    _caplogCompleter = completer;
+    _caplogReassembler = CaplogReassembler();
+    _caplogAwaitingStart = true;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog download timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(buildOffbandCaplogRequestFrame());
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      _caplogCompleter = null;
+      _caplogReassembler = null;
+      _caplogAwaitingStart = false;
+    }
+  }
+
+  /// Route an incoming 0xC4 caplog frame into the in-flight download, if any.
+  /// START/CHUNK/END are reassembled by [CaplogReassembler]; frames arriving
+  /// with no download in flight are ignored. (#430)
+  void _handleOffbandCaplogFrame(Uint8List frame) {
+    // Control replies (ACK / STATUS) go to their own pending completers,
+    // independent of any download in flight. (#430)
+    if (frame.length >= 2) {
+      if (frame[1] == caplogRespAck) {
+        final ack = parseCaplogAck(frame);
+        final c = _caplogAckCompleter;
+        if (ack != null && c != null && !c.isCompleted) c.complete(ack);
+        return;
+      }
+      if (frame[1] == caplogRespStatus) {
+        final status = parseCaplogStatus(frame);
+        final c = _caplogStatusCompleter;
+        if (status != null && c != null && !c.isCompleted) c.complete(status);
+        return;
+      }
+    }
+    // Download stream (START/CHUNK/END).
+    final completer = _caplogCompleter;
+    final reassembler = _caplogReassembler;
+    if (completer == null || reassembler == null || completer.isCompleted) {
+      return;
+    }
+    final event = reassembler.accept(frame);
+    switch (event.status) {
+      case CaplogStatus.started:
+        _caplogAwaitingStart = false;
+        _caplogChunks = 0;
+        break;
+      case CaplogStatus.chunk:
+        _caplogChunks++;
+        break;
+      case CaplogStatus.completed:
+        _appDebugLogService?.info(
+          'Caplog download complete: ${event.bytes!.length} bytes in '
+          '$_caplogChunks chunks',
+          tag: 'Caplog',
+        );
+        completer.complete(event.bytes);
+        break;
+      case CaplogStatus.truncated:
+        _appDebugLogService?.warn(
+          'Caplog download truncated: ${event.bytes!.length} of '
+          '${event.expected} bytes in $_caplogChunks chunks',
+          tag: 'Caplog',
+        );
+        completer.completeError(
+          CaplogTruncatedException(
+            received: event.bytes!.length,
+            expected: event.expected!,
+            chunks: _caplogChunks,
+          ),
+        );
+        break;
+      case CaplogStatus.ignored:
+        break;
+    }
+  }
+
+  /// Enable or disable serial capture on the device (0xC4 control). Returns the
+  /// device's `ok` result. (#430)
+  Future<bool> setDeviceCaplogEnabled(
+    bool enabled, {
+    Duration timeout = const Duration(seconds: 5),
+  }) => _caplogControl(
+    enabled
+        ? buildOffbandCaplogEnableFrame()
+        : buildOffbandCaplogDisableFrame(),
+    timeout,
+  );
+
+  /// Erase the device's serial-capture buffer (0xC4 control). Returns `ok`.
+  /// (#430)
+  Future<bool> eraseDeviceCaplog({
+    Duration timeout = const Duration(seconds: 5),
+  }) => _caplogControl(buildOffbandCaplogEraseFrame(), timeout);
+
+  Future<bool> _caplogControl(Uint8List frame, Duration timeout) async {
+    if (_caplogAckCompleter != null) {
+      throw StateError('A caplog control op is already in progress');
+    }
+    final completer = Completer<CaplogAck>();
+    _caplogAckCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog control timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(frame);
+      final ack = await completer.future;
+      return ack.ok;
+    } finally {
+      timer.cancel();
+      _caplogAckCompleter = null;
+    }
+  }
+
+  /// Query the device's capture status: enabled / level / used / capacity
+  /// (0xC4 control). (#430)
+  Future<CaplogDeviceStatus> getDeviceCaplogStatus({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (_caplogStatusCompleter != null) {
+      throw StateError('A caplog status query is already in progress');
+    }
+    final completer = Completer<CaplogDeviceStatus>();
+    _caplogStatusCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('caplog status timed out', timeout),
+        );
+      }
+    });
+    try {
+      await sendFrame(buildOffbandCaplogStatusFrame());
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      _caplogStatusCompleter = null;
+    }
+  }
+
   /// Called when a BLOCK_LIST dump ends. A truncated dump (early-END) is
   /// re-requested once the link settles; never derive removals from a partial
   /// pull. The union reconcile against the local list is wired in B4.
@@ -4290,10 +4483,10 @@ class MeshCoreConnector extends ChangeNotifier {
       });
       return;
     }
-    // Complete dump — UNION. Exclude any key the user block/unblocked WHILE the
+    // Complete dump, UNION. Exclude any key the user block/unblocked WHILE the
     // dump was in flight: _pushBlockChange already sent the right ADD/REMOVE and
     // the local state is authoritative, so the stale dump must NOT override it
-    // (prevents re-importing an unblock — data loss — and redundant re-pushes).
+    // (prevents re-importing an unblock, data loss, and redundant re-pushes).
     final blockService = _blockService;
     if (blockService == null) {
       _blockDumpInFlight = false;
@@ -4459,6 +4652,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case cmdOffbandFemLna:
         _handleOffbandFemLnaReply(frame);
         break;
+      case respCodeOffbandCaplog:
+        _handleOffbandCaplogFrame(frame);
+        break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
         _handleSelfInfo(frame);
@@ -4562,6 +4758,17 @@ class MeshCoreConnector extends ChangeNotifier {
       case pushCodeTelemetryResponse:
         _handleSelfTelemetry(frame);
         break;
+      case pushCodeChannelsChanged:
+        // Device's channel table changed (add/update/delete). Re-poll instead
+        // of only refreshing on reconnect (#429 part A). Debounce so a burst
+        // (e.g. a bulk edit on the device) coalesces into one re-sync rather
+        // than repeatedly clearing and repopulating the channel list.
+        _channelsChangedDebounce?.cancel();
+        _channelsChangedDebounce = Timer(
+          const Duration(milliseconds: 400),
+          () => unawaited(getChannels(force: true)),
+        );
+        break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);
         break;
@@ -4600,13 +4807,38 @@ class MeshCoreConnector extends ChangeNotifier {
   }) => isSyncingChannels && channelSyncInFlight && !hasPendingGenericAck;
 
   void _handleErrorFrame(Uint8List frame) {
+    // A caplog download awaiting its START frame: the firmware answers the
+    // generic RESP_CODE_ERR when another stream (block-list / contacts /
+    // observer config) is already in flight. Fail the download fast with a
+    // typed error instead of waiting out the timeout. Falling through to the
+    // normal handling below is harmless, it no-ops unless a channel sync is
+    // active. (#430)
+    if (_caplogAwaitingStart) {
+      _caplogAwaitingStart = false;
+      final download = _caplogCompleter;
+      if (download != null && !download.isCompleted) {
+        download.completeError(const CaplogBusyException());
+      }
+    }
+    // Control ops (enable / disable / erase / status) are likewise rejected with
+    // RESP_CODE_ERR while a stream is in flight; fail their pending completers
+    // fast rather than hanging until the 5s timeout. A status poll swallows the
+    // error and retries, so this is safe even for an unrelated ERR. (#430)
+    final ack = _caplogAckCompleter;
+    if (ack != null && !ack.isCompleted) {
+      ack.completeError(const CaplogBusyException());
+    }
+    final status = _caplogStatusCompleter;
+    if (status != null && !status.isCompleted) {
+      status.completeError(const CaplogBusyException());
+    }
     final errCode = frame.length > 1 ? frame[1] : -1;
     _appDebugLogService?.warn(
       'Firmware responded with error code: $errCode',
       tag: 'Protocol',
     );
 
-    // An in-flight channel GET that draws an ERR means that slot is empty —
+    // An in-flight channel GET that draws an ERR means that slot is empty,
     // advance to the next index the instant the ERR lands instead of waiting
     // out the timeout + retry budget (mirrors the CHANNEL_INFO success path
     // minus adding a channel). This is the whole sync-slowness fix (#82).
@@ -4711,7 +4943,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     // GPS poll responses arrive as RESP_CODE_SELF_INFO but are not the real
-    // handshake — only update location and notify, skip store reloads and
+    // handshake, only update location and notify, skip store reloads and
     // contact sync which would clear and re-fetch contacts every minute.
     if (!wasAwaitingSelfInfo) {
       notifyListeners();
@@ -4769,7 +5001,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Extract the additive `offband_caps` byte from a device-info reply.
   ///
   /// Offset verified against firmware MyMesh.cpp: the reply tail is three
-  /// consecutive `out_frame[i++]` writes — client_repeat (byte 80, v9+),
+  /// consecutive `out_frame[i++]` writes, client_repeat (byte 80, v9+),
   /// path_hash_mode (byte 81, v10+), offband_caps (byte 82, v14+). Bytes 80/81
   /// are shipping/working (path-hash feature), so byte 82 is the adjacent next
   /// byte by construction. Pre-v14 firmware sends a shorter frame -> null.
@@ -4778,8 +5010,8 @@ class MeshCoreConnector extends ChangeNotifier {
       frame.length >= 83 ? frame[82] : null;
 
   /// FEM LNA state byte, appended immediately after the caps byte in device-info
-  /// v16+ (firmware #298). Appended **unconditionally** — including on
-  /// non-capable boards, where it reads 0 — so the byte's presence indicates
+  /// v16+ (firmware #298). Appended **unconditionally**, including on
+  /// non-capable boards, where it reads 0, so the byte's presence indicates
   /// firmware version, not capability. The capability BIT is what decides
   /// whether to render the control. Null on v15 and older (shorter frame).
   static bool? parseFemLnaState(Uint8List frame) =>
@@ -4792,7 +5024,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     _firmwareVerCode = frame[1];
 
-    // Readable build date / model / firmware version — NUL-terminated strings
+    // Readable build date / model / firmware version, NUL-terminated strings
     // after the 8-byte header, before the binary config block. (#134)
     final infoStrings = parseDeviceInfoStrings(frame);
     final info = deviceInfoFields(infoStrings);
@@ -4833,7 +5065,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // testable helper; offset verified against firmware (see parseOffbandCaps).
     _offbandCaps = parseOffbandCaps(frame);
     // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
-    // read on connect — a 0xC3 GET is only the fallback.
+    // read on connect, a 0xC3 GET is only the fallback.
     _femLnaEnabled = parseFemLnaState(frame);
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
@@ -4848,7 +5080,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
-    // Caps landed — if the radio speaks block, pull its list and union-reconcile.
+    // Caps landed, if the radio speaks block, pull its list and union-reconcile.
     _reconcileFirmwareBlock();
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
@@ -5065,7 +5297,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int _physicsMinTimeout(int pathLength, int airtime) {
     if (pathLength < 0) {
-      // Same as max for flood — firmware uses a single formula
+      // Same as max for flood, firmware uses a single formula
       return 500 + (16 * airtime);
     } else {
       return airtime * (pathLength + 1);
@@ -5101,7 +5333,7 @@ class MeshCoreConnector extends ChangeNotifier {
       return mlTimeout.clamp(physicsMin, physicsMax);
     }
 
-    // No ML data — use firmware formula
+    // No ML data, use firmware formula
     return physicsMax;
   }
 
@@ -5465,7 +5697,7 @@ class MeshCoreConnector extends ChangeNotifier {
         'claimed=${claimed.toIso8601String()} '
         'delta=${formatRxTimeDelta(arrival, claimed)} path=$path';
     // Direct service call (not appLogger): the file trail must not depend on
-    // the in-app debug-log toggle — the service always writes to disk and the
+    // the in-app debug-log toggle, the service always writes to disk and the
     // toggle only gates the in-app ring buffer.
     if (isRxTimeAnomaly(arrival, claimed)) {
       _appDebugLogService?.warn('$line ** TIME ANOMALY **', tag: 'Ingest');
@@ -5527,7 +5759,7 @@ class MeshCoreConnector extends ChangeNotifier {
         return;
       }
 
-      // Blocked sender: drop the DM entirely — no thread entry, no unread, no
+      // Blocked sender: drop the DM entirely, no thread entry, no unread, no
       // notification, no lastMessage bump. Adverts still flow for name self-heal.
       if (!message.isOutgoing &&
           (_blockService?.isBlocked(message.senderKeyHex) ?? false)) {
@@ -5651,17 +5883,31 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       // Companion radio layout:
-      // [code][snr?][res?][res?][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
-      // double snr = 0;
+      // [code][snr][res1][res2][prefix x6][path_len][txt_type][timestamp x4][extra?][text...]
+      // snr: (int8)(snr_dB * 4), so dB = byte / 4.0 (MyMesh.cpp:512).
+      // res1 bit0 = device-composed outgoing flag (#429).
+      // res2 = RX RSSI as clamped int8 dBm, or 0 when unset (older firmware or
+      // no-RX text). Gate on != 0 (MyMesh.cpp:550-551, #465). RSSI is always
+      // negative for a real RX, so 0 unambiguously means "no data".
+      double? snr;
+      bool isOutgoing = false;
+      int? rssi;
       if (code == respCodeContactMsgRecvV3) {
-        // Older firmware layout with SNR as a signed byte after the code
-        // snr = reader.readInt8().toDouble() * 4; // SNR in dB, scaled by 4
-        reader.skipBytes(1); // Skip SNR byte
-        reader.skipBytes(2); // Skip reserved bytes
+        snr = reader.readInt8() / 4.0;
+        // reserved1 bit0 = outgoing flag: set for a message composed on the
+        // device itself, so it renders as sent-by-me (#429 part B).
+        isOutgoing = (reader.readByte() & 0x01) != 0;
+        final rssiByte = reader.readInt8(); // reserved2 = RX RSSI (#439/#465)
+        rssi = rssiByte != 0 ? rssiByte : null;
       }
 
       final senderPrefix = reader.readBytes(6);
-      final pathLength = reader.readByte();
+      // path_len is the flood hop count, or 0xFF when the frame arrived
+      // direct/point-to-point (MyMesh.cpp:545). Preserve that distinction for
+      // the Path screen before the 0xFF->0 normalization below. (#438)
+      final rawPathLen = reader.readByte();
+      final isFloodRoute = rawPathLen != 0xFF;
+      final pathLength = rawPathLen;
       final txtType = reader.readByte();
       final timestampRaw = reader.readUInt32LE();
       final timestamp = DateTime.fromMillisecondsSinceEpoch(
@@ -5717,13 +5963,18 @@ class MeshCoreConnector extends ChangeNotifier {
         senderKey: contact.publicKey,
         text: decodedText,
         timestamp: timestamp,
-        isOutgoing: false,
+        isOutgoing: isOutgoing,
         isCli: isCli,
-        status: MessageStatus.delivered,
+        status: isOutgoing ? MessageStatus.sent : MessageStatus.delivered,
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
         fourByteRoomContactKey: roomAuthorPrefix,
-        rxTime: DateTime.now(),
+        // A device-composed outgoing message has no real RX frame, so its SNR /
+        // path-type / rxTime are meaningless, null them like rxTime (#429/#438).
+        rxTime: isOutgoing ? null : DateTime.now(),
+        snr: isOutgoing ? null : snr,
+        rssi: isOutgoing ? null : rssi,
+        isFloodRoute: isOutgoing ? null : isFloodRoute,
       );
     } catch (e) {
       appLogger.warn('Error parsing contact direct message: $e');
@@ -5758,17 +6009,6 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Notifying per contact rebuilds the whole tree once per contact, and each
   /// rebuild itself walks the contact list, so a large address book turns this
   /// into O(contacts^2) work on the UI isolate.
-  Future<void> _ensureContactSmazSettingLoaded(
-    String contactKeyHex, {
-    bool notify = true,
-  }) async {
-    if (_contactSmazEnabled.containsKey(contactKeyHex)) return;
-    final enabled = await _contactSettingsStore.loadSmazEnabled(contactKeyHex);
-    if (_contactSmazEnabled[contactKeyHex] == enabled) return;
-    _contactSmazEnabled[contactKeyHex] = enabled;
-    if (notify) notifyListeners();
-  }
-
   Future<void> _ensureContactCyr2LatSettingLoaded(
     String contactKeyHex, {
     bool notify = true,
@@ -5848,9 +6088,7 @@ class MeshCoreConnector extends ChangeNotifier {
         trimmed.startsWith('m:') ||
         trimmed.startsWith('V1|');
     if (!isStructuredPayload) {
-      if (isContactSmazEnabled(contact.publicKeyHex)) {
-        return Smaz.encodeIfSmaller(text);
-      } else if (isContactCyr2LatEnabled(contact.publicKeyHex)) {
+      if (isContactCyr2LatEnabled(contact.publicKeyHex)) {
         final profileId = getContactCyr2LatProfileId(contact.publicKeyHex);
         final profile = profileId != null && _appSettingsService != null
             ? _appSettingsService!.getCyr2LatProfileById(profileId)
@@ -5876,9 +6114,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final isStructuredPayload =
         trimmed.startsWith('g:') || trimmed.startsWith('m:');
     if (!isStructuredPayload) {
-      if (isChannelSmazEnabled(channelIndex)) {
-        return Smaz.encodeIfSmaller(text);
-      } else if (isChannelCyr2LatEnabled(channelIndex)) {
+      if (isChannelCyr2LatEnabled(channelIndex)) {
         final profileId = getChannelCyr2LatProfileId(channelIndex);
         final profile = profileId != null && _appSettingsService != null
             ? _appSettingsService!.getCyr2LatProfileById(profileId)
@@ -5989,7 +6225,10 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     final parsed = ChannelMessage.fromFrame(frame);
     if (parsed != null && parsed.channelIndex != null) {
-      if (_shouldDropSelfChannelMessage(parsed.senderName, parsed.pathBytes)) {
+      // Device-composed (outgoing) messages legitimately carry our own name and
+      // no path; don't let the self-echo guard drop them (#429 part B).
+      if (!parsed.isOutgoing &&
+          _shouldDropSelfChannelMessage(parsed.senderName, parsed.pathBytes)) {
         return;
       }
       _lastChannelMsgRxTime = DateTime.now();
@@ -6236,6 +6475,29 @@ class MeshCoreConnector extends ChangeNotifier {
     return false;
   }
 
+  void _markChannelMessageFailed(int channelIndex, String messageId) {
+    final channelMessages = _channelMessages[channelIndex];
+    if (channelMessages == null) return;
+    for (int i = channelMessages.length - 1; i >= 0; i--) {
+      final message = channelMessages[i];
+      if (message.messageId != messageId) {
+        continue;
+      }
+      if (!message.isOutgoing ||
+          message.status != ChannelMessageStatus.pending) {
+        return;
+      }
+      channelMessages[i] = message.copyWith(
+        status: ChannelMessageStatus.failed,
+      );
+      unawaited(
+        _channelMessageStore.saveChannelMessages(channelIndex, channelMessages),
+      );
+      notifyListeners();
+      return;
+    }
+  }
+
   void _handleOk() {
     if (_pendingGenericAckQueue.isEmpty) {
       return;
@@ -6415,7 +6677,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> setChannelOrder(List<int> order) async {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     _channelOrder = List<int>.from(order);
@@ -6534,13 +6796,45 @@ class MeshCoreConnector extends ChangeNotifier {
     _conversations.putIfAbsent(pubKeyHex, () => []);
     final messages = _conversations[pubKeyHex]!;
 
-    // Parse reaction info
-    final reactionInfo = Message.parseReaction(message.text);
+    // Parse reaction info. Our own format first, then the PocketMesh /
+    // MeshCore One format (#380). A room server behaves like a channel (many
+    // senders) while 1:1 does not, and the two forms are mutually exclusive by
+    // shape, so try both rather than guessing which one applies.
+    final reactionInfo =
+        Message.parseReaction(message.text) ??
+        _parsePocketMeshReaction(message.text, isDm: true) ??
+        _parsePocketMeshReaction(message.text, isDm: false);
     if (reactionInfo != null) {
-      // Check if we've already processed this exact reaction
+      // Check if we've already processed this exact reaction. A room server is
+      // many-party over the 1:1 transport, so the reacting author belongs in
+      // the key or two members sending the same emoji collapse into one; in a
+      // true 1:1 the author prefix is empty and the key is unchanged.
       _processedContactReactions.putIfAbsent(pubKeyHex, () => {});
+      // The reactor's display name: in a room the frame's own author field
+      // identifies them; in a true 1:1 it is simply the contact. Falls back to
+      // the hex author prefix, then the pubkey, so it is never empty (#383).
+      final reactionContact = _contacts.cast<Contact?>().firstWhere(
+        (c) => c?.publicKeyHex == pubKeyHex,
+        orElse: () => null,
+      );
+      final isRoomReaction = reactionContact?.type == advTypeRoom;
+      final reactingAuthorHex = message.fourByteRoomContactKey
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
+      // In a room, reactionContact is the room server, NOT the reactor, so its
+      // name must never be the fallback: it would attribute every unknown-author
+      // reaction to the room and then dedup distinct authors into one, dropping
+      // reactions (#383). Fall back to the per-author hex, which is unique per
+      // reactor. In a true 1:1 the author hex is empty and the contact IS the
+      // reactor, so its name is correct.
+      final fallbackName = (isRoomReaction && reactingAuthorHex.isNotEmpty)
+          ? reactingAuthorHex
+          : (reactionContact?.name ?? pubKeyHex);
+      final reactorName =
+          _resolveContactSenderName(message, reactionContact, isRoomReaction) ??
+          fallbackName;
       final reactionIdentifier =
-          '${reactionInfo.targetHash}_${reactionInfo.emoji}';
+          '${reactionInfo.targetHash}_${reactionInfo.emoji}_$reactingAuthorHex';
 
       final isDuplicate = _processedContactReactions[pubKeyHex]!.contains(
         reactionIdentifier,
@@ -6548,7 +6842,21 @@ class MeshCoreConnector extends ChangeNotifier {
 
       if (!isDuplicate) {
         // New reaction - process it
-        _processContactReaction(messages, reactionInfo, pubKeyHex);
+        final matched = _processContactReaction(
+          messages,
+          reactionInfo,
+          pubKeyHex,
+          reactorName,
+        );
+        if (!matched) {
+          // Early arrival, not junk. Hold it for the target (#382).
+          _pendingReactions.add(
+            _contactScopeKey(pubKeyHex),
+            reactionInfo,
+            reactorName,
+            DateTime.now(),
+          );
+        }
         _messageStore.saveMessages(pubKeyHex, messages);
 
         // Mark as processed
@@ -6560,14 +6868,25 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     messages.add(message);
+    // A message just landed, so a reaction that arrived before it may now have
+    // its target (#382).
+    _pendingReactions.retry(
+      _contactScopeKey(pubKeyHex),
+      (info, reactingSender) =>
+          _processContactReaction(messages, info, pubKeyHex, reactingSender),
+      DateTime.now(),
+    );
     _messageStore.saveMessages(pubKeyHex, messages);
     notifyListeners();
   }
 
-  void _processContactReaction(
+  String _contactScopeKey(String pubKeyHex) => 'contact:$pubKeyHex';
+
+  bool _processContactReaction(
     List<Message> messages,
     ReactionInfo reactionInfo,
     String contactPubKeyHex,
+    String reactingSender,
   ) {
     final contact = _contacts.cast<Contact?>().firstWhere(
       (c) => c?.publicKeyHex == contactPubKeyHex,
@@ -6575,9 +6894,10 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     final isRoomServer = contact?.type == advTypeRoom;
 
-    ReactionHelper.applyReaction<Message>(
+    return ReactionHelper.applyReaction<Message>(
       messages: messages,
       reactionInfo: reactionInfo,
+      reactingSender: reactingSender,
       // Incoming reactions in 1:1: match against outgoing messages only
       shouldSkip: (msg) => isRoomServer != true && !msg.isOutgoing,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
@@ -6585,8 +6905,12 @@ class MeshCoreConnector extends ChangeNotifier {
           _resolveContactSenderName(msg, contact, isRoomServer == true),
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
       },
     );
   }
@@ -6601,6 +6925,8 @@ class MeshCoreConnector extends ChangeNotifier {
     ReactionHelper.applyReaction<Message>(
       messages: messages,
       reactionInfo: reactionInfo,
+      // Our own outgoing reaction, so the reactor is us.
+      reactingSender: _selfName ?? 'Me',
       // Outgoing reactions in 1:1: match against incoming messages
       shouldSkip: (msg) => !isRoomServer && msg.isOutgoing,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
@@ -6608,8 +6934,12 @@ class MeshCoreConnector extends ChangeNotifier {
           _resolveContactSenderName(msg, contact, isRoomServer),
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
       },
     );
   }
@@ -6780,21 +7110,40 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelMessages.putIfAbsent(channelIndex, () => []);
     final messages = _channelMessages[channelIndex]!;
 
-    // Parse reaction info
-    final reactionInfo = ChannelMessage.parseReaction(message.text);
+    // Parse reaction info. Our own format first, then the PocketMesh /
+    // MeshCore One format other clients send (#380).
+    final reactionInfo =
+        ChannelMessage.parseReaction(message.text) ??
+        _parsePocketMeshReaction(message.text, isDm: false);
     if (reactionInfo != null) {
       // Check if we've already processed this exact reaction
       _processedChannelReactions.putIfAbsent(channelIndex, () => {});
+      // The reacting sender belongs in the key: without it, two people sending
+      // the same emoji to the same message collapse into one and the count
+      // never leaves 1.
       final reactionIdentifier =
-          '${reactionInfo.targetHash}_${reactionInfo.emoji}';
+          '${reactionInfo.targetHash}_${reactionInfo.emoji}_${message.senderName}';
 
       final isDuplicate = _processedChannelReactions[channelIndex]!.contains(
         reactionIdentifier,
       );
 
       if (!isDuplicate) {
-        // New reaction - process it
-        _processReaction(messages, reactionInfo);
+        // New reaction - process it. The reactor is the frame's sender.
+        final matched = _processReaction(
+          messages,
+          reactionInfo,
+          message.senderName,
+        );
+        if (!matched) {
+          // Early arrival, not junk. Hold it for the target (#382).
+          _pendingReactions.add(
+            _channelScopeKey(channelIndex),
+            reactionInfo,
+            message.senderName,
+            DateTime.now(),
+          );
+        }
         // Save updated messages
         _channelMessageStore.saveChannelMessages(channelIndex, messages);
 
@@ -6849,25 +7198,49 @@ class MeshCoreConnector extends ChangeNotifier {
       messages.add(processedMessage);
     }
 
+    // A message just landed, so a reaction that arrived before it may now have
+    // its target (#382).
+    _pendingReactions.retry(
+      _channelScopeKey(channelIndex),
+      (info, reactingSender) =>
+          _processReaction(messages, info, reactingSender),
+      DateTime.now(),
+    );
+
     // Save to persistent storage
     _channelMessageStore.saveChannelMessages(channelIndex, messages);
     return isNew;
   }
 
-  void _processReaction(
+  String _channelScopeKey(int channelIndex) => 'channel:$channelIndex';
+
+  /// The PocketMesh / MeshCore One reaction format, wrapped for matching.
+  /// Receive-only: we never emit it.
+  ReactionInfo? _parsePocketMeshReaction(String text, {required bool isDm}) {
+    final parsed = PocketMeshReaction.parse(text, isDm: isDm);
+    return parsed == null ? null : ReactionInfo.pocketMesh(parsed);
+  }
+
+  bool _processReaction(
     List<ChannelMessage> messages,
     ReactionInfo reactionInfo,
+    String reactingSender,
   ) {
-    ReactionHelper.applyReaction<ChannelMessage>(
+    return ReactionHelper.applyReaction<ChannelMessage>(
       messages: messages,
       reactionInfo: reactionInfo,
+      reactingSender: reactingSender,
       shouldSkip: (_) => false,
       getTimestampSecs: (msg) => msg.timestamp.millisecondsSinceEpoch ~/ 1000,
       getSenderName: (msg) => msg.senderName,
       getMessageText: (msg) => msg.text,
       getReactions: (msg) => msg.reactions,
-      updateMessage: (i, reactions) {
-        messages[i] = messages[i].copyWith(reactions: reactions);
+      getReactionSenders: (msg) => msg.reactionSenders,
+      updateMessage: (i, reactions, senders) {
+        messages[i] = messages[i].copyWith(
+          reactions: reactions,
+          reactionSenders: senders,
+        );
         notifyListeners();
       },
     );
@@ -7070,7 +7443,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reported clock. Frame layout (firmware companion_radio/MyMesh.cpp:678+):
   ///   [0]=0x85, [1]=permissions, [2..7]=pubkey prefix (6 bytes),
   ///   [8..11]=repeater RTC unix seconds (LE), [12]=ACL perms, [13]=fw level
-  /// The timestamp is only present in the v7+ "new login response" — older
+  /// The timestamp is only present in the v7+ "new login response", older
   /// firmware emits a shorter frame that we silently skip.
   void _handleLoginSuccess(Uint8List frame) {
     if (frame.length < 12) return;
@@ -7149,6 +7522,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryPollTimer?.cancel();
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
+    _channelsChangedDebounce?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();
@@ -7180,7 +7554,7 @@ class MeshCoreConnector extends ChangeNotifier {
       final pathBytes = packet.readBytes(pathByteLen);
       final payload = packet.readBytes(packet.remaining);
 
-      // #186: feed the passive topology map from every routed packet's path —
+      // #186: feed the passive topology map from every routed packet's path,
       // the same firehose that feeds nearest-repeater detection. Cheap: the
       // path is already parsed here. Guarded so a topology-side fault can never
       // stall the RX dispatch that also drives message handling.

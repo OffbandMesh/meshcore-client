@@ -1,6 +1,6 @@
 // Adversarial + correctness tests for the Offband config codec (#64 A1).
 //
-// TDD: the "hostile device" group is written to FAIL on the un-hardened codec —
+// TDD: the "hostile device" group is written to FAIL on the un-hardened codec,
 // it documents the Gemini BLOCKER (unbounded BrokerListDecoder / DoS) and MINOR
 // (out-of-range slot accepted). C1 (#72) hardens the codec until these pass.
 // The builder / parsing / happy-path groups assert the contract and should be
@@ -107,7 +107,7 @@ void main() {
     });
   });
 
-  group('broker decode — happy path', () {
+  group('broker decode, happy path', () {
     test('START -> KV -> END assembles a broker', () {
       final d = BrokerListDecoder();
       expect(
@@ -133,7 +133,7 @@ void main() {
   // ---- ADVERSARIAL: assume a malicious/compromised device controls the wire ----
   group('adversarial: hostile device', () {
     test(
-      'DoS — flood of BROKER_KV must not retain slots past brokerSlotCount',
+      'DoS, flood of BROKER_KV must not retain slots past brokerSlotCount',
       () {
         final d = BrokerListDecoder();
         d.add(
@@ -199,7 +199,7 @@ void main() {
 
     test('KV before START is ignored (no implicit accumulation)', () {
       final d = BrokerListDecoder();
-      // No START — a stray KV must not be retained.
+      // No START, a stray KV must not be retained.
       d.add(ObserverConfigClient.parse(brokerKv(0, 'url=mqtt://stray')));
       final list = d.add(
         ObserverConfigClient.parse(resp(ObserverConfigClient.rBrokersEnd)),
