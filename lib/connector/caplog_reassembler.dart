@@ -68,7 +68,7 @@ class CaplogBusyException implements Exception {
   const CaplogBusyException();
   @override
   String toString() =>
-      'CaplogBusyException: device busy — another stream is in flight';
+      'CaplogBusyException: device busy, another stream is in flight';
 }
 
 /// Thrown when the reassembled caplog byte count doesn't match the length the
@@ -82,7 +82,7 @@ class CaplogTruncatedException implements Exception {
   final int received;
   final int expected;
 
-  /// Number of CHUNK frames the client accumulated before END — a diagnostic to
+  /// Number of CHUNK frames the client accumulated before END, a diagnostic to
   /// tell client/transport frame loss apart from the firmware streaming short.
   final int? chunks;
 

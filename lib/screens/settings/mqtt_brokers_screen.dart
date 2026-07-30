@@ -8,7 +8,7 @@ import 'broker_editor_screen.dart';
 
 /// The MQTT broker pool as its own screen (#80), reached from the Observer
 /// settings pane. Tap a broker to edit it; long-press for Enable / Disable /
-/// Edit / Clear; the `+` FAB adds the next empty slot — matching the FAB-add
+/// Edit / Clear; the `+` FAB adds the next empty slot, matching the FAB-add
 /// pattern of channels_screen. Single-slot re-GET keeps it off the 84-frame
 /// pool dump after each action.
 class MqttBrokersScreen extends StatefulWidget {
@@ -90,7 +90,7 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
       );
       return;
     }
-    // The SET was ACKed — but a firmware build can ACK without applying it
+    // The SET was ACKed, but a firmware build can ACK without applying it
     // (meshcore-firmware#179). Settle, re-read the slot, and report what the
     // device ACTUALLY did rather than trusting the ACK.
     await Future.delayed(ObserverConfigService.applySettleDelay);
@@ -123,7 +123,7 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
           SnackBar(
             content: Text(
               'Device reported success but broker ${b.slot} is still '
-              '${fresh!.enabled ? 'enabled' : 'disabled'} — possible firmware '
+              '${fresh!.enabled ? 'enabled' : 'disabled'}, possible firmware '
               'issue',
             ),
             backgroundColor: errorColor,
@@ -133,7 +133,7 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              'Broker ${b.slot} ${enable ? 'enable' : 'disable'} sent — could '
+              'Broker ${b.slot} ${enable ? 'enable' : 'disable'} sent. Could '
               'not confirm (device may be rebooting). Tap Refresh to re-check.',
             ),
           ),
@@ -266,9 +266,7 @@ class _MqttBrokersScreenState extends State<MqttBrokersScreen> {
         child: const Icon(Icons.add),
       ),
       body: _brokers.isEmpty
-          ? const Center(
-              child: Text('No brokers configured — tap + to add one'),
-            )
+          ? const Center(child: Text('No brokers configured. Tap + to add one'))
           : ListView(
               children: [
                 for (final b in _brokers)

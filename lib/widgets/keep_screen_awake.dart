@@ -8,7 +8,7 @@ import '../services/app_settings_service.dart';
 /// the app is foregrounded (#269).
 ///
 /// The lock is released when the setting is turned off, when the app leaves the
-/// foreground, and on dispose — so normal display sleep resumes and the
+/// foreground, and on dispose, so normal display sleep resumes and the
 /// background foreground-service behaviour is untouched.
 class KeepScreenAwake extends StatefulWidget {
   const KeepScreenAwake({super.key, required this.child});

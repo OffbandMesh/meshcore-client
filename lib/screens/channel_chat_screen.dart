@@ -635,7 +635,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   /// Block the sender of a channel post. Resolves the claimed name to known
   /// pubkey(s) and blocks each (full block: DM + adverts + all channels); if it
   /// resolves to nothing, blocks the name globally across all channels (promotes
-  /// to a pubkey block later, once the identity is learned — #174).
+  /// to a pubkey block later, once the identity is learned, #174).
   Future<void> _blockChannelSender(ChannelMessage message) async {
     final connector = context.read<MeshCoreConnector>();
     final blockService = context.read<BlockService>();
@@ -1423,7 +1423,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
-  /// One-click reply quoting the route a message took — hop count + path,
+  /// One-click reply quoting the route a message took, hop count + path,
   /// truncated with … to fit the channel byte budget, fired directly. (#106)
   void _sendRouteReply(ChannelMessage message) {
     final connector = context.read<MeshCoreConnector>();

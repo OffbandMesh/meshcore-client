@@ -20,7 +20,7 @@ class CompanionRadioStatsScreen extends StatelessWidget {
   }
 }
 
-/// Embeddable Radio Stats content (no Scaffold) — used by both
+/// Embeddable Radio Stats content (no Scaffold), used by both
 /// [CompanionRadioStatsScreen] and the settings shell's Radio Stats pane.
 /// Acquires 1 s radio-stats polling while mounted and releases it on dispose.
 class CompanionRadioStatsBody extends StatefulWidget {

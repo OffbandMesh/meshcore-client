@@ -81,7 +81,7 @@ class DirectRepeater {
       pubkeyPrefix.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   /// True if [pathBytes] begins with this repeater's full configured-width
-  /// prefix — the width-aware replacement for a 1-byte first-hop match. (#156)
+  /// prefix, the width-aware replacement for a 1-byte first-hop match. (#156)
   bool matchesPathStart(List<int> pathBytes) {
     if (pathBytes.length < pubkeyPrefix.length) return false;
     for (var i = 0; i < pubkeyPrefix.length; i++) {
@@ -118,7 +118,7 @@ class DirectRepeater {
         const Duration(minutes: maxAgeMinutes);
   }
 
-  /// Records a directly-heard hop [prefix] at [snr] into [list] — the SNR-ranked
+  /// Records a directly-heard hop [prefix] at [snr] into [list], the SNR-ranked
   /// set of nearest direct repeaters, capped at [cap]. Updates an existing
   /// entry's SNR + timestamp, or adds a new one, evicting the weakest by SNR
   /// only when the newcomer is stronger. Returns true when the change is worth a
@@ -442,7 +442,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     final mtu = _device?.mtuNow ?? 0;
     // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
-    // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize] —
+    // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize],
     // defaulting an unknown link to the largest size would authorize an
     // oversized write (#395 review).
     const minWritable = 20;
@@ -610,7 +610,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
 
-  /// Whether the connected firmware speaks the `0xC1` GPS extension — i.e. it
+  /// Whether the connected firmware speaks the `0xC1` GPS extension, i.e. it
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
   /// so 0xC1 is suppressed there rather than pinged blindly. (#144)
   bool get supportsOffbandGps => firmwareSupportsOffbandGps(_offbandCaps);
@@ -626,7 +626,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether this specific radio can control its external FEM LNA (#304).
   ///
-  /// Gated on the capability BIT alone — firmware derives it from a runtime FEM
+  /// Gated on the capability BIT alone, firmware derives it from a runtime FEM
   /// probe, so it is a per-unit answer: two Heltec V4s can legitimately disagree
   /// depending on the fitted chip, and `rak3401` reports false by design (its
   /// SKY66122 gates LNA and PA off one line, so a toggle would kill TX).
@@ -654,7 +654,7 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildOffbandFemLnaGetFrame());
   }
 
-  /// `[0xC3][sub][value]` — the value is the post-apply hardware state, so it is
+  /// `[0xC3][sub][value]`, the value is the post-apply hardware state, so it is
   /// adopted verbatim rather than assuming a SET took effect (#304).
   void _handleOffbandFemLnaReply(Uint8List frame) {
     final reply = parseOffbandFemLnaReply(frame);
@@ -1015,7 +1015,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void setChannelUnreadCount(int channelIndex, int count) {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
@@ -1036,7 +1036,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void markChannelRead(int channelIndex) {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     final channel = _findChannelByIndex(channelIndex);
@@ -1345,7 +1345,7 @@ class MeshCoreConnector extends ChangeNotifier {
     int timestampSeconds,
   ) async {
     if (!isConnected || text.isEmpty) return;
-    // Automatic retries route here without passing sendMessage — stop them
+    // Automatic retries route here without passing sendMessage, stop them
     // too once the contact is blocked (#252).
     if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
       appLogger.info(
@@ -1673,8 +1673,8 @@ class MeshCoreConnector extends ChangeNotifier {
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    // Surface radios already connected to the OS — by us or by another app such
-    // as MeshCore — so we can attach to them. A connected BLE radio stops
+    // Surface radios already connected to the OS, by us or by another app such
+    // as MeshCore, so we can attach to them. A connected BLE radio stops
     // advertising, so a scan alone never finds it; systemDevices does. Supported
     // on every native platform (Android/iOS/macOS/Linux), not web.
     if (!PlatformInfo.isWeb) {
@@ -2616,7 +2616,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Keep [BlockService]'s notion of "me" in sync with the connected node, so
-  /// it can refuse a self-block and self-heal one that already exists — the
+  /// it can refuse a self-block and self-heal one that already exists, the
   /// union pull can land before self-info arrives, so healing matters (#250).
   void _applySelfKeyToBlockService() {
     final service = _blockService;
@@ -2897,7 +2897,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Poll the radio's own GPS position every [_gpsLocationPollInterval] without
   /// resetting the session (the old `CMD_APP_START` poll re-inited the device
-  /// and broke contact/channel sync on gps=1 radios — #110/#140). Mechanism is
+  /// and broke contact/channel sync on gps=1 radios, #110/#140). Mechanism is
   /// firmware-aware: the Offband `0xC1` query where supported (#135, richer
   /// state), else standard MeshCore self-telemetry (`CMD_SEND_TELEMETRY_REQ`
   /// len==4 → `PUSH_CODE_TELEMETRY_RESPONSE`, decoded in [_handleSelfTelemetry])
@@ -2933,7 +2933,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Start or stop the GPS poll based on state: run whenever the radio reports
-  /// `gps=1` — the poll itself picks 0xC1 vs self-telemetry by firmware, so
+  /// `gps=1`, the poll itself picks 0xC1 vs self-telemetry by firmware, so
   /// stock-fw radios get the non-destructive self-telemetry refresh too (#123).
   /// Called from every input that can change `gps` or `offband_caps` (custom-var
   /// frames, the enable toggle, the device-info reply that delivers
@@ -2948,7 +2948,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Decode a self-telemetry reply
   /// (`[0x8B][reserved][self-pubkey 6][CayenneLPP]`) and update the radio's own
-  /// position from its GPS — the non-destructive replacement for the APP_START
+  /// position from its GPS, the non-destructive replacement for the APP_START
   /// GPS poll (#110). Contact telemetry (a different pubkey) is ignored here;
   /// the telemetry screen handles those.
   void _handleSelfTelemetry(List<int> frame) {
@@ -2956,7 +2956,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (selfKey == null || selfKey.length < 6) return;
     if (frame.length < 8) return; // code + reserved + 6-byte pubkey prefix
     if (!listEquals(frame.sublist(2, 8), selfKey.sublist(0, 6))) {
-      return; // not the self node — a contact telemetry reply
+      return; // not the self node, a contact telemetry reply
     }
     // Guard the parse: a malformed CayenneLPP payload from an external radio
     // must not throw out of the RX dispatch and stall the receive loop. (#123)
@@ -3100,7 +3100,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// and awaiting SELF_INFO, and never while an initial sync is in flight (the
   /// Web-path guard, so the retry doesn't contend with the contact/channel
   /// sync). The timer keeps rescheduling, so the skip is per-tick, not
-  /// permanent — once a sync settles, the next tick sends. (#88)
+  /// permanent, once a sync settles, the next tick sends. (#88)
   static bool shouldSendAppStartRetry({
     required bool connected,
     required bool awaitingSelfInfo,
@@ -3135,7 +3135,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     // BLE/USB: bounded backoff -> slow keep-alive (was an unbounded 3.5s
     // hammer). A slow handshake no longer churns the connect or contends with
-    // the initial sync, but the retry never hard-stops — a slow/recovering
+    // the initial sync, but the retry never hard-stops, a slow/recovering
     // device still gets prompted (#88).
     _appStartRetryAttempt = 0;
     _armAppStartRetry();
@@ -3216,7 +3216,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }) async {
     if (!isConnected || text.isEmpty) return;
     // Outgoing DMs (incl. reactions and retries) to a blocked contact are
-    // dropped — mirrors the incoming DM-drop so a block is symmetric (#252).
+    // dropped, mirrors the incoming DM-drop so a block is symmetric (#252).
     if (_blockService?.isBlocked(contact.publicKeyHex) ?? false) {
       appLogger.info(
         'Dropped outgoing DM to blocked contact',
@@ -3242,7 +3242,7 @@ class MeshCoreConnector extends ChangeNotifier {
       notifyListeners();
 
       // Route through retry service (same as normal messages)
-      // Don't use auto-rotation for reactions — just send directly
+      // Don't use auto-rotation for reactions, just send directly
       if (_retryService != null) {
         await _retryService!.sendMessageWithRetry(contact: contact, text: text);
       } else {
@@ -3785,7 +3785,7 @@ class MeshCoreConnector extends ChangeNotifier {
       );
       if (existingIndex >= 0) {
         final existing = _contacts[existingIndex];
-        // Preserve pathOverride and pathOverrideBytes — only reset device path
+        // Preserve pathOverride and pathOverrideBytes, only reset device path
         _contacts[existingIndex] = existing.copyWith(
           pathLength: -1,
           path: Uint8List(0),
@@ -4181,7 +4181,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // than the one whose history is stored here, clear the stale history so a
     // previous occupant's messages (e.g. #echo) don't surface under the newly
     // added channel. Preserve only when the slot already holds the SAME channel
-    // (same PSK) — e.g. a rename. (#193)
+    // (same PSK), e.g. a rename. (#193)
     final existing = _findChannelByIndex(index);
     final sameChannel = existing != null && listEquals(existing.psk, psk);
 
@@ -4227,7 +4227,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!supportsOffbandGps) return null;
     final existing = _offbandGpsCompleter;
     if (existing != null && !existing.isCompleted) {
-      // A query is already in flight — share it rather than orphaning it.
+      // A query is already in flight, share it rather than orphaning it.
       return existing.future.timeout(timeout, onTimeout: () => null);
     }
     final completer = Completer<OffbandGpsStatus?>();
@@ -4253,7 +4253,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final completer = _offbandGpsCompleter;
     _offbandGpsCompleter = null;
     _latestOffbandGpsStatus = status;
-    // A live fix is the device's real position — keep self-lat/lon (and the
+    // A live fix is the device's real position, keep self-lat/lon (and the
     // map) fresh from it, replacing what the old APP_START GPS poll did. (#140)
     if (status.hasLiveFix) {
       _selfLatitude = status.latitude;
@@ -4483,10 +4483,10 @@ class MeshCoreConnector extends ChangeNotifier {
       });
       return;
     }
-    // Complete dump — UNION. Exclude any key the user block/unblocked WHILE the
+    // Complete dump, UNION. Exclude any key the user block/unblocked WHILE the
     // dump was in flight: _pushBlockChange already sent the right ADD/REMOVE and
     // the local state is authoritative, so the stale dump must NOT override it
-    // (prevents re-importing an unblock — data loss — and redundant re-pushes).
+    // (prevents re-importing an unblock, data loss, and redundant re-pushes).
     final blockService = _blockService;
     if (blockService == null) {
       _blockDumpInFlight = false;
@@ -4811,7 +4811,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // generic RESP_CODE_ERR when another stream (block-list / contacts /
     // observer config) is already in flight. Fail the download fast with a
     // typed error instead of waiting out the timeout. Falling through to the
-    // normal handling below is harmless — it no-ops unless a channel sync is
+    // normal handling below is harmless, it no-ops unless a channel sync is
     // active. (#430)
     if (_caplogAwaitingStart) {
       _caplogAwaitingStart = false;
@@ -4838,7 +4838,7 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'Protocol',
     );
 
-    // An in-flight channel GET that draws an ERR means that slot is empty —
+    // An in-flight channel GET that draws an ERR means that slot is empty,
     // advance to the next index the instant the ERR lands instead of waiting
     // out the timeout + retry budget (mirrors the CHANNEL_INFO success path
     // minus adding a channel). This is the whole sync-slowness fix (#82).
@@ -4943,7 +4943,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     // GPS poll responses arrive as RESP_CODE_SELF_INFO but are not the real
-    // handshake — only update location and notify, skip store reloads and
+    // handshake, only update location and notify, skip store reloads and
     // contact sync which would clear and re-fetch contacts every minute.
     if (!wasAwaitingSelfInfo) {
       notifyListeners();
@@ -5001,7 +5001,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Extract the additive `offband_caps` byte from a device-info reply.
   ///
   /// Offset verified against firmware MyMesh.cpp: the reply tail is three
-  /// consecutive `out_frame[i++]` writes — client_repeat (byte 80, v9+),
+  /// consecutive `out_frame[i++]` writes, client_repeat (byte 80, v9+),
   /// path_hash_mode (byte 81, v10+), offband_caps (byte 82, v14+). Bytes 80/81
   /// are shipping/working (path-hash feature), so byte 82 is the adjacent next
   /// byte by construction. Pre-v14 firmware sends a shorter frame -> null.
@@ -5010,8 +5010,8 @@ class MeshCoreConnector extends ChangeNotifier {
       frame.length >= 83 ? frame[82] : null;
 
   /// FEM LNA state byte, appended immediately after the caps byte in device-info
-  /// v16+ (firmware #298). Appended **unconditionally** — including on
-  /// non-capable boards, where it reads 0 — so the byte's presence indicates
+  /// v16+ (firmware #298). Appended **unconditionally**, including on
+  /// non-capable boards, where it reads 0, so the byte's presence indicates
   /// firmware version, not capability. The capability BIT is what decides
   /// whether to render the control. Null on v15 and older (shorter frame).
   static bool? parseFemLnaState(Uint8List frame) =>
@@ -5024,7 +5024,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     _firmwareVerCode = frame[1];
 
-    // Readable build date / model / firmware version — NUL-terminated strings
+    // Readable build date / model / firmware version, NUL-terminated strings
     // after the 8-byte header, before the binary config block. (#134)
     final infoStrings = parseDeviceInfoStrings(frame);
     final info = deviceInfoFields(infoStrings);
@@ -5065,7 +5065,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // testable helper; offset verified against firmware (see parseOffbandCaps).
     _offbandCaps = parseOffbandCaps(frame);
     // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
-    // read on connect — a 0xC3 GET is only the fallback.
+    // read on connect, a 0xC3 GET is only the fallback.
     _femLnaEnabled = parseFemLnaState(frame);
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
@@ -5080,7 +5080,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
-    // Caps landed — if the radio speaks block, pull its list and union-reconcile.
+    // Caps landed, if the radio speaks block, pull its list and union-reconcile.
     _reconcileFirmwareBlock();
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
@@ -5297,7 +5297,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int _physicsMinTimeout(int pathLength, int airtime) {
     if (pathLength < 0) {
-      // Same as max for flood — firmware uses a single formula
+      // Same as max for flood, firmware uses a single formula
       return 500 + (16 * airtime);
     } else {
       return airtime * (pathLength + 1);
@@ -5333,7 +5333,7 @@ class MeshCoreConnector extends ChangeNotifier {
       return mlTimeout.clamp(physicsMin, physicsMax);
     }
 
-    // No ML data — use firmware formula
+    // No ML data, use firmware formula
     return physicsMax;
   }
 
@@ -5697,7 +5697,7 @@ class MeshCoreConnector extends ChangeNotifier {
         'claimed=${claimed.toIso8601String()} '
         'delta=${formatRxTimeDelta(arrival, claimed)} path=$path';
     // Direct service call (not appLogger): the file trail must not depend on
-    // the in-app debug-log toggle — the service always writes to disk and the
+    // the in-app debug-log toggle, the service always writes to disk and the
     // toggle only gates the in-app ring buffer.
     if (isRxTimeAnomaly(arrival, claimed)) {
       _appDebugLogService?.warn('$line ** TIME ANOMALY **', tag: 'Ingest');
@@ -5759,7 +5759,7 @@ class MeshCoreConnector extends ChangeNotifier {
         return;
       }
 
-      // Blocked sender: drop the DM entirely — no thread entry, no unread, no
+      // Blocked sender: drop the DM entirely, no thread entry, no unread, no
       // notification, no lastMessage bump. Adverts still flow for name self-heal.
       if (!message.isOutgoing &&
           (_blockService?.isBlocked(message.senderKeyHex) ?? false)) {
@@ -5887,7 +5887,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // snr: (int8)(snr_dB * 4), so dB = byte / 4.0 (MyMesh.cpp:512).
       // res1 bit0 = device-composed outgoing flag (#429).
       // res2 = RX RSSI as clamped int8 dBm, or 0 when unset (older firmware or
-      // no-RX text) — gate on != 0 (MyMesh.cpp:550-551, #465). RSSI is always
+      // no-RX text). Gate on != 0 (MyMesh.cpp:550-551, #465). RSSI is always
       // negative for a real RX, so 0 unambiguously means "no data".
       double? snr;
       bool isOutgoing = false;
@@ -5970,7 +5970,7 @@ class MeshCoreConnector extends ChangeNotifier {
         pathBytes: Uint8List(0),
         fourByteRoomContactKey: roomAuthorPrefix,
         // A device-composed outgoing message has no real RX frame, so its SNR /
-        // path-type / rxTime are meaningless — null them like rxTime (#429/#438).
+        // path-type / rxTime are meaningless, null them like rxTime (#429/#438).
         rxTime: isOutgoing ? null : DateTime.now(),
         snr: isOutgoing ? null : snr,
         rssi: isOutgoing ? null : rssi,
@@ -6677,7 +6677,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> setChannelOrder(List<int> order) async {
-    // Don't persist channel state after disconnect — the store scope still
+    // Don't persist channel state after disconnect, the store scope still
     // points at the last radio, so a stale write can mis-scope (#23).
     if (!isConnected) return;
     _channelOrder = List<int>.from(order);
@@ -7443,7 +7443,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reported clock. Frame layout (firmware companion_radio/MyMesh.cpp:678+):
   ///   [0]=0x85, [1]=permissions, [2..7]=pubkey prefix (6 bytes),
   ///   [8..11]=repeater RTC unix seconds (LE), [12]=ACL perms, [13]=fw level
-  /// The timestamp is only present in the v7+ "new login response" — older
+  /// The timestamp is only present in the v7+ "new login response", older
   /// firmware emits a shorter frame that we silently skip.
   void _handleLoginSuccess(Uint8List frame) {
     if (frame.length < 12) return;
@@ -7554,7 +7554,7 @@ class MeshCoreConnector extends ChangeNotifier {
       final pathBytes = packet.readBytes(pathByteLen);
       final payload = packet.readBytes(packet.remaining);
 
-      // #186: feed the passive topology map from every routed packet's path —
+      // #186: feed the passive topology map from every routed packet's path,
       // the same firehose that feeds nearest-repeater detection. Cheap: the
       // path is already parsed here. Guarded so a topology-side fault can never
       // stall the RX dispatch that also drives message handling.

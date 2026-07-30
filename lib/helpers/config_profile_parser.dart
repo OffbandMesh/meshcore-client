@@ -15,7 +15,7 @@ class ConfigProfileFormatException implements Exception {
 
 /// Parse a YAML config profile into a [ConfigProfile] (#402 model).
 ///
-/// Strict by design — profiles are untrusted input (#139 trust note), so an
+/// Strict by design, profiles are untrusted input (#139 trust note), so an
 /// unknown key, a wrong type, or an out-of-range value is an error, not a silent
 /// skip. Only keys present in the document appear in the model; everything else
 /// stays null so the apply engines touch only what the profile sets.

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Runs a settings-persist [action] and surfaces a dismissible error SnackBar if
 /// it throws, instead of dropping the returned Future and swallowing the error
-/// (no silent failures — #28).
+/// (no silent failures, #28).
 ///
 /// Call sites intentionally don't await the returned Future: this function never
 /// rethrows (it catches internally), so dropping it is safe. The

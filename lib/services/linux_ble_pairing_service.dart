@@ -154,7 +154,7 @@ class LinuxBlePairingService {
         return false;
       }
 
-      // Timeout path — pairing neither succeeded nor failed.
+      // Timeout path, pairing neither succeeded nor failed.
       onLog?.call('Pairing did not complete before timeout');
       if (!result.pinSent &&
           !proactivePinRetryUsed &&

@@ -74,7 +74,7 @@ Map<String, String> _parseIoregOutput(String output) {
       currentVendor = vendorMatch.group(1)?.trim();
       continue;
     }
-    // IOCalloutDevice — the /dev/cu.xxx path our app uses
+    // IOCalloutDevice, the /dev/cu.xxx path our app uses
     final calloutMatch = _kCalloutDevice.firstMatch(line);
     if (calloutMatch != null) {
       final port = calloutMatch.group(1)?.trim();

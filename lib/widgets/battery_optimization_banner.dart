@@ -12,7 +12,7 @@ import '../utils/platform_info.dart';
 /// exempt gets put to sleep on screen-off, dropping the radio connection. The
 /// app can't force the exemption without the Play-restricted
 /// `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission, so it only reads its own
-/// status and deep-links to the settings screen — no restricted permission,
+/// status and deep-links to the settings screen: no restricted permission,
 /// no Play-policy impact.
 ///
 /// Mirrors [StorageUnavailableBanner]'s wrap-child shape: when there is nothing
@@ -65,7 +65,7 @@ class _BatteryOptimizationBannerState extends State<BatteryOptimizationBanner>
       if (!mounted) return;
       setState(() => _ignoring = ignoring);
     } catch (e) {
-      // Can't confirm the status — leave the banner hidden rather than risk a
+      // Can't confirm the status, leave the banner hidden rather than risk a
       // false warning, but surface the failure to the log (SAFELANE §6).
       appLogger.warn(
         'Battery-optimization status check failed: $e',

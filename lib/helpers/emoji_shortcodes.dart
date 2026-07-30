@@ -1925,7 +1925,7 @@ const Map<String, String> _emojiAliases = {
   'tick': '✅',
 };
 
-/// gemoji shortcodes plus [_emojiAliases] — what composers use.
+/// gemoji shortcodes plus [_emojiAliases], what composers use.
 final Map<String, String> emojiShortcodesWithAliases = {
   ...emojiShortcodes,
   ..._emojiAliases,

@@ -256,15 +256,15 @@ const int respCodeCustomVars = 21;
 const int respCodeAutoAddConfig = 25;
 const int respCodeStats = 24;
 
-/// Offband fork-only extension space (0xC0+) — never collides with upstream,
+/// Offband fork-only extension space (0xC0+), never collides with upstream,
 /// never submitted upstream. Request and reply share the code. (#135)
 const int cmdOffbandGps = 0xC1;
 const int respCodeOffbandGps = 0xC1;
 
-/// Request frame for [cmdOffbandGps] — a bare 1-byte command, no payload. (#135)
+/// Request frame for [cmdOffbandGps], a bare 1-byte command, no payload. (#135)
 Uint8List buildOffbandGpsRequestFrame() => Uint8List.fromList([cmdOffbandGps]);
 
-// --- Offband FEM LNA command (0xC3) — capability-gated. Heltec V4 external
+// --- Offband FEM LNA command (0xC3), capability-gated. Heltec V4 external
 // FEM LNA control; firmware counterpart OffbandMesh/meshcore-firmware#298.
 //
 // Deliberately a fork-private command rather than an extra byte on the stock
@@ -312,11 +312,11 @@ OffbandFemLnaReply? parseOffbandFemLnaReply(Uint8List frame) {
   return OffbandFemLnaReply(frame[1], frame[2]);
 }
 
-// --- Offband caplog serial-capture download (0xC4) — companion-API only; NEVER
+// --- Offband caplog serial-capture download (0xC4), companion-API only; NEVER
 // on the mesh. Firmware counterpart OffbandMesh/meshcore-firmware#406.
 //
 // 0xC4, NOT 0xC3: the firmware first merged this on 0xC3, which collides with
-// cmdOffbandFemLna (0xC3, #298) — the caplog handler swallowed every 0xC3 frame
+// cmdOffbandFemLna (0xC3, #298), the caplog handler swallowed every 0xC3 frame
 // before FEM/LNA dispatch. Reassigned to 0xC4, the next free code in the 0xC0+
 // space (0xC0 config, 0xC1 GPS, 0xC2 block, 0xC3 FEM LNA).
 //
@@ -334,8 +334,7 @@ const int caplogSubEnd = 0x03;
 // Caplog request sub-codes in cmd_frame[1]. A bare [0xC4] (len 1) is DOWNLOAD
 // for back-compat. Firmware #417/#408. (#430)
 const int caplogReqDownload = 0x01;
-const int caplogReqEnable =
-    0x02; // [0xC4,0x02,(level)] — omit level for default
+const int caplogReqEnable = 0x02; // [0xC4,0x02,(level)], omit level for default
 const int caplogReqDisable = 0x03;
 const int caplogReqErase = 0x04;
 const int caplogReqStatus = 0x05;
@@ -346,7 +345,7 @@ const int caplogRespAck = 0x10; // [0xC4,0x10, req_op, ok(0|1)]
 const int caplogRespStatus =
     0x11; // [0xC4,0x11, enabled, level, used(4B LE), cap(4B LE)]
 
-/// Request frame to download the device's serial-capture buffer — a bare 1-byte
+/// Request frame to download the device's serial-capture buffer, a bare 1-byte
 /// command, no payload (firmware treats bare [0xC4] as DOWNLOAD). (#430)
 Uint8List buildOffbandCaplogRequestFrame() =>
     Uint8List.fromList([cmdOffbandCaplog]);
@@ -414,7 +413,7 @@ CaplogDeviceStatus? parseCaplogStatus(Uint8List frame) {
   );
 }
 
-// --- Offband block command (0xC2) — capability-gated; see
+// --- Offband block command (0xC2), capability-gated; see
 // docs/architecture/block-contract-as-built.md §8. Firmware as-built PR #247. ---
 const int cmdOffbandBlock = 0xC2;
 const int offbandBlockAdd = 0x01;
@@ -423,11 +422,11 @@ const int offbandBlockList = 0x03;
 const int offbandBlockClear = 0x04;
 
 /// Result of a malformed 0xC2 request: firmware replies with the GENERIC error
-/// frame `[respCodeErr(1)][errCodeIllegalArg(6)]` — NOT 0xC2-prefixed, so the
+/// frame `[respCodeErr(1)][errCodeIllegalArg(6)]`, NOT 0xC2-prefixed, so the
 /// app must recognise the 2-byte error frame and not wait for a 0xC2 echo.
 const int errCodeIllegalArg = 6;
 
-/// `ERR_CODE_UNSUPPORTED_CMD` — returned for an Offband command the connected
+/// `ERR_CODE_UNSUPPORTED_CMD`, returned for an Offband command the connected
 /// board can't service (e.g. a `0xC3` FEM LNA request to a board without FEM
 /// control). Unreachable when the capability bit is respected; firmware answers
 /// it defensively against a stale or mis-gated client. (#304)
@@ -461,7 +460,7 @@ OffbandBlockReply? parseOffbandBlockReply(Uint8List frame) {
 /// True iff the connected firmware understands the `0xC1` GPS extension. Gated
 /// on the `offband_caps` byte being present: that byte is an Offband-fork
 /// addition (device-info v14+) which stock/upstream MeshCore never emits, so a
-/// null caps value means non-Offband firmware that couldn't answer `0xC1` — and
+/// null caps value means non-Offband firmware that couldn't answer `0xC1`, and
 /// must not be pinged with it. (#144)
 ///
 /// Interim presence-gate: a dedicated `OFFBAND_CAP_GPS` bit (firmware
@@ -479,12 +478,12 @@ const int offbandCapBlock = 0x02;
 /// `OFFBAND_CAP_FEM_LNA` bit (bit 2) in the `offband_caps` byte: this radio can
 /// control its external FEM LNA (firmware #298).
 ///
-/// PROVISIONAL — firmware owns the caps byte and has not yet confirmed 0x04 as
+/// PROVISIONAL, firmware owns the caps byte and has not yet confirmed 0x04 as
 /// free. Do not ship against this without that confirmation (#304).
 ///
 /// Gate on the BIT ONLY, never on model or version: firmware derives it at
 /// runtime from the auto-detected FEM chip (KCT8103L vs GC1109), so it is a
-/// per-unit answer — two Heltec V4s can legitimately disagree, and other
+/// per-unit answer, two Heltec V4s can legitimately disagree, and other
 /// FEM-bearing boards report false today.
 const int offbandCapFemLna = 0x04;
 
@@ -497,7 +496,7 @@ bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
     (firmwareVerCode ?? 0) >= 15;
 
 /// Caplog serial-capture capability (firmware #427). The bit is compile-time
-/// static in device-info, so it's reliable across reboots — the client re-reads
+/// static in device-info, so it's reliable across reboots, the client re-reads
 /// it on reconnect and never has to race a STATUS probe. Bit 5 (0x08/0x10 are
 /// reserved for WiFi-companion #365 / display-config); requires FIRMWARE_VER_CODE
 /// >= 17, the version that introduced it.
@@ -711,7 +710,7 @@ int readInt32LE(Uint8List data, int offset) {
 }
 
 // Path-length byte from the firmware. This is a PACKED field, and both halves
-// are authoritative — the path is self-describing on the wire:
+// are authoritative, the path is self-describing on the wire:
 //
 //   high 2 bits = hash size - 1  (0..2 -> 1..3 bytes per hop hash)
 //   low  6 bits = hash COUNT     (the number of HOPS, 0-63)
@@ -1066,7 +1065,7 @@ Uint8List buildResetPathFrame(Uint8List pubKey) {
 // [hopCount] is a HOP count and [hashWidth] the bytes per hop hash; the two are
 // packed into the single wire path_len byte via encodePathLen().
 //
-// This previously wrote the count raw, leaving the mode bits 00 — which tells
+// This previously wrote the count raw, leaving the mode bits 00, which tells
 // the radio "1-byte hashes". On a 2-byte net that handed the firmware 2-byte
 // hash data labelled as 1-byte hops, so it routed to nodes that were never on
 // the route. That is the send-side half of #240's misrouting. (#309)

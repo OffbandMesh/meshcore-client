@@ -386,7 +386,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get settings_gpsStatusLiveFix => 'Live GPS fix';
 
   @override
-  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+  String get settings_gpsStatusNoFix => 'No fix: using stored/last position';
 
   @override
   String get settings_gpsStatusCoords => 'Coordinates';
@@ -406,7 +406,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get settings_gpsStatusNoResponse =>
-      'No response — device may need the GPS-query firmware build';
+      'No response: device may need the GPS-query firmware build';
 
   @override
   String get settings_locationIntervalInvalid =>
@@ -4313,7 +4313,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get snrIndicator_noNeighbors =>
-      'No neighbors heard currently — messages still broadcast and route.';
+      'No neighbors heard currently. Messages still broadcast and route.';
 
   @override
   String get snrIndicator_lastSeen => 'Zadnjič videno';
@@ -4654,7 +4654,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String block_blockedNameOnly(String name) {
-    return 'Blocked \"$name\" across all channels — name only until we learn their key';
+    return 'Blocked \"$name\" across all channels. Name only until we learn their key';
   }
 
   @override
@@ -4674,15 +4674,15 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get block_namesHint =>
-      'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
+      'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.';
 
   @override
   String get block_offloadActive =>
-      'Firmware offload active — blocks sync to this radio';
+      'Firmware offload active: blocks sync to this radio';
 
   @override
   String get block_offloadStoreFull =>
-      'Radio block list full (32) — extra blocks stay app-only';
+      'Radio block list full (32): extra blocks stay app-only';
 
   @override
   String get block_composerNotice => 'You\'ve blocked this contact';

@@ -823,7 +823,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_gpsStatusNoFix.
   ///
   /// In en, this message translates to:
-  /// **'No fix — using stored/last position'**
+  /// **'No fix: using stored/last position'**
   String get settings_gpsStatusNoFix;
 
   /// No description provided for @settings_gpsStatusCoords.
@@ -859,7 +859,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_gpsStatusNoResponse.
   ///
   /// In en, this message translates to:
-  /// **'No response — device may need the GPS-query firmware build'**
+  /// **'No response: device may need the GPS-query firmware build'**
   String get settings_gpsStatusNoResponse;
 
   /// No description provided for @settings_locationIntervalInvalid.
@@ -4751,7 +4751,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_pathHashModeHelper.
   ///
   /// In en, this message translates to:
-  /// **'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths — only raise once your network is on v1.14+.'**
+  /// **'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths. Only raise once your network is on v1.14+.'**
   String get repeater_pathHashModeHelper;
 
   /// No description provided for @repeater_txDelay.
@@ -4787,7 +4787,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_intThreshHelper.
   ///
   /// In en, this message translates to:
-  /// **'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables — only raise if you see RX errors in a noisy band.'**
+  /// **'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables. Only raise if you see RX errors in a noisy band.'**
   String get repeater_intThreshHelper;
 
   /// No description provided for @repeater_agcResetInterval.
@@ -4859,7 +4859,7 @@ abstract class AppLocalizations {
   /// No description provided for @repeater_settingsSavedRebootNeeded.
   ///
   /// In en, this message translates to:
-  /// **'Settings saved — reboot the repeater to apply'**
+  /// **'Settings saved. Reboot the repeater to apply'**
   String get repeater_settingsSavedRebootNeeded;
 
   /// No description provided for @repeater_settingsPartialFailure.
@@ -7417,7 +7417,7 @@ abstract class AppLocalizations {
   /// No description provided for @snrIndicator_noNeighbors.
   ///
   /// In en, this message translates to:
-  /// **'No neighbors heard currently — messages still broadcast and route.'**
+  /// **'No neighbors heard currently. Messages still broadcast and route.'**
   String get snrIndicator_noNeighbors;
 
   /// No description provided for @snrIndicator_lastSeen.
@@ -7987,7 +7987,7 @@ abstract class AppLocalizations {
   /// No description provided for @block_blockedNameOnly.
   ///
   /// In en, this message translates to:
-  /// **'Blocked \"{name}\" across all channels — name only until we learn their key'**
+  /// **'Blocked \"{name}\" across all channels. Name only until we learn their key'**
   String block_blockedNameOnly(String name);
 
   /// No description provided for @block_settingsTitle.
@@ -8023,19 +8023,19 @@ abstract class AppLocalizations {
   /// No description provided for @block_namesHint.
   ///
   /// In en, this message translates to:
-  /// **'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.'**
+  /// **'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.'**
   String get block_namesHint;
 
   /// No description provided for @block_offloadActive.
   ///
   /// In en, this message translates to:
-  /// **'Firmware offload active — blocks sync to this radio'**
+  /// **'Firmware offload active: blocks sync to this radio'**
   String get block_offloadActive;
 
   /// No description provided for @block_offloadStoreFull.
   ///
   /// In en, this message translates to:
-  /// **'Radio block list full (32) — extra blocks stay app-only'**
+  /// **'Radio block list full (32): extra blocks stay app-only'**
   String get block_offloadStoreFull;
 
   /// No description provided for @block_composerNotice.

@@ -80,7 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<SettingsCategory> _categories(BuildContext context) {
     final l10n = context.l10n;
-    // Rebuild ONLY when the observer gate flips — NOT on every connector update.
+    // Rebuild ONLY when the observer gate flips, NOT on every connector update.
     // A blanket context.watch here rebuilt the whole settings screen on every
     // sync frame, thrashing the UI thread and slowing the channel sync (#81).
     final showObserver = context.select<MeshCoreConnector, bool>(
@@ -720,7 +720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.sync_problem_outlined),
             title: const Text('Sync queued messages now'),
             subtitle: const Text(
-              'Force-pull messages the radio is holding — diagnostic for #51 '
+              'Force-pull messages the radio is holding, diagnostic for #51 '
               '(radio reports a count but the app shows none). Logs the flow '
               'for diagnostics.',
             ),
@@ -2290,7 +2290,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
             contentPadding: EdgeInsets.zero,
           ),
         ],
-        // Only this radio's own FEM probe decides whether this appears — never
+        // Only this radio's own FEM probe decides whether this appears, never
         // model or version (#304). Deliberately not mirrored into local state:
         // firmware returns post-apply hardware truth, so the switch renders
         // what the radio reports rather than what we asked for.
@@ -2336,7 +2336,7 @@ class _RadioSettingsSnapshot {
     required this.txPowerDbm,
   });
 
-  /// Frequency in integer Hz — avoids floating-point comparison issues.
+  /// Frequency in integer Hz, avoids floating-point comparison issues.
   int get frequencyHz => (frequencyMHz * 1000).round();
 
   /// Convert from the connector's raw-int snapshot to UI-enum snapshot.

@@ -52,7 +52,7 @@ class OffbandDatabase extends _$OffbandDatabase {
       web: DriftWebOptions(
         sqlite3Wasm: Uri.parse('sqlite3.wasm'),
         // Filename matches the asset published by the drift release, which is
-        // `drift_worker.js` — not the `drift_worker.dart.js` the older docs
+        // `drift_worker.js`, not the `drift_worker.dart.js` the older docs
         // name. Both assets are taken from the SAME drift release so they are
         // built against each other.
         driftWorker: Uri.parse('drift_worker.js'),

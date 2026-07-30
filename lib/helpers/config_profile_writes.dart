@@ -3,10 +3,10 @@ import '../models/config_profile.dart';
 /// Enumerates the device writes a [ConfigProfile] implies (#405), device-agnostic
 /// so observer / repeater / companion executors share the same rules:
 ///
-/// - **Skip null or empty** — a profile only touches keys it actually sets; a
+/// - **Skip null or empty**, a profile only touches keys it actually sets; a
 ///   blank never clobbers a configured value. Clearing is a separate explicit op.
-/// - **Skip `jwt_token`** — it's live-minted by firmware at connect, never config.
-/// - **`enabled` is written last** (the executor's activation guard) — so it is
+/// - **Skip `jwt_token`**, it's live-minted by firmware at connect, never config.
+/// - **`enabled` is written last** (the executor's activation guard), so it is
 ///   returned separately from [BrokerWrites.fields].
 /// - **Danger fields** (owner/identity/credentials) are flagged so the preview
 ///   (#406) can gate them: broker `username`/`password`/`jwt_owner`/`jwt_email`,
@@ -65,7 +65,7 @@ class ProfileWrites {
 
 /// Partition writes into (safe, danger) so the preview's two buttons each apply
 /// their own set: the normal Apply writes safe changes; the red gate writes the
-/// credential/identity ones. A broker with both is split across both — its
+/// credential/identity ones. A broker with both is split across both, its
 /// `enabled` toggle rides with the safe half only.
 ({ProfileWrites safe, ProfileWrites danger}) splitProfileWrites(
   ProfileWrites w,
@@ -117,7 +117,7 @@ bool _blank(String? v) => v == null || v.isEmpty;
 ProfileWrites enumerateProfileWrites(ConfigProfile p) {
   final flats = <FlatWrite>[];
 
-  // WiFi — ssid/pwd first, enabled last (activation guard).
+  // WiFi, ssid/pwd first, enabled last (activation guard).
   final wifi = p.wifi;
   if (wifi != null) {
     if (!_blank(wifi.ssid)) {
@@ -157,7 +157,7 @@ ProfileWrites enumerateProfileWrites(ConfigProfile p) {
     }
     put(ConfigKeys.brokerUsername, b.username);
     put(ConfigKeys.brokerPassword, b.password);
-    // jwt_token deliberately omitted — live-minted at connect, never config.
+    // jwt_token deliberately omitted, live-minted at connect, never config.
     put(ConfigKeys.brokerJwtAudience, b.jwtAudience);
     if (b.jwtRefresh != null) {
       fields[ConfigKeys.brokerJwtRefresh] = '${b.jwtRefresh}';

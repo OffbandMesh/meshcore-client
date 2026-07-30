@@ -1439,7 +1439,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (result == null) {
-      return; // Cancelled — keep existing path
+      return; // Cancelled, keep existing path
     }
 
     if (!mounted) {

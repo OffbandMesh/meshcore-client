@@ -20,7 +20,7 @@ import 'prefs_manager.dart';
 class ClientIdStore {
   static const String _key = 'client_install_id';
 
-  /// Byte length of the id. Do not change without re-checking both firmwares —
+  /// Byte length of the id. Do not change without re-checking both firmwares,
   /// 6 is what keeps the app-name offset agreeing at 8.
   static const int length = 6;
 

@@ -5,7 +5,7 @@ import '../l10n/l10n.dart';
 /// A persistent, non-dismissable banner shown above the whole app when the
 /// storage layer failed to open (#385).
 ///
-/// SAFELANE §6: a storage failure must be loud and stay visible — not a 4s
+/// SAFELANE §6: a storage failure must be loud and stay visible, not a 4s
 /// toast, and never a silent empty screen. When [show] is false this is a
 /// transparent pass-through and adds no layout.
 class StorageUnavailableBanner extends StatelessWidget {

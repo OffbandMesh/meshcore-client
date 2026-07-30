@@ -24,7 +24,7 @@ class TimeoutPredictionService extends ChangeNotifier {
   static const int maxObservations = 100;
   static const int _retrainInterval = 5;
   // 1.5x multiplier on raw prediction to account for variance in delivery
-  // times — tight enough to improve on worst-case physics, loose enough
+  // times, tight enough to improve on worst-case physics, loose enough
   // to avoid premature timeouts from model noise.
   static const double _safetyMargin = 1.5;
   static const int _minContactObservations = 10;

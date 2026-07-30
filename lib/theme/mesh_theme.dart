@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// MeshCore redesign palette — warm field-journal dark theme with
+/// MeshCore redesign palette, warm field-journal dark theme with
 /// phosphor-green signal accents. Mirrors values from the redesign spec.
 class MeshPalette {
   MeshPalette._();
@@ -67,7 +67,7 @@ class MeshPalette {
   static const lightSignal = Color(0xFF1A7A44);
 }
 
-/// Named font stacks — Flutter falls back to system fonts when the named
+/// Named font stacks, Flutter falls back to system fonts when the named
 /// family isn't installed, keeping things working without bundled assets.
 class MeshFonts {
   MeshFonts._();
@@ -389,7 +389,7 @@ class MeshTheme {
     );
   }
 
-  /// Mono text style — sizes default to the body size Inter is using.
+  /// Mono text style, sizes default to the body size Inter is using.
   static TextStyle mono({
     double? fontSize,
     FontWeight? fontWeight,
@@ -424,7 +424,7 @@ class MeshTheme {
     );
   }
 
-  /// Small-caps mono label — used for section accents and chip labels.
+  /// Small-caps mono label, used for section accents and chip labels.
   static TextStyle accentLabel({Color? color, double? fontSize}) {
     return TextStyle(
       fontFamily: MeshFonts.mono,
