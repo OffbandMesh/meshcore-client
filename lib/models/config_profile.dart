@@ -74,7 +74,6 @@ class WifiConfig {
 class BrokerConfig {
   const BrokerConfig({
     required this.slot,
-    this.enabled,
     this.url,
     this.port,
     this.transport,
@@ -92,8 +91,12 @@ class BrokerConfig {
   });
 
   /// 0-based slot index, `0 <= slot < kMaxBrokerSlots`.
+  ///
+  /// Broker `enabled` is deliberately NOT a profile field (#456): enabling a
+  /// broker is the operator's runtime decision (firmware ships slots disabled,
+  /// opt-in per #262). A profile configures the connection; apply preserves the
+  /// device's current enabled state.
   final int slot;
-  final bool? enabled;
   final String? url;
   final int? port;
   final MqttTransport? transport;

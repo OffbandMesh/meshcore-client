@@ -38,16 +38,15 @@ class ObserverApplyService {
     }
 
     for (final b in writes.brokers) {
-      // Current state: wasLive for the safe-save dance, and to preserve `enabled`
-      // when the profile doesn't set it.
+      // Profiles never set broker enabled (#456) — preserve the device's current
+      // state: read wasLive for the safe-save dance and re-enable to the same.
       final current = await _svc.getBroker(b.slot);
       final wasLive = current?.enabled ?? false;
-      final enable = b.enabled ?? wasLive;
 
       final res = await _svc.saveBroker(
         b.slot,
         fields: b.fields,
-        enable: enable,
+        enable: wasLive,
         wasLive: wasLive,
       );
       items.add(

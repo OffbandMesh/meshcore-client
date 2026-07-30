@@ -77,26 +77,34 @@ void main() {
       });
     });
 
-    test('broker enabled change is a plain (non-danger) row', () {
-      final w = _writes(
-        const ConfigProfile(
-          schemaVersion: 2,
-          mqtt: MqttSection(
-            brokers: [BrokerConfig(slot: 2, enabled: true, url: 'h')],
+    test(
+      'broker field change is a plain (non-danger) row; unchanged dropped',
+      () {
+        final w = _writes(
+          const ConfigProfile(
+            schemaVersion: 2,
+            mqtt: MqttSection(
+              brokers: [
+                BrokerConfig(slot: 2, url: 'new-host', topicPrefix: 'mc'),
+              ],
+            ),
           ),
-        ),
-      );
-      final d = buildProfileDiff(
-        w,
-        currentFlat: const {},
-        currentBroker: {
-          2: {ConfigKeys.brokerEnabled: '0', ConfigKeys.brokerUrl: 'h'},
-        },
-      );
-      // url unchanged (h==h) dropped; enabled 0->1 present, not danger
-      final labels = d.rows.map((r) => r.label).toList();
-      expect(labels, ['broker 2.${ConfigKeys.brokerEnabled}']);
-      expect(d.rows.single.danger, isFalse);
-    });
+        );
+        final d = buildProfileDiff(
+          w,
+          currentFlat: const {},
+          currentBroker: {
+            2: {
+              ConfigKeys.brokerUrl: 'old-host',
+              ConfigKeys.brokerTopicPrefix: 'mc', // unchanged -> dropped
+            },
+          },
+        );
+        final labels = d.rows.map((r) => r.label).toList();
+        expect(labels, ['broker 2.${ConfigKeys.brokerUrl}']);
+        expect(d.rows.single.kind, DiffKind.change);
+        expect(d.rows.single.danger, isFalse);
+      },
+    );
   });
 }

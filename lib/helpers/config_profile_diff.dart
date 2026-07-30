@@ -100,25 +100,7 @@ ProfileDiff buildProfileDiff(
         ),
       );
     }
-    // enabled change (add/change), never danger/secret
-    if (b.enabled != null) {
-      final current = cur[ConfigKeys.brokerEnabled];
-      final newVal = b.enabled! ? '1' : '0';
-      if (current != newVal) {
-        rows.add(
-          DiffRow(
-            label: 'broker ${b.slot}.${ConfigKeys.brokerEnabled}',
-            oldValue: current,
-            newValue: newVal,
-            kind: (current == null || current.isEmpty)
-                ? DiffKind.add
-                : DiffKind.change,
-            danger: false,
-            secret: false,
-          ),
-        );
-      }
-    }
+    // Broker enabled is not a profile field (#456) — never diffed/applied.
   }
 
   return ProfileDiff(rows);

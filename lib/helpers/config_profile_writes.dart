@@ -6,8 +6,8 @@ import '../models/config_profile.dart';
 /// - **Skip null or empty**, a profile only touches keys it actually sets; a
 ///   blank never clobbers a configured value. Clearing is a separate explicit op.
 /// - **Skip `jwt_token`**, it's live-minted by firmware at connect, never config.
-/// - **`enabled` is written last** (the executor's activation guard), so it is
-///   returned separately from [BrokerWrites.fields].
+/// - **Skip broker `enabled`** (#456), enabling a broker is the operator's
+///   runtime decision, not profile config; apply preserves the current state.
 /// - **Danger fields** (owner/identity/credentials) are flagged so the preview
 ///   (#406) can gate them: broker `username`/`password`/`jwt_owner`/`jwt_email`,
 ///   and global `wifi.pwd`.
@@ -31,19 +31,17 @@ class FlatWrite {
   final bool danger;
 }
 
-/// The writes for one broker slot. [fields] excludes `enabled` (written last by
-/// the executor) and `jwt_token` (never written). [enabled] is null when the
-/// profile doesn't set it, so the executor preserves the device's current state.
+/// The writes for one broker slot. [fields] excludes `jwt_token` (never written)
+/// and the broker `enabled` flag (#456: not a profile field — apply preserves
+/// the device's current enabled state).
 class BrokerWrites {
   const BrokerWrites({
     required this.slot,
     required this.fields,
-    required this.enabled,
     required this.dangerFields,
   });
   final int slot;
   final Map<String, String> fields;
-  final bool? enabled;
   final Set<String> dangerFields;
 }
 
@@ -65,8 +63,7 @@ class ProfileWrites {
 
 /// Partition writes into (safe, danger) so the preview's two buttons each apply
 /// their own set: the normal Apply writes safe changes; the red gate writes the
-/// credential/identity ones. A broker with both is split across both, its
-/// `enabled` toggle rides with the safe half only.
+/// credential/identity ones. A broker with both is split across both.
 ({ProfileWrites safe, ProfileWrites danger}) splitProfileWrites(
   ProfileWrites w,
 ) {
@@ -84,14 +81,9 @@ class ProfileWrites {
       for (final e in b.fields.entries)
         if (b.dangerFields.contains(e.key)) e.key: e.value,
     };
-    if (safeFields.isNotEmpty || b.enabled != null) {
+    if (safeFields.isNotEmpty) {
       safeBrokers.add(
-        BrokerWrites(
-          slot: b.slot,
-          fields: safeFields,
-          enabled: b.enabled,
-          dangerFields: const {},
-        ),
+        BrokerWrites(slot: b.slot, fields: safeFields, dangerFields: const {}),
       );
     }
     if (dangerFields.isNotEmpty) {
@@ -99,7 +91,6 @@ class ProfileWrites {
         BrokerWrites(
           slot: b.slot,
           fields: dangerFields,
-          enabled: null, // never toggle activation from the credential pass
           dangerFields: dangerFields.keys.toSet(),
         ),
       );
@@ -171,13 +162,12 @@ ProfileWrites enumerateProfileWrites(ConfigProfile p) {
     put(ConfigKeys.brokerTopicPrefix, b.topicPrefix);
     put(ConfigKeys.brokerIataOverride, b.iataOverride);
 
-    if (fields.isEmpty && b.enabled == null) continue; // nothing to write
+    if (fields.isEmpty) continue; // nothing to write
 
     brokers.add(
       BrokerWrites(
         slot: b.slot,
         fields: fields,
-        enabled: b.enabled,
         dangerFields: fields.keys.where(kDangerBrokerFields.contains).toSet(),
       ),
     );
