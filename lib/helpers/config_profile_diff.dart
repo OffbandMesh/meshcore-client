@@ -100,7 +100,7 @@ ProfileDiff buildProfileDiff(
         ),
       );
     }
-    // Broker enabled is not a profile field (#456) — never diffed/applied.
+    // Broker enabled is not a profile field (#456), never diffed/applied.
   }
 
   return ProfileDiff(rows);

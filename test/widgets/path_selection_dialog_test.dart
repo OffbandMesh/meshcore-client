@@ -3,7 +3,7 @@ import 'package:meshcore_open/widgets/path_selection_dialog.dart';
 
 void main() {
   group('PathSelectionDialog.parsePathPrefixes (#155)', () {
-    test('width 1 — single-byte hops', () {
+    test('width 1, single-byte hops', () {
       final invalid = <String>[];
       expect(PathSelectionDialog.parsePathPrefixes('A1,F2,3C', 1, invalid), [
         0xA1,
@@ -13,7 +13,7 @@ void main() {
       expect(invalid, isEmpty);
     });
 
-    test('width 2 — two-byte hops, each entry 4 hex chars', () {
+    test('width 2, two-byte hops, each entry 4 hex chars', () {
       final invalid = <String>[];
       expect(PathSelectionDialog.parsePathPrefixes('84AB,C1D2', 2, invalid), [
         0x84,

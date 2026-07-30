@@ -228,7 +228,7 @@ void main() {
       fake.saveCalls,
       hasLength(1),
       reason:
-          'the client no longer gates JWT fields — the firmware enforces them '
+          'the client no longer gates JWT fields, the firmware enforces them '
           'with its defaults (owner -> device pubkey)',
     );
     expect(fake.saveCalls.single.enable, isTrue);

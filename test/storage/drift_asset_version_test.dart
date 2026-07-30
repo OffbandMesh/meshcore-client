@@ -72,7 +72,7 @@ void main() {
       orderedEquals([0x00, 0x61, 0x73, 0x6d]),
       reason:
           'web/sqlite3.wasm does not start with the WebAssembly magic '
-          'bytes (\\0asm) — the download is corrupt or is not a wasm file.',
+          'bytes (\\0asm), the download is corrupt or is not a wasm file.',
     );
   });
 }

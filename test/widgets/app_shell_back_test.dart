@@ -6,7 +6,7 @@ import 'package:meshcore_open/widgets/app_shell.dart';
 import 'package:provider/provider.dart';
 
 /// #389: Back must pop out of a pushed detail (a channel chat) to its list, and
-/// background the app only from a genuine top-level tab — not the other way
+/// background the app only from a genuine top-level tab, not the other way
 /// round. These pin the full decision matrix.
 void main() {
   group('AppShell.backAction', () {

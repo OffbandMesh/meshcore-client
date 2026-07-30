@@ -2,7 +2,7 @@
 //
 // The models are the data structures untrusted wire fields decode into, so the
 // defensive behavior (enum fallback, numeric fallback, secret presence) is
-// pinned here. All green — M1 confirms the existing draft is contract-correct.
+// pinned here. All green, M1 confirms the existing draft is contract-correct.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/models/observer_config.dart';

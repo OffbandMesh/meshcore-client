@@ -32,7 +32,7 @@ class FlatWrite {
 }
 
 /// The writes for one broker slot. [fields] excludes `jwt_token` (never written)
-/// and the broker `enabled` flag (#456: not a profile field — apply preserves
+/// and the broker `enabled` flag (#456: not a profile field, apply preserves
 /// the device's current enabled state).
 class BrokerWrites {
   const BrokerWrites({

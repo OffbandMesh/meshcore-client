@@ -116,7 +116,7 @@ mqtt:
       );
     });
 
-    test('rejects broker "enabled" (#456 — not a profile field)', () {
+    test('rejects broker "enabled" (#456, not a profile field)', () {
       expect(
         () => parseConfigProfile(
           'schema_version: 2\nmqtt:\n  brokers:\n    - slot: 0\n      enabled: true\n',

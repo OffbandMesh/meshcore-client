@@ -26,18 +26,18 @@ Contact _contact({
 
 void main() {
   group('PathHelper.formatPathHex (#154)', () {
-    test('width 1 — one hop per byte, comma-separated', () {
+    test('width 1, one hop per byte, comma-separated', () {
       expect(PathHelper.formatPathHex([0x84, 0xab, 0x12], 1), '84,AB,12');
     });
 
-    test('width 2 — groups two bytes per hop', () {
+    test('width 2, groups two bytes per hop', () {
       expect(
         PathHelper.formatPathHex([0x84, 0xab, 0x12, 0x34], 2),
         '84AB,1234',
       );
     });
 
-    test('width 3 — groups three bytes per hop', () {
+    test('width 3, groups three bytes per hop', () {
       expect(
         PathHelper.formatPathHex([0x01, 0x02, 0x03, 0x04, 0x05, 0x06], 3),
         '010203,040506',
@@ -54,7 +54,7 @@ void main() {
   });
 
   group('PathHelper.resolvePathNames (#154)', () {
-    test('width 1 — resolves per-byte, ignoring chat nodes', () {
+    test('width 1, resolves per-byte, ignoring chat nodes', () {
       final contacts = [
         _contact(prefix: [0xF2], name: 'MunTui', type: advTypeChat),
         _contact(prefix: [0x7E], name: 'zrepeater', type: advTypeRepeater),
@@ -68,14 +68,14 @@ void main() {
       expect(resolved, equals('F2 → zrepeater → USS Ronald Reagan'));
     });
 
-    test('width 2 — resolves by the full 2-byte hop prefix', () {
+    test('width 2, resolves by the full 2-byte hop prefix', () {
       final contacts = [
         _contact(
           prefix: [0x7E, 0xAB],
           name: 'zrepeater',
           type: advTypeRepeater,
         ),
-        // Shares the first byte but differs in the second — must NOT match.
+        // Shares the first byte but differs in the second, must NOT match.
         _contact(prefix: [0x7E, 0x01], name: 'decoy', type: advTypeRepeater),
       ];
       final resolved = PathHelper.resolvePathNames([0x7E, 0xAB], contacts, 2);
@@ -120,7 +120,7 @@ void main() {
       ]);
     });
 
-    test('buildTraceRoundTrip — repeater width 1: out + target + reverse', () {
+    test('buildTraceRoundTrip, repeater width 1: out + target + reverse', () {
       expect(
         PathHelper.buildTraceRoundTrip(
           routingPath: [0x0a, 0x0b],
@@ -133,7 +133,7 @@ void main() {
       );
     });
 
-    test('buildTraceRoundTrip — repeater width 2 mirrors by hop, not byte', () {
+    test('buildTraceRoundTrip, repeater width 2 mirrors by hop, not byte', () {
       expect(
         PathHelper.buildTraceRoundTrip(
           routingPath: [0xa1, 0xa2, 0xb1, 0xb2],
@@ -147,7 +147,7 @@ void main() {
     });
 
     test(
-      'buildTraceRoundTrip — via-repeater: [via]+target → [via,target,via]',
+      'buildTraceRoundTrip, via-repeater: [via]+target → [via,target,via]',
       () {
         // #150: with no committed route, trace a repeater through our strongest
         // direct repeater as the first hop (Ben's mesh: 6A3D fronting AC01).
@@ -164,7 +164,7 @@ void main() {
       },
     );
 
-    test('buildTraceRoundTrip — chat: far hop is the turnaround', () {
+    test('buildTraceRoundTrip, chat: far hop is the turnaround', () {
       expect(
         PathHelper.buildTraceRoundTrip(
           routingPath: [0x0a, 0x0b],
