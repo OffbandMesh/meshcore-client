@@ -127,4 +127,43 @@ void main() {
       expect(w.brokers, isEmpty);
     });
   });
+
+  group('splitProfileWrites', () {
+    test('splits a mixed broker; enabled rides with safe half only', () {
+      final w = enumerateProfileWrites(
+        const ConfigProfile(
+          schemaVersion: 1,
+          wifi: WifiConfig(ssid: 'net', password: 'pw', enabled: true),
+          brokers: [
+            BrokerConfig(
+              slot: 0,
+              url: 'h',
+              username: 'u',
+              password: 'p',
+              enabled: true,
+            ),
+          ],
+        ),
+      );
+      final s = splitProfileWrites(w);
+
+      // safe: wifi.ssid + wifi.enabled flats; broker url + enabled
+      final safeFlatKeys = s.safe.flats.map((f) => f.key).toSet();
+      expect(safeFlatKeys, contains(ConfigKeys.wifiSsid));
+      expect(safeFlatKeys, contains(ConfigKeys.wifiEnabled));
+      expect(safeFlatKeys.contains(ConfigKeys.wifiPassword), isFalse);
+      expect(s.safe.brokers.single.fields.keys, contains(ConfigKeys.brokerUrl));
+      expect(s.safe.brokers.single.enabled, true);
+
+      // danger: wifi.pwd flat; broker username + password, enabled NOT toggled
+      final dangerFlatKeys = s.danger.flats.map((f) => f.key).toSet();
+      expect(dangerFlatKeys, {ConfigKeys.wifiPassword});
+      final db = s.danger.brokers.single;
+      expect(db.fields.keys.toSet(), {
+        ConfigKeys.brokerUsername,
+        ConfigKeys.brokerPassword,
+      });
+      expect(db.enabled, isNull);
+    });
+  });
 }
