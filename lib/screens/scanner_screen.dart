@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../services/linux_ble_error_classifier.dart';
 import '../utils/app_logger.dart';
 import '../widgets/adaptive_app_bar_title.dart';
+import '../widgets/battery_optimization_banner.dart';
 import '../widgets/device_tile.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
@@ -121,24 +122,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
         centerTitle: true,
         automaticallyImplyLeading: false,
       ),
-      body: SafeArea(
-        top: false,
-        child: Consumer<MeshCoreConnector>(
-          builder: (context, connector, child) {
-            return Column(
-              children: [
-                // Bluetooth off warning
-                if (_bluetoothState == BluetoothAdapterState.off)
-                  _bluetoothOffWarning(context),
+      body: BatteryOptimizationBanner(
+        child: SafeArea(
+          top: false,
+          child: Consumer<MeshCoreConnector>(
+            builder: (context, connector, child) {
+              return Column(
+                children: [
+                  // Bluetooth off warning
+                  if (_bluetoothState == BluetoothAdapterState.off)
+                    _bluetoothOffWarning(context),
 
-                // Status bar
-                _buildStatusBar(context, connector),
+                  // Status bar
+                  _buildStatusBar(context, connector),
 
-                // Device list
-                Expanded(child: _buildDeviceList(context, connector)),
-              ],
-            );
-          },
+                  // Device list
+                  Expanded(child: _buildDeviceList(context, connector)),
+                ],
+              );
+            },
+          ),
         ),
       ),
       bottomNavigationBar: Consumer<MeshCoreConnector>(
