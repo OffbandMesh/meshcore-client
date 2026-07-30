@@ -87,13 +87,22 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
-# Copy the native assets provided by the build.dart from all packages.
+# Copy the native assets provided by build.dart hooks (e.g. sqlite3, llamadart)
+# from all packages. The stock template guards this with a configure-time
+# `if(EXISTS)`, but native assets are built AFTER cmake configures, so on a
+# clean build the directory does not exist yet and the install is silently
+# skipped, stranding sqlite3.dll / the llama libs (#445). Defer the existence
+# check to install time so clean builds (and CI) bundle them.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
-if(EXISTS "${NATIVE_ASSETS_DIR}")
-  install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-    COMPONENT Runtime)
-endif()
+install(CODE "
+  if(EXISTS \"${NATIVE_ASSETS_DIR}\")
+    file(GLOB _native_asset_libs \"${NATIVE_ASSETS_DIR}*\")
+    if(_native_asset_libs)
+      file(INSTALL DESTINATION \"${INSTALL_BUNDLE_LIB_DIR}\" TYPE FILE
+        FILES \${_native_asset_libs})
+    endif()
+  endif()
+" COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

@@ -72,6 +72,8 @@ jobs:
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
       - run: flutter build linux --release --no-pub --dart-define-from-file=dart_defines.json
       - name: Upload Linux bundle
         uses: actions/upload-artifact@v4
@@ -91,6 +93,8 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
       - run: flutter build macos --release --no-pub
 
   web:
@@ -134,6 +138,8 @@ jobs:
         run: |
           @{ GIPHY_API_KEY = $env:GIPHY_API_KEY } | ConvertTo-Json -Compress |
             Set-Content -Path dart_defines.json -Encoding utf8 -NoNewline
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
       - run: flutter build windows --release --no-pub --dart-define-from-file=dart_defines.json
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
