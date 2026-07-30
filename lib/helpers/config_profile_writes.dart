@@ -63,6 +63,55 @@ class ProfileWrites {
       brokers.any((b) => b.dangerFields.isNotEmpty);
 }
 
+/// Partition writes into (safe, danger) so the preview's two buttons each apply
+/// their own set: the normal Apply writes safe changes; the red gate writes the
+/// credential/identity ones. A broker with both is split across both — its
+/// `enabled` toggle rides with the safe half only.
+({ProfileWrites safe, ProfileWrites danger}) splitProfileWrites(
+  ProfileWrites w,
+) {
+  final safeFlats = w.flats.where((f) => !f.danger).toList();
+  final dangerFlats = w.flats.where((f) => f.danger).toList();
+
+  final safeBrokers = <BrokerWrites>[];
+  final dangerBrokers = <BrokerWrites>[];
+  for (final b in w.brokers) {
+    final safeFields = <String, String>{
+      for (final e in b.fields.entries)
+        if (!b.dangerFields.contains(e.key)) e.key: e.value,
+    };
+    final dangerFields = <String, String>{
+      for (final e in b.fields.entries)
+        if (b.dangerFields.contains(e.key)) e.key: e.value,
+    };
+    if (safeFields.isNotEmpty || b.enabled != null) {
+      safeBrokers.add(
+        BrokerWrites(
+          slot: b.slot,
+          fields: safeFields,
+          enabled: b.enabled,
+          dangerFields: const {},
+        ),
+      );
+    }
+    if (dangerFields.isNotEmpty) {
+      dangerBrokers.add(
+        BrokerWrites(
+          slot: b.slot,
+          fields: dangerFields,
+          enabled: null, // never toggle activation from the credential pass
+          dangerFields: dangerFields.keys.toSet(),
+        ),
+      );
+    }
+  }
+
+  return (
+    safe: ProfileWrites(flats: safeFlats, brokers: safeBrokers),
+    danger: ProfileWrites(flats: dangerFlats, brokers: dangerBrokers),
+  );
+}
+
 bool _blank(String? v) => v == null || v.isEmpty;
 
 ProfileWrites enumerateProfileWrites(ConfigProfile p) {
