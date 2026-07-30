@@ -42,8 +42,8 @@ void main() async {
   // Initialize SharedPreferences cache
   await PrefsManager.initialize();
 
-  // Probe the storage layer up front (#385). If the database can't open — e.g.
-  // the native sqlite library fails to load — every read/write silently fails
+  // Probe the storage layer up front (#385). If the database can't open, e.g.
+  // the native sqlite library fails to load, every read/write silently fails
   // and the app looks wiped. Capture that here so the UI can warn loudly
   // instead of showing an empty, normal-looking screen (SAFELANE §6).
   final storageHealth = StorageHealthService();

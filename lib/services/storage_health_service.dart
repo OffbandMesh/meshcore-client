@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 /// Tracks whether the app's storage layer (drift/SQLite) opened successfully at
 /// startup (#385).
 ///
-/// When the database can't open — e.g. the native `sqlite3` library fails to
-/// load — every read and write silently fails and the app looks wiped. This
+/// When the database can't open, e.g. the native `sqlite3` library fails to
+/// load, every read and write silently fails and the app looks wiped. This
 /// holds that state so the UI can show a loud, persistent warning instead of an
 /// empty, normal-looking screen (SAFELANE §6: no silent failures).
 class StorageHealthService extends ChangeNotifier {

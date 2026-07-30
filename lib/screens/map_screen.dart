@@ -136,7 +136,7 @@ class _MapScreenState extends State<MapScreen> {
       sumSquaredDiff += diff * diff;
     }
 
-    // Sample standard deviation (n-1) — most appropriate here
+    // Sample standard deviation (n-1), most appropriate here
     final variance = sumSquaredDiff / (values.length - 1);
 
     return sqrt(variance);
@@ -251,7 +251,7 @@ class _MapScreenState extends State<MapScreen> {
           return c.hasLocation;
         }).toList();
 
-        // All contacts with a known location — used as anchors regardless of
+        // All contacts with a known location, used as anchors regardless of
         // time/key-prefix filters so that repeaters are always available.
         final allContactsWithLocation = allContacts
             .where((c) => c.hasLocation)
@@ -710,7 +710,7 @@ class _MapScreenState extends State<MapScreen> {
 
       // Collect the contact-side (last-hop) repeater from every known path.
       // path = [device-side hop, ..., contact-side hop]
-      // Only path.last is actually within radio range of the contact — using
+      // Only path.last is actually within radio range of the contact, using
       // earlier bytes would anchor against our own side of the network.
       final pathSets = <List<int>>[
         contact.path.toList(),
@@ -722,7 +722,7 @@ class _MapScreenState extends State<MapScreen> {
         if (pathBytes.length < w) continue;
         // Anchor on the contact-side hop. Paths are stored device-side-first
         // (Contact.path is the reversed wire path), so the contact-side repeater
-        // is the trailing w bytes — the same hop the 1-byte code read via
+        // is the trailing w bytes, the same hop the 1-byte code read via
         // pathBytes.last, just widened to the configured width.
         final r = repeaterByHash[packPrefix(pathBytes, pathBytes.length - w)];
         if (r != null) anchorSet.add(LatLng(r.latitude!, r.longitude!));
@@ -1010,7 +1010,7 @@ class _MapScreenState extends State<MapScreen> {
     return filtered;
   }
 
-  /// True if two contacts share their first [width] public-key bytes — the
+  /// True if two contacts share their first [width] public-key bytes, the
   /// width-aware replacement for a 1-byte first-byte comparison. (#156)
   bool _samePubkeyPrefix(Contact a, Contact b, int width) {
     if (a.publicKey.length < width || b.publicKey.length < width) return false;

@@ -3,7 +3,7 @@
 // Mirrors the firmware contract in the firmware repo's
 // `examples/companion_radio/OffbandConfigProtocol.h` + `MyMesh::handleOffbandConfigCmd`
 // (Epic F #160-#163) byte-for-byte. This is a PURE codec: it builds request
-// frames and parses response frames. It never touches BLE/USB/TCP — the
+// frames and parses response frames. It never touches BLE/USB/TCP, the
 // connector sends the Uint8Lists and feeds received frames back to [parse].
 //
 // Frame layout (both directions): byte[0] = code (0xC0), byte[1] = sub-type,
@@ -97,13 +97,13 @@ class ObserverConfigClient {
   /// Bit 0 of the `offband_caps` byte appended to the device-info reply.
   static const int capWifiObserver = 0x01;
 
-  // Request sub-type — byte[1].
+  // Request sub-type, byte[1].
   static const int opSet = 0x00;
   static const int opGet = 0x01;
   static const int opView = 0x02;
   static const int opBrokers = 0x03;
 
-  // Response sub-type — byte[1].
+  // Response sub-type, byte[1].
   static const int rAck = 0x00;
   static const int rErr = 0x01;
   static const int rValue = 0x02;
@@ -141,7 +141,7 @@ class ObserverConfigClient {
     return builder.toBytes();
   }
 
-  /// SET `<key> <value>` — firmware splits on the FIRST space; [value] is the
+  /// SET `<key> <value>`, firmware splits on the FIRST space; [value] is the
   /// verbatim remainder and may contain spaces.
   static Uint8List buildSet(String key, String value) =>
       _frame(opSet, '$key $value');
@@ -166,7 +166,7 @@ class ObserverConfigClient {
   /// NOTE: `enabled` is intentionally NOT here. The firmware
   /// `handleSetBrokerField` has no `enabled` branch and the VIEW allowlist
   /// blocks `mqtt enable/disable/clear`, so activation + clear have no wire
-  /// path in this firmware (TODO: firmware F-task — see observer_config docs).
+  /// path in this firmware (TODO: firmware F-task, see observer_config docs).
   /// The activation guard still holds: any field SET on a live slot
   /// auto-disables it firmware-side.
   static List<MapEntry<String, String>> brokerFieldSets(
@@ -264,7 +264,7 @@ class ObserverConfigClient {
 /// [BrokerConfig]s. Feed each parsed [ConfigResponse]; [add] returns the
 /// decoded list once END arrives (or `[]` for an empty pool), else null.
 class BrokerListDecoder {
-  /// Hard cap on total key/value lines retained across the whole dump — a
+  /// Hard cap on total key/value lines retained across the whole dump, a
   /// hostile device cannot grow memory without bound (Gemini BLOCKER: DoS).
   /// Generous for the 10-slot contract (~16 fields each).
   static const int _maxFields = ObserverConfigClient.brokerSlotCount * 32;

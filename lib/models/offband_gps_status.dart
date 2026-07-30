@@ -1,4 +1,4 @@
-/// Parsed payload of a `RESP_CODE_OFFBAND_GPS` (0xC1) reply — the on-demand GPS
+/// Parsed payload of a `RESP_CODE_OFFBAND_GPS` (0xC1) reply, the on-demand GPS
 /// state from an Offband-fork companion radio. (#135)
 ///
 /// Wire format is one ASCII string of space-separated `key=value` tokens, e.g.
@@ -27,7 +27,7 @@ class OffbandGpsStatus {
     this.timestampUtc,
   });
 
-  /// True when the radio reports a live satellite fix with usable coordinates —
+  /// True when the radio reports a live satellite fix with usable coordinates,
   /// i.e. position is GPS-driven, not a stored/manual location. (#135)
   bool get hasLiveFix => fix && latitude != null && longitude != null;
 

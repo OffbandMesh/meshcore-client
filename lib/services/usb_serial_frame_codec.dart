@@ -5,7 +5,7 @@ const int usbSerialRxFrameStart = 0x3e;
 const int usbSerialHeaderLength = 3;
 // Max companion frame the decoder will accept, matching the firmware's
 // MAX_FRAME_SIZE (BaseSerialInterface.h = 176, "+4 for transport codes"). This
-// was 172, which silently rejected full-size frames — exposed by caplog chunks
+// was 172, which silently rejected full-size frames, exposed by caplog chunks
 // (176 B), the first feature to use the full frame. Normal traffic stays <=172.
 const int usbSerialMaxPayloadLength = 176;
 

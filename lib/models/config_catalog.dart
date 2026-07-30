@@ -3,8 +3,8 @@ import 'dart:convert';
 // Catalog manifest model (#404): the `profiles.json` a source publishes.
 //
 // Schema is documented in the `OffbandMesh/config-profiles` repo (SCHEMA.md).
-// Parsing is resilient — a single malformed entry is skipped rather than
-// failing the whole catalog — but a manifest that isn't JSON, or declares a
+// Parsing is resilient, a single malformed entry is skipped rather than
+// failing the whole catalog, but a manifest that isn't JSON, or declares a
 // newer `manifest_version` than we support, is rejected outright.
 
 /// Highest manifest_version this build understands.
@@ -67,7 +67,7 @@ class ConfigCatalog {
   final int manifestVersion;
   final List<CatalogEntry> entries;
 
-  /// Count of malformed entries skipped during parse — surfaced so a partly-bad
+  /// Count of malformed entries skipped during parse, surfaced so a partly-bad
   /// catalog doesn't look complete (no silent truncation).
   final int skippedEntries;
 

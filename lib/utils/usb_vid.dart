@@ -7,10 +7,10 @@
 /// wedges it until a physical reset. We gate the pulse by vendor ID. (#244/#245)
 library;
 
-/// Adafruit — nRF52 boards (RAK4631 etc.). Needs the DTR edge to reconnect.
+/// Adafruit, nRF52 boards (RAK4631 etc.). Needs the DTR edge to reconnect.
 const int usbVidAdafruitNrf52 = 0x239A;
 
-/// Espressif — ESP32 USB-Serial/JTAG. The DTR pulse resets it into ROM.
+/// Espressif, ESP32 USB-Serial/JTAG. The DTR pulse resets it into ROM.
 const int usbVidEspressif = 0x303A;
 
 final RegExp _vidWindows = RegExp(r'VID_([0-9A-Fa-f]{4})');

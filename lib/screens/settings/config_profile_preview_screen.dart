@@ -7,7 +7,7 @@ import '../../services/observer_apply_service.dart';
 import '../../services/observer_config_service.dart';
 
 /// Full sub-screen preview of a config-profile apply (#406): shows the current
-/// -> new diff, then a two-tier confirm — a normal Apply for plain config, and a
+/// -> new diff, then a two-tier confirm, a normal Apply for plain config, and a
 /// separate red gate for credential/identity changes.
 class ConfigProfilePreviewScreen extends StatefulWidget {
   const ConfigProfilePreviewScreen({
@@ -117,7 +117,7 @@ class _ConfigProfilePreviewScreenState
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'No changes — the device already matches this profile.',
+            'No changes: the device already matches this profile.',
             textAlign: TextAlign.center,
           ),
         ),
@@ -290,7 +290,7 @@ class _DangerHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Credential / identity changes ($count) — require the red button',
+              'Credential / identity changes ($count), require the red button',
               style: theme.textTheme.titleSmall?.copyWith(
                 color: theme.colorScheme.error,
               ),

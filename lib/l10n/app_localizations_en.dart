@@ -384,7 +384,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settings_gpsStatusLiveFix => 'Live GPS fix';
 
   @override
-  String get settings_gpsStatusNoFix => 'No fix — using stored/last position';
+  String get settings_gpsStatusNoFix => 'No fix: using stored/last position';
 
   @override
   String get settings_gpsStatusCoords => 'Coordinates';
@@ -404,7 +404,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settings_gpsStatusNoResponse =>
-      'No response — device may need the GPS-query firmware build';
+      'No response: device may need the GPS-query firmware build';
 
   @override
   String get settings_locationIntervalInvalid =>
@@ -2613,7 +2613,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get repeater_pathHashModeHelper =>
-      'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths — only raise once your network is on v1.14+.';
+      'Bytes used to encode this repeater\'s ID in flood path/loop-detect tags. 0=1 byte (256 IDs, up to 64 hops), 1=2 bytes (65K IDs, up to 32 hops), 2=3 bytes (16M IDs, up to 21 hops). v1.13 and older firmware drops multi-byte paths. Only raise once your network is on v1.14+.';
 
   @override
   String get repeater_txDelay => 'Flood TX delay';
@@ -2634,7 +2634,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get repeater_intThreshHelper =>
-      'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables — only raise if you see RX errors in a noisy band.';
+      'Threshold passed to the radio\'s noise-floor calibration so it rejects interference above this level. 0 disables. Only raise if you see RX errors in a noisy band.';
 
   @override
   String get repeater_agcResetInterval => 'AGC reset interval';
@@ -2679,7 +2679,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get repeater_settingsSavedRebootNeeded =>
-      'Settings saved — reboot the repeater to apply';
+      'Settings saved. Reboot the repeater to apply';
 
   @override
   String repeater_settingsPartialFailure(String failures) {
@@ -4262,7 +4262,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get snrIndicator_noNeighbors =>
-      'No neighbors heard currently — messages still broadcast and route.';
+      'No neighbors heard currently. Messages still broadcast and route.';
 
   @override
   String get snrIndicator_lastSeen => 'Last seen';
@@ -4596,7 +4596,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String block_blockedNameOnly(String name) {
-    return 'Blocked \"$name\" across all channels — name only until we learn their key';
+    return 'Blocked \"$name\" across all channels. Name only until we learn their key';
   }
 
   @override
@@ -4616,15 +4616,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get block_namesHint =>
-      'Name-only blocks (channel senders) — each upgrades to a full block once we learn their key.';
+      'Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.';
 
   @override
   String get block_offloadActive =>
-      'Firmware offload active — blocks sync to this radio';
+      'Firmware offload active: blocks sync to this radio';
 
   @override
   String get block_offloadStoreFull =>
-      'Radio block list full (32) — extra blocks stay app-only';
+      'Radio block list full (32): extra blocks stay app-only';
 
   @override
   String get block_composerNotice => 'You\'ve blocked this contact';

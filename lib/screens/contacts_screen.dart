@@ -1335,7 +1335,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                     } else {
                       // Confirm-first: pre-fill the route builder with the
                       // inferred route when we have one, else an empty builder.
-                      // The user always confirms — we never fire a silent guess.
+                      // The user always confirms, we never fire a silent guess.
                       // (#186; replaces the old strongest-repeater guess.)
                       final suggested =
                           (inferred != null && inferred.isNotEmpty)

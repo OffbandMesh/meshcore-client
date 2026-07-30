@@ -148,7 +148,7 @@ class AppSettings {
   /// written, so an older build can be rolled back to without losing mutes.
   final Set<String> mutedChannels;
 
-  /// Per-channel notification level, keyed by [channelNotifyKey] — the PSK
+  /// Per-channel notification level, keyed by [channelNotifyKey], the PSK
   /// identity when known, else the slot index. Keying by PSK (not by display
   /// name, and not by slot) means the setting survives a rename and does not
   /// bleed across a slot reassignment (#193/#194).

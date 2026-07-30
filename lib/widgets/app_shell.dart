@@ -21,11 +21,11 @@ class AppShell extends StatefulWidget {
   static const double _drawerWidth = 300;
 
   /// Bottom bar tab to highlight. A pushed detail screen (a channel chat) still
-  /// sets this so the bar stays visible; it is NOT what decides Back behavior —
+  /// sets this so the bar stays visible; it is NOT what decides Back behavior,
   /// [isTopLevel] is. Null renders no bottom bar.
   final int? selectedIndex;
 
-  /// Whether this is a genuine top-level landing screen — a bottom-bar tab
+  /// Whether this is a genuine top-level landing screen, a bottom-bar tab
   /// (Contacts/Channels/Map). On a top-level screen, Back sends the app to the
   /// background; on a pushed detail screen (a channel chat, the LOS map) Back
   /// pops to the list it came from. Kept separate from [selectedIndex] so a
@@ -74,8 +74,8 @@ class AppShell extends StatefulWidget {
 
   /// Pure back-button decision (#389), extracted so it is testable without the
   /// widget tree. An open drawer closes first; a pushed detail ([isTopLevel]
-  /// false) that has a route below pops to its list; anything else — a
-  /// top-level tab, or a detail with nothing to pop — backgrounds the app. A
+  /// false) that has a route below pops to its list; anything else, a
+  /// top-level tab, or a detail with nothing to pop, backgrounds the app. A
   /// top-level tab CAN pop (the scanner sits below it) but must not, or Back
   /// would strand the user on the radio-connect screen.
   @visibleForTesting

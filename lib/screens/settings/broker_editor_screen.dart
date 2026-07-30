@@ -114,7 +114,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
 
   /// Pre-enable validation, shared with the list's quick Enable via
   /// [BrokerConfig.enableError]. Only structural fields (URL, port) gate a save
-  /// — the firmware enforces the rest via its own defaults.
+  ///, the firmware enforces the rest via its own defaults.
   String? _validate() => BrokerConfig(
     slot: _baseline.slot,
     url: _url.text.trim(),
@@ -122,7 +122,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
   ).enableError;
 
   /// Greyed placeholder showing the firmware-resolved default for a field whose
-  /// raw value is blank (#173). The blank raw key stays the source of truth —
+  /// raw value is blank (#173). The blank raw key stays the source of truth,
   /// this is hint text only, never written back. Null when nothing to resolve.
   String? _resolvedHint(String resolved, {bool shortenKey = false}) {
     if (resolved.isEmpty) return null;
@@ -142,7 +142,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
   }
 
   Future<void> _save() async {
-    // Validation only gates ENABLING — disabling a slot with blank/partial
+    // Validation only gates ENABLING, disabling a slot with blank/partial
     // fields is fine; it won't be active.
     if (_enabled) {
       final err = _validate();
@@ -169,7 +169,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Save failed at "${result.failedField ?? 'a field'}" — the slot '
+            'Save failed at "${result.failedField ?? 'a field'}", the slot '
             'was left disabled. Re-read and retry.',
           ),
           backgroundColor: errorColor,
@@ -177,7 +177,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
       );
       return;
     }
-    // The writes were ACKed — but a firmware build can ACK without applying the
+    // The writes were ACKed, but a firmware build can ACK without applying the
     // enabled state (meshcore-firmware#179). Settle, re-read, and only claim
     // success if the device actually matches what we asked for.
     await Future.delayed(ObserverConfigService.applySettleDelay);
@@ -195,14 +195,14 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
         );
         navigator.pop(true);
       case BrokerApplyOutcome.notApplied:
-        // Stay on the editor, re-seed to the device's true state, and warn — the
+        // Stay on the editor, re-seed to the device's true state, and warn, the
         // fields were written but the device didn't honor the enable/disable.
         if (fresh != null) _seedFrom(fresh);
         messenger.showSnackBar(
           SnackBar(
             content: Text(
               'Saved, but the device did not ${intended ? 'enable' : 'disable'} '
-              'broker ${_baseline.slot} — possible firmware issue',
+              'broker ${_baseline.slot}, possible firmware issue',
             ),
             backgroundColor: errorColor,
           ),
@@ -211,7 +211,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              'Broker ${_baseline.slot} saved — could not confirm enabled '
+              'Broker ${_baseline.slot} saved. Could not confirm enabled '
               'state (device may be rebooting)',
             ),
           ),
@@ -429,7 +429,7 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
       obscureText: true,
       decoration: InputDecoration(
         labelText: _baseline.passwordSet
-            ? 'Password (set — leave blank to keep)'
+            ? 'Password (set, leave blank to keep)'
             : 'Password',
         border: const OutlineInputBorder(),
       ),

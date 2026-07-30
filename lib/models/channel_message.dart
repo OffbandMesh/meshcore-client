@@ -60,7 +60,7 @@ class ChannelMessage {
   final Map<String, List<String>> reactionSenders;
 
   /// Local wall-clock time this message's frame arrived, set at ingest.
-  /// Null for outgoing messages and records stored before #285 — never
+  /// Null for outgoing messages and records stored before #285, never
   /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
   final DateTime? rxTime;
 
@@ -106,7 +106,7 @@ class ChannelMessage {
 
   /// Hop count decoded from the firmware path-length byte (low 6 bits).
   /// The raw byte also packs hash width in its high 2 bits, so the stored
-  /// pathLength is NOT the hop count — use this getter for display.
+  /// pathLength is NOT the hop count, use this getter for display.
   /// Returns null when unknown; a negative (flood) sentinel is preserved.
   int? get hopCount {
     final pl = pathLength;

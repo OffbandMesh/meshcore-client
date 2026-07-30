@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 
-/// Flashes the Windows taskbar button to draw attention — e.g. a new message
+/// Flashes the Windows taskbar button to draw attention, e.g. a new message
 /// arriving while the app window is not in the foreground.
 ///
 /// The native side (`windows/runner/flutter_window.cpp`) only flashes when the

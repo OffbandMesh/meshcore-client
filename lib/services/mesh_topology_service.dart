@@ -3,7 +3,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 /// A node (repeater/relay) in the passively-observed mesh topology, keyed by its
-/// width-byte path-hash prefix. (#186 Phase B — see docs/trace-topology-spec.md)
+/// width-byte path-hash prefix. (#186 Phase B, see docs/trace-topology-spec.md)
 class TopoNode {
   final Uint8List prefix;
   int lastSeen; // unix seconds
@@ -29,7 +29,7 @@ class TopoEdge {
   int lastSeen;
   int count;
 
-  /// Set when a trace routed over this link timed out — inference deprioritises
+  /// Set when a trace routed over this link timed out, inference deprioritises
   /// it so the graph self-heals as topology drifts.
   int? lastFailed;
 
@@ -43,13 +43,13 @@ class TopoEdge {
 }
 
 /// Accumulates the routing paths of received packets into a topology graph and
-/// infers trace routes from it — the thing the firmware can't do (it only walks
+/// infers trace routes from it, the thing the firmware can't do (it only walks
 /// a caller-supplied route) and the reference apps push onto the user (manual
 /// build). Deliberately SEPARATE from PathHistoryService (Ben, 2026-07-05):
 /// PathHistory weights message routing; this is the trace oracle.
 ///
 /// Storage is bounded by design: the graph is deduplicated (a node/edge stored
-/// once, refreshed), pruned by freshness, and hard-capped by node count — so it
+/// once, refreshed), pruned by freshness, and hard-capped by node count, so it
 /// scales with mesh size, not hop depth or packet volume. (#186)
 class MeshTopologyService extends ChangeNotifier {
   static const int defaultFreshnessSeconds = 7 * 24 * 3600; // 7 days
@@ -98,7 +98,7 @@ class MeshTopologyService extends ChangeNotifier {
   double? neighbourSnrOf(List<int> prefix) =>
       _nodes[_hex(prefix)]?.neighbourSnr;
 
-  /// Our own node prefix — the BFS origin for inference and the anchor for the
+  /// Our own node prefix, the BFS origin for inference and the anchor for the
   /// `us ~ direct-neighbour` edges.
   void setSelf(List<int> prefix, int width) {
     final w = width < 1 ? 1 : width;
@@ -117,7 +117,7 @@ class MeshTopologyService extends ChangeNotifier {
   /// `origin → h1 → … → hk → us`, so `hk` = `path`'s last hop = our direct
   /// neighbour). [lastHopSnr] is the SNR of our reception (attributed to `hk`).
   /// Returns true on a notify-worthy STRUCTURAL change (new node/edge). Cheap:
-  /// O(path length ≤ 64) map writes — the path was already parsed upstream.
+  /// O(path length ≤ 64) map writes, the path was already parsed upstream.
   bool observePath(
     List<int> path, {
     required int width,
@@ -193,7 +193,7 @@ class MeshTopologyService extends ChangeNotifier {
   }
 
   /// The ordered intermediate hops from us to [target], EXCLUDING both us and
-  /// the target — feed straight into
+  /// the target, feed straight into
   /// `PathHelper.buildTraceRoundTrip(routingPath: result, targetPrefix: target)`.
   ///
   /// - `[]`   → target is a direct neighbour (a one-hop ping is correct).
@@ -287,7 +287,7 @@ class MeshTopologyService extends ChangeNotifier {
     }
   }
 
-  /// Drops nodes/edges not heard within the freshness window — for persistence
+  /// Drops nodes/edges not heard within the freshness window, for persistence
   /// bounds (Phase D). Inference already ignores stale links at query time.
   void pruneStale([int? nowTs]) {
     final now = nowTs ?? _now();

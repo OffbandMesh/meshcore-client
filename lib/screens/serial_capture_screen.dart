@@ -205,7 +205,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
         title: const Text('Start capture & reboot?'),
         content: const Text(
           'Enables serial capture, then reboots the radio so the boot log is '
-          'captured from power-on. There is no timer — capture runs until you '
+          'captured from power-on. There is no timer. Capture runs until you '
           'Stop it. The connection drops during the reboot; when it reconnects, '
           'capture is still running and you can Stop and download here.',
         ),
@@ -254,7 +254,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       if (bytes.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Buffer is empty — nothing to download.'),
+            content: Text('Buffer is empty, nothing to download.'),
           ),
         );
         return;

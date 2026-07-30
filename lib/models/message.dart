@@ -43,16 +43,16 @@ class Message {
   final Uint8List fourByteRoomContactKey;
 
   /// Local wall-clock time this message's frame arrived, set at ingest.
-  /// Null for outgoing messages and records stored before #285 — never
+  /// Null for outgoing messages and records stored before #285, never
   /// fabricated. [timestamp] is the SENDER's claimed time; this is ours.
   final DateTime? rxTime;
 
   /// RX signal-to-noise in dB for the received frame, captured from the v3
   /// contact-msg-recv frame. Null for outgoing messages, pre-v3 firmware, and
-  /// records stored before #438 — never fabricated. (#438)
+  /// records stored before #438, never fabricated. (#438)
   final double? snr;
 
-  /// RX signal strength in dBm. Null until firmware populates it — the wire
+  /// RX signal strength in dBm. Null until firmware populates it, the wire
   /// currently sends a reserved 0 byte here, so we do NOT read it yet (#439).
   final int? rssi;
 

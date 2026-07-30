@@ -21,7 +21,7 @@ class _AckHistoryEntry {
   });
 }
 
-/// (messageId, timestamp, attemptIndex, pathSelection) — stored per ACK hash
+/// (messageId, timestamp, attemptIndex, pathSelection), stored per ACK hash
 /// for O(1) lookup.  [pathSelection] snapshots the route used for this
 /// specific attempt so that a late PUSH_CODE_SEND_CONFIRMED credits the
 /// correct path even when the message has since been retried on a different
@@ -174,7 +174,7 @@ class MessageRetryService extends ChangeNotifier {
 
     _config?.addMessage(contact.publicKeyHex, message);
 
-    // Queue per contact — only one message in-flight at a time to avoid
+    // Queue per contact, only one message in-flight at a time to avoid
     // overflowing the firmware's 8-entry expected_ack_table.
     final contactKey = contact.publicKeyHex;
     _sendQueue[contactKey] ??= [];
@@ -267,7 +267,7 @@ class MessageRetryService extends ChangeNotifier {
       );
       _pendingMessages[messageId] = updatedMessage;
     } else if (message.retryCount > 0) {
-      // No schedule entry for this retry — re-resolve path from current contact
+      // No schedule entry for this retry, re-resolve path from current contact
       // state so user's path override changes are picked up between retries.
       final resolved = resolvePathSelection(contact);
       final updatedMessage = message.copyWith(
@@ -304,7 +304,7 @@ class MessageRetryService extends ChangeNotifier {
       }
     }
 
-    // Re-validate after async gap — a timer or ACK could have resolved/retried
+    // Re-validate after async gap, a timer or ACK could have resolved/retried
     // this message while we were awaiting the path callback.
     final currentMessage = _pendingMessages[messageId];
     if (currentMessage == null || _resolvedMessages.contains(messageId)) {
@@ -384,7 +384,7 @@ class MessageRetryService extends ChangeNotifier {
     _pendingMessages[messageId] = failed;
     _config?.updateMessage(failed);
     _config?.debugLogService?.warn(
-      'No RESP_CODE_SENT within ${_sentConfirmationTimeoutMs}ms — marking send failed',
+      'No RESP_CODE_SENT within ${_sentConfirmationTimeoutMs}ms, marking send failed',
       tag: 'AckHash',
     );
     notifyListeners();
@@ -464,7 +464,7 @@ class MessageRetryService extends ChangeNotifier {
     _pendingMessages[messageId] = updatedMessage;
     config.updateMessage(updatedMessage);
 
-    // Radio confirmed the send — the delivery-ack timer takes over from here.
+    // Radio confirmed the send, the delivery-ack timer takes over from here.
     _sentConfirmationTimers.remove(messageId)?.cancel();
     _startTimeoutTimer(messageId, actualTimeout);
     return true;

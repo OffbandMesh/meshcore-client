@@ -2,7 +2,7 @@
 // [ObserverConfigClient], sends them over the active transport, awaits and
 // parses the response, and holds the parsed [ObserverConfig].
 //
-// Device NVS is the source of truth — this service caches the last read but
+// Device NVS is the source of truth, this service caches the last read but
 // never persists locally. The firmware protocol has no request id, so
 // responses are correlated by ORDER: keep ONE request in flight at a time
 // (the settings UI sends staged changes sequentially, awaiting each).
@@ -32,22 +32,22 @@ class ObserverConfigService extends ChangeNotifier {
   ObserverConfig? _config;
   ObserverConfig? get config => _config;
 
-  /// True after a refresh failed to complete — the UI shows stale data warning
+  /// True after a refresh failed to complete, the UI shows stale data warning
   /// rather than silently presenting an out-of-date snapshot.
   bool _stale = false;
   bool get stale => _stale;
 
-  /// Last error surfaced (SAFELANE §6 — every failure is visible). The UI shows
+  /// Last error surfaced (SAFELANE §6, every failure is visible). The UI shows
   /// it; cleared on the next success.
   String? _lastError;
   String? get lastError => _lastError;
 
-  /// True when the broker-pool dump failed but the flat settings read OK — the
+  /// True when the broker-pool dump failed but the flat settings read OK, the
   /// UI shows the broker section as unavailable instead of blanking the pane.
   bool _brokersUnavailable = false;
   bool get brokersUnavailable => _brokersUnavailable;
 
-  /// Whether the connected device supports the config command — the version
+  /// Whether the connected device supports the config command, the version
   /// gate AND the capability bit, read live from the connector's device-info
   /// parse. The settings UI watches the connector, so the Observer category
   /// appears/hides as this flips on connect/disconnect.
@@ -140,7 +140,7 @@ class ObserverConfigService extends ChangeNotifier {
   /// Save a broker [slot] field-at-a-time per the firmware contract: a live slot
   /// is disabled first, each changed [fields] entry is written, then `enabled`
   /// is written LAST (when [enable]). Stops at the first ERR/timeout and reports
-  /// the failed field — a partial save therefore leaves the slot disabled, never
+  /// the failed field, a partial save therefore leaves the slot disabled, never
   /// live-corrupt (#80). The caller re-GETs the slot to show true state + offer
   /// retry/clear.
   Future<BrokerSaveResult> saveBroker(
@@ -167,10 +167,10 @@ class ObserverConfigService extends ChangeNotifier {
     return const BrokerSaveResult.ok();
   }
 
-  /// Definitively wipe a broker slot — `mqtt.broker.<slot>.clear` (#80).
+  /// Definitively wipe a broker slot, `mqtt.broker.<slot>.clear` (#80).
   Future<bool> clearBroker(int slot) => setBrokerField(slot, 'clear', '1');
 
-  /// Re-read a single broker [slot] field-by-field — the post-save / recovery
+  /// Re-read a single broker [slot] field-by-field, the post-save / recovery
   /// re-GET. Cheaper than the whole pool: 14 scalar GETs for one slot, not the
   /// 84-frame OCFG_BROKERS dump (#80). Returns null if any field GET fails.
   Future<BrokerConfig?> getBroker(int slot) async {
@@ -194,7 +194,7 @@ class ObserverConfigService extends ChangeNotifier {
     for (final f in fields) {
       final v = await getFlat('mqtt.broker.$slot.$f');
       if (v == null) {
-        // password is write-only — a missing read is its presence, not a slot
+        // password is write-only, a missing read is its presence, not a slot
         // failure; any other missing field means the re-GET is incomplete.
         if (f == 'password') continue;
         return null;
@@ -210,7 +210,7 @@ class ObserverConfigService extends ChangeNotifier {
 
   /// Read the broker pool (paginated START → KV → END). Null on a stall or
   /// error. The completion deadline is an INACTIVITY watchdog re-armed on every
-  /// frame — a large pool streams field-by-field and outlasts any single fixed
+  /// frame, a large pool streams field-by-field and outlasts any single fixed
   /// deadline, so only a genuine stall (no frame for [timeout]) fails (#103).
   /// The fetch lifecycle is logged to the shared file log (#108) so a tester's
   /// Share-logs capture shows in plain text where a pool load succeeds or fails.
@@ -239,7 +239,7 @@ class ObserverConfigService extends ChangeNotifier {
         final r = ObserverConfigClient.parse(f);
         if (r is ConfigBrokersStart) {
           expected = r.count;
-          _logBroker('pool GET: header — ${r.count} brokers');
+          _logBroker('pool GET: header, ${r.count} brokers');
         }
         frames++;
         final list = decoder.add(r);
@@ -260,7 +260,7 @@ class ObserverConfigService extends ChangeNotifier {
         _logBroker(
           'pool GET: FAILED after '
           '${DateTime.now().difference(started).inMilliseconds}ms '
-          '($frames frames, header said ${expected ?? "?"}) — $e',
+          '($frames frames, header said ${expected ?? "?"}), $e',
         );
         _setError('broker list failed: $e');
         return null;
@@ -285,7 +285,7 @@ class ObserverConfigService extends ChangeNotifier {
       final alwaysOn = await getFlat('display.always_on');
       final rotation = await getFlat('display.rotation');
       // Skip the heavy broker dump (84 frames) when only flat settings changed
-      // (e.g. after a flat Save) — it must not re-flood BLE for a toggle (#81).
+      // (e.g. after a flat Save), it must not re-flood BLE for a toggle (#81).
       final brokers = includeBrokers ? await getBrokers() : null;
       final keptBrokers = _config?.brokers ?? const <BrokerConfig>[];
 

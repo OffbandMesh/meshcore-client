@@ -329,7 +329,7 @@ class _UsbScreenState extends State<UsbScreen> {
           ..addAll(ports);
       });
     } catch (_) {
-      // Silent — hot-plug failures are non-critical.
+      // Silent, hot-plug failures are non-critical.
     }
   }
 

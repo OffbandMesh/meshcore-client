@@ -1,7 +1,7 @@
 import '../helpers/config_profile_writes.dart';
 import 'observer_config_service.dart';
 
-/// Result of applying one write (or one broker slot). [label] is safe to show —
+/// Result of applying one write (or one broker slot). [label] is safe to show,
 /// it names the key/slot, never a value, so secrets never leak into UI or logs.
 class ApplyItemResult {
   const ApplyItemResult(this.label, this.ok, [this.error]);
@@ -56,7 +56,7 @@ class ObserverApplyService {
             : ApplyItemResult(
                 'broker ${b.slot}',
                 false,
-                'field "${res.failedField}" failed — slot left disabled',
+                'field "${res.failedField}" failed, slot left disabled',
               ),
       );
     }

@@ -5,7 +5,7 @@ import 'prefs_manager.dart';
 
 /// Persistence for the app-global block list.
 ///
-/// Deliberately **global** — unlike the other stores it is NOT scoped by the
+/// Deliberately **global**, unlike the other stores it is NOT scoped by the
 /// connected device key. A block is "I don't want to see this person," keyed by
 /// their public key, and must hold regardless of which radio is connected.
 /// See `docs/architecture/block-contract-as-built.md`.

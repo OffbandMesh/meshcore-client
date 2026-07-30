@@ -62,7 +62,7 @@ void main() {
       );
       expect(
         _broker(state: BrokerRuntimeState.heldNoHeap).status.label,
-        'Held — low heap',
+        'Held, low heap',
       );
     });
 

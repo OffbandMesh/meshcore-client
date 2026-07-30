@@ -1,6 +1,6 @@
 /// Identity of the running binary, injected at build time (#397).
 ///
-/// Set via `--dart-define` so every build — debug or release, dev or prod —
+/// Set via `--dart-define` so every build, debug or release, dev or prod,
 /// carries its own identity, independent of the pubspec marketing version:
 ///
 /// ```

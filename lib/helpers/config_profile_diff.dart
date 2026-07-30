@@ -4,7 +4,7 @@ import 'config_profile_writes.dart';
 /// Builds the human-facing diff for a profile apply (#406): current → new, per
 /// field, categorized so the preview can render its two-tier confirm.
 ///
-/// Pure — the screen fetches current device values and passes them in, so this
+/// Pure, the screen fetches current device values and passes them in, so this
 /// is unit-testable without a device.
 
 enum DiffKind {
@@ -25,7 +25,7 @@ class DiffRow {
     required this.secret,
   });
 
-  /// Firmware key (flat) or `broker N.<field>` — never a value, safe to show.
+  /// Firmware key (flat) or `broker N.<field>`, never a value, safe to show.
   final String label;
 
   /// Current on-device value, or null if unknown/unreadable (e.g. write-only
@@ -34,10 +34,10 @@ class DiffRow {
   final String newValue;
   final DiffKind kind;
 
-  /// In the credential/identity danger set — routed to the red gate.
+  /// In the credential/identity danger set, routed to the red gate.
   final bool danger;
 
-  /// A true secret (password / wifi.pwd) — the UI must mask both values.
+  /// A true secret (password / wifi.pwd), the UI must mask both values.
   final bool secret;
 }
 

@@ -195,7 +195,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
 
     // Per the firmware trace contract, the route must EXCLUDE our own origin
     // prefix (it is implicit at both ends). Drop a leading self hop if the
-    // stored path includes it — otherwise route[0] matches no forwarding node
+    // stored path includes it, otherwise route[0] matches no forwarding node
     // (we are the sender) and the packet never advances → silent timeout. (#150)
     var route = pathBytes;
     final self = context.read<MeshCoreConnector>().selfPublicKey;
@@ -210,7 +210,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
       if (isSelf) route = Uint8List.fromList(route.sublist(hopBytes));
     }
 
-    // Empty path, or an all-zero "flood" marker, means no real route — trace
+    // Empty path, or an all-zero "flood" marker, means no real route, trace
     // the target's own width prefix directly. Never return an empty payload:
     // the firmware rejects an empty trace with error 1. (#150)
     if (route.isEmpty || route.every((b) => b == 0)) {
@@ -256,7 +256,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
     final path = widget.flipPathAround ? buildPath(pathTmp) : pathTmp;
 
     if (path.isEmpty) {
-      // No route to trace — don't send an empty payload (firmware error 1);
+      // No route to trace, don't send an empty payload (firmware error 1);
       // surface "not available" instead. (#150)
       appLogger.info(
         'Path trace skipped: no route to trace',

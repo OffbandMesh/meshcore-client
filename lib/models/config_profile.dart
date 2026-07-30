@@ -2,7 +2,7 @@
 ///
 /// A profile is a portable set of config values a user applies to a device
 /// (observer #139, repeater #137, companion #138) instead of baked defaults.
-/// This file defines only the schema and typed model — parsing (#403) and the
+/// This file defines only the schema and typed model, parsing (#403) and the
 /// per-device apply engines live elsewhere.
 ///
 /// Every field is nullable: a profile carries only the keys it wants to set, so
@@ -20,7 +20,7 @@ const int kConfigProfileSchemaVersion = 1;
 /// Number of broker slots the firmware exposes (`mqtt_b0`..`mqtt_b5`).
 const int kMaxBrokerSlots = 6;
 
-/// MQTT transport — wire value is the name (`tcp`/`tls`/`wss`), not the ordinal.
+/// MQTT transport, wire value is the name (`tcp`/`tls`/`wss`), not the ordinal.
 enum MqttTransport {
   tcp,
   tls,
@@ -37,7 +37,7 @@ enum MqttTransport {
   }
 }
 
-/// MQTT auth type — wire value is the name (`none`/`basic`/`jwt`).
+/// MQTT auth type, wire value is the name (`none`/`basic`/`jwt`).
 enum MqttAuthType {
   none,
   basic,
@@ -123,10 +123,10 @@ class ConfigProfile {
   final int schemaVersion;
   final WifiConfig? wifi;
 
-  /// `mqtt.iata` — the region/IATA code applied globally.
+  /// `mqtt.iata`, the region/IATA code applied globally.
   final String? regionIata;
 
-  /// `mqtt.status_interval` — seconds between status publishes.
+  /// `mqtt.status_interval`, seconds between status publishes.
   final int? statusInterval;
 
   /// Populated broker slots only (may be sparse; each carries its [BrokerConfig.slot]).

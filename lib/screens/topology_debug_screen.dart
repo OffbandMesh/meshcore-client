@@ -13,7 +13,7 @@ import '../widgets/adaptive_app_bar_title.dart';
 /// epic #186). It answers one question on real hardware: is
 /// [MeshTopologyService] actually ingesting? Node/edge counts climb as routed
 /// packets arrive; stuck at zero while traffic flows means the RX ingestion
-/// wiring is dead. Strings are hardcoded EN on purpose — this is a dev-facing
+/// wiring is dead. Strings are hardcoded EN on purpose, this is a dev-facing
 /// diagnostic, deliberately not part of the localized UX surface.
 class TopologyDebugScreen extends StatelessWidget {
   const TopologyDebugScreen({super.key});
@@ -85,7 +85,7 @@ class TopologyDebugScreen extends StatelessWidget {
     List<Contact> contacts,
   ) {
     final selfLabel = self == null
-        ? 'not set yet — waiting for first packet'
+        ? 'not set yet, waiting for first packet'
         : (_nameOf(self, contacts) == null
               ? _hex(self)
               : '${_nameOf(self, contacts)} (${_hex(self)})');
@@ -229,7 +229,7 @@ class TopologyDebugScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Listening — this fills as routed packets arrive from the mesh. '
+            'Listening. This fills as routed packets arrive from the mesh. '
             'Leave it connected a few minutes.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.grey[500]),
@@ -282,7 +282,7 @@ class TopologyDebugScreen extends StatelessWidget {
     final self = topo.self;
     final buf = StringBuffer()
       ..writeln(
-        'Mesh topology — ${topo.nodeCount} nodes, ${topo.edgeCount} edges',
+        'Mesh topology: ${topo.nodeCount} nodes, ${topo.edgeCount} edges',
       )
       ..writeln('self: ${self == null ? "(unset)" : _hex(self)}')
       ..writeln('freshness: ${topo.freshnessSeconds ~/ 86400}d')

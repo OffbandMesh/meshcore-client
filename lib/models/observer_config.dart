@@ -3,7 +3,7 @@
 // These mirror the firmware wire contract in the firmware repo's
 // `examples/companion_radio/OffbandConfigProtocol.h` (CMD_OFFBAND_CONFIG 0xC0,
 // Epic F #160-#163). The device NVS is the single source of truth: the client
-// holds no local copy — it reads via ObserverConfigClient and writes
+// holds no local copy, it reads via ObserverConfigClient and writes
 // field-at-a-time. Secrets (password / wifi.pwd) are write-only on the wire.
 
 /// MQTT broker transport. On the wire this is the string name
@@ -77,13 +77,13 @@ enum WifiStatus {
 sealed class SecretField {
   const SecretField();
 
-  /// Leave the stored secret untouched — the codec sends nothing.
+  /// Leave the stored secret untouched, the codec sends nothing.
   const factory SecretField.unchanged() = SecretUnchanged;
 
-  /// Clear the stored secret — the codec sends an empty value.
+  /// Clear the stored secret, the codec sends an empty value.
   const factory SecretField.clear() = SecretClear;
 
-  /// Replace the stored secret — the codec sends [value].
+  /// Replace the stored secret, the codec sends [value].
   const factory SecretField.set(String value) = SecretSet;
 }
 
@@ -103,16 +103,16 @@ class SecretSet extends SecretField {
 /// Outcome of verifying that a broker enable/disable actually took effect, by
 /// re-reading the slot after the SET (#89). A firmware build can ACK a toggle as
 /// success without applying it (meshcore-firmware#179), so the UI never trusts
-/// the ACK alone — it re-reads and reports what the device actually says.
+/// the ACK alone, it re-reads and reports what the device actually says.
 enum BrokerApplyOutcome {
   /// Re-read confirms the device is in the intended enabled state.
   applied,
 
-  /// The device ACKed success but the re-read shows the unchanged state — it did
+  /// The device ACKed success but the re-read shows the unchanged state, it did
   /// not apply the toggle. Surfaced as a warning, never a false success.
   notApplied,
 
-  /// The re-read itself failed (timeout/disconnect — e.g. an enable that rebooted
+  /// The re-read itself failed (timeout/disconnect, e.g. an enable that rebooted
   /// the device), so the result can't be confirmed either way.
   unverified,
 }
@@ -174,7 +174,7 @@ enum BrokerLastError {
   }
 }
 
-/// Display category for a broker's status line — drives the label colour/icon.
+/// Display category for a broker's status line, drives the label colour/icon.
 enum BrokerStatusKind { connected, connecting, failed, held, idle, disabled }
 
 /// A broker's human-facing status: a [label] plus a [kind] the UI colours.
@@ -185,7 +185,7 @@ class BrokerStatus {
 }
 
 /// One MQTT broker slot (0-9), as read back from the `OCFG_BROKERS` dump.
-/// Non-secret fields only — `password` is reported as presence ([passwordSet]),
+/// Non-secret fields only, `password` is reported as presence ([passwordSet]),
 /// `jwt_token` is never a config key.
 class BrokerConfig {
   const BrokerConfig({
@@ -218,7 +218,7 @@ class BrokerConfig {
   final BrokerAuthType authType;
   final String username;
 
-  /// Whether a password is stored — from the wire `(set)` / `(unset)` token.
+  /// Whether a password is stored, from the wire `(set)` / `(unset)` token.
   /// The value itself is never returned.
   final bool passwordSet;
   final String topicPrefix;
@@ -237,7 +237,7 @@ class BrokerConfig {
   final BrokerLastError lastError;
 
   /// Resolved defaults shown as greyed hints when the raw key is blank (#173).
-  /// Never written back — the blank raw key stays the source of truth.
+  /// Never written back, the blank raw key stays the source of truth.
   final String jwtOwnerResolved;
   final String iataResolved;
 
@@ -251,7 +251,7 @@ class BrokerConfig {
     if (url.isEmpty) return 'URL is required';
     if (port < 1 || port > 65535) return 'Port must be between 1 and 65535';
     // JWT owner (device pubkey), IATA override, etc. are firmware-defaulted, so
-    // the client does NOT gate them — the firmware enforces with its defaults.
+    // the client does NOT gate them, the firmware enforces with its defaults.
     return null;
   }
 
@@ -272,7 +272,7 @@ class BrokerConfig {
   /// Human-facing status, derived from [enabled] + [runtimeState] + [lastError]
   /// (#172). When the device doesn't report runtime state ([runtimeState] is
   /// [BrokerRuntimeState.unknown], e.g. older firmware) this is the plain
-  /// enabled/disabled the UI showed before — so absent fields read as today.
+  /// enabled/disabled the UI showed before, so absent fields read as today.
   BrokerStatus get status {
     if (!enabled) {
       return const BrokerStatus('Disabled', BrokerStatusKind.disabled);
@@ -288,9 +288,9 @@ class BrokerConfig {
             : ' (${lastError.name})';
         return BrokerStatus('Failed$reason', BrokerStatusKind.failed);
       case BrokerRuntimeState.heldNoClock:
-        return const BrokerStatus('Held — no clock', BrokerStatusKind.held);
+        return const BrokerStatus('Held, no clock', BrokerStatusKind.held);
       case BrokerRuntimeState.heldNoHeap:
-        return const BrokerStatus('Held — low heap', BrokerStatusKind.held);
+        return const BrokerStatus('Held, low heap', BrokerStatusKind.held);
       case BrokerRuntimeState.down:
       case BrokerRuntimeState.unknown:
         return const BrokerStatus('Enabled', BrokerStatusKind.idle);

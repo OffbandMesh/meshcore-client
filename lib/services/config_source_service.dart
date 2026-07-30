@@ -7,7 +7,7 @@ import '../models/config_profile.dart';
 /// Fetches config profiles from a remote source (#404): the curated Offband
 /// catalog, or any region's self-hosted catalog / single profile.
 ///
-/// Device-agnostic — observer (#139), repeater (#137), and companion (#138)
+/// Device-agnostic, observer (#139), repeater (#137), and companion (#138)
 /// share this. Only the apply step differs per device.
 
 /// Default curated catalog (repo: OffbandMesh/config-profiles).
@@ -21,7 +21,7 @@ class ResolvedSource {
   const ResolvedSource(this.kind, this.url);
   final SourceKind kind;
 
-  /// The URL to actually fetch (may differ from the input — a directory URL
+  /// The URL to actually fetch (may differ from the input, a directory URL
   /// resolves to `<dir>/profiles.json`).
   final String url;
 }
@@ -81,8 +81,8 @@ class ConfigSourceService {
     try {
       // Cache-bust for federated catalogs on normal servers/CDNs: a unique
       // query param + no-cache headers get them to serve fresh content.
-      // KNOWN LIMITATION (#452): raw.githubusercontent — the DEFAULT catalog
-      // host — ignores BOTH (verified: X-Cache HIT on a unique-query request)
+      // KNOWN LIMITATION (#452): raw.githubusercontent, the DEFAULT catalog
+      // host, ignores BOTH (verified: X-Cache HIT on a unique-query request)
       // and serves its cached copy for up to max-age=300 (~5 min). So the
       // default catalog can lag up to 5 min after an edit; this does not defeat
       // that. Kept because region-hosted catalogs elsewhere do honor it.
