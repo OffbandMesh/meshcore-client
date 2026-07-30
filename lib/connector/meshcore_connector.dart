@@ -378,6 +378,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _isSyncingChannels = false;
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
+  Timer? _channelsChangedDebounce;
   int _channelSyncRetries = 0;
   int _nextChannelIndexToRequest = 0;
   int _totalChannelsToRequest = 0;
@@ -4751,8 +4752,14 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case pushCodeChannelsChanged:
         // Device's channel table changed (add/update/delete). Re-poll instead
-        // of only refreshing on reconnect (#429 part A).
-        unawaited(getChannels(force: true));
+        // of only refreshing on reconnect (#429 part A). Debounce so a burst
+        // (e.g. a bulk edit on the device) coalesces into one re-sync rather
+        // than repeatedly clearing and repopulating the channel list.
+        _channelsChangedDebounce?.cancel();
+        _channelsChangedDebounce = Timer(
+          const Duration(milliseconds: 400),
+          () => unawaited(getChannels(force: true)),
+        );
         break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);
@@ -7484,6 +7491,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryPollTimer?.cancel();
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
+    _channelsChangedDebounce?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();
