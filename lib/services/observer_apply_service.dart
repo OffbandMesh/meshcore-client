@@ -38,16 +38,16 @@ class ObserverApplyService {
     }
 
     for (final b in writes.brokers) {
-      // Profiles never set broker enabled (#456), preserve the device's current
-      // state: read wasLive for the safe-save dance and re-enable to the same.
-      final current = await _svc.getBroker(b.slot);
-      final wasLive = current?.enabled ?? false;
-
+      // Import NEVER touches enabled state (#470, owner directive): a config
+      // import carries no enabled/disabled, and the firmware already force-
+      // disables a slot on any field write (#53). We do not re-enable — the slot
+      // is left DISABLED and the operator re-enables intentionally. Prior enabled
+      // state is not carried over.
       final res = await _svc.saveBroker(
         b.slot,
         fields: b.fields,
-        enable: wasLive,
-        wasLive: wasLive,
+        enable: false,
+        wasLive: false,
       );
       items.add(
         res.ok
