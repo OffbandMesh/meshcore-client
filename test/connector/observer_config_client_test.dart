@@ -208,4 +208,32 @@ void main() {
       expect(list, isNull);
     });
   });
+
+  group('extractScalarValue (#469)', () {
+    String v(String reply) => ObserverConfigClient.extractScalarValue(reply);
+
+    test('blank field returns empty, not the echoed key line', () {
+      // The bug: a blank field replies "key =" (no space after =); the old
+      // " = " match failed and leaked the whole line.
+      expect(v('mqtt.broker.1.iata_override ='), '');
+      expect(v('mqtt.broker.1.iata_override =\n'), '');
+      expect(v('mqtt.broker.1.iata_override = '), '');
+    });
+
+    test('normal value extracted', () {
+      expect(
+        v('mqtt.broker.0.url = mqtt://mqtt1.okimesh.org:1883\n'),
+        'mqtt://mqtt1.okimesh.org:1883',
+      );
+      expect(v('mqtt.broker.0.enabled = 1'), '1');
+    });
+
+    test('value containing = is preserved (split on first =)', () {
+      expect(v('mqtt.broker.0.jwt_token = a=b=c'), 'a=b=c');
+    });
+
+    test('no = falls back to the trimmed line', () {
+      expect(v('  bareword  '), 'bareword');
+    });
+  });
 }
