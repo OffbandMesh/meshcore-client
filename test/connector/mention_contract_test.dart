@@ -26,8 +26,17 @@ void main() {
       expect(MeshCoreConnector.mentionsName('x@[Ben]y', 'Ben'), isTrue);
     });
 
-    test('name is trimmed before matching', () {
-      expect(MeshCoreConnector.mentionsName('yo @[Ben]', '  Ben  '), isTrue);
+    test('the name is compared VERBATIM, whitespace included (#497)', () {
+      // Owner ruling 2026-08-01: @[name] is a wire token carrying the advert
+      // name byte-for-byte. A name with surrounding spaces is a DIFFERENT
+      // name, and trimming it here is what stopped mentions beeping.
+      expect(MeshCoreConnector.mentionsName('yo @[Ben]', '  Ben  '), isFalse);
+      expect(
+        MeshCoreConnector.mentionsName('yo @[  Ben  ]', '  Ben  '),
+        isTrue,
+      );
+      expect(MeshCoreConnector.mentionsName('yo @[Ben ]', 'Ben '), isTrue);
+      expect(MeshCoreConnector.mentionsName('yo @[Ben]', 'Ben '), isFalse);
     });
 
     test('empty or whitespace-only self-name matches nothing', () {
