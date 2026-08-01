@@ -251,7 +251,11 @@ Plan, build and test children get scoped once these are answered.
 
 ---
 
-## 10. Adversarial review findings (Gemini, gemini-3.1-pro-preview, 2026-08-01)
+## 10. Adversarial review findings
+
+> **Model correction.** The first run used `gemini-3.1-pro-preview`. Owner decree of 2026-08-01 (Agent Mail msg 348, point 7) binds all Gemini use to **2.5 only, never 3.x**. That message was unread in my inbox when I ran it. The review was re-run on `gemini-2.5-pro`; **section 10.1 is the binding review**, and it found a significant gap the 3.x run missed. Section 10 below is retained because its findings are real and already actioned.
+
+### 10.0 First run (gemini-3.1-pro-preview, superseded)
 
 Run per standards#145 before opening the PR. Every finding was checked against a primary source before being accepted or rejected. The reviewer endorsed the wiki disqualification and did not overturn the recommendation, but it found real defects, most of which land on the build phase (#491) rather than on this decision.
 
@@ -278,3 +282,24 @@ Run per standards#145 before opening the PR. Every finding was checked against a
 ### Net effect
 
 The recommendation stands. What changes is the build design: no central nav, resolve tag versus branch, add a pre-merge docs build check, decide the language URL segment before launch, and choose clone-versus-plugin on evidence rather than in advance.
+
+### 10.1 Binding review (gemini-2.5-pro, 2026-08-01)
+
+Re-run on the mandated model. It confirmed the 3.x findings and added one the 3.x run missed entirely, plus it pushed harder on two decisions.
+
+**New, and a genuine gap: cross-repo clone credentials were never addressed.**
+
+For a CI job in `offband-site` to clone `docs/` out of `meshcore-client` and `meshcore-firmware`, it needs credentials, and the assessment said nothing about them. The options are a deploy key whose public half goes on both source repos and whose private half is a secret in `offband-site` (rotation in three places if compromised), or a machine-user PAT with `repo` scope (a high-privilege token and a real leak liability). The `repository_dispatch` trigger needs a token too.
+
+This matters beyond convenience. **SAFELANE §5 explicitly prohibits reaching for a new PAT before auditing existing inventory**, following the 2026-04-25 PAT-proliferation incident. So the credential decision is governed, not free, and it partly undercuts the "plain clone avoids dependencies" argument, since it trades a plugin dependency for a secrets-management surface. **Added to #491 as a design item that must be settled before the build starts, with the existing credential inventory audited first.**
+
+**Pushed harder, and worth the owner's attention:**
+
+| Finding | Assessment |
+|---|---|
+| **Deferring offline in-app help is the single most regrettable decision.** The product exists to work when connectivity is gone, and the documentation will live behind the exact connectivity the product replaces. The moment a user most needs help, in the field, is the moment help is unreachable. | **This is a fair challenge to a decision the owner already made** (in-app help filed as #492, backlog, P3). Not overridden here. Surfaced to the owner rather than silently re-prioritised, because gates and priorities are the owner's. |
+| **Deferring localization is a trap, not just a URL problem.** Shipping the app in 18 locales sets an expectation the docs then break, and writing 20 English articles first creates a monolithic block of translation debt that is more expensive to clear later than translating as you go. | Stronger than the 3.x version, which only caught the URL structure risk. Recorded. The counter remains that translation multiplies solo-maintainer effort by 18, so this is a real tradeoff rather than an obvious error, and it belongs to the owner. |
+| **The same markdown should feed both the site and the app**, so in-app help is a viewer over the same source rather than a separate hand-built effort, which also guarantees the help version matches the installed app version exactly. | Agreed and already the intent. Both #492 and section 4 say the markdown choice is what makes bundling cheap. Made explicit rather than implied. |
+| **Same-PR benefit survives for content, not structure.** Navigation, cross-links and any new MkDocs plugin all require a second PR in `offband-site`. | Consistent with finding 1 above. The no-central-nav constraint mitigates the navigation case but not the plugin case. Honest statement: the property holds for the common case and not for structural change. |
+
+**Net.** The recommendation still stands, and no reviewer has argued for a different home. What the binding review changes is that **#491 gains a credentials design item that must be resolved before any build work**, and two owner-level questions are put back on the table: whether offline help really belongs in the backlog, and whether localization should be planned for now rather than later.
