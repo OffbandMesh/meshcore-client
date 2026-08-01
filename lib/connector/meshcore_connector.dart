@@ -294,6 +294,7 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+  int? _offbandCaps2;
   bool? _femLnaEnabled;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
@@ -609,6 +610,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// `offband_caps` capability bitfield from the device-info reply (v14+);
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
+
+  /// Second `offband_caps` bitfield (frame offset 84, firmware #508). Null when
+  /// the frame is too short, which means "no byte-2 capabilities" and is never
+  /// an error: every radio predating #508 reports null here. (#480)
+  int? get offbandCaps2 => _offbandCaps2;
 
   /// Whether the connected firmware speaks the `0xC1` GPS extension, i.e. it
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
@@ -5022,6 +5028,21 @@ class MeshCoreConnector extends ChangeNotifier {
   static bool? parseFemLnaState(Uint8List frame) =>
       frame.length >= 84 ? frame[83] != femLnaBypass : null;
 
+  /// Second `offband_caps` byte, at frame offset **84** (firmware #508).
+  ///
+  /// Deliberately NOT adjacent to byte 1 at offset 82: offset 83 is already the
+  /// FEM LNA state byte, and every field here is read at a FIXED ABSOLUTE
+  /// offset, so inserting byte 2 next to byte 1 would shift the FEM state and
+  /// make shipped clients misread a bitmask as the LNA toggle. Firmware appends
+  /// byte 2 at the end of the frame for exactly that reason
+  /// (`OffbandConfigProtocol.h`, firmware PR #515).
+  ///
+  /// Null on any firmware predating #508, which sends a shorter frame. Null
+  /// means "no byte-2 capabilities", never an error. Bounds-checked like its
+  /// siblings, so a truncated or hostile short frame never indexes OOB.
+  static int? parseOffbandCaps2(Uint8List frame) =>
+      frame.length >= 85 ? frame[84] : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -5072,11 +5093,14 @@ class MeshCoreConnector extends ChangeNotifier {
     // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
     // read on connect, a 0xC3 GET is only the fallback.
     _femLnaEnabled = parseFemLnaState(frame);
+    // Second caps byte rides at offset 84, past the FEM state byte (#480).
+    _offbandCaps2 = parseOffbandCaps2(frame);
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
     // be told apart from "this radio says it can't". (#304)
     _appDebugLogService?.info(
       'Offband caps=0x${(_offbandCaps ?? 0).toRadixString(16).padLeft(2, '0')} '
+      'caps2=${_offbandCaps2 == null ? 'absent' : '0x${_offbandCaps2!.toRadixString(16).padLeft(2, '0')}'} '
       'verCode=${_firmwareVerCode ?? 0} frameLen=${frame.length} '
       'femLnaByte=${_femLnaEnabled == null ? 'absent' : (_femLnaEnabled! ? '1' : '0')} '
       'femCapable=$supportsOffbandFemLna blockCapable=$supportsOffbandBlock',
