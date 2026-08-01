@@ -6178,17 +6178,25 @@ class MeshCoreConnector extends ChangeNotifier {
   /// change that ships only in an aligned client + firmware build pair, never
   /// unilaterally.
   ///
-  /// The three properties firmware must match, none obvious from the rule name:
-  /// the name is trimmed and an empty name matches nothing (it does not fall
-  /// through to matching everything); the match is a plain substring `contains`,
-  /// neither anchored nor word-boundary aware; folding is ASCII-only per
-  /// [_foldAscii].
+  /// ⚠ THE NAME IS COMPARED VERBATIM. Owner ruling 2026-08-01 (#497): the
+  /// `@[name]` token carries the advert name BYTE-FOR-BYTE, unnormalised. No
+  /// trimming, no Unicode normalisation. Leading and trailing whitespace are
+  /// part of a name's identity, and every other hop is already verbatim, so a
+  /// `.trim()` here makes this node stop recognising mentions of itself. That
+  /// is what stopped mentions beeping. Do not reintroduce it.
+  ///
+  /// The properties firmware must match, none obvious from the rule name: an
+  /// empty name matches nothing (it does not fall through to matching
+  /// everything); the match is a plain substring `contains`, neither anchored
+  /// nor word-boundary aware; folding is ASCII-only per [_foldAscii] and is the
+  /// ONLY normalisation applied to either side.
   ///
   /// Bare `@Name` is deliberately NOT matched: it false-positives on ordinary
   /// text and cannot be delimited for names containing spaces.
   static bool mentionsName(String text, String? selfName) {
-    final name = selfName?.trim();
-    if (name == null || name.isEmpty) return false;
+    final name = selfName;
+    // Emptiness is probed on a trimmed copy; the COMPARISON uses the raw name.
+    if (name == null || name.trim().isEmpty) return false;
     return _foldAscii(text).contains('@[${_foldAscii(name)}]');
   }
 

@@ -1297,11 +1297,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final seen = <String>{};
 
     // Recent senders in this channel, keyed to their most recent timestamp.
+    // Names are carried VERBATIM: the `@[name]` token must byte-match the
+    // advert name the device stores, whitespace included (#497). Emptiness is
+    // tested on a trimmed copy, but the raw name is what gets kept.
     final recentTime = <String, DateTime>{};
     for (final message in connector.getChannelMessages(_currentChannel)) {
       if (message.isOutgoing) continue;
-      final name = message.senderName.trim();
-      if (name.isEmpty || name == 'Unknown') continue;
+      final name = message.senderName;
+      final probe = name.trim();
+      if (probe.isEmpty || probe == 'Unknown') continue;
       final existing = recentTime[name];
       if (existing == null || message.timestamp.isAfter(existing)) {
         recentTime[name] = message.timestamp;
@@ -1314,10 +1318,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       seen.add(name.toLowerCase());
     });
 
-    // Known contacts not already present as a recent sender.
+    // Known contacts not already present as a recent sender. Same rule: the
+    // contact's name is kept raw so the inserted token matches the device.
     for (final contact in connector.allContacts) {
-      final name = contact.name.trim();
-      if (name.isEmpty) continue;
+      final name = contact.name;
+      if (name.trim().isEmpty) continue;
       if (!seen.add(name.toLowerCase())) continue;
       candidates.add(MentionCandidate(name: name, recent: false));
     }

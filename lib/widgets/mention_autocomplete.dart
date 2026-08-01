@@ -5,6 +5,17 @@ import 'byte_count_input.dart';
 
 /// A candidate name for `@`-mention autocomplete.
 class MentionCandidate {
+  /// The advert name EXACTLY as the device holds it, including any leading or
+  /// trailing whitespace.
+  ///
+  /// ⚠ CROSS-REPO CONTRACT (client #497, firmware #510). The `@[name]` token
+  /// carries the advert name BYTE-FOR-BYTE, unnormalised: no trimming, no
+  /// Unicode normalisation, no case folding when composing it. Whitespace is
+  /// part of a name's identity, and every other hop (entry, firmware memcpy,
+  /// advert encode, advert parse, contact record) is already verbatim. A
+  /// `.trim()` here changes the identity of the addressee and makes the
+  /// mention unmatchable on the device, which is exactly the bug that stopped
+  /// mentions beeping. Do not "tidy" this.
   final String name;
 
   /// True when this name is a recent sender in the current channel.
@@ -13,11 +24,17 @@ class MentionCandidate {
   /// Most-recent time this name was seen (recent candidates only).
   final DateTime? lastSeen;
 
+  final String? _label;
+
+  /// Display-only form. Safe to trim, because it never reaches the wire.
+  String get label => _label ?? name.trim();
+
   const MentionCandidate({
     required this.name,
+    String? label,
     required this.recent,
     this.lastSeen,
-  });
+  }) : _label = label;
 }
 
 /// One row in the autocomplete dropdown.
@@ -248,8 +265,11 @@ class _MentionAutocompleteFieldState extends State<MentionAutocompleteField> {
     }
     _matches = combined
         .map(
+          // label is display, insert is the wire token. They are deliberately
+          // different fields: the token must carry the raw name verbatim while
+          // the list may show a tidied one. (#497)
           (c) => _Entry(
-            label: c.name,
+            label: c.label,
             icon: c.recent ? Icons.history : Icons.person_outline,
             insert: '@[${c.name}] ',
           ),
