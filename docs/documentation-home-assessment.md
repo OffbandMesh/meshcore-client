@@ -121,10 +121,11 @@ Notes on the two that look better in the abstract than in practice:
 
 Concretely:
 
-1. User documentation lives in `meshcore-client/docs/user/`, plain markdown, versioned with the code, changed in the same pull request as the behavior it documents.
-2. A `mkdocs.yml` at the client root, modelled directly on the firmware's existing file, with an `exclude_docs` block that keeps `llm-consultations/`, `plans-archive/`, `architecture/` and `llm-consult-prompts/` out of the public site.
-3. Built in CI and deployed to Cloudflare Pages, which is the mechanism this project already uses for the web client and the marketing site. No new vendor, no new bill.
-4. The `/docs` page on `offband.org` stops being three cards to elsewhere and becomes the front door that links into the real thing.
+1. User documentation lives in `meshcore-client/docs/user/`, plain markdown, versioned with the code, changed in the same pull request as the behavior it documents. Firmware docs stay in `meshcore-firmware/docs/` for the same reason.
+2. Each repo keeps an `exclude_docs` list so internal artifacts (`llm-consultations/`, `plans-archive/`, `architecture/`, `llm-consult-prompts/`) never ship as public pages. The firmware config already does this.
+3. **One** MkDocs Material build aggregates both sources into a single site. See section 4.1, which revises where that build lives.
+4. Deployed to Cloudflare Pages, the mechanism this project already uses for the web client and the marketing site. No new vendor, no new bill.
+5. The `/docs` page on `offband.org` stops being three cards to elsewhere and becomes the front door that links into the real thing.
 
 **Why this and not the others.** It scores well on every criterion that has teeth here and it is the only option that is mostly already built. It keeps documentation in the same review path as the code, which is the only mechanism that actually stops documentation rotting for a single maintainer. It gives readers navigation and offline-capable client-side search without hand-writing templates. It produces plain markdown, so if the answer is wrong in a year the content moves anywhere.
 
@@ -136,7 +137,39 @@ Concretely:
 - **If the client repository crosses 500 stars** and community editing is not wanted, option A stops being disqualified. At 3 stars this is not a near-term consideration.
 - **If offline documentation is judged essential rather than desirable.** Then E stops being a complement and becomes a requirement, and the recommendation should be sequenced to make in-app help first rather than later. Given the product exists for the moments when connectivity is gone, this deserves the owner's explicit view.
 
-**One question the recommendation deliberately leaves open:** whether client and firmware get one unified documentation site or two. The firmware config is already scoped to firmware only. Unifying is more coherent for a reader and more work; two sites is faster and matches the current repository split. I did not decide this because it is a product judgment, not a technical one.
+---
+
+## 4.1 Client and firmware: one site, and the build does not live in either code repo
+
+Raised by the owner, 2026-08-01: if the docs build runs in `meshcore-client`, what happens to `meshcore-firmware`?
+
+The original wording of this recommendation had the client repo own `docs.offband.org`. That was wrong on its face. The hostname is org-level and neutral, and the firmware has the stronger claim to it today, since it has roughly 30 documentation files and a configured `mkdocs.yml` while the client has none. Letting either code repo own the shared hostname is an arbitrary land grab that the other repo then has to work around.
+
+**Users do not think in repositories.** Someone asking "how do I set up MQTT on my observer" (firmware) and "how do I read a path trace" (client) is one person, in one sitting, with one radio. Two sites means two search boxes and a guess about which one holds the answer. That is a worse product for no benefit.
+
+**Revised structure:**
+
+| Piece | Where |
+|---|---|
+| Client docs source | `meshcore-client/docs/user/` |
+| Firmware docs source | `meshcore-firmware/docs/` (unchanged, already exists) |
+| The build | **`offband-site`**, the neutral repo, which already owns `offband.org/docs` and already has Cloudflare Pages deployment solved |
+| Published at | `docs.offband.org/app/...` and `docs.offband.org/firmware/...`, one nav, one search index |
+
+**Why the build belongs in `offband-site`:** it is neutral, so neither code repo grabs the shared hostname; Cloudflare Pages deployment is already working there; the docs entry page (`offband.org/docs`) and the docs site end up in the same repo; and neither code repo takes a build dependency on the other.
+
+**This does not weaken the anti-rot property**, which was the main argument for the recommendation. The *sources* still live beside the code and still change in the same pull request as the behavior they describe. Only the *publish step* is centralized.
+
+**How the build gets the content.** Two approaches, to be settled in the plan phase:
+
+- **Plain:** a CI step does a shallow `git clone` of each code repo's `docs/` into the build tree. No third-party dependency, nothing to break when a plugin goes unmaintained. This is the recommended starting point.
+- **Plugin:** [mkdocs-multirepo-plugin](https://github.com/jdoiro3/mkdocs-multirepo-plugin) or [mkdocs-monorepo-plugin](https://github.com/backstage/mkdocs-monorepo-plugin) do this natively with nav integration. `[verified]` both exist and are published. Worth evaluating, but a plugin is a maintenance liability the plain approach does not carry.
+
+**Republish trigger:** a `repository_dispatch` from each code repo when a merge touches `docs/`, so a documentation change goes live without waiting on an unrelated site commit.
+
+**An open sub-question for the build phase, not for now:** whether the build pulls each repo's default branch or its latest release tag. Pulling the branch means the site can describe unreleased behavior. Pulling the tag keeps docs aligned with what users actually have installed. The second is probably right for the client, which ships to Play.
+
+**A useful consequence.** The firmware already has around 30 documentation files and the client has zero. Building the unified site means **it launches with real content on day one**, carrying firmware docs, rather than sitting empty until client documentation is written. The client section then fills in over time against a site that is already live and already indexed.
 
 ---
 
@@ -210,7 +243,7 @@ The epic closes on a decision plus a working skeleton, not on this document. The
 
 1. C plus D as recommended, or the runner-up B, or something else?
 2. Is the BookStack instance Offband's to use, or is it OKIMesh's?
-3. One documentation site for client and firmware, or two?
+3. ~~One documentation site for client and firmware, or two?~~ **Answered in section 4.1: one site, build owned by `offband-site`.** Confirm or push back.
 4. Is offline in-app help a requirement or a later nice-to-have?
 5. ~~Is it acceptable to move `docs.offband.org` off the marketing site?~~ **Withdrawn.** The subdomain does not exist, so there is nothing to move. Remaining question is only whether `docs.offband.org` is the hostname you want for the docs site.
 
