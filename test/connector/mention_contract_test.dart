@@ -97,4 +97,27 @@ void main() {
       },
     );
   });
+
+  group('foldAscii is the single equivalence rule (Gemini review, #497)', () {
+    test('ASCII case collapses, non-ASCII case does not', () {
+      // Dedup used String.toLowerCase(), which collapses these; matching uses
+      // foldAscii, which keeps them distinct. One of two real contacts would
+      // have silently vanished from the mention list while staying matchable.
+      expect('É'.toLowerCase() == 'é'.toLowerCase(), isTrue);
+      expect(
+        MeshCoreConnector.foldAscii('É') == MeshCoreConnector.foldAscii('é'),
+        isFalse,
+      );
+      expect(
+        MeshCoreConnector.foldAscii('Ben') ==
+            MeshCoreConnector.foldAscii('ben'),
+        isTrue,
+      );
+    });
+
+    test('folding leaves non-ASCII bytes untouched', () {
+      expect(MeshCoreConnector.foldAscii('Érik'), equals('Érik'));
+      expect(MeshCoreConnector.foldAscii('BEN'), equals('ben'));
+    });
+  });
 }

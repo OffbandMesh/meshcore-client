@@ -1315,7 +1315,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       candidates.add(
         MentionCandidate(name: name, recent: true, lastSeen: time),
       );
-      seen.add(name.toLowerCase());
+      // Same equivalence as mentionsName, or a real contact silently
+      // vanishes from the list while still being matchable. (#497)
+      seen.add(MeshCoreConnector.foldAscii(name));
     });
 
     // Known contacts not already present as a recent sender. Same rule: the
@@ -1323,7 +1325,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     for (final contact in connector.allContacts) {
       final name = contact.name;
       if (name.trim().isEmpty) continue;
-      if (!seen.add(name.toLowerCase())) continue;
+      if (!seen.add(MeshCoreConnector.foldAscii(name))) continue;
       candidates.add(MentionCandidate(name: name, recent: false));
     }
     return candidates;
