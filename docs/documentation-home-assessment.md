@@ -248,3 +248,33 @@ The epic closes on a decision plus a working skeleton, not on this document. The
 5. ~~Is it acceptable to move `docs.offband.org` off the marketing site?~~ **Withdrawn.** The subdomain does not exist, so there is nothing to move. Remaining question is only whether `docs.offband.org` is the hostname you want for the docs site.
 
 Plan, build and test children get scoped once these are answered.
+
+---
+
+## 10. Adversarial review findings (Gemini, gemini-3.1-pro-preview, 2026-08-01)
+
+Run per standards#145 before opening the PR. Every finding was checked against a primary source before being accepted or rejected. The reviewer endorsed the wiki disqualification and did not overturn the recommendation, but it found real defects, most of which land on the build phase (#491) rather than on this decision.
+
+### Accepted
+
+| # | Finding | Verification | Disposition |
+|---|---|---|---|
+| 1 | **A central `nav:` block would force a second PR in `offband-site` every time a page is added**, destroying the same-PR benefit for structural changes. | `[verified]` [MkDocs configuration](https://www.mkdocs.org/user-guide/configuration/): "By default `nav` will contain an alphanumerically sorted, nested list of all the Markdown files found within the `docs_dir`". `nav` is optional. | **Real, and avoidable.** The build must **not** use an explicit central nav. Rely on directory-inferred nav, or a per-directory nav file owned by each source repo. Added as a hard constraint on #491. This is the most valuable finding. |
+| 2 | **Tag versus branch paradox.** If the build pulls the latest release tag, a post-merge `repository_dispatch` rebuilds the same tag and changes nothing. | Self-evident on inspection. | **Real contradiction in section 4.1.** The two ideas are incompatible as written. Resolved on #491: pick one per source, and if tag-pinned, the dispatch must fire on tag creation, not on merge. |
+| 3 | **No PR previews or link validation.** A docs change in a code repo cannot build the site, so broken links and bad paths are only discovered after merge. | Follows from the split. | **Real.** #491 gains a `mkdocs build --strict` check runnable from the source repos, so a docs PR fails before merge rather than after. |
+| 4 | **Cross-repo relative links** between the app and firmware sections break when viewed as raw markdown on GitHub and are awkward in the aggregated build. | Follows from the split. | **Real.** Needs a link convention decided at build time. |
+| 5 | **Localization URL trap.** Publishing at `/app/` today and adding languages later typically forces `/en/app/`, breaking every inbound link. | Consistent with this document's own argument that URLs are the expensive thing to change. | **Real and self-inconsistent on my part.** The language segment should be decided before launch, not after. Added to #491. |
+| 6 | **Custom clone script versus plugin is a possible "not invented here" trap.** A bespoke sync script is also a maintenance liability. | Judgment, not fact. | **Fair.** Section 4.1 pre-committed to the plain approach on thin reasoning. Softened: both are evaluated in the build phase on evidence. |
+| 7 | **Read the Docs was not assessed at all.** | `[verified]` [RTD supports MkDocs](https://docs.readthedocs.com/platform/stable/intro/mkdocs.html) and offers version management. | **Real gap.** Assessed now, and still not recommended: it adds a hosting vendor where Cloudflare Pages already works and is already paid for. Recorded so the option is on the record rather than ignored. |
+
+### Rejected or corrected
+
+| # | Finding | Why |
+|---|---|---|
+| 8 | "Read the Docs natively handles multirepo builds." | **Not verified.** RTD's own MkDocs page says nothing about aggregating multiple repositories. Not propagated as fact. The versioning claim is supported; the multirepo claim is not. |
+| 9 | "Bundling markdown as Flutter assets was not assessed." | **Inaccurate.** It is option E in section 3 and is now epic #492, which explicitly notes that keeping docs as in-repo markdown is what makes bundling cheap later. The reviewer's supporting argument, that bundling guarantees the docs version matches the app version exactly, is a good one and has been added to #492. |
+| 10 | "A plain clone breaks the firmware's existing `mkdocs.yml`." | **Overstated.** The firmware config is not reused as the aggregate build config; a new config is modelled on it. The firmware's own file stays valid for local firmware-only builds. The underlying point about path mapping and absolute links is real and is folded into finding 4. |
+
+### Net effect
+
+The recommendation stands. What changes is the build design: no central nav, resolve tag versus branch, add a pre-merge docs build check, decide the language URL segment before launch, and choose clone-versus-plugin on evidence rather than in advance.
