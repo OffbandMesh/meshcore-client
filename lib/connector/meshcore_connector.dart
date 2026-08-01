@@ -6148,18 +6148,51 @@ class MeshCoreConnector extends ChangeNotifier {
     return 'Channel $channelIndex';
   }
 
-  /// True when [text] carries a canonical mention of this node: the `@[Name]`
+  /// Case-fold ASCII `A-Z` only, leaving every other code unit byte-exact.
+  ///
+  /// Deliberately NOT `String.toLowerCase()`, which applies full Unicode case
+  /// mapping. Firmware #510 implements the same match rule with a byte-wise
+  /// fold that does not do Unicode mapping, so a node name carrying any
+  /// non-ASCII character would get one self-mention verdict on the client and
+  /// the opposite on the device for the SAME message: a silent wrong answer,
+  /// not a visible failure. Owner decision 2026-07-31 (#475): both sides fold
+  /// ASCII only, so non-ASCII names compare case-sensitively. (#486)
+  static String _foldAscii(String s) {
+    final units = s.codeUnits;
+    final folded = List<int>.filled(units.length, 0);
+    for (var i = 0; i < units.length; i++) {
+      final unit = units[i];
+      folded[i] = (unit >= 0x41 && unit <= 0x5A) ? unit + 0x20 : unit;
+    }
+    return String.fromCharCodes(folded);
+  }
+
+  /// True when [text] carries a canonical mention of [selfName]: the `@[Name]`
   /// form the composer inserts and the chat renders as a chip (#235).
   ///
-  /// Matched case-insensitively, since a hand-typed mention need not match the
-  /// advert's casing. Bare `@Name` is deliberately NOT matched: it false-
-  /// positives on ordinary text and cannot be delimited for names containing
-  /// spaces.
-  bool _mentionsSelf(String text) {
-    final name = _selfName?.trim();
+  /// ⚠ CROSS-REPO CONTRACT (client #475, firmware #510). The firmware
+  /// implements this exact rule against `NodePrefs::node_name` so that both
+  /// sides agree on what "Self" means for the device notification scope.
+  /// Changing it in any way (accepting a bare `@name`, restoring Unicode
+  /// folding, anchoring the match at a word boundary) is a BREAKING cross-repo
+  /// change that ships only in an aligned client + firmware build pair, never
+  /// unilaterally.
+  ///
+  /// The three properties firmware must match, none obvious from the rule name:
+  /// the name is trimmed and an empty name matches nothing (it does not fall
+  /// through to matching everything); the match is a plain substring `contains`,
+  /// neither anchored nor word-boundary aware; folding is ASCII-only per
+  /// [_foldAscii].
+  ///
+  /// Bare `@Name` is deliberately NOT matched: it false-positives on ordinary
+  /// text and cannot be delimited for names containing spaces.
+  static bool mentionsName(String text, String? selfName) {
+    final name = selfName?.trim();
     if (name == null || name.isEmpty) return false;
-    return text.toLowerCase().contains('@[${name.toLowerCase()}]');
+    return _foldAscii(text).contains('@[${_foldAscii(name)}]');
   }
+
+  bool _mentionsSelf(String text) => mentionsName(text, _selfName);
 
   void _maybeNotifyChannelMessage(
     ChannelMessage message, {
