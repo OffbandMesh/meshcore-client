@@ -409,11 +409,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Capability-gated controls vanish silently when a bit is clear,
             // which is indistinguishable from a bug. Surface the raw inputs so
             // "missing feature" can be diagnosed without enabling logging. (#304)
+            // caps2 is shown as "absent" rather than omitted: on a radio running
+            // byte-2 firmware the whole point is telling "the radio sent it" and
+            // "the radio is too old to send it" apart at a glance, without
+            // opening the debug log. All-bits-zero is a valid present value.
+            // (#480)
             if (connector.offbandCaps != null)
               _buildInfoRow(
                 l10n.settings_infoOffbandCaps,
                 '0x${connector.offbandCaps!.toRadixString(16).padLeft(2, '0')}'
                 ' (v${connector.firmwareVerCode ?? 0})'
+                ' · caps2 '
+                '${connector.offbandCaps2 == null ? 'absent' : '0x${connector.offbandCaps2!.toRadixString(16).padLeft(2, '0')}'}'
                 '${connector.supportsOffbandFemLna ? ' · FEM LNA' : ''}'
                 '${connector.supportsOffbandBlock ? ' · block' : ''}',
               ),
