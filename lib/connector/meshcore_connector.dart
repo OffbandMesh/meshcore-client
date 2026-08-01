@@ -3470,10 +3470,14 @@ class MeshCoreConnector extends ChangeNotifier {
     // Update any in-flight retries so they use the new path override
     _retryService?.updatePendingContact(_contacts[index]);
 
-    // If setting a specific path (not flood, not auto), also sync with device
+    // If setting a specific path (not flood, not auto), also sync with device.
+    // pathLen from the override dialog is a BYTE count; convert to a true hop
+    // count at the contact's width so the wire path_len packs correctly (#279).
     if (pathLen != null && pathLen >= 0 && pathBytes != null) {
+      final w = contact.pathHashWidth < 1 ? 1 : contact.pathHashWidth;
+      final hops = w > 0 ? pathBytes.length ~/ w : pathBytes.length;
       appLogger.info('Sending path to device...', tag: 'Connector');
-      await setContactPath(contact, pathBytes, pathLen);
+      await setContactPath(contact, pathBytes, hops, hashWidth: w);
       appLogger.info('Path sent to device', tag: 'Connector');
     }
 
@@ -3505,6 +3509,7 @@ class MeshCoreConnector extends ChangeNotifier {
         contact,
         Uint8List.fromList(resolved.pathBytes),
         resolved.hopCount,
+        hashWidth: resolved.hashWidth,
       );
     }
 
