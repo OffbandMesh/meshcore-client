@@ -6181,6 +6181,13 @@ class MeshCoreConnector extends ChangeNotifier {
   /// the opposite on the device for the SAME message: a silent wrong answer,
   /// not a visible failure. Owner decision 2026-07-31 (#475): both sides fold
   /// ASCII only, so non-ASCII names compare case-sensitively. (#486)
+  /// Public so that anything deciding "is this the same name?" uses the SAME
+  /// equivalence as [mentionsName]. Deduplicating with `String.toLowerCase()`
+  /// instead silently drops candidates: `'É'` and `'é'` collapse under
+  /// `toLowerCase()` but stay distinct under this fold, so one of two real
+  /// contacts would disappear from the mention list while remaining matchable.
+  static String foldAscii(String s) => _foldAscii(s);
+
   static String _foldAscii(String s) {
     final units = s.codeUnits;
     final folded = List<int>.filled(units.length, 0);

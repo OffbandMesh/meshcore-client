@@ -26,8 +26,14 @@ class MentionCandidate {
 
   final String? _label;
 
-  /// Display-only form. Safe to trim, because it never reaches the wire.
-  String get label => _label ?? name.trim();
+  /// Display form. Defaults to the raw name, NOT a trimmed copy.
+  ///
+  /// Trimming here would render two contacts whose names differ only by
+  /// surrounding whitespace as identical rows, giving the user no way to tell
+  /// which one they are about to address, while the inserted tokens differ.
+  /// That hides exactly the identity #497 exists to preserve, so the display
+  /// stays honest to what will be sent.
+  String get label => _label ?? name;
 
   const MentionCandidate({
     required this.name,
