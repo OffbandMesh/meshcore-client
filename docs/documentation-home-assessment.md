@@ -14,7 +14,8 @@ Every factual claim below is tagged `[verified]` with its evidence or `[hypothes
 
 | Surface | Contents | Audience | Evidence |
 |---|---|---|---|
-| `docs.offband.org` (Hugo `content/docs.md`) | Three link cards: firmware docs, app docs, GitHub org. No documentation of its own. | Mixed | `[verified]` read `offband-site/content/docs.md`, 12 lines, three `card` shortcodes |
+| `offband.org/docs` (Hugo `content/docs.md`) | Three link cards: firmware docs, app docs, GitHub org. No documentation of its own. Returns 200. | Mixed | `[verified]` read `offband-site/content/docs.md`, 12 lines, three `card` shortcodes; `curl` returns 200 |
+| `docs.offband.org` | **Does not exist.** No DNS record at all. | n/a | `[verified]` `nslookup docs.offband.org` returns NXDOMAIN; `curl` fails to connect. Note: `offband-site/CLAUDE.md`, `CLAUDE.local.md` and `KNOWLEDGE-TRANSFER.md` all state this subdomain maps to the `/docs` hub. **That claim is wrong and should be corrected in that repo.** |
 | The "App docs" card | Points at `https://github.com/OffbandMesh/meshcore-client`, so a user lands on the repository root | Developers | `[verified]` same file, line 9 |
 | `meshcore-client/README.md` | 256 lines mixing end-user sections (Download and Install, Features) with developer sections (Building for Release, Project Structure, Code Style, Dependencies) | Both, unseparated | `[verified]` `wc -l` plus heading scan |
 | `meshcore-client/docs/` | 17 markdown files: `BLE_PROTOCOL.md`, `PRIVACY_POLICY.md`, `trace-topology-spec.md`, `windows-distribution-and-versioning.md`, plus `llm-consultations/` (9 files), `plans-archive/` (2), `architecture/` (1) | Developers and internal | `[verified]` `find docs -name "*.md"` |
@@ -131,7 +132,7 @@ Concretely:
 
 **What would flip the decision:**
 
-- **If the BookStack instance is available to Offband and the owner wants it.** Then G plausibly wins on effort alone, since it is a running wiki with search and editing already solved, and OKIMesh users may already be there. The cost is that Offband's documentation would live on infrastructure Offband does not control, and portability becomes a real risk. This needs the owner's answer before it can be scored honestly.
+- ~~**If the BookStack instance is available to Offband.**~~ **Resolved by the owner, 2026-08-01: the BookStack is OKIMesh's, not Offband's.** Option G is therefore off the table as a home for Offband's own documentation. Standing up a second, Offband-owned BookStack was considered and rejected on cost: BookStack supports **only MySQL 8.0+ or MariaDB 10.6+**, with no SQLite or PostgreSQL option, plus PHP 8.2+, a PHP-capable webserver, and Composer (`[verified]` [BookStack installation requirements](https://www.bookstackapp.com/docs/admin/installation/)). That is a database, a server and an upgrade treadmill for a project with one maintainer. The recommended option requires no database and no server at all, which is the relevant contrast.
 - **If the client repository crosses 500 stars** and community editing is not wanted, option A stops being disqualified. At 3 stars this is not a near-term consideration.
 - **If offline documentation is judged essential rather than desirable.** Then E stops being a complement and becomes a requirement, and the recommendation should be sequenced to make in-app help first rather than later. Given the product exists for the moments when connectivity is gone, this deserves the owner's explicit view.
 
@@ -185,7 +186,7 @@ Little is published, so this is cheap now and gets more expensive with every mon
 
 | Item | Now | Proposed | Risk |
 |---|---|---|---|
-| `docs.offband.org` | Serves the Hugo `/docs` page, three cards | Serves the MkDocs site | **Conflict: the subdomain is already attached to the offband-site Pages project.** It has to be detached and reattached, or the docs site takes a different hostname. This is the one real migration step and it needs deciding before anything is built. |
+| `docs.offband.org` | **Nothing. No DNS record.** | New CNAME to a new Cloudflare Pages project fed by this repo's CI | **None.** The hostname is unused, so it is created rather than migrated. Nothing to detach, nothing to break, no redirects. |
 | `offband.org/docs` | The three cards | Becomes an entry page linking into `docs.offband.org` | None, internal link change |
 | "App docs" card, currently to the repo root | Repository root | The getting-started page | Improvement, no dead link |
 | `meshcore-client/README.md` | User and developer content mixed | User sections shortened to a link into the docs, developer content stays | Keep anchors alive; the README is linked from Google Play and releases |
@@ -211,6 +212,6 @@ The epic closes on a decision plus a working skeleton, not on this document. The
 2. Is the BookStack instance Offband's to use, or is it OKIMesh's?
 3. One documentation site for client and firmware, or two?
 4. Is offline in-app help a requirement or a later nice-to-have?
-5. Is it acceptable to move `docs.offband.org` off the marketing site to point at the docs build?
+5. ~~Is it acceptable to move `docs.offband.org` off the marketing site?~~ **Withdrawn.** The subdomain does not exist, so there is nothing to move. Remaining question is only whether `docs.offband.org` is the hostname you want for the docs site.
 
 Plan, build and test children get scoped once these are answered.
