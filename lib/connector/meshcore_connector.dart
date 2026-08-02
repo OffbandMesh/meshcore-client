@@ -676,8 +676,38 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Ask the radio for its button matrix. No-op unless the capability bit is
   /// set, so an unsupported radio never sees `0xC5`.
+  /// True when a `0xC5` request for [what] may be sent, logging the reason when
+  /// it may not.
+  ///
+  /// A suppressed request is the case that cost a whole diagnosis on
+  /// 2026-08-02: the scope appeared not to refresh, and nothing in either the
+  /// app log or a firmware serial capture could distinguish "the client never
+  /// asked" from "the client asked and got an unchanged value". Silence is
+  /// ambiguous, so the suppression says which gate closed and why. (#501)
+  bool _deviceUiGateOpen(String what, {required bool advertised}) {
+    if (!deviceUiCommandLanded) {
+      _appDebugLogService?.info(
+        '$what suppressed: 0xC5 command support is compiled off',
+        tag: 'DeviceUI',
+      );
+      return false;
+    }
+    if (!advertised) {
+      _appDebugLogService?.info(
+        '$what suppressed: radio does not advertise it '
+        '(caps2=${_offbandCaps2 == null ? 'absent' : '0x${_offbandCaps2!.toRadixString(16).padLeft(2, '0')}'})',
+        tag: 'DeviceUI',
+      );
+      return false;
+    }
+    return true;
+  }
+
   Future<void> requestButtonMatrix() async {
-    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    if (!_deviceUiGateOpen('matrix GET', advertised: supportsButtonMatrix)) {
+      return;
+    }
+    _appDebugLogService?.info('matrix GET -> [0xC5][0x03]', tag: 'DeviceUI');
     await sendFrame(buildButtonMatrixGetFrame());
   }
 
@@ -689,22 +719,40 @@ class MeshCoreConnector extends ChangeNotifier {
     ButtonSequence sequence,
     ButtonAction action,
   ) async {
-    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    if (!_deviceUiGateOpen('matrix SET', advertised: supportsButtonMatrix)) {
+      return;
+    }
     _deviceUiError = null;
+    _appDebugLogService?.info(
+      'matrix SET -> ${sequence.label} = ${action.label} '
+      '[0xC5][0x04][0x${sequence.code.toRadixString(16).padLeft(2, '0')}]'
+      '[0x${action.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
     await sendFrame(buildButtonMatrixSetFrame(sequence, action));
   }
 
   /// Ask the radio for its current notification scope.
   Future<void> requestNotifyScope() async {
-    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    if (!_deviceUiGateOpen('scope GET', advertised: supportsNotifyScope)) {
+      return;
+    }
+    _appDebugLogService?.info('scope GET -> [0xC5][0x01]', tag: 'DeviceUI');
     await sendFrame(buildNotifyScopeGetFrame());
   }
 
   /// Set the device notification scope. As with the matrix, local state follows
   /// the device's reply rather than the request.
   Future<void> setNotifyScope(DeviceNotifyScope scope) async {
-    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    if (!_deviceUiGateOpen('scope SET', advertised: supportsNotifyScope)) {
+      return;
+    }
     _deviceUiError = null;
+    _appDebugLogService?.info(
+      'scope SET -> ${scope.label} '
+      '[0xC5][0x02][0x${scope.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
     await sendFrame(buildNotifyScopeSetFrame(scope));
   }
 
@@ -754,8 +802,20 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     if (reply.matrix != null) {
-      _buttonMatrix = reply.matrix;
+      final m = reply.matrix!;
+      _appDebugLogService?.info(
+        'matrix GET reply: mask=0x${m.supportedActions.toRadixString(16).padLeft(2, '0')} '
+        'rows=${m.assignments.length} '
+        '[${m.assignments.entries.map((e) => '${e.key.label}=${e.value.label}').join(', ')}]',
+        tag: 'DeviceUI',
+      );
+      _buttonMatrix = m;
     } else if (reply.setSequence != null && reply.setAction != null) {
+      _appDebugLogService?.info(
+        'matrix SET confirmed: ${reply.setSequence!.label} = '
+        '${reply.setAction!.label}',
+        tag: 'DeviceUI',
+      );
       final held = _buttonMatrix;
       if (held == null) {
         // A device-confirmed write with nothing to fold it into. Never drop it
@@ -779,6 +839,12 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'DeviceUI',
       );
     } else {
+      _appDebugLogService?.info(
+        'scope reply: ${reply.scope!.label} '
+        '(sub=0x${reply.sub.toRadixString(16).padLeft(2, '0')}, '
+        '${reply.sub == offbandUiScopeSet ? 'write confirmed' : 'read'})',
+        tag: 'DeviceUI',
+      );
       _deviceNotifyScope = reply.scope;
     }
     notifyListeners();
