@@ -58,6 +58,7 @@ import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
 import 'meshcore_protocol.dart';
+import 'offband_device_ui.dart';
 import 'caplog_reassembler.dart';
 
 class DirectRepeater {
@@ -296,6 +297,9 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _offbandCaps;
   int? _offbandCaps2;
   bool? _femLnaEnabled;
+  ButtonMatrix? _buttonMatrix;
+  DeviceNotifyScope? _deviceNotifyScope;
+  String? _deviceUiError;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -615,6 +619,132 @@ class MeshCoreConnector extends ChangeNotifier {
   /// the frame is too short, which means "no byte-2 capabilities" and is never
   /// an error: every radio predating #508 reports null here. (#480)
   int? get offbandCaps2 => _offbandCaps2;
+
+  /// Whether this radio exposes a configurable button-action matrix (#474).
+  bool get supportsButtonMatrix => firmwareSupportsButtonMatrix(_offbandCaps2);
+
+  /// Whether this radio exposes a settable device notification scope (#475).
+  bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
+
+  /// Whether the radio can actually be QUERIED, as opposed to merely reporting
+  /// that it has the feature. False until firmware lands the get/set command,
+  /// so no frame is emitted that nothing will answer. The distinction is real
+  /// and user-visible: a T1000-E advertises the buzzer capability today but
+  /// cannot yet be read or written by the app.
+  bool get supportsDeviceUiCommand =>
+      deviceUiCommandLanded && (supportsNotifyScope || supportsButtonMatrix);
+
+  /// Last button matrix read from the radio, or null if not read yet.
+  ButtonMatrix? get buttonMatrix => _buttonMatrix;
+
+  /// Last device notification scope read from the radio. The user can change
+  /// this out of band by triple-pressing the device, so it is re-read on every
+  /// device-info refresh rather than cached across a connection. (#475)
+  DeviceNotifyScope? get deviceNotifyScope => _deviceNotifyScope;
+
+  /// The radio's own reason for refusing the last write, or null. Held until
+  /// the next request so the UI can show it persistently rather than as a
+  /// flash: an error the user cannot finish reading is not surfaced (§6).
+  String? get deviceUiError => _deviceUiError;
+
+  void clearDeviceUiError() {
+    if (_deviceUiError == null) return;
+    _deviceUiError = null;
+    notifyListeners();
+  }
+
+  /// Ask the radio for its button matrix. No-op unless the capability bit is
+  /// set, so an unsupported radio never sees `0xC5`.
+  Future<void> requestButtonMatrix() async {
+    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    await sendFrame(buildButtonMatrixGetFrame());
+  }
+
+  /// Assign [action] to [sequence]. The radio echoes the pair on success or
+  /// replies with a reason; the local matrix is updated only from that reply,
+  /// never optimistically, so the UI can never show an assignment the device
+  /// rejected.
+  Future<void> setButtonAction(
+    ButtonSequence sequence,
+    ButtonAction action,
+  ) async {
+    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    _deviceUiError = null;
+    await sendFrame(buildButtonMatrixSetFrame(sequence, action));
+  }
+
+  /// Ask the radio for its current notification scope.
+  Future<void> requestNotifyScope() async {
+    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    await sendFrame(buildNotifyScopeGetFrame());
+  }
+
+  /// Set the device notification scope. As with the matrix, local state follows
+  /// the device's reply rather than the request.
+  Future<void> setNotifyScope(DeviceNotifyScope scope) async {
+    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    _deviceUiError = null;
+    await sendFrame(buildNotifyScopeSetFrame(scope));
+  }
+
+  /// Re-read whatever headless-UI state this radio supports. Called after every
+  /// device-info reply so a scope changed by triple-press on the device is
+  /// never displayed stale, and so frame-arrival order does not matter. (#475)
+  void _reconcileDeviceUi() {
+    if (supportsButtonMatrix) requestButtonMatrix();
+    if (supportsNotifyScope) requestNotifyScope();
+  }
+
+  /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
+  /// ride one command byte, so the matrix parser is tried first (it owns 0x7F)
+  /// and the scope parser handles what is left.
+  void _handleDeviceUiReply(Uint8List frame) {
+    if (parseButtonMatrixReply(frame) != null) {
+      _handleButtonMatrixReply(frame);
+      return;
+    }
+    _handleNotifyScopeReply(frame);
+  }
+
+  void _handleButtonMatrixReply(Uint8List frame) {
+    final reply = parseButtonMatrixReply(frame);
+    if (reply == null) return;
+    if (reply.isError) {
+      _deviceUiError = reply.errorMessage;
+      _appDebugLogService?.warn(
+        'Button config refused: ${reply.errorMessage}',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
+      return;
+    }
+    if (reply.matrix != null) {
+      _buttonMatrix = reply.matrix;
+    } else if (reply.setSequence != null && reply.setAction != null) {
+      // Fold the confirmed assignment into the matrix we already hold rather
+      // than re-reading the whole thing.
+      _buttonMatrix = _buttonMatrix?.withAssignment(
+        reply.setSequence!,
+        reply.setAction!,
+      );
+    }
+    notifyListeners();
+  }
+
+  void _handleNotifyScopeReply(Uint8List frame) {
+    final reply = parseNotifyScopeReply(frame);
+    if (reply == null) return;
+    if (reply.isError) {
+      _deviceUiError = reply.errorMessage;
+      _appDebugLogService?.warn(
+        'Notification scope refused: ${reply.errorMessage}',
+        tag: 'DeviceUI',
+      );
+    } else {
+      _deviceNotifyScope = reply.scope;
+    }
+    notifyListeners();
+  }
 
   /// Whether the connected firmware speaks the `0xC1` GPS extension, i.e. it
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
@@ -3964,6 +4094,8 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     if (value == 'gps:1' || value == 'gps:0') {
       _reconcileGpsPolling();
+      // Byte-2 caps just landed: pull the headless-UI state they gate. (#474/#475)
+      _reconcileDeviceUi();
     }
   }
 
@@ -4665,6 +4797,9 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeOffbandCaplog:
         _handleOffbandCaplogFrame(frame);
+        break;
+      case respCodeOffbandDeviceUi:
+        _handleDeviceUiReply(frame);
         break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
