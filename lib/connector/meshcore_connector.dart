@@ -690,6 +690,17 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Re-read whatever headless-UI state this radio supports. Called after every
   /// device-info reply so a scope changed by triple-press on the device is
   /// never displayed stale, and so frame-arrival order does not matter. (#475)
+  /// Drop everything read from the PREVIOUS radio.
+  ///
+  /// These values are per-device. Capability bits refresh from every
+  /// device-info frame, but the values behind them do not, so without this a
+  /// reconnect can show one radio's notification scope as another's.
+  void _clearDeviceUiState() {
+    _buttonMatrix = null;
+    _deviceNotifyScope = null;
+    _deviceUiError = null;
+  }
+
   void _reconcileDeviceUi() {
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
@@ -699,16 +710,19 @@ class MeshCoreConnector extends ChangeNotifier {
   /// ride one command byte, so the matrix parser is tried first (it owns 0x7F)
   /// and the scope parser handles what is left.
   void _handleDeviceUiReply(Uint8List frame) {
-    if (parseButtonMatrixReply(frame) != null) {
-      _handleButtonMatrixReply(frame);
+    // Parse ONCE and hand the result down. Parsing here to route and again in
+    // the handler lets the two copies drift, so a later edit to one could drop
+    // a valid frame.
+    final matrix = parseButtonMatrixReply(frame);
+    if (matrix != null) {
+      _handleButtonMatrixReply(matrix);
       return;
     }
-    _handleNotifyScopeReply(frame);
+    final scope = parseNotifyScopeReply(frame);
+    if (scope != null) _handleNotifyScopeReply(scope);
   }
 
-  void _handleButtonMatrixReply(Uint8List frame) {
-    final reply = parseButtonMatrixReply(frame);
-    if (reply == null) return;
+  void _handleButtonMatrixReply(OffbandUiReply reply) {
     if (reply.isError) {
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
@@ -721,19 +735,22 @@ class MeshCoreConnector extends ChangeNotifier {
     if (reply.matrix != null) {
       _buttonMatrix = reply.matrix;
     } else if (reply.setSequence != null && reply.setAction != null) {
-      // Fold the confirmed assignment into the matrix we already hold rather
-      // than re-reading the whole thing.
-      _buttonMatrix = _buttonMatrix?.withAssignment(
-        reply.setSequence!,
-        reply.setAction!,
-      );
+      final held = _buttonMatrix;
+      if (held == null) {
+        // A device-confirmed write with nothing to fold it into. Never drop it
+        // silently: re-read so the client matches what the device just did.
+        requestButtonMatrix();
+      } else {
+        _buttonMatrix = held.withAssignment(
+          reply.setSequence!,
+          reply.setAction!,
+        );
+      }
     }
     notifyListeners();
   }
 
-  void _handleNotifyScopeReply(Uint8List frame) {
-    final reply = parseNotifyScopeReply(frame);
-    if (reply == null) return;
+  void _handleNotifyScopeReply(OffbandUiReply reply) {
     if (reply.isError) {
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
@@ -4094,8 +4111,6 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     if (value == 'gps:1' || value == 'gps:0') {
       _reconcileGpsPolling();
-      // Byte-2 caps just landed: pull the headless-UI state they gate. (#474/#475)
-      _reconcileDeviceUi();
     }
   }
 
@@ -5241,6 +5256,12 @@ class MeshCoreConnector extends ChangeNotifier {
       'femCapable=$supportsOffbandFemLna blockCapable=$supportsOffbandBlock',
       tag: 'Device',
     );
+    // Byte-2 caps just landed. Drop the PREVIOUS radio's device-UI values,
+    // then pull this one's, so a scope changed by triple-pressing the device is
+    // re-read and one radio's configuration is never shown as another's.
+    // (#474/#475)
+    _clearDeviceUiState();
+    _reconcileDeviceUi();
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
