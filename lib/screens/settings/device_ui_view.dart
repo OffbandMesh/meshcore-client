@@ -40,49 +40,12 @@ class _DeviceUiViewState extends State<DeviceUiView> {
       builder: (context, connector, _) {
         final showButtons = connector.supportsButtonMatrix;
         final showScope = connector.supportsNotifyScope;
-        // A radio that advertises nothing gets a diagnosis, not a blank screen.
-        // Silence used to be indistinguishable from a broken client, which is
-        // exactly the failure this pane is meant to make visible.
+        // A radio advertising neither bit has no button and no buzzer to
+        // configure, so it gets nothing. The tile that leads here is gated the
+        // same way, so this is a belt-and-braces guard rather than a path a
+        // user can reach. (#474 negative test)
         if (!showButtons && !showScope) {
-          final caps2 = connector.offbandCaps2;
-          return ListView(
-            children: [
-              const _SectionHeader('Not advertised by this radio'),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Text(
-                  caps2 == null
-                      ? 'This radio sends no capability byte 2 at all, which '
-                            'means its firmware predates the feature. Nothing '
-                            'is wrong with the app; the radio needs newer '
-                            'firmware.'
-                      : 'This radio sends capability byte 2 as 0x'
-                            '${caps2.toRadixString(16).padLeft(2, '0')}, with '
-                            'neither the notification-scope bit (0x01) nor the '
-                            'button-matrix bit (0x02) set. Its firmware knows '
-                            'about byte 2 but does not claim these features, '
-                            'for example a board with no buzzer.',
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.memory_outlined),
-                title: const Text('Capability byte 2'),
-                subtitle: Text(
-                  caps2 == null
-                      ? 'absent (frame shorter than 85 bytes)'
-                      : '0x${caps2.toRadixString(16).padLeft(2, '0')}',
-                ),
-              ),
-              const ListTile(
-                leading: Icon(Icons.block_outlined),
-                title: Text('No command will be sent'),
-                subtitle: Text(
-                  'The app never emits this command to a radio that has not '
-                  'advertised support for it.',
-                ),
-              ),
-            ],
-          );
+          return const SizedBox.shrink();
         }
         // The radio advertises the capability but shipped firmware has no
         // get/set command yet, so it can be detected and not queried. Say that

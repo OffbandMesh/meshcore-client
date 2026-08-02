@@ -272,7 +272,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // Button and buzzer: device UI config (#474/#475). Owner-placed
               // under Node Settings, appended last so nothing already here
               // moves.
-              if (connector.isConnected) ...[
+              //
+              // Gated STRICTLY on the capability bits. A radio without the
+              // hardware has no button to configure, so it gets no tile, no
+              // screen and no command. This is the negative test in #474:
+              // "A device that does not advertise the bit shows no screen and
+              // the client emits no command."
+              if (connector.supportsButtonMatrix ||
+                  connector.supportsNotifyScope) ...[
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked_outlined),
