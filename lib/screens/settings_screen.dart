@@ -258,20 +258,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
               ],
-              if (connector.selfPublicKey != null) ...[
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: _buildInfoRow(
-                    l10n.settings_infoPublicKey,
-                    pubKeyToHex(connector.selfPublicKey!),
-                    copyValue: pubKeyToHex(connector.selfPublicKey!),
-                  ),
-                ),
-              ],
               // Button and buzzer: device UI config (#474/#475). Owner-placed
-              // under Node Settings, appended last so nothing already here
-              // moves.
+              // under Node Settings, directly above the public key.
               //
               // Gated STRICTLY on the capability bits. A radio without the
               // hardware has no button to configure, so it gets no tile, no
@@ -302,6 +290,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     );
                   },
+                ),
+              ],
+              if (connector.selfPublicKey != null) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: _buildInfoRow(
+                    l10n.settings_infoPublicKey,
+                    pubKeyToHex(connector.selfPublicKey!),
+                    copyValue: pubKeyToHex(connector.selfPublicKey!),
+                  ),
                 ),
               ],
             ],
