@@ -502,6 +502,32 @@ bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
 /// >= 17, the version that introduced it.
 const int offbandCapCaplog = 0x20;
 
+/// `offband_caps` BYTE 2 bits (device-info frame offset 84, firmware #508).
+///
+/// Bit assignment CONFIRMED by firmware (FuchsiaCreek, 2026-08-01): bit 0 is
+/// the notification scope, bit 1 is the button matrix. This is the reverse of
+/// the order the two epics were filed in, so do not infer it from issue
+/// numbers.
+///
+/// `offbandCap2NotifyScope` is set **only where `PIN_BUZZER` is defined**, the
+/// same principle as FEM LNA gating on `canControlLoRaFemLna()`. Heltec V4 and
+/// RAK4631 have no buzzer and will never advertise it. Gate on the BIT ONLY,
+/// never on model or version code: it is a per-unit answer.
+///
+/// Bit 1 is still unclaimed pending the #509 firmware PR.
+const int offbandCap2NotifyScope = 0x01;
+const int offbandCap2ButtonMatrix = 0x02;
+
+/// True iff this radio advertises a configurable button-action matrix (#474).
+/// False whenever byte 2 is absent, which is every radio predating #508 and is
+/// never an error.
+bool firmwareSupportsButtonMatrix(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2ButtonMatrix) != 0;
+
+/// True iff this radio advertises a settable device notification scope (#475).
+bool firmwareSupportsNotifyScope(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2NotifyScope) != 0;
+
 bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
     (offbandCaps & offbandCapCaplog) != 0 &&

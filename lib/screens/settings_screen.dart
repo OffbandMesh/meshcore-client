@@ -21,6 +21,7 @@ import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
+import 'settings/device_ui_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
 import 'serial_capture_screen.dart';
@@ -266,6 +267,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     pubKeyToHex(connector.selfPublicKey!),
                     copyValue: pubKeyToHex(connector.selfPublicKey!),
                   ),
+                ),
+              ],
+              // Button and buzzer: device UI config (#474/#475). Owner-placed
+              // under Node Settings, appended last so nothing already here
+              // moves.
+              if (connector.isConnected) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.radio_button_checked_outlined),
+                  title: const Text('Button and buzzer'),
+                  subtitle: const Text(
+                    'Assign button actions and set when this radio beeps',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => Scaffold(
+                          appBar: AppBar(
+                            title: const Text('Button and buzzer'),
+                            centerTitle: true,
+                          ),
+                          body: const DeviceUiView(),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ],
