@@ -2789,10 +2789,33 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer?.cancel();
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
+    // Drop the previous radio's in-memory history before a new connection loads
+    // its own. These caches are keyed by channel index / contact key, not by
+    // radio, so without this a radio switch would keep showing the prior
+    // radio's channel and DM history (a new radio's empty store cannot
+    // overwrite them). On-disk stores are already per-radio (device+PSK); this
+    // is purely the runtime cache. Repopulated on connect by
+    // loadAllChannelMessages and _loadMessagesForContact. (#472)
+    _channelMessages.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
     _resetSyncProgressState();
     _bleInitialSyncStarted = false;
     _pathHashByteWidth = 1;
   }
+
+  @visibleForTesting
+  void resetConnectionHandshakeStateForTest() =>
+      _resetConnectionHandshakeState();
+
+  @visibleForTesting
+  Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
+
+  @visibleForTesting
+  Map<String, List<Message>> get conversationsForTest => _conversations;
+
+  @visibleForTesting
+  Set<String> get loadedConversationKeysForTest => _loadedConversationKeys;
 
   void _resetSyncProgressState() {
     _pendingInitialChannelSync = false;
