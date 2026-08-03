@@ -348,8 +348,9 @@ class TranslationService extends ChangeNotifier {
     var waited = Duration.zero;
     while (waited < total && !_cancelDownloadRequested) {
       final remaining = total - waited;
-      await Future<void>.delayed(remaining < step ? remaining : step);
-      waited += step;
+      final chunk = remaining < step ? remaining : step;
+      await Future<void>.delayed(chunk);
+      waited += chunk;
     }
   }
 
