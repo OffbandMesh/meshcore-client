@@ -45,7 +45,7 @@ bool isRetryableDownloadStatus(int statusCode) =>
 
 /// Exponential backoff for download [attempt] (1-based): 1, 2, 4, 8, 16 s capped
 /// at 30 s; a larger server `Retry-After` (seconds) wins, also capped. No jitter
-/// (single-client download — no thundering-herd concern). #229
+/// (single-client download, no thundering-herd concern). #229
 Duration translationDownloadBackoff(int attempt, {int? retryAfterSeconds}) {
   final exp = (1 << (attempt - 1)).clamp(1, 30);
   final seconds = (retryAfterSeconds != null && retryAfterSeconds > exp)
@@ -58,7 +58,7 @@ int? _retryAfterHeaderSeconds(Map<String, String> headers) =>
     int.tryParse(headers['retry-after']?.trim() ?? '');
 
 /// Sends the request built by [buildRequest] on [client], retrying transient
-/// failures — 5xx / 429 responses and network exceptions — with bounded
+/// failures (5xx / 429 responses and network exceptions) with bounded
 /// exponential backoff. Terminal responses (2xx, 3xx, non-retryable 4xx) are
 /// returned for the caller to validate; a sustained failure throws after
 /// [maxAttempts]. Cancellable via [isCancelled]. Deps injected → unit-testable.
