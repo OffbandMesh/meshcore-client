@@ -35,6 +35,78 @@ class TranslationDownloadCancelled implements Exception {
   String toString() => 'Download canceled.';
 }
 
+/// Max attempts (initial + retries) for a transient model-download failure. #229
+const int kTranslationDownloadMaxAttempts = 5;
+
+/// HTTP statuses worth retrying on a model download: server overload / 5xx and
+/// 429. Terminal 4xx (e.g. 404) are not retried. #229
+bool isRetryableDownloadStatus(int statusCode) =>
+    statusCode == 429 || (statusCode >= 500 && statusCode <= 599);
+
+/// Exponential backoff for download [attempt] (1-based): 1, 2, 4, 8, 16 s capped
+/// at 30 s; a larger server `Retry-After` (seconds) wins, also capped. No jitter
+/// (single-client download — no thundering-herd concern). #229
+Duration translationDownloadBackoff(int attempt, {int? retryAfterSeconds}) {
+  final exp = (1 << (attempt - 1)).clamp(1, 30);
+  final seconds = (retryAfterSeconds != null && retryAfterSeconds > exp)
+      ? retryAfterSeconds.clamp(1, 30)
+      : exp;
+  return Duration(seconds: seconds);
+}
+
+int? _retryAfterHeaderSeconds(Map<String, String> headers) =>
+    int.tryParse(headers['retry-after']?.trim() ?? '');
+
+/// Sends the request built by [buildRequest] on [client], retrying transient
+/// failures — 5xx / 429 responses and network exceptions — with bounded
+/// exponential backoff. Terminal responses (2xx, 3xx, non-retryable 4xx) are
+/// returned for the caller to validate; a sustained failure throws after
+/// [maxAttempts]. Cancellable via [isCancelled]. Deps injected → unit-testable.
+/// #229
+Future<http.StreamedResponse> sendModelDownloadWithRetry(
+  http.Client client,
+  http.Request Function() buildRequest, {
+  required Future<void> Function(Duration) sleep,
+  required bool Function() isCancelled,
+  int maxAttempts = kTranslationDownloadMaxAttempts,
+}) async {
+  var attempt = 0;
+  while (true) {
+    attempt++;
+    if (isCancelled()) throw const TranslationDownloadCancelled();
+    try {
+      final response = await client.send(buildRequest());
+      if (isRetryableDownloadStatus(response.statusCode) &&
+          attempt < maxAttempts) {
+        await response.stream.drain<void>();
+        appLogger.warn(
+          'Model download HTTP ${response.statusCode}; retry $attempt/$maxAttempts',
+        );
+        await sleep(
+          translationDownloadBackoff(
+            attempt,
+            retryAfterSeconds: _retryAfterHeaderSeconds(response.headers),
+          ),
+        );
+        continue;
+      }
+      return response;
+    } on TranslationDownloadCancelled {
+      rethrow;
+    } on Exception catch (e) {
+      if ((e is http.ClientException || e is TimeoutException) &&
+          attempt < maxAttempts) {
+        appLogger.warn(
+          'Model download error ($e); retry $attempt/$maxAttempts',
+        );
+        await sleep(translationDownloadBackoff(attempt));
+        continue;
+      }
+      rethrow;
+    }
+  }
+}
+
 class TranslationService extends ChangeNotifier {
   final AppSettingsService _appSettingsService;
   final TranslationFileStore _fileStore;
@@ -205,7 +277,10 @@ class TranslationService extends ChangeNotifier {
         int? totalSize;
         bool supportsRange = false;
         try {
-          final headResponse = await headClient.send(http.Request('HEAD', uri));
+          final headResponse = await _sendWithRetry(
+            headClient,
+            () => http.Request('HEAD', uri),
+          );
           totalSize = headResponse.contentLength;
           supportsRange =
               headResponse.headers['accept-ranges']?.contains('bytes') == true;
@@ -257,13 +332,37 @@ class TranslationService extends ChangeNotifier {
     });
   }
 
+  Future<http.StreamedResponse> _sendWithRetry(
+    http.Client client,
+    http.Request Function() buildRequest,
+  ) => sendModelDownloadWithRetry(
+    client,
+    buildRequest,
+    sleep: _cancellableBackoff,
+    isCancelled: () => _cancelDownloadRequested,
+  );
+
+  /// Backoff wait that aborts promptly when the user cancels the download.
+  Future<void> _cancellableBackoff(Duration total) async {
+    const step = Duration(milliseconds: 250);
+    var waited = Duration.zero;
+    while (waited < total && !_cancelDownloadRequested) {
+      final remaining = total - waited;
+      await Future<void>.delayed(remaining < step ? remaining : step);
+      waited += step;
+    }
+  }
+
   Future<DownloadedModelFile> _downloadSingle({
     required Uri uri,
     required String fileName,
   }) async {
     final client = http.Client();
     try {
-      final response = await client.send(http.Request('GET', uri));
+      final response = await _sendWithRetry(
+        client,
+        () => http.Request('GET', uri),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError('Model download failed: HTTP ${response.statusCode}');
       }
@@ -338,9 +437,11 @@ class TranslationService extends ChangeNotifier {
     required int start,
     required int end,
   }) async {
-    final request = http.Request('GET', uri);
-    request.headers['Range'] = 'bytes=$start-$end';
-    final response = await client.send(request);
+    final response = await _sendWithRetry(client, () {
+      final request = http.Request('GET', uri);
+      request.headers['Range'] = 'bytes=$start-$end';
+      return request;
+    });
     if (response.statusCode != 206) {
       await response.stream.drain<void>();
       throw StateError(
