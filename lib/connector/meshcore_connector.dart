@@ -309,6 +309,7 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _offbandCaps2;
   bool? _femLnaEnabled;
   ButtonMatrix? _buttonMatrix;
+  String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
   String? _deviceUiError;
   int _pathHashByteWidth = 1;
@@ -686,21 +687,34 @@ class MeshCoreConnector extends ChangeNotifier {
   /// ambiguous, so the suppression says which gate closed and why. (#501)
   bool _deviceUiGateOpen(String what, {required bool advertised}) {
     if (!deviceUiCommandLanded) {
-      _appDebugLogService?.info(
-        '$what suppressed: 0xC5 command support is compiled off',
-        tag: 'DeviceUI',
-      );
+      _logDeviceUiSuppression(what, '0xC5 command support is compiled off');
       return false;
     }
     if (!advertised) {
-      _appDebugLogService?.info(
-        '$what suppressed: radio does not advertise it '
+      _logDeviceUiSuppression(
+        what,
+        'radio does not advertise it '
         '(caps2=${_offbandCaps2 == null ? 'absent' : '0x${_offbandCaps2!.toRadixString(16).padLeft(2, '0')}'})',
-        tag: 'DeviceUI',
       );
       return false;
     }
+    // A gate that opens clears the memo, so the next genuine suppression is
+    // reported rather than swallowed as a repeat.
+    _lastDeviceUiSuppression = null;
     return true;
+  }
+
+  /// Log a suppressed request ONCE per distinct reason.
+  ///
+  /// Device-info arrives on every connect, so a flapping radio would otherwise
+  /// emit the same suppression line on every reconnect. Diagnostics must not
+  /// become the outage (SAFELANE §11 rule 10), and a repeated identical line
+  /// carries no information the first one did not.
+  void _logDeviceUiSuppression(String what, String reason) {
+    final memo = '$what|$reason';
+    if (_lastDeviceUiSuppression == memo) return;
+    _lastDeviceUiSuppression = memo;
+    _appDebugLogService?.info('$what suppressed: $reason', tag: 'DeviceUI');
   }
 
   Future<void> requestButtonMatrix() async {
@@ -766,6 +780,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reconnect can show one radio's notification scope as another's.
   void _clearDeviceUiState() {
     _buttonMatrix = null;
+    _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
     _deviceUiError = null;
   }
@@ -839,13 +854,26 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'DeviceUI',
       );
     } else {
-      _appDebugLogService?.info(
-        'scope reply: ${reply.scope!.label} '
-        '(sub=0x${reply.sub.toRadixString(16).padLeft(2, '0')}, '
-        '${reply.sub == offbandUiScopeSet ? 'write confirmed' : 'read'})',
-        tag: 'DeviceUI',
-      );
-      _deviceNotifyScope = reply.scope;
+      final scope = reply.scope;
+      if (scope == null) {
+        // Not reachable today: parseNotifyScopeReply returns an error reply
+        // when the scope code is unknown, so a non-error reply always carries
+        // one. That invariant lives in another file, so it is checked here
+        // rather than asserted with a bang across the boundary.
+        _appDebugLogService?.warn(
+          'scope reply with no scope (sub=0x'
+          '${reply.sub.toRadixString(16).padLeft(2, '0')})',
+          tag: 'DeviceUI',
+        );
+      } else {
+        _appDebugLogService?.info(
+          'scope reply: ${scope.label} '
+          '(sub=0x${reply.sub.toRadixString(16).padLeft(2, '0')}, '
+          '${reply.sub == offbandUiScopeSet ? 'write confirmed' : 'read'})',
+          tag: 'DeviceUI',
+        );
+        _deviceNotifyScope = scope;
+      }
     }
     notifyListeners();
   }
