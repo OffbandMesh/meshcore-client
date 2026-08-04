@@ -1,0 +1,3 @@
+Offband Meshcore 1.4.0
+
+A follow-up to the 1.3.0 launch. New button and buzzer settings for headless devices, a one-tap Send Again on channel messages, and more capability detail in Device Info. Fixes: the block list is scoped per radio again, per-radio caches are cleared on reconnect so nothing lingers from another radio, translation-model downloads retry on transient errors, and routed replies use the correct path width.
