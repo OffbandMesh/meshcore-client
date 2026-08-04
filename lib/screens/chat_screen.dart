@@ -1586,7 +1586,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (message.isOutgoing && message.status == MessageStatus.failed)
               ListTile(
                 leading: const Icon(Icons.refresh),
-                title: Text(context.l10n.common_retry),
+                title: Text(context.l10n.message_sendAgain),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _retryMessage(message);
@@ -1643,7 +1643,7 @@ class _ChatScreenState extends State<ChatScreen> {
     connector.sendMessage(_resolveContact(connector), message.text);
     showDismissibleSnackBar(
       context,
-      content: Text(context.l10n.chat_retryingMessage),
+      content: Text(context.l10n.chat_sendingAgain),
     );
   }
 

@@ -1613,6 +1613,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  void _retryChannelMessage(ChannelMessage message) {
+    context.read<MeshCoreConnector>().sendChannelMessage(
+      _currentChannel,
+      message.text,
+    );
+    showDismissibleSnackBar(
+      context,
+      content: Text(context.l10n.chat_sendingAgain),
+    );
+  }
+
   void _showMessageActions(ChannelMessage message) {
     final translationService = context.read<TranslationService>();
     final canTranslateMessage =
@@ -1653,6 +1664,19 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _showMessagePathInfo(message);
+                },
+              ),
+            // Offer resend on an outgoing channel message until its
+            // ack/repeat-back arrives (status becomes sent). Channel sends are
+            // not auto-retried, so this is the only recovery path. (#256)
+            if (message.isOutgoing &&
+                message.status != ChannelMessageStatus.sent)
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: Text(context.l10n.message_sendAgain),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _retryChannelMessage(message);
                 },
               ),
             // Can't react to your own messages

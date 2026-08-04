@@ -1450,6 +1450,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chat_retryingMessage => 'Versuche es erneut.';
 
   @override
+  String get chat_sendingAgain => 'Sending again';
+
+  @override
+  String get message_sendAgain => 'Send Again';
+
+  @override
   String chat_retryCount(int current, int max) {
     return 'Versuche $current/$max';
   }
