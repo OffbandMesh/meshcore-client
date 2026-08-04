@@ -295,7 +295,7 @@ App version: `9.1.0+14` — Dart SDK constraint: `^3.9.2`
 - `LSApplicationQueriesSchemes`: `http`, `https`
 
 ### Web (`web/`)
-PWA scaffold present but boilerplate (`manifest.json` and `index.html` are unmodified Flutter defaults). BLE is unsupported in browsers; TCP and Web Serial USB may work in Chrome only. `ChromeRequiredScreen` gates non-Chrome web users. Versioned releases are produced via `build_pipe` (`?v=<pubspec version>` cache busting, no service worker).
+The web client is live at `offband.app` (deployed by CI via Cloudflare Pages). **BLE works on web via Web Bluetooth (`flutter_blue_plus_web`), in Chromium browsers only**: Chrome/Edge on desktop and Android; iOS has no Web Bluetooth in any browser; Linux Chrome may require enabling `chrome://flags/#enable-web-bluetooth`. Connecting requires HTTPS and a user gesture (the browser's device-chooser dialog — no passive scan list). TCP is disabled on web (`scanner_screen.dart` gates it with `!PlatformInfo.isWeb`); Web Serial USB may work in Chrome only. `ChromeRequiredScreen` gates non-Chromium browsers. Versioned assets use `?v=<pubspec version>` cache busting (no service worker).
 
 ### Desktop
 `linux/`, `windows/`, and `macos/` directories are present as Flutter scaffolds. No app-specific native config has been added; BLE on desktop has not been validated.
