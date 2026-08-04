@@ -2768,14 +2768,18 @@ class MeshCoreConnector extends ChangeNotifier {
     _maybeStartInitialChannelSync();
   }
 
-  /// Keep [BlockService]'s notion of "me" in sync with the connected node, so
-  /// it can refuse a self-block and self-heal one that already exists, the
-  /// union pull can land before self-info arrives, so healing matters (#250).
+  /// (Re)load the connected radio's per-radio block list and keep BlockService's
+  /// notion of "me" in sync. Called when the device key is learned (device-info)
+  /// and on disconnect/reset (null). loadForDevice sets the store scope + self
+  /// key synchronously, so an unawaited call is safe against a concurrent block
+  /// LIST dump; it also runs the #250 self-heal. Per-radio scoping is what stops
+  /// a block on one radio leaking to another and re-infecting a cleared radio
+  /// (#471).
   void _applySelfKeyToBlockService() {
     final service = _blockService;
     if (service == null) return;
     final key = _selfPublicKey;
-    unawaited(service.setSelfKey(key == null ? null : pubKeyToHex(key)));
+    unawaited(service.loadForDevice(key == null ? null : pubKeyToHex(key)));
   }
 
   void _resetConnectionHandshakeState() {
