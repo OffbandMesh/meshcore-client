@@ -724,6 +724,8 @@
   "chat_messageCopied": "Message copied",
   "chat_messageDeleted": "Message deleted",
   "chat_retryingMessage": "Retrying message",
+  "chat_sendingAgain": "Sending again",
+  "message_sendAgain": "Send Again",
   "chat_retryCount": "Retry {current}/{max}",
   "@chat_retryCount": {
     "placeholders": {

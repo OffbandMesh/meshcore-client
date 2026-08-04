@@ -1439,6 +1439,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chat_retryingMessage => 'Pokus o obnovenie';
 
   @override
+  String get chat_sendingAgain => 'Sending again';
+
+  @override
+  String get message_sendAgain => 'Send Again';
+
+  @override
   String chat_retryCount(int current, int max) {
     return 'Skúsiť $current/$max';
   }
