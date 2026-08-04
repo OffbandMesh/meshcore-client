@@ -1369,6 +1369,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chat_retryingMessage => '正在重试消息';
 
   @override
+  String get chat_sendingAgain => 'Sending again';
+
+  @override
+  String get message_sendAgain => 'Send Again';
+
+  @override
   String chat_retryCount(int current, int max) {
     return '重试 $current/$max';
   }

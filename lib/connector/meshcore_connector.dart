@@ -58,6 +58,7 @@ import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
 import 'meshcore_protocol.dart';
+import 'offband_device_ui.dart';
 import 'caplog_reassembler.dart';
 
 class DirectRepeater {
@@ -294,7 +295,11 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+  int? _offbandCaps2;
   bool? _femLnaEnabled;
+  ButtonMatrix? _buttonMatrix;
+  DeviceNotifyScope? _deviceNotifyScope;
+  String? _deviceUiError;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -609,6 +614,154 @@ class MeshCoreConnector extends ChangeNotifier {
   /// `offband_caps` capability bitfield from the device-info reply (v14+);
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
+
+  /// Second `offband_caps` bitfield (frame offset 84, firmware #508). Null when
+  /// the frame is too short, which means "no byte-2 capabilities" and is never
+  /// an error: every radio predating #508 reports null here. (#480)
+  int? get offbandCaps2 => _offbandCaps2;
+
+  /// Whether this radio exposes a configurable button-action matrix (#474).
+  bool get supportsButtonMatrix => firmwareSupportsButtonMatrix(_offbandCaps2);
+
+  /// Whether this radio exposes a settable device notification scope (#475).
+  bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
+
+  /// Whether the radio can actually be QUERIED, as opposed to merely reporting
+  /// that it has the feature. False until firmware lands the get/set command,
+  /// so no frame is emitted that nothing will answer. The distinction is real
+  /// and user-visible: a T1000-E advertises the buzzer capability today but
+  /// cannot yet be read or written by the app.
+  bool get supportsDeviceUiCommand =>
+      deviceUiCommandLanded && (supportsNotifyScope || supportsButtonMatrix);
+
+  /// Last button matrix read from the radio, or null if not read yet.
+  ButtonMatrix? get buttonMatrix => _buttonMatrix;
+
+  /// Last device notification scope read from the radio. The user can change
+  /// this out of band by triple-pressing the device, so it is re-read on every
+  /// device-info refresh rather than cached across a connection. (#475)
+  DeviceNotifyScope? get deviceNotifyScope => _deviceNotifyScope;
+
+  /// The radio's own reason for refusing the last write, or null. Held until
+  /// the next request so the UI can show it persistently rather than as a
+  /// flash: an error the user cannot finish reading is not surfaced (§6).
+  String? get deviceUiError => _deviceUiError;
+
+  void clearDeviceUiError() {
+    if (_deviceUiError == null) return;
+    _deviceUiError = null;
+    notifyListeners();
+  }
+
+  /// Ask the radio for its button matrix. No-op unless the capability bit is
+  /// set, so an unsupported radio never sees `0xC5`.
+  Future<void> requestButtonMatrix() async {
+    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    await sendFrame(buildButtonMatrixGetFrame());
+  }
+
+  /// Assign [action] to [sequence]. The radio echoes the pair on success or
+  /// replies with a reason; the local matrix is updated only from that reply,
+  /// never optimistically, so the UI can never show an assignment the device
+  /// rejected.
+  Future<void> setButtonAction(
+    ButtonSequence sequence,
+    ButtonAction action,
+  ) async {
+    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    _deviceUiError = null;
+    await sendFrame(buildButtonMatrixSetFrame(sequence, action));
+  }
+
+  /// Ask the radio for its current notification scope.
+  Future<void> requestNotifyScope() async {
+    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    await sendFrame(buildNotifyScopeGetFrame());
+  }
+
+  /// Set the device notification scope. As with the matrix, local state follows
+  /// the device's reply rather than the request.
+  Future<void> setNotifyScope(DeviceNotifyScope scope) async {
+    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    _deviceUiError = null;
+    await sendFrame(buildNotifyScopeSetFrame(scope));
+  }
+
+  /// Re-read whatever headless-UI state this radio supports. Called after every
+  /// device-info reply so a scope changed by triple-press on the device is
+  /// never displayed stale, and so frame-arrival order does not matter. (#475)
+  /// Drop everything read from the PREVIOUS radio.
+  ///
+  /// These values are per-device. Capability bits refresh from every
+  /// device-info frame, but the values behind them do not, so without this a
+  /// reconnect can show one radio's notification scope as another's.
+  void _clearDeviceUiState() {
+    _buttonMatrix = null;
+    _deviceNotifyScope = null;
+    _deviceUiError = null;
+  }
+
+  void _reconcileDeviceUi() {
+    if (supportsButtonMatrix) requestButtonMatrix();
+    if (supportsNotifyScope) requestNotifyScope();
+  }
+
+  /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
+  /// ride one command byte, so the matrix parser is tried first (it owns 0x7F)
+  /// and the scope parser handles what is left.
+  void _handleDeviceUiReply(Uint8List frame) {
+    // Parse ONCE and hand the result down. Parsing here to route and again in
+    // the handler lets the two copies drift, so a later edit to one could drop
+    // a valid frame.
+    final matrix = parseButtonMatrixReply(frame);
+    if (matrix != null) {
+      _handleButtonMatrixReply(matrix);
+      return;
+    }
+    final scope = parseNotifyScopeReply(frame);
+    if (scope != null) _handleNotifyScopeReply(scope);
+  }
+
+  void _handleButtonMatrixReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _deviceUiError = reply.errorMessage;
+      _appDebugLogService?.warn(
+        'Button config refused: ${reply.errorMessage}',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
+      return;
+    }
+    if (reply.matrix != null) {
+      _buttonMatrix = reply.matrix;
+    } else if (reply.setSequence != null && reply.setAction != null) {
+      final held = _buttonMatrix;
+      if (held == null) {
+        // A device-confirmed write with nothing to fold it into. Never drop it
+        // silently: re-read so the client matches what the device just did.
+        requestButtonMatrix();
+      } else {
+        _buttonMatrix = held.withAssignment(
+          reply.setSequence!,
+          reply.setAction!,
+        );
+      }
+    }
+    notifyListeners();
+  }
+
+  void _handleNotifyScopeReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _deviceUiError = reply.errorMessage;
+      _appDebugLogService?.warn(
+        'Notification scope refused: ${reply.errorMessage}',
+        tag: 'DeviceUI',
+      );
+    } else {
+      _deviceNotifyScope = reply.scope;
+    }
+    notifyListeners();
+  }
 
   /// Whether the connected firmware speaks the `0xC1` GPS extension, i.e. it
   /// advertised the Offband-fork `offband_caps` byte. Stock MeshCore omits it,
@@ -2615,14 +2768,18 @@ class MeshCoreConnector extends ChangeNotifier {
     _maybeStartInitialChannelSync();
   }
 
-  /// Keep [BlockService]'s notion of "me" in sync with the connected node, so
-  /// it can refuse a self-block and self-heal one that already exists, the
-  /// union pull can land before self-info arrives, so healing matters (#250).
+  /// (Re)load the connected radio's per-radio block list and keep BlockService's
+  /// notion of "me" in sync. Called when the device key is learned (device-info)
+  /// and on disconnect/reset (null). loadForDevice sets the store scope + self
+  /// key synchronously, so an unawaited call is safe against a concurrent block
+  /// LIST dump; it also runs the #250 self-heal. Per-radio scoping is what stops
+  /// a block on one radio leaking to another and re-infecting a cleared radio
+  /// (#471).
   void _applySelfKeyToBlockService() {
     final service = _blockService;
     if (service == null) return;
     final key = _selfPublicKey;
-    unawaited(service.setSelfKey(key == null ? null : pubKeyToHex(key)));
+    unawaited(service.loadForDevice(key == null ? null : pubKeyToHex(key)));
   }
 
   void _resetConnectionHandshakeState() {
@@ -2636,10 +2793,33 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer?.cancel();
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
+    // Drop the previous radio's in-memory history before a new connection loads
+    // its own. These caches are keyed by channel index / contact key, not by
+    // radio, so without this a radio switch would keep showing the prior
+    // radio's channel and DM history (a new radio's empty store cannot
+    // overwrite them). On-disk stores are already per-radio (device+PSK); this
+    // is purely the runtime cache. Repopulated on connect by
+    // loadAllChannelMessages and _loadMessagesForContact. (#472)
+    _channelMessages.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
     _resetSyncProgressState();
     _bleInitialSyncStarted = false;
     _pathHashByteWidth = 1;
   }
+
+  @visibleForTesting
+  void resetConnectionHandshakeStateForTest() =>
+      _resetConnectionHandshakeState();
+
+  @visibleForTesting
+  Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
+
+  @visibleForTesting
+  Map<String, List<Message>> get conversationsForTest => _conversations;
+
+  @visibleForTesting
+  Set<String> get loadedConversationKeysForTest => _loadedConversationKeys;
 
   void _resetSyncProgressState() {
     _pendingInitialChannelSync = false;
@@ -3470,10 +3650,14 @@ class MeshCoreConnector extends ChangeNotifier {
     // Update any in-flight retries so they use the new path override
     _retryService?.updatePendingContact(_contacts[index]);
 
-    // If setting a specific path (not flood, not auto), also sync with device
+    // If setting a specific path (not flood, not auto), also sync with device.
+    // pathLen from the override dialog is a BYTE count; convert to a true hop
+    // count at the contact's width so the wire path_len packs correctly (#279).
     if (pathLen != null && pathLen >= 0 && pathBytes != null) {
+      final w = contact.pathHashWidth < 1 ? 1 : contact.pathHashWidth;
+      final hops = w > 0 ? pathBytes.length ~/ w : pathBytes.length;
       appLogger.info('Sending path to device...', tag: 'Connector');
-      await setContactPath(contact, pathBytes, pathLen);
+      await setContactPath(contact, pathBytes, hops, hashWidth: w);
       appLogger.info('Path sent to device', tag: 'Connector');
     }
 
@@ -3505,6 +3689,7 @@ class MeshCoreConnector extends ChangeNotifier {
         contact,
         Uint8List.fromList(resolved.pathBytes),
         resolved.hopCount,
+        hashWidth: resolved.hashWidth,
       );
     }
 
@@ -4655,6 +4840,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case respCodeOffbandCaplog:
         _handleOffbandCaplogFrame(frame);
         break;
+      case respCodeOffbandDeviceUi:
+        _handleDeviceUiReply(frame);
+        break;
       case respCodeSelfInfo:
         debugPrint('Got SELF_INFO');
         _handleSelfInfo(frame);
@@ -5017,6 +5205,21 @@ class MeshCoreConnector extends ChangeNotifier {
   static bool? parseFemLnaState(Uint8List frame) =>
       frame.length >= 84 ? frame[83] != femLnaBypass : null;
 
+  /// Second `offband_caps` byte, at frame offset **84** (firmware #508).
+  ///
+  /// Deliberately NOT adjacent to byte 1 at offset 82: offset 83 is already the
+  /// FEM LNA state byte, and every field here is read at a FIXED ABSOLUTE
+  /// offset, so inserting byte 2 next to byte 1 would shift the FEM state and
+  /// make shipped clients misread a bitmask as the LNA toggle. Firmware appends
+  /// byte 2 at the end of the frame for exactly that reason
+  /// (`OffbandConfigProtocol.h`, firmware PR #515).
+  ///
+  /// Null on any firmware predating #508, which sends a shorter frame. Null
+  /// means "no byte-2 capabilities", never an error. Bounds-checked like its
+  /// siblings, so a truncated or hostile short frame never indexes OOB.
+  static int? parseOffbandCaps2(Uint8List frame) =>
+      frame.length >= 85 ? frame[84] : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -5067,16 +5270,25 @@ class MeshCoreConnector extends ChangeNotifier {
     // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
     // read on connect, a 0xC3 GET is only the fallback.
     _femLnaEnabled = parseFemLnaState(frame);
+    // Second caps byte rides at offset 84, past the FEM state byte (#480).
+    _offbandCaps2 = parseOffbandCaps2(frame);
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
     // be told apart from "this radio says it can't". (#304)
     _appDebugLogService?.info(
       'Offband caps=0x${(_offbandCaps ?? 0).toRadixString(16).padLeft(2, '0')} '
+      'caps2=${_offbandCaps2 == null ? 'absent' : '0x${_offbandCaps2!.toRadixString(16).padLeft(2, '0')}'} '
       'verCode=${_firmwareVerCode ?? 0} frameLen=${frame.length} '
       'femLnaByte=${_femLnaEnabled == null ? 'absent' : (_femLnaEnabled! ? '1' : '0')} '
       'femCapable=$supportsOffbandFemLna blockCapable=$supportsOffbandBlock',
       tag: 'Device',
     );
+    // Byte-2 caps just landed. Drop the PREVIOUS radio's device-UI values,
+    // then pull this one's, so a scope changed by triple-pressing the device is
+    // re-read and one radio's configuration is never shown as another's.
+    // (#474/#475)
+    _clearDeviceUiState();
+    _reconcileDeviceUi();
     // Caps just landed; (re)evaluate GPS polling in case a `gps=1` custom-var
     // frame arrived before this device-info reply set support. (#144)
     _reconcileGpsPolling();
@@ -6143,18 +6355,66 @@ class MeshCoreConnector extends ChangeNotifier {
     return 'Channel $channelIndex';
   }
 
-  /// True when [text] carries a canonical mention of this node: the `@[Name]`
+  /// Case-fold ASCII `A-Z` only, leaving every other code unit byte-exact.
+  ///
+  /// Deliberately NOT `String.toLowerCase()`, which applies full Unicode case
+  /// mapping. Firmware #510 implements the same match rule with a byte-wise
+  /// fold that does not do Unicode mapping, so a node name carrying any
+  /// non-ASCII character would get one self-mention verdict on the client and
+  /// the opposite on the device for the SAME message: a silent wrong answer,
+  /// not a visible failure. Owner decision 2026-07-31 (#475): both sides fold
+  /// ASCII only, so non-ASCII names compare case-sensitively. (#486)
+  /// Public so that anything deciding "is this the same name?" uses the SAME
+  /// equivalence as [mentionsName]. Deduplicating with `String.toLowerCase()`
+  /// instead silently drops candidates: `'É'` and `'é'` collapse under
+  /// `toLowerCase()` but stay distinct under this fold, so one of two real
+  /// contacts would disappear from the mention list while remaining matchable.
+  static String foldAscii(String s) => _foldAscii(s);
+
+  static String _foldAscii(String s) {
+    final units = s.codeUnits;
+    final folded = List<int>.filled(units.length, 0);
+    for (var i = 0; i < units.length; i++) {
+      final unit = units[i];
+      folded[i] = (unit >= 0x41 && unit <= 0x5A) ? unit + 0x20 : unit;
+    }
+    return String.fromCharCodes(folded);
+  }
+
+  /// True when [text] carries a canonical mention of [selfName]: the `@[Name]`
   /// form the composer inserts and the chat renders as a chip (#235).
   ///
-  /// Matched case-insensitively, since a hand-typed mention need not match the
-  /// advert's casing. Bare `@Name` is deliberately NOT matched: it false-
-  /// positives on ordinary text and cannot be delimited for names containing
-  /// spaces.
-  bool _mentionsSelf(String text) {
-    final name = _selfName?.trim();
-    if (name == null || name.isEmpty) return false;
-    return text.toLowerCase().contains('@[${name.toLowerCase()}]');
+  /// ⚠ CROSS-REPO CONTRACT (client #475, firmware #510). The firmware
+  /// implements this exact rule against `NodePrefs::node_name` so that both
+  /// sides agree on what "Self" means for the device notification scope.
+  /// Changing it in any way (accepting a bare `@name`, restoring Unicode
+  /// folding, anchoring the match at a word boundary) is a BREAKING cross-repo
+  /// change that ships only in an aligned client + firmware build pair, never
+  /// unilaterally.
+  ///
+  /// ⚠ THE NAME IS COMPARED VERBATIM. Owner ruling 2026-08-01 (#497): the
+  /// `@[name]` token carries the advert name BYTE-FOR-BYTE, unnormalised. No
+  /// trimming, no Unicode normalisation. Leading and trailing whitespace are
+  /// part of a name's identity, and every other hop is already verbatim, so a
+  /// `.trim()` here makes this node stop recognising mentions of itself. That
+  /// is what stopped mentions beeping. Do not reintroduce it.
+  ///
+  /// The properties firmware must match, none obvious from the rule name: an
+  /// empty name matches nothing (it does not fall through to matching
+  /// everything); the match is a plain substring `contains`, neither anchored
+  /// nor word-boundary aware; folding is ASCII-only per [_foldAscii] and is the
+  /// ONLY normalisation applied to either side.
+  ///
+  /// Bare `@Name` is deliberately NOT matched: it false-positives on ordinary
+  /// text and cannot be delimited for names containing spaces.
+  static bool mentionsName(String text, String? selfName) {
+    final name = selfName;
+    // Emptiness is probed on a trimmed copy; the COMPARISON uses the raw name.
+    if (name == null || name.trim().isEmpty) return false;
+    return _foldAscii(text).contains('@[${_foldAscii(name)}]');
   }
+
+  bool _mentionsSelf(String text) => mentionsName(text, _selfName);
 
   void _maybeNotifyChannelMessage(
     ChannelMessage message, {

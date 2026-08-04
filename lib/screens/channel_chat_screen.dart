@@ -1297,11 +1297,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final seen = <String>{};
 
     // Recent senders in this channel, keyed to their most recent timestamp.
+    // Names are carried VERBATIM: the `@[name]` token must byte-match the
+    // advert name the device stores, whitespace included (#497). Emptiness is
+    // tested on a trimmed copy, but the raw name is what gets kept.
     final recentTime = <String, DateTime>{};
     for (final message in connector.getChannelMessages(_currentChannel)) {
       if (message.isOutgoing) continue;
-      final name = message.senderName.trim();
-      if (name.isEmpty || name == 'Unknown') continue;
+      final name = message.senderName;
+      final probe = name.trim();
+      if (probe.isEmpty || probe == 'Unknown') continue;
       final existing = recentTime[name];
       if (existing == null || message.timestamp.isAfter(existing)) {
         recentTime[name] = message.timestamp;
@@ -1311,14 +1315,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       candidates.add(
         MentionCandidate(name: name, recent: true, lastSeen: time),
       );
-      seen.add(name.toLowerCase());
+      // Same equivalence as mentionsName, or a real contact silently
+      // vanishes from the list while still being matchable. (#497)
+      seen.add(MeshCoreConnector.foldAscii(name));
     });
 
-    // Known contacts not already present as a recent sender.
+    // Known contacts not already present as a recent sender. Same rule: the
+    // contact's name is kept raw so the inserted token matches the device.
     for (final contact in connector.allContacts) {
-      final name = contact.name.trim();
-      if (name.isEmpty) continue;
-      if (!seen.add(name.toLowerCase())) continue;
+      final name = contact.name;
+      if (name.trim().isEmpty) continue;
+      if (!seen.add(MeshCoreConnector.foldAscii(name))) continue;
       candidates.add(MentionCandidate(name: name, recent: false));
     }
     return candidates;
@@ -1606,6 +1613,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  void _retryChannelMessage(ChannelMessage message) {
+    context.read<MeshCoreConnector>().sendChannelMessage(
+      _currentChannel,
+      message.text,
+    );
+    showDismissibleSnackBar(
+      context,
+      content: Text(context.l10n.chat_sendingAgain),
+    );
+  }
+
   void _showMessageActions(ChannelMessage message) {
     final translationService = context.read<TranslationService>();
     final canTranslateMessage =
@@ -1646,6 +1664,19 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _showMessagePathInfo(message);
+                },
+              ),
+            // Offer resend on an outgoing channel message until its
+            // ack/repeat-back arrives (status becomes sent). Channel sends are
+            // not auto-retried, so this is the only recovery path. (#256)
+            if (message.isOutgoing &&
+                message.status != ChannelMessageStatus.sent)
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: Text(context.l10n.message_sendAgain),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _retryChannelMessage(message);
                 },
               ),
             // Can't react to your own messages

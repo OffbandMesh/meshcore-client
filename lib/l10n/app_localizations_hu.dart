@@ -1457,6 +1457,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chat_retryingMessage => 'Újrapróbálási üzenet';
 
   @override
+  String get chat_sendingAgain => 'Sending again';
+
+  @override
+  String get message_sendAgain => 'Send Again';
+
+  @override
   String chat_retryCount(int current, int max) {
     return 'Újrapróbál $current/$max';
   }

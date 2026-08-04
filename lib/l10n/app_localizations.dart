@@ -2668,6 +2668,18 @@ abstract class AppLocalizations {
   /// **'Retrying message'**
   String get chat_retryingMessage;
 
+  /// No description provided for @chat_sendingAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending again'**
+  String get chat_sendingAgain;
+
+  /// No description provided for @message_sendAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Send Again'**
+  String get message_sendAgain;
+
   /// No description provided for @chat_retryCount.
   ///
   /// In en, this message translates to:

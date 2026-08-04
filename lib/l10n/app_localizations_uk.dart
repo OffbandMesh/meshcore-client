@@ -1443,6 +1443,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get chat_retryingMessage => 'Спроба відновлення.';
 
   @override
+  String get chat_sendingAgain => 'Sending again';
+
+  @override
+  String get message_sendAgain => 'Send Again';
+
+  @override
   String chat_retryCount(int current, int max) {
     return 'Повторна спроба $current/$max';
   }
