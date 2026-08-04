@@ -2,6 +2,40 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.4.0] - 2026-07-30
+
+A follow-up to the 1.3.0 production launch: settings for headless devices, a
+resend action for channel messages, and a batch of per-radio data-correctness
+fixes.
+
+### Added
+
+- Button and buzzer settings for headless devices, capability-gated so they only
+  appear on radios that report support (#483).
+- "Send Again" resend on channel messages, with the direct-message resend action
+  relabeled to match (#513).
+- Device Info shows the second offband capabilities byte, so more capability bits
+  are visible at a glance (#480).
+- `@[name]` self-mention matching is now ASCII case-insensitive, so a mention
+  matches regardless of case (#486).
+
+### Fixed
+
+- Block list is scoped per radio again: an accidental global block list was dropped,
+  so blocking on one radio no longer leaks to another (#505, #506).
+- Per-radio in-memory caches are cleared on reconnect, so data from a previously
+  connected radio cannot linger into the next session (#472).
+- Translation-model downloads retry transient 5xx errors with backoff instead of
+  failing outright, and the backoff tracks actual elapsed time (#425).
+- `@[name]` mentions are treated as a verbatim wire token (no stray trim), matching
+  the reference contract (#497).
+- Routed replies are sent at the contact's path-hash width instead of width 1
+  (#495).
+
+### Under the hood
+
+- CI now guards against em-dash characters in `lib/` and `test/` (#464).
+
 ## [1.3.0] - 2026-07-30
 
 The first Offband release published to the Google Play production track. A large
