@@ -52,7 +52,29 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     super.initState();
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
     _commandService = RepeaterCommandService(connector);
+    _commandService!.onUnmatchedResponse = _handleUnmatchedResponse;
     _setupMessageListener();
+  }
+
+  /// A reply the command future never received, because its window had already
+  /// closed. It is still the repeater's real answer, so it goes into the
+  /// history instead of being dropped (#528).
+  void _handleUnmatchedResponse(UnmatchedRepeaterResponse unmatched) {
+    if (!mounted) return;
+    setState(() {
+      _commandHistory.add({
+        'type': 'late',
+        'text': unmatched.response,
+        'command': unmatched.command ?? '',
+        'seconds': unmatched.sinceTimeout == null
+            ? ''
+            : (unmatched.sinceTimeout!.inMilliseconds / 1000).toStringAsFixed(
+                1,
+              ),
+        'timestamp': DateTime.now().toString(),
+      });
+    });
+    _scrollToBottom();
   }
 
   @override
@@ -103,11 +125,10 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     if (parsed == null) return;
     if (!_matchesRepeaterPrefix(parsed.senderPrefix)) return;
 
-    // Notify command service of response (for retry handling)
+    // The service routes this either to the waiting command's future, which
+    // _sendCommand appends to history, or to onUnmatchedResponse when the
+    // window has already closed. Both paths reach the transcript (#528).
     _commandService?.handleResponse(widget.repeater, parsed.text);
-
-    // Note: The command service will handle the response via the Future
-    // We don't need to add it to history here anymore as _sendCommand will do it
   }
 
   bool _matchesRepeaterPrefix(Uint8List prefix) {
@@ -184,7 +205,19 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     _historyIndex = -1;
     _commandFocusNode.requestFocus();
 
-    // Auto-scroll to bottom
+    _scrollToBottom();
+  }
+
+  String _lateResponseLabel(Map<String, String> entry) {
+    final command = entry['command'] ?? '';
+    final seconds = entry['seconds'] ?? '';
+    if (command.isEmpty || seconds.isEmpty) {
+      return context.l10n.repeater_cliUnmatchedResponse;
+    }
+    return context.l10n.repeater_cliLateResponse(command, seconds);
+  }
+
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -450,6 +483,25 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
       itemBuilder: (context, index) {
         final entry = _commandHistory[index];
         final isCommand = entry['type'] == 'command';
+        final isLate = entry['type'] == 'late';
+        final scheme = Theme.of(context).colorScheme;
+
+        final Color badgeColor;
+        final Color badgeIconColor;
+        final IconData badgeIcon;
+        if (isCommand) {
+          badgeColor = scheme.primaryContainer;
+          badgeIconColor = scheme.onPrimaryContainer;
+          badgeIcon = Icons.chevron_right;
+        } else if (isLate) {
+          badgeColor = scheme.tertiaryContainer;
+          badgeIconColor = scheme.onTertiaryContainer;
+          badgeIcon = Icons.history;
+        } else {
+          badgeColor = scheme.secondaryContainer;
+          badgeIconColor = scheme.onSecondaryContainer;
+          badgeIcon = Icons.arrow_back;
+        }
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -459,32 +511,34 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isCommand
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : Theme.of(context).colorScheme.secondaryContainer,
+                  color: badgeColor,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Icon(
-                  isCommand ? Icons.chevron_right : Icons.arrow_back,
-                  size: 16,
-                  color: isCommand
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
+                child: Icon(badgeIcon, size: 16, color: badgeIconColor),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (isLate)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          _lateResponseLabel(entry),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                            color: scheme.tertiary,
+                          ),
+                        ),
+                      ),
                     SelectableText(
                       entry['text']!,
                       style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 13,
-                        color: isCommand
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurface,
+                        color: isCommand ? scheme.primary : scheme.onSurface,
                       ),
                     ),
                   ],

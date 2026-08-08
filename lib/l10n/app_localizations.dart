@@ -5126,6 +5126,24 @@ abstract class AppLocalizations {
   /// **'Error: {error}'**
   String repeater_cliCommandError(String error);
 
+  /// No description provided for @repeater_cliLateResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Late response to \"{command}\" (arrived {seconds}s after timeout)'**
+  String repeater_cliLateResponse(String command, String seconds);
+
+  /// No description provided for @repeater_cliUnmatchedResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrequested response from repeater'**
+  String get repeater_cliUnmatchedResponse;
+
+  /// No description provided for @repeater_lateResponseReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'A late response arrived after the command timed out. See the CLI screen.'**
+  String get repeater_lateResponseReceived;
+
   /// No description provided for @repeater_cliQuickGetName.
   ///
   /// In en, this message translates to:

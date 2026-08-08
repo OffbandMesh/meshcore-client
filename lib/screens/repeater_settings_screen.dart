@@ -183,8 +183,24 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     super.initState();
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
     _commandService = RepeaterCommandService(connector);
+    _commandService!.onUnmatchedResponse = _handleUnmatchedResponse;
     _setupMessageListener();
     _loadSettings();
+  }
+
+  /// A repeater reply whose command had already timed out. This screen has no
+  /// transcript to append it to, so it is applied like any other response and
+  /// the user is told it arrived late rather than the reply being dropped
+  /// (#528).
+  void _handleUnmatchedResponse(UnmatchedRepeaterResponse unmatched) {
+    if (!mounted) return;
+    if (unmatched.command != null) {
+      _handleGetResponse(unmatched.command!, unmatched.response);
+    }
+    showDismissibleSnackBar(
+      context,
+      content: Text(context.l10n.repeater_lateResponseReceived),
+    );
   }
 
   @override

@@ -1566,6 +1566,19 @@
       }
     }
   },
+  "repeater_cliLateResponse": "Late response to \"{command}\" (arrived {seconds}s after timeout)",
+  "@repeater_cliLateResponse": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "repeater_cliUnmatchedResponse": "Unrequested response from repeater",
+  "repeater_lateResponseReceived": "A late response arrived after the command timed out. See the CLI screen.",
   "repeater_cliQuickGetName": "Get Name",
   "repeater_cliQuickGetRadio": "Get Radio",
   "repeater_cliQuickGetTx": "Get TX",

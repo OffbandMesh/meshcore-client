@@ -2906,6 +2906,19 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String repeater_cliLateResponse(String command, String seconds) {
+    return 'Late response to \"$command\" (arrived ${seconds}s after timeout)';
+  }
+
+  @override
+  String get repeater_cliUnmatchedResponse =>
+      'Unrequested response from repeater';
+
+  @override
+  String get repeater_lateResponseReceived =>
+      'A late response arrived after the command timed out. See the CLI screen.';
+
+  @override
   String get repeater_cliQuickGetName => 'Ottieni Nome';
 
   @override
