@@ -5126,6 +5126,12 @@ abstract class AppLocalizations {
   /// **'Error: {error}'**
   String repeater_cliCommandError(String error);
 
+  /// No description provided for @repeater_cliCommandTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Command timed out after {seconds} seconds'**
+  String repeater_cliCommandTimeout(String seconds);
+
   /// No description provided for @repeater_cliLateResponse.
   ///
   /// In en, this message translates to:

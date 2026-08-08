@@ -191,10 +191,15 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // A timeout knows the exact window that was armed, so it reports that
+        // rather than a rounded-up guess (#531).
+        final text = e is RepeaterCommandTimeout
+            ? context.l10n.repeater_cliCommandTimeout(e.secondsText)
+            : context.l10n.repeater_cliCommandError(e.toString());
         setState(() {
           _commandHistory.add({
             'type': 'response',
-            'text': context.l10n.repeater_cliCommandError(e.toString()),
+            'text': text,
             'timestamp': DateTime.now().toString(),
           });
         });

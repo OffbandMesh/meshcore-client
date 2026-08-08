@@ -29,6 +29,32 @@ class UnmatchedRepeaterResponse {
   bool get isLateReply => command != null;
 }
 
+/// Thrown when a CLI command's window closes with no reply.
+///
+/// Carries the window that was actually armed, so callers can report the real
+/// figure. The previous message printed `(timeoutMs / 1000).ceil()`, so a
+/// 4074 ms window announced "timeout after 5 seconds": every window in
+/// (4000, 5000] reported the same 5, and the number shown was never the number
+/// used (#531).
+class RepeaterCommandTimeout implements Exception {
+  final String command;
+  final int timeoutMs;
+
+  const RepeaterCommandTimeout({
+    required this.command,
+    required this.timeoutMs,
+  });
+
+  /// The armed window in seconds to one decimal, e.g. `28.7`.
+  String get secondsText => (timeoutMs / 1000).toStringAsFixed(1);
+
+  /// Non-localized fallback for logs and for callers without a
+  /// [BuildContext]. UI paths should prefer [secondsText] with their own
+  /// localized string.
+  @override
+  String toString() => 'Command timed out after $secondsText seconds';
+}
+
 class _ExpiredCommand {
   final String command;
   final DateTime expiredAt;
@@ -136,7 +162,6 @@ class RepeaterCommandService {
         pathLength: pathLengthValue,
         messageBytes: responseBytes,
       );
-      final timeoutSeconds = (timeoutMs / 1000).ceil();
       await _connector.sendFrame(frame);
       _commandTimeouts[commandId]?.cancel();
       _commandTimeouts[commandId] = Timer(
@@ -151,7 +176,7 @@ class RepeaterCommandService {
               expiredAt: DateTime.now(),
             );
             completer.completeError(
-              'Command timeout after $timeoutSeconds seconds',
+              RepeaterCommandTimeout(command: command, timeoutMs: timeoutMs),
             );
             _cleanup(commandId);
           }
