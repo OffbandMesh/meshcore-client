@@ -132,10 +132,7 @@ class RepeaterCommandService {
     final repeaterKey = repeater.publicKeyHex;
     final prefix = _nextPrefixToken();
     final commandId = '${repeaterKey}_$prefix';
-    final completer = Completer<String>();
-    _pendingCommands[commandId] = completer;
-    _commandPrefixes[commandId] = prefix;
-    _pendingByPrefix[prefix] = commandId;
+    final completer = _registerPending(commandId, prefix);
     attemptPrefixes.add(prefix);
 
     try {
@@ -206,13 +203,21 @@ class RepeaterCommandService {
       responsePayload = responseText.substring(3).trimLeft();
     }
 
+    // A reply that carries a prefix is self-identifying. If that prefix matches
+    // nothing pending, the answer belongs to a command that already completed
+    // or expired, and forcing it onto whatever else is in flight would report
+    // one command's output as another command's result (#532). Only a reply
+    // with no prefix at all, which carries no correlation token, may fall back
+    // to matching by repeater.
     final matchedId = prefix != null ? _pendingByPrefix[prefix] : null;
     final commandId =
         matchedId ??
-        _pendingCommands.keys.firstWhere(
-          (id) => id.startsWith(repeaterKey),
-          orElse: () => '',
-        );
+        (prefix != null
+            ? ''
+            : _pendingCommands.keys.firstWhere(
+                (id) => id.startsWith(repeaterKey),
+                orElse: () => '',
+              ));
 
     if (commandId.isNotEmpty) {
       final completer = _pendingCommands[commandId];
@@ -261,6 +266,21 @@ class RepeaterCommandService {
       ),
     );
   }
+
+  Completer<String> _registerPending(String commandId, String prefix) {
+    final completer = Completer<String>();
+    _pendingCommands[commandId] = completer;
+    _commandPrefixes[commandId] = prefix;
+    _pendingByPrefix[prefix] = commandId;
+    return completer;
+  }
+
+  /// Puts a command in flight without performing the send, so a test can set up
+  /// two concurrent commands to one repeater. Deliberately routes through the
+  /// same [_registerPending] the real send path uses, so the two cannot drift.
+  @visibleForTesting
+  Future<String> registerPendingForTest(String repeaterKeyHex, String prefix) =>
+      _registerPending('${repeaterKeyHex}_$prefix', prefix).future;
 
   /// Records a timed-out command so a reply arriving later can still be
   /// attributed to it. Exposed because a test cannot drive a real
