@@ -7,6 +7,7 @@
 //
 // These tests pin the contract that no reply is ever dropped silently.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -143,6 +144,81 @@ void main() {
       const e = RepeaterCommandTimeout(command: 'get tx', timeoutMs: 1234);
       expect(e.command, 'get tx');
       expect(e.timeoutMs, 1234);
+    });
+  });
+
+  group('reply correlation (#532)', () {
+    // A reply carrying a prefix identifies itself. Before this fix, a prefix
+    // that matched nothing pending fell through to "first pending command for
+    // this repeater", so a straggler from an expired command could complete an
+    // unrelated one and report its output as that command's result.
+    //
+    // Not reachable from today's callers, which all pass retries: 1 and await
+    // sequentially, but live the moment anything issues concurrent commands.
+
+    test(
+      'a stale prefix does NOT complete a different in-flight command',
+      () async {
+        final other = service.registerPendingForTest(
+          repeater.publicKeyHex,
+          'B7|',
+        );
+        var otherCompleted = false;
+        unawaited(other.then((_) => otherCompleted = true));
+
+        // 'A3|' expired earlier and is no longer pending.
+        service.recordExpiredCommandForTest('A3|', 'ver');
+        service.handleResponse(repeater, 'A3|v1.16.0');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(
+          otherCompleted,
+          isFalse,
+          reason: "the 'B7|' command must not be completed by 'A3|' output",
+        );
+        expect(surfaced, hasLength(1));
+        expect(surfaced.single.command, 'ver');
+        expect(surfaced.single.response, 'v1.16.0');
+      },
+    );
+
+    test(
+      'an unknown prefix with nothing expired is surfaced, not misapplied',
+      () async {
+        final other = service.registerPendingForTest(
+          repeater.publicKeyHex,
+          'B7|',
+        );
+        var otherCompleted = false;
+        unawaited(other.then((_) => otherCompleted = true));
+
+        service.handleResponse(repeater, 'ZZ|orphan output');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(otherCompleted, isFalse);
+        expect(surfaced.single.command, isNull);
+        expect(surfaced.single.response, 'orphan output');
+      },
+    );
+
+    test('a matching prefix still completes its own command', () async {
+      final own = service.registerPendingForTest(repeater.publicKeyHex, 'C1|');
+
+      service.handleResponse(repeater, 'C1|hello');
+
+      expect(await own, 'hello');
+      expect(surfaced, isEmpty);
+    });
+
+    test('an unprefixed reply still falls back to the pending command', () async {
+      // Preserved behaviour: with no correlation token there is nothing else to
+      // match on, so position is all we have.
+      final own = service.registerPendingForTest(repeater.publicKeyHex, 'D2|');
+
+      service.handleResponse(repeater, 'no prefix here');
+
+      expect(await own, 'no prefix here');
+      expect(surfaced, isEmpty);
     });
   });
 }
