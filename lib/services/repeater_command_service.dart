@@ -132,7 +132,7 @@ class RepeaterCommandService {
       final responseBytes = frame.length > maxFrameSize
           ? frame.length
           : maxFrameSize;
-      final timeoutMs = _connector.calculateTimeout(
+      final timeoutMs = _connector.calculateCliTimeout(
         pathLength: pathLengthValue,
         messageBytes: responseBytes,
       );
