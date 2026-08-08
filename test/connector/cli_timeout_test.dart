@@ -4,8 +4,11 @@
 //
 // Measured against rpt-01: 27 commands, 12 replies, and 4 of those 12 arrived
 // after the 4074 ms window had expired (6.17 s, 8.28 s, 15.52 s, 20.33 s;
-// median 2.75 s). The same verb `wifi on 30` returned in both 2.31 s and
-// 20.33 s, so the tail is not a per-command constant that could be tabulated.
+// median 2.75 s). The same verb returned in both 2.31 s and 20.33 s. The tail
+// is transmit scheduling on both radios, not command execution: on the 20.33 s
+// case the repeater stamped its reply ~5 s in and the packet took another ~15 s
+// to arrive, and `wifi on N` only sets a deadline before replying. So it is not
+// a per-command constant that could be tabulated.
 //
 // These tests pin the budget's construction and, just as importantly, pin that
 // the direct-message ACK path was NOT changed.
