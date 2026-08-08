@@ -1566,6 +1566,14 @@
       }
     }
   },
+  "repeater_cliCommandTimeout": "Command timed out after {seconds} seconds",
+  "@repeater_cliCommandTimeout": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
   "repeater_cliLateResponse": "Late response to \"{command}\" (arrived {seconds}s after timeout)",
   "@repeater_cliLateResponse": {
     "placeholders": {

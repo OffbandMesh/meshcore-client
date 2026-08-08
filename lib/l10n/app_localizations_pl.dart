@@ -2914,6 +2914,11 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String repeater_cliCommandTimeout(String seconds) {
+    return 'Command timed out after $seconds seconds';
+  }
+
+  @override
   String repeater_cliLateResponse(String command, String seconds) {
     return 'Late response to \"$command\" (arrived ${seconds}s after timeout)';
   }

@@ -114,4 +114,35 @@ void main() {
 
     expect(seen.single.command, isNull);
   });
+
+  group('timeout reporting (#531)', () {
+    // The old message printed (timeoutMs / 1000).ceil(), so every window in
+    // (4000, 5000] announced "5 seconds" and the figure shown was never the
+    // one armed. The owner's 0-hop window was 4074 ms and it claimed 5.
+    test('reports the armed window to one decimal, not rounded up', () {
+      const e = RepeaterCommandTimeout(command: 'ver', timeoutMs: 4074);
+      expect(e.secondsText, '4.1');
+      expect(e.toString(), 'Command timed out after 4.1 seconds');
+    });
+
+    test('does not round a sub-second remainder up to the next second', () {
+      // 28748 ms is the new CLI budget on the owner's preset. ceil() would say
+      // 29; the armed window is 28.7.
+      const e = RepeaterCommandTimeout(command: 'status', timeoutMs: 28748);
+      expect(e.secondsText, '28.7');
+    });
+
+    test('distinct windows in the same second are distinguishable', () {
+      // The defect's signature: 4001 and 4999 both printed "5 seconds".
+      const a = RepeaterCommandTimeout(command: 'a', timeoutMs: 4001);
+      const b = RepeaterCommandTimeout(command: 'b', timeoutMs: 4999);
+      expect(a.secondsText, isNot(b.secondsText));
+    });
+
+    test('carries the command so a caller can name what timed out', () {
+      const e = RepeaterCommandTimeout(command: 'get tx', timeoutMs: 1234);
+      expect(e.command, 'get tx');
+      expect(e.timeoutMs, 1234);
+    });
+  });
 }
