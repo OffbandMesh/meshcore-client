@@ -5788,11 +5788,15 @@ class MeshCoreConnector extends ChangeNotifier {
   /// 4. [messageRetrievalBudgetMs], because the reply is not pushed to us. The
   ///    radio raises `MSG_WAITING` and we must ask for it.
   ///
-  /// Command execution time is deliberately not modelled. Measured round trips
-  /// to a single repeater ranged from 1.65 s to 20.33 s, and the *same* verb
-  /// (`wifi on 30`) returned in both 2.31 s and 20.33 s, so execution cost is
-  /// not a per-verb constant that could be tabulated. The retrieval term is
-  /// what carries that tail.
+  /// The tail is transmit scheduling, not command execution, and neither end
+  /// exposes it. Measured round trips to one repeater ranged from 1.65 s to
+  /// 20.33 s, and the *same* verb returned in both 2.31 s and 20.33 s. On the
+  /// 20.33 s case the repeater stamped its reply about 5 s in and the packet
+  /// did not reach us for another ~15 s, so the time went into queueing on
+  /// both radios, not into running the command: `wifi on N` only sets a
+  /// deadline and returns immediately (firmware `CommonCLI.cpp` "wifi on").
+  /// Nothing here is a per-verb constant that could be tabulated, so the
+  /// retrieval term is what absorbs it.
   ///
   /// The reply leg uses physics only. The predictor is trained on direct-message
   /// ACK latency, not on command round trips, so asking it about a reply leg
