@@ -5764,6 +5764,56 @@ class MeshCoreConnector extends ChangeNotifier {
     return physicsMax;
   }
 
+  /// Worst case the app allows *itself* to take fetching one message once the
+  /// radio already holds it: every `CMD_SYNC_NEXT_MESSAGE` attempt plus its
+  /// retries. Replies are pull-based, so this sits inside every CLI round trip.
+  ///
+  /// Derived from the retrieval constants rather than restated, so a command
+  /// timeout built on it cannot drift below the layer it depends on (#530).
+  int get messageRetrievalBudgetMs =>
+      _queueSyncTimeoutMs * (_maxQueueSyncRetries + 1);
+
+  /// Timeout for a repeater CLI command.
+  ///
+  /// [calculateTimeout] models **one-way delivery**: it mirrors the firmware's
+  /// `calcDirectTimeoutMillisFor`, whose job is to estimate when an outbound
+  /// packet should have been acknowledged. A CLI command is not that. It is a
+  /// request, an execution, and a reply, and the budget has to name all of it:
+  ///
+  /// 1. the outbound leg, which is what [calculateTimeout] is actually for;
+  /// 2. [cliReplyDelayMs], the fixed hold the repeater applies before it even
+  ///    queues the reply;
+  /// 3. the reply's own transmission, a second packet the ACK formula never
+  ///    modelled;
+  /// 4. [messageRetrievalBudgetMs], because the reply is not pushed to us. The
+  ///    radio raises `MSG_WAITING` and we must ask for it.
+  ///
+  /// Command execution time is deliberately not modelled. Measured round trips
+  /// to a single repeater ranged from 1.65 s to 20.33 s, and the *same* verb
+  /// (`wifi on 30`) returned in both 2.31 s and 20.33 s, so execution cost is
+  /// not a per-verb constant that could be tabulated. The retrieval term is
+  /// what carries that tail.
+  ///
+  /// The reply leg uses physics only. The predictor is trained on direct-message
+  /// ACK latency, not on command round trips, so asking it about a reply leg
+  /// would be extrapolation (#534, #535).
+  int calculateCliTimeout({
+    required int pathLength,
+    int messageBytes = maxFrameSize,
+    String? contactKey,
+  }) {
+    final outboundMs = calculateTimeout(
+      pathLength: pathLength,
+      messageBytes: messageBytes,
+      contactKey: contactKey,
+    );
+    final replyLegMs = _physicsMaxTimeout(
+      pathLength,
+      _estimateAirtimeMs(messageBytes),
+    );
+    return outboundMs + cliReplyDelayMs + replyLegMs + messageRetrievalBudgetMs;
+  }
+
   /// Coalesces notifications during a bulk contact pull.
   ///
   /// Outside a pull this notifies immediately, preserving live-update

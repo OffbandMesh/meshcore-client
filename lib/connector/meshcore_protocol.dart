@@ -279,6 +279,13 @@ const int offbandFemLnaGet = 0x02;
 const int femLnaBypass = 0x00;
 const int femLnaEnabled = 0x01;
 
+/// Fixed delay a repeater applies before queueing a CLI reply for transmit.
+///
+/// Firmware `CLI_REPLY_DELAY_MILLIS` in `examples/simple_repeater/MyMesh.cpp`,
+/// applied on both the direct and the flood reply path. It is unconditional, so
+/// every CLI round trip pays it and any budget for one must include it.
+const int cliReplyDelayMs = 600;
+
 Uint8List buildOffbandFemLnaSetFrame(bool enabled) => Uint8List.fromList([
   cmdOffbandFemLna,
   offbandFemLnaSet,
