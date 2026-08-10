@@ -233,7 +233,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _experimentalPane(BuildContext context) {
     final l10n = context.l10n;
-    final settingsService = context.read<AppSettingsService>();
+    final settingsService = context.watch<AppSettingsService>();
+    final supportsPktHash = context.select<MeshCoreConnector, bool>(
+      (c) => c.supportsPktHash,
+    );
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -244,8 +247,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // Future me-centric/experimental toggles land here (e.g. Fast Sync
-        // #118, CoreScope repeats #524). Empty of features until they arrive.
+        // CoreScope observer counts (#524). Disabled until the connected radio
+        // advertises the 0xC6 packet-hash capability.
+        Card(
+          child: SwitchListTile(
+            secondary: const Icon(Icons.cloud_outlined),
+            title: Text(l10n.settings_coreScopeObserverCount),
+            subtitle: Text(
+              supportsPktHash
+                  ? l10n.settings_coreScopeObserverCountSubtitle
+                  : l10n.settings_coreScopeObserverCountUnsupported,
+            ),
+            value: settingsService.settings.coreScopeObserverCountEnabled,
+            onChanged: supportsPktHash
+                ? (value) =>
+                      settingsService.setCoreScopeObserverCountEnabled(value)
+                : null,
+          ),
+        ),
+        const SizedBox(height: 16),
         // A plain action (not a switch): "hide" is a one-shot, and a switch
         // whose ON state means "hidden" read backwards.
         Card(

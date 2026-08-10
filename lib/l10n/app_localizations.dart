@@ -1108,6 +1108,24 @@ abstract class AppLocalizations {
   /// **'These features are experimental and may change or be removed at any time. They default to off.'**
   String get settings_experimentalDescription;
 
+  /// No description provided for @settings_coreScopeObserverCount.
+  ///
+  /// In en, this message translates to:
+  /// **'CoreScope observer counts'**
+  String get settings_coreScopeObserverCount;
+
+  /// No description provided for @settings_coreScopeObserverCountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On outgoing channel messages, show how many CoreScope observers heard the packet, alongside radio-heard repeats. Needs internet.'**
+  String get settings_coreScopeObserverCountSubtitle;
+
+  /// No description provided for @settings_coreScopeObserverCountUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires a firmware build with packet-hash support (v22+).'**
+  String get settings_coreScopeObserverCountUnsupported;
+
   /// No description provided for @settings_experimentalHide.
   ///
   /// In en, this message translates to:
@@ -3063,6 +3081,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Heard {count, plural, =1{1 repeat} other{{count} repeats}}'**
   String channel_heardTooltip(int count);
+
+  /// No description provided for @channel_coreScopeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Seen by {count, plural, =1{1 CoreScope observer} other{{count} CoreScope observers}}'**
+  String channel_coreScopeTooltip(int count);
 
   /// No description provided for @chat_successes.
   ///

@@ -1517,6 +1517,24 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             ),
           ),
         ],
+        // CoreScope observer count (#524), shown parallel to the radio-heard
+        // count with a distinct icon, never merged into one number.
+        if (isOutgoing && (message.coreScopeObserverCount ?? 0) > 0) ...[
+          dot,
+          Tooltip(
+            message: context.l10n.channel_coreScopeTooltip(
+              message.coreScopeObserverCount!,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_outlined, size: 12, color: metaColor),
+                const SizedBox(width: 4),
+                Text('${message.coreScopeObserverCount}', style: metaStyle),
+              ],
+            ),
+          ),
+        ],
         if (isOutgoing) ...[
           const SizedBox(width: 6),
           Icon(
