@@ -544,6 +544,17 @@ class AppLocalizationsSl extends AppLocalizations {
       'These features are experimental and may change or be removed at any time. They default to off.';
 
   @override
+  String get settings_coreScopeObserverCount => 'CoreScope observer counts';
+
+  @override
+  String get settings_coreScopeObserverCountSubtitle =>
+      'On outgoing channel messages, show how many CoreScope observers heard the packet, alongside radio-heard repeats. Needs internet.';
+
+  @override
+  String get settings_coreScopeObserverCountUnsupported =>
+      'Requires a firmware build with packet-hash support (v22+).';
+
+  @override
   String get settings_experimentalHide => 'Hide Experimental section';
 
   @override
@@ -1672,6 +1683,17 @@ class AppLocalizationsSl extends AppLocalizations {
       one: '1 repeat',
     );
     return 'Heard $_temp0';
+  }
+
+  @override
+  String channel_coreScopeTooltip(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count CoreScope observers',
+      one: '1 CoreScope observer',
+    );
+    return 'Seen by $_temp0';
   }
 
   @override

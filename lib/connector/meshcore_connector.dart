@@ -19,6 +19,7 @@ import '../models/path_selection.dart';
 import '../models/translation_support.dart';
 import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
+import '../services/corescope_service.dart';
 import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/time_anomaly.dart';
@@ -296,6 +297,11 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _caplogAwaitingStart = false;
   Completer<CaplogAck>? _caplogAckCompleter;
   Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
+
+  /// Outstanding 0xC6 packet-hash queries, keyed "ts_chan" so a reply matches
+  /// its request without relying on ordering (#524).
+  final Map<String, Completer<OffbandPktHash?>> _pendingPktHashCompleters = {};
+  final CoreScopeService _coreScopeService = CoreScopeService();
   int _caplogChunks = 0; // CHUNK frames in the active download (diagnostic)
   String? _firmwareVersion;
   String? _deviceModel;
@@ -630,6 +636,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether this radio exposes a settable device notification scope (#475).
   bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
+
+  /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
+  bool get supportsPktHash =>
+      firmwareSupportsPktHash(_offbandCaps2, _firmwareVerCode);
+
+  /// Whether to fetch CoreScope observer counts for outgoing channel messages:
+  /// firmware supports the hash query AND the owner enabled the feature.
+  bool get _coreScopeQueryActive =>
+      supportsPktHash &&
+      (_appSettingsService?.settings.coreScopeObserverCountEnabled ?? false);
 
   /// Whether the radio can actually be QUERIED, as opposed to merely reporting
   /// that it has the feature. False until firmware lands the get/set command,
@@ -3883,6 +3899,17 @@ class MeshCoreConnector extends ChangeNotifier {
         channelSendQueueId: message.messageId,
         expectsGenericAck: true,
       );
+      // Owner-only CoreScope observer count (#524): background, gated, and
+      // best-effort. Never blocks or fails the send.
+      if (_coreScopeQueryActive) {
+        unawaited(
+          _fetchAndStoreCoreScopeCount(
+            channel.index,
+            sendTsSecs,
+            message.messageId,
+          ),
+        );
+      }
     } catch (e) {
       // Clear the stuck queue id and surface the failure in the chat bubble
       // instead of leaving the message pending and blocking the queue (#395).
@@ -4679,6 +4706,90 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Ask firmware for the on-air packet hash of a channel message we sent,
+  /// keyed by (ts, chan) (0xC6, #524). Returns null on timeout / error frame.
+  Future<OffbandPktHash?> _queryPacketHash(
+    int ts,
+    int chan, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final key = '${ts}_$chan';
+    final completer = Completer<OffbandPktHash?>();
+    _pendingPktHashCompleters[key] = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    try {
+      await sendFrame(buildOffbandPktHashGetFrame(ts, chan));
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn('0xC6 query failed for $key: $e', tag: 'CoreScope');
+      return null;
+    } finally {
+      timer.cancel();
+      _pendingPktHashCompleters.remove(key);
+    }
+  }
+
+  /// Routes a 0xC6 reply to its waiting query. Success replies echo the key;
+  /// error/malformed frames are logged and left for the query to time out (the
+  /// error frame carries no key, so it cannot be correlated).
+  void _handleOffbandPktHashFrame(Uint8List frame) {
+    final parsed = parseOffbandPktHashReply(frame);
+    if (parsed == null) {
+      appLogger.warn('0xC6 error or malformed reply', tag: 'CoreScope');
+      return;
+    }
+    final key = '${parsed.timestamp}_${parsed.channelIdx}';
+    final completer = _pendingPktHashCompleters[key];
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(parsed);
+    }
+  }
+
+  /// After sending a channel message, fetch its firmware hash then CoreScope's
+  /// observer count and stamp both on the message. Best-effort and gated; any
+  /// failure leaves the message showing radio-only.
+  Future<void> _fetchAndStoreCoreScopeCount(
+    int channelIndex,
+    int ts,
+    String messageId,
+  ) async {
+    try {
+      final pkt = await _queryPacketHash(ts, channelIndex);
+      if (pkt == null) return;
+      _updateChannelMessageById(
+        channelIndex,
+        messageId,
+        (m) => m.copyWith(onAirHash: pkt.hashHex),
+      );
+      final count = await _coreScopeService.fetchObserverCount(pkt.hashHex);
+      if (count == null) return;
+      _updateChannelMessageById(
+        channelIndex,
+        messageId,
+        (m) => m.copyWith(coreScopeObserverCount: count),
+      );
+      notifyListeners();
+    } catch (e) {
+      appLogger.warn(
+        'CoreScope observer-count fetch failed: $e',
+        tag: 'CoreScope',
+      );
+    }
+  }
+
+  void _updateChannelMessageById(
+    int channelIndex,
+    String messageId,
+    ChannelMessage Function(ChannelMessage) transform,
+  ) {
+    final messages = _channelMessages[channelIndex];
+    if (messages == null) return;
+    final i = messages.indexWhere((m) => m.messageId == messageId);
+    if (i >= 0) messages[i] = transform(messages[i]);
+  }
+
   /// Called when a BLOCK_LIST dump ends. A truncated dump (early-END) is
   /// re-requested once the link settles; never derive removals from a partial
   /// pull. The union reconcile against the local list is wired in B4.
@@ -4870,6 +4981,9 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeOffbandCaplog:
         _handleOffbandCaplogFrame(frame);
+        break;
+      case cmdOffbandPktHash:
+        _handleOffbandPktHashFrame(frame);
         break;
       case respCodeOffbandDeviceUi:
         _handleDeviceUiReply(frame);

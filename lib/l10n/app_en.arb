@@ -218,6 +218,9 @@
   "settings_experimental": "Experimental",
   "settings_experimentalSubtitle": "Advanced and in-development features",
   "settings_experimentalDescription": "These features are experimental and may change or be removed at any time. They default to off.",
+  "settings_coreScopeObserverCount": "CoreScope observer counts",
+  "settings_coreScopeObserverCountSubtitle": "On outgoing channel messages, show how many CoreScope observers heard the packet, alongside radio-heard repeats. Needs internet.",
+  "settings_coreScopeObserverCountUnsupported": "Requires a firmware build with packet-hash support (v22+).",
   "settings_experimentalHide": "Hide Experimental section",
   "settings_experimentalHideSubtitle": "Unlock again anytime with 7 taps on the version row.",
   "settings_experimentalUnlocked": "Experimental features unlocked",
@@ -867,6 +870,14 @@
   },
   "channel_heardTooltip": "Heard {count, plural, =1{1 repeat} other{{count} repeats}}",
   "@channel_heardTooltip": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channel_coreScopeTooltip": "Seen by {count, plural, =1{1 CoreScope observer} other{{count} CoreScope observers}}",
+  "@channel_coreScopeTooltip": {
     "placeholders": {
       "count": {
         "type": "int"
