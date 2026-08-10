@@ -4754,16 +4754,15 @@ class MeshCoreConnector extends ChangeNotifier {
   /// After sending a channel message, fetch its firmware hash then CoreScope's
   /// observer count and stamp both on the message. Best-effort and gated; any
   /// failure leaves the message showing radio-only.
-  /// Backoff schedule for polling CoreScope after a send. Observer counts
-  /// accrue over time: the packet must propagate the mesh and be reported by
-  /// observers before CoreScope has any record, then the count keeps climbing
-  /// for a few seconds. Cumulative wall-clock: ~10s, 30s, 60s, 120s.
-  static const List<Duration> _coreScopePollSchedule = [
-    Duration(seconds: 10),
-    Duration(seconds: 20),
-    Duration(seconds: 30),
-    Duration(seconds: 60),
-  ];
+  /// Poll intervals (seconds) after a send: quick at first, then settle. The
+  /// list also caps the total window (sum ~5 min). Observer counts accrue over
+  /// time (the packet must propagate and be reported), so a single instant
+  /// query misses it. The loop also stops early once the count stabilises, no
+  /// increase across [_coreScopeStableChecks] consecutive polls. There is no
+  /// true "final" count (it only ever grows), so this is a pragmatic stop, the
+  /// tappable badge covers re-checking later.
+  static const List<int> _coreScopePollSecs = [10, 20, 30, 60, 60, 60, 60];
+  static const int _coreScopeStableChecks = 2;
 
   Future<void> _fetchAndStoreCoreScopeCount(
     int channelIndex,
@@ -4785,14 +4784,16 @@ class MeshCoreConnector extends ChangeNotifier {
         messageId,
         (m) => m.copyWith(onAirHash: pkt.hashHex),
       );
-      // Poll with backoff, keeping the highest count as observers report in.
       var best = 0;
-      for (final delay in _coreScopePollSchedule) {
-        await Future<void>.delayed(delay);
+      var flat = 0;
+      for (final secs in _coreScopePollSecs) {
+        await Future<void>.delayed(Duration(seconds: secs));
         if (!isConnected) return;
         final count = await _coreScopeService.fetchObserverCount(pkt.hashHex);
-        if (count != null && count > best) {
+        if (count == null) continue;
+        if (count > best) {
           best = count;
+          flat = 0;
           _updateChannelMessageById(
             channelIndex,
             messageId,
@@ -4800,6 +4801,8 @@ class MeshCoreConnector extends ChangeNotifier {
           );
           appLogger.info('observer count=$count', tag: 'CoreScope');
           notifyListeners();
+        } else if (++flat >= _coreScopeStableChecks) {
+          return; // stabilised
         }
       }
     } catch (e) {
@@ -4808,6 +4811,23 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'CoreScope',
       );
     }
+  }
+
+  /// Tap-to-refresh: re-query CoreScope for a message's stored on-air hash and
+  /// bump the observer count if it grew (counts only ever climb). No-op without
+  /// a stored hash.
+  Future<void> refreshCoreScopeObserverCount(
+    int channelIndex,
+    String messageId,
+    String hashHex,
+  ) async {
+    final count = await _coreScopeService.fetchObserverCount(hashHex);
+    if (count == null) return;
+    _updateChannelMessageById(channelIndex, messageId, (m) {
+      final current = m.coreScopeObserverCount ?? 0;
+      return count > current ? m.copyWith(coreScopeObserverCount: count) : m;
+    });
+    notifyListeners();
   }
 
   void _updateChannelMessageById(
