@@ -88,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  void _handleVersionTap() {
+  void _handleUnlockTap() {
     final l10n = context.l10n;
     final settingsService = context.read<AppSettingsService>();
 
@@ -621,11 +621,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // #397: identity of the running binary, injected at build time and
             // independent of the marketing version. Its own line so "which build
             // am I on" is answerable at a glance; copyable for bug reports.
+            // Also the hidden 7-tap Experimental unlock anchor (#509/#553),
+            // mirroring Android's Software-info build-number gesture.
             _buildInfoRow(
               l10n.settings_infoBuild,
               BuildInfo.stamp,
               copyValue: BuildInfo.stamp,
+              onTap: _handleUnlockTap,
             ),
+            if (_versionHint != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 6),
+                child: Text(
+                  _versionHint!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -754,33 +768,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListTile(
         leading: const Icon(Icons.info_outline),
         title: Text(l10n.settings_about),
-        // Tapping the version number counts toward the #509 unlock and is
-        // absorbed here; tapping elsewhere on the row still opens the dialog.
-        // Progress is shown inline (below), never as a snackbar.
-        subtitle: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _handleVersionTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                l10n.settings_aboutVersion(
-                  _appVersion.isEmpty ? l10n.common_loading : _appVersion,
-                ),
-              ),
-              if (_versionHint != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    _versionHint!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-            ],
+        subtitle: Text(
+          l10n.settings_aboutVersion(
+            _appVersion.isEmpty ? l10n.common_loading : _appVersion,
           ),
         ),
         onTap: () => _showAbout(context),
