@@ -4742,6 +4742,10 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     final key = '${parsed.timestamp}_${parsed.channelIdx}';
     final completer = _pendingPktHashCompleters[key];
+    appLogger.info(
+      '0xC6 reply hash=${parsed.hashHex} key=$key matched=${completer != null}',
+      tag: 'CoreScope',
+    );
     if (completer != null && !completer.isCompleted) {
       completer.complete(parsed);
     }
@@ -4756,8 +4760,15 @@ class MeshCoreConnector extends ChangeNotifier {
     String messageId,
   ) async {
     try {
+      appLogger.info(
+        'start ts=$ts chan=$channelIndex msg=$messageId',
+        tag: 'CoreScope',
+      );
       final pkt = await _queryPacketHash(ts, channelIndex);
-      if (pkt == null) return;
+      if (pkt == null) {
+        appLogger.info('no hash (0xC6 null/timeout)', tag: 'CoreScope');
+        return;
+      }
       _updateChannelMessageById(
         channelIndex,
         messageId,
@@ -4770,6 +4781,7 @@ class MeshCoreConnector extends ChangeNotifier {
         messageId,
         (m) => m.copyWith(coreScopeObserverCount: count),
       );
+      appLogger.info('stored observer count=$count', tag: 'CoreScope');
       notifyListeners();
     } catch (e) {
       appLogger.warn(
@@ -4787,7 +4799,14 @@ class MeshCoreConnector extends ChangeNotifier {
     final messages = _channelMessages[channelIndex];
     if (messages == null) return;
     final i = messages.indexWhere((m) => m.messageId == messageId);
-    if (i >= 0) messages[i] = transform(messages[i]);
+    if (i >= 0) {
+      messages[i] = transform(messages[i]);
+    } else {
+      appLogger.warn(
+        'message $messageId not found on chan $channelIndex; count dropped',
+        tag: 'CoreScope',
+      );
+    }
   }
 
   /// Called when a BLOCK_LIST dump ends. A truncated dump (early-END) is
