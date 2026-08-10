@@ -533,6 +533,75 @@ bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
     (offbandCaps & offbandCapCaplog) != 0 &&
     (firmwareVerCode ?? 0) >= 17;
 
+/// Packet-hash query capability (firmware #611, cap byte 2 bit 3). Lets the
+/// client ask firmware for the authoritative on-air hash of a channel message
+/// it sent, keyed by (msg_timestamp, channel_idx), to correlate against
+/// CoreScope observer counts (#524). Allocation provisional until the firmware
+/// PR merges; confirm against it before release.
+const int offbandCap2PktHash = 0x08;
+
+/// True iff this radio supports the 0xC6 packet-hash query. Requires both the
+/// cap-byte-2 bit AND FIRMWARE_VER_CODE >= 22. The client must never emit 0xC6
+/// unless this is true.
+bool firmwareSupportsPktHash(int? offbandCaps2, int? firmwareVerCode) =>
+    offbandCaps2 != null &&
+    (offbandCaps2 & offbandCap2PktHash) != 0 &&
+    (firmwareVerCode ?? 0) >= 22;
+
+/// 0xC6 CMD_OFFBAND_PKT_HASH (firmware #611). Client-issued query, never a push;
+/// the stock channel-send OK reply is untouched.
+const int cmdOffbandPktHash = 0xC6;
+const int pktHashReqGet = 0x01;
+const int pktHashRespGet = 0x01;
+const int pktHashRespErr = 0x7F;
+
+/// Build a 0xC6 GET request for the hash of a sent channel message, keyed by
+/// the (msg_timestamp, channel_idx) the client used in CMD_SEND_CHANNEL_TXT_MSG.
+/// Wire: [0xC6][0x01][ts:4 LE][chan:1] = 7 bytes.
+Uint8List buildOffbandPktHashGetFrame(int msgTimestamp, int channelIdx) {
+  final frame = Uint8List(7);
+  frame[0] = cmdOffbandPktHash;
+  frame[1] = pktHashReqGet;
+  ByteData.sublistView(frame, 2, 6).setUint32(0, msgTimestamp, Endian.little);
+  frame[6] = channelIdx & 0xFF;
+  return frame;
+}
+
+/// A parsed 0xC6 success reply: the on-air packet hash plus the echoed key,
+/// so a reply can be matched to its request without relying on ordering.
+class OffbandPktHash {
+  const OffbandPktHash({
+    required this.timestamp,
+    required this.channelIdx,
+    required this.hashHex,
+  });
+
+  /// msg_timestamp echoed from the request.
+  final int timestamp;
+
+  /// channel_idx echoed from the request.
+  final int channelIdx;
+
+  /// 16 lowercase hex chars, matching CoreScope's hash and the client's own
+  /// [_computePacketHash] format.
+  final String hashHex;
+}
+
+/// Parse a 0xC6 reply. Returns the hash on a success reply
+/// ([0xC6][0x01][ts:4][chan:1][hash:8], 15 bytes), or null on the error reply
+/// ([0xC6][0x7F][reason]) or any malformed frame.
+OffbandPktHash? parseOffbandPktHashReply(Uint8List frame) {
+  if (frame.length < 15) return null;
+  if (frame[0] != cmdOffbandPktHash || frame[1] != pktHashRespGet) return null;
+  final ts = ByteData.sublistView(frame, 2, 6).getUint32(0, Endian.little);
+  final chan = frame[6];
+  final hashHex = frame
+      .sublist(7, 15)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return OffbandPktHash(timestamp: ts, channelIdx: chan, hashHex: hashHex);
+}
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;
