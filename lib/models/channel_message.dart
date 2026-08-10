@@ -56,6 +56,10 @@ class ChannelMessage {
   /// Unique observers CoreScope reports for this message's on-air packet
   /// (#524). Null until queried / when the feature is off. Transient.
   final int? coreScopeObserverCount;
+
+  /// Total observations (sightings) CoreScope reports for the same packet, the
+  /// "Observations (N)" number in its UI. Transient. See [coreScopeObserverCount].
+  final int? coreScopeObservationCount;
   final String? replyToMessageId;
   final String? replyToSenderName;
   final String? replyToText;
@@ -96,6 +100,7 @@ class ChannelMessage {
     this.packetHash,
     this.onAirHash,
     this.coreScopeObserverCount,
+    this.coreScopeObservationCount,
     this.replyToMessageId,
     this.replyToSenderName,
     this.replyToText,
@@ -144,6 +149,7 @@ class ChannelMessage {
     String? packetHash,
     String? onAirHash,
     int? coreScopeObserverCount,
+    int? coreScopeObservationCount,
     String? replyToMessageId,
     String? replyToSenderName,
     String? replyToText,
@@ -187,6 +193,8 @@ class ChannelMessage {
       onAirHash: onAirHash ?? this.onAirHash,
       coreScopeObserverCount:
           coreScopeObserverCount ?? this.coreScopeObserverCount,
+      coreScopeObservationCount:
+          coreScopeObservationCount ?? this.coreScopeObservationCount,
       replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,

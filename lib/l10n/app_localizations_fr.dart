@@ -1722,6 +1722,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String get channel_coreScopeRefreshFailed => 'CoreScope unreachable';
 
   @override
+  String channel_coreScopeCounts(int observers, int observations) {
+    String _temp0 = intl.Intl.pluralLogic(
+      observers,
+      locale: localeName,
+      other: '$observers observers',
+      one: '1 observer',
+    );
+    return '$_temp0 · $observations observations';
+  }
+
+  @override
   String get chat_successes => 'Succès';
 
   @override

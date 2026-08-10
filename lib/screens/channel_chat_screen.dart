@@ -1523,9 +1523,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         if (isOutgoing && (message.coreScopeObserverCount ?? 0) > 0) ...[
           dot,
           Tooltip(
-            message: context.l10n.channel_coreScopeTooltip(
-              message.coreScopeObserverCount!,
-            ),
+            message: _coreScopeLabel(message),
             child: InkWell(
               onTap: message.onAirHash == null
                   ? null
@@ -1642,25 +1640,52 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  String _coreScopeLabel(ChannelMessage message) {
+    final observers = message.coreScopeObserverCount ?? 0;
+    final observations = message.coreScopeObservationCount;
+    return observations == null
+        ? context.l10n.channel_coreScopeTooltip(observers)
+        : context.l10n.channel_coreScopeCounts(observers, observations);
+  }
+
   Future<void> _refreshCoreScope(ChannelMessage message) async {
     final hash = message.onAirHash;
     if (hash == null) return;
     final connector = context.read<MeshCoreConnector>();
     final l10n = context.l10n;
-    final count = await connector.refreshCoreScopeObserverCount(
+    final counts = await connector.refreshCoreScopeCounts(
       message.channelIndex ?? _currentChannel.index,
       message.messageId,
       hash,
     );
     if (!mounted) return;
-    showDismissibleSnackBar(
-      context,
-      content: Text(
-        count == null
-            ? l10n.channel_coreScopeRefreshFailed
-            : l10n.channel_coreScopeTooltip(count),
+    _showCoreScopeBanner(
+      counts == null
+          ? l10n.channel_coreScopeRefreshFailed
+          : l10n.channel_coreScopeCounts(counts.observers, counts.observations),
+    );
+  }
+
+  /// Top banner (out of the way of the composer), auto-dismissed after a few
+  /// seconds. Used for the CoreScope refresh result (#524).
+  void _showCoreScopeBanner(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearMaterialBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        content: Text(message),
+        leading: const Icon(Icons.cloud_outlined),
+        actions: [
+          TextButton(
+            onPressed: messenger.hideCurrentMaterialBanner,
+            child: Text(context.l10n.common_ok),
+          ),
+        ],
       ),
     );
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) messenger.hideCurrentMaterialBanner();
+    });
   }
 
   void _retryChannelMessage(ChannelMessage message) {
@@ -1736,11 +1761,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 leading: const Icon(Icons.cloud_outlined),
                 title: Text(context.l10n.channel_coreScopeRefresh),
                 subtitle: message.coreScopeObserverCount != null
-                    ? Text(
-                        context.l10n.channel_coreScopeTooltip(
-                          message.coreScopeObserverCount!,
-                        ),
-                      )
+                    ? Text(_coreScopeLabel(message))
                     : null,
                 onTap: () {
                   Navigator.pop(sheetContext);

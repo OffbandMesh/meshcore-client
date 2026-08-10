@@ -886,6 +886,17 @@
   },
   "channel_coreScopeRefresh": "Refresh CoreScope observers",
   "channel_coreScopeRefreshFailed": "CoreScope unreachable",
+  "channel_coreScopeCounts": "{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations",
+  "@channel_coreScopeCounts": {
+    "placeholders": {
+      "observers": {
+        "type": "int"
+      },
+      "observations": {
+        "type": "int"
+      }
+    }
+  },
   "chat_successes": "successes",
   "chat_score": "Score",
   "chat_removePath": "Remove path",
