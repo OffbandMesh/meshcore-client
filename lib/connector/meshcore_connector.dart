@@ -4754,6 +4754,17 @@ class MeshCoreConnector extends ChangeNotifier {
   /// After sending a channel message, fetch its firmware hash then CoreScope's
   /// observer count and stamp both on the message. Best-effort and gated; any
   /// failure leaves the message showing radio-only.
+  /// Backoff schedule for polling CoreScope after a send. Observer counts
+  /// accrue over time: the packet must propagate the mesh and be reported by
+  /// observers before CoreScope has any record, then the count keeps climbing
+  /// for a few seconds. Cumulative wall-clock: ~10s, 30s, 60s, 120s.
+  static const List<Duration> _coreScopePollSchedule = [
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+    Duration(seconds: 30),
+    Duration(seconds: 60),
+  ];
+
   Future<void> _fetchAndStoreCoreScopeCount(
     int channelIndex,
     int ts,
@@ -4774,15 +4785,23 @@ class MeshCoreConnector extends ChangeNotifier {
         messageId,
         (m) => m.copyWith(onAirHash: pkt.hashHex),
       );
-      final count = await _coreScopeService.fetchObserverCount(pkt.hashHex);
-      if (count == null) return;
-      _updateChannelMessageById(
-        channelIndex,
-        messageId,
-        (m) => m.copyWith(coreScopeObserverCount: count),
-      );
-      appLogger.info('stored observer count=$count', tag: 'CoreScope');
-      notifyListeners();
+      // Poll with backoff, keeping the highest count as observers report in.
+      var best = 0;
+      for (final delay in _coreScopePollSchedule) {
+        await Future<void>.delayed(delay);
+        if (!isConnected) return;
+        final count = await _coreScopeService.fetchObserverCount(pkt.hashHex);
+        if (count != null && count > best) {
+          best = count;
+          _updateChannelMessageById(
+            channelIndex,
+            messageId,
+            (m) => m.copyWith(coreScopeObserverCount: count),
+          );
+          appLogger.info('observer count=$count', tag: 'CoreScope');
+          notifyListeners();
+        }
+      }
     } catch (e) {
       appLogger.warn(
         'CoreScope observer-count fetch failed: $e',
