@@ -1741,11 +1741,12 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   _showMessagePathInfo(message);
                 },
               ),
-            // Offer resend on an outgoing channel message until its
-            // ack/repeat-back arrives (status becomes sent). Channel sends are
-            // not auto-retried, so this is the only recovery path. (#256)
-            if (message.isOutgoing &&
-                message.status != ChannelMessageStatus.sent)
+            // Offer resend on an outgoing channel message until a repeater
+            // repeats it back (repeatCount > 0). The radio-ack checkmark
+            // (status == sent) does NOT mean a repeat was heard, so gate on the
+            // repeat-back, not status. Channel sends aren't auto-retried, so
+            // this is the only recovery path. (#256, #555)
+            if (message.isOutgoing && message.repeatCount == 0)
               ListTile(
                 leading: const Icon(Icons.refresh),
                 title: Text(context.l10n.message_sendAgain),
