@@ -884,6 +884,8 @@
       }
     }
   },
+  "channel_coreScopeRefresh": "Refresh CoreScope observers",
+  "channel_coreScopeRefreshFailed": "CoreScope unreachable",
   "chat_successes": "successes",
   "chat_score": "Score",
   "chat_removePath": "Remove path",

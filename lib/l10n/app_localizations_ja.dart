@@ -1646,6 +1646,12 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get channel_coreScopeRefresh => 'Refresh CoreScope observers';
+
+  @override
+  String get channel_coreScopeRefreshFailed => 'CoreScope unreachable';
+
+  @override
   String get chat_successes => '成功事例';
 
   @override

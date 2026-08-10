@@ -4761,8 +4761,8 @@ class MeshCoreConnector extends ChangeNotifier {
   /// increase across [_coreScopeStableChecks] consecutive polls. There is no
   /// true "final" count (it only ever grows), so this is a pragmatic stop, the
   /// tappable badge covers re-checking later.
-  static const List<int> _coreScopePollSecs = [10, 20, 30, 60, 60, 60, 60];
-  static const int _coreScopeStableChecks = 2;
+  static const List<int> _coreScopePollSecs = [10, 20, 30, 60, 60, 60, 90, 90];
+  static const int _coreScopeStableChecks = 3;
 
   Future<void> _fetchAndStoreCoreScopeCount(
     int channelIndex,
@@ -4814,20 +4814,21 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Tap-to-refresh: re-query CoreScope for a message's stored on-air hash and
-  /// bump the observer count if it grew (counts only ever climb). No-op without
-  /// a stored hash.
-  Future<void> refreshCoreScopeObserverCount(
+  /// bump the observer count if it grew (counts only ever climb). Returns the
+  /// fetched count (or null on failure / no stored hash) so the UI can confirm.
+  Future<int?> refreshCoreScopeObserverCount(
     int channelIndex,
     String messageId,
     String hashHex,
   ) async {
     final count = await _coreScopeService.fetchObserverCount(hashHex);
-    if (count == null) return;
+    if (count == null) return null;
     _updateChannelMessageById(channelIndex, messageId, (m) {
       final current = m.coreScopeObserverCount ?? 0;
       return count > current ? m.copyWith(coreScopeObserverCount: count) : m;
     });
     notifyListeners();
+    return count;
   }
 
   void _updateChannelMessageById(

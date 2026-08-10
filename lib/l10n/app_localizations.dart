@@ -3088,6 +3088,18 @@ abstract class AppLocalizations {
   /// **'Seen by {count, plural, =1{1 CoreScope observer} other{{count} CoreScope observers}}'**
   String channel_coreScopeTooltip(int count);
 
+  /// No description provided for @channel_coreScopeRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh CoreScope observers'**
+  String get channel_coreScopeRefresh;
+
+  /// No description provided for @channel_coreScopeRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'CoreScope unreachable'**
+  String get channel_coreScopeRefreshFailed;
+
   /// No description provided for @chat_successes.
   ///
   /// In en, this message translates to:
