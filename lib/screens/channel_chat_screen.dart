@@ -1522,28 +1522,26 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         // re-query on demand (the count only ever climbs).
         if (isOutgoing && (message.coreScopeObserverCount ?? 0) > 0) ...[
           dot,
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: message.onAirHash == null
-                ? null
-                : () => context
-                      .read<MeshCoreConnector>()
-                      .refreshCoreScopeObserverCount(
-                        message.channelIndex ?? _currentChannel.index,
-                        message.messageId,
-                        message.onAirHash!,
-                      ),
-            child: Tooltip(
-              message: context.l10n.channel_coreScopeTooltip(
-                message.coreScopeObserverCount!,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.cloud_outlined, size: 12, color: metaColor),
-                  const SizedBox(width: 4),
-                  Text('${message.coreScopeObserverCount}', style: metaStyle),
-                ],
+          Tooltip(
+            message: context.l10n.channel_coreScopeTooltip(
+              message.coreScopeObserverCount!,
+            ),
+            child: InkWell(
+              onTap: message.onAirHash == null
+                  ? null
+                  : () => _refreshCoreScope(message),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                // Generous padding so the small badge is a reliable tap target.
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_outlined, size: 12, color: metaColor),
+                    const SizedBox(width: 4),
+                    Text('${message.coreScopeObserverCount}', style: metaStyle),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1644,6 +1642,27 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  Future<void> _refreshCoreScope(ChannelMessage message) async {
+    final hash = message.onAirHash;
+    if (hash == null) return;
+    final connector = context.read<MeshCoreConnector>();
+    final l10n = context.l10n;
+    final count = await connector.refreshCoreScopeObserverCount(
+      message.channelIndex ?? _currentChannel.index,
+      message.messageId,
+      hash,
+    );
+    if (!mounted) return;
+    showDismissibleSnackBar(
+      context,
+      content: Text(
+        count == null
+            ? l10n.channel_coreScopeRefreshFailed
+            : l10n.channel_coreScopeTooltip(count),
+      ),
+    );
+  }
+
   void _retryChannelMessage(ChannelMessage message) {
     context.read<MeshCoreConnector>().sendChannelMessage(
       _currentChannel,
@@ -1708,6 +1727,24 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _retryChannelMessage(message);
+                },
+              ),
+            // CoreScope observer count refresh (#524), owner feature. A large,
+            // reliable tap target vs the small inline badge.
+            if (message.isOutgoing && message.onAirHash != null)
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: Text(context.l10n.channel_coreScopeRefresh),
+                subtitle: message.coreScopeObserverCount != null
+                    ? Text(
+                        context.l10n.channel_coreScopeTooltip(
+                          message.coreScopeObserverCount!,
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _refreshCoreScope(message);
                 },
               ),
             // Can't react to your own messages
