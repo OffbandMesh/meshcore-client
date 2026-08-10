@@ -958,13 +958,19 @@ Uint8List buildSendTextMsgFrame(
 
 // Build CMD_SEND_CHANNEL_TXT_MSG frame
 // Format: [cmd][txt_type][channel_idx][timestamp x4][text...]
-Uint8List buildSendChannelTextMsgFrame(int channelIndex, String text) {
-  final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+// [timestamp] (seconds) may be supplied by the caller so it can correlate the
+// send to the firmware packet hash (0xC6, #524); defaults to now.
+Uint8List buildSendChannelTextMsgFrame(
+  int channelIndex,
+  String text, {
+  int? timestamp,
+}) {
+  final ts = timestamp ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
   final writer = BufferWriter();
   writer.writeByte(cmdSendChannelTxtMsg);
   writer.writeByte(txtTypePlain);
   writer.writeByte(channelIndex);
-  writer.writeUInt32LE(timestamp);
+  writer.writeUInt32LE(ts);
   writer.writeString(text);
   writer.writeByte(0);
   return writer.toBytes();

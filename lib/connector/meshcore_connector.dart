@@ -17,6 +17,7 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
 import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
@@ -235,6 +236,10 @@ class MeshCoreConnector extends ChangeNotifier {
   final List<Channel> _channels = [];
   final Map<String, List<Message>> _conversations = {};
   final Map<int, List<ChannelMessage>> _channelMessages = {};
+
+  /// Last send timestamp (seconds) used per channel, to keep every channel
+  /// send's `(ts, channel_idx)` key unique for 0xC6 correlation (#524).
+  final Map<int, int> _lastChannelSendTsSecs = {};
   final List<String> _pendingChannelSentQueue = [];
   final List<_PendingCommandAck> _pendingGenericAckQueue = [];
   static const String _reactionSendQueuePrefix = '__reaction_send__';
@@ -3771,6 +3776,19 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// A strictly-increasing per-channel send timestamp (seconds), so no two
+  /// channel sends share a `(ts, channel_idx)` key. Required for 0xC6 hash
+  /// correlation (#524); harmless otherwise.
+  int _nextChannelSendTimestampSecs(int channelIndex) {
+    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final ts = monotonicChannelSendTs(
+      nowSecs,
+      _lastChannelSendTsSecs[channelIndex],
+    );
+    _lastChannelSendTsSecs[channelIndex] = ts;
+    return ts;
+  }
+
   Future<void> sendChannelMessage(
     Channel channel,
     String text, {
@@ -3815,7 +3833,11 @@ class MeshCoreConnector extends ChangeNotifier {
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
       try {
         await sendFrame(
-          buildSendChannelTextMsgFrame(channel.index, text),
+          buildSendChannelTextMsgFrame(
+            channel.index,
+            text,
+            timestamp: _nextChannelSendTimestampSecs(channel.index),
+          ),
           channelSendQueueId: reactionQueueId,
           expectsGenericAck: true,
         );
@@ -3832,10 +3854,15 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
 
+    // One monotonic timestamp shared by the outgoing message and the frame, so
+    // the (ts, channel) key is unique and the client can correlate it to the
+    // firmware packet hash via 0xC6 (#524).
+    final sendTsSecs = _nextChannelSendTimestampSecs(channel.index);
     final message = ChannelMessage.outgoing(
       text,
       _selfName ?? 'Me',
       channel.index,
+      timestampSecs: sendTsSecs,
       originalText: originalText,
       translatedLanguageCode: translatedLanguageCode,
       translationModelId: translationModelId,
@@ -3848,7 +3875,11 @@ class MeshCoreConnector extends ChangeNotifier {
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
     try {
       await sendFrame(
-        buildSendChannelTextMsgFrame(channel.index, outboundText),
+        buildSendChannelTextMsgFrame(
+          channel.index,
+          outboundText,
+          timestamp: sendTsSecs,
+        ),
         channelSendQueueId: message.messageId,
         expectsGenericAck: true,
       );
