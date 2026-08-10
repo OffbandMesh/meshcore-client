@@ -1111,13 +1111,13 @@ abstract class AppLocalizations {
   /// No description provided for @settings_experimentalHide.
   ///
   /// In en, this message translates to:
-  /// **'Hide this section'**
+  /// **'Hide Experimental section'**
   String get settings_experimentalHide;
 
   /// No description provided for @settings_experimentalHideSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Re-hide Experimental. Unlock again with 7 taps on the version row.'**
+  /// **'Unlock again anytime with 7 taps on the version row.'**
   String get settings_experimentalHideSubtitle;
 
   /// No description provided for @settings_experimentalUnlocked.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -61,11 +63,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const Duration _experimentalTapWindow = Duration(seconds: 3);
   int _versionTapCount = 0;
   DateTime? _lastVersionTap;
+  // Inline feedback shown in the version row itself (no snackbar — a bottom
+  // snackbar overlaps the very row being tapped and blocks the next tap).
+  String? _versionHint;
+  Timer? _versionHintTimer;
 
   @override
   void initState() {
     super.initState();
     _loadVersionInfo();
+  }
+
+  @override
+  void dispose() {
+    _versionHintTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadVersionInfo() async {
@@ -82,7 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (settingsService.settings.experimentalUnlocked) {
       _versionTapCount = 0;
-      _showVersionSnack(l10n.settings_experimentalAlreadyUnlocked);
+      _setVersionHint(l10n.settings_experimentalAlreadyUnlocked);
       return;
     }
 
@@ -98,26 +110,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (remaining <= 0) {
       _versionTapCount = 0;
       settingsService.setExperimentalUnlocked(true);
-      _showVersionSnack(l10n.settings_experimentalUnlocked);
+      _setVersionHint(l10n.settings_experimentalUnlocked);
     } else if (remaining <= 3) {
-      _showVersionSnack(
-        l10n.settings_experimentalCountdown(remaining),
-        brief: true,
-      );
+      _setVersionHint(l10n.settings_experimentalCountdown(remaining));
     }
   }
 
-  void _showVersionSnack(String message, {bool brief = false}) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: brief
-              ? const Duration(milliseconds: 900)
-              : const Duration(seconds: 2),
-        ),
-      );
+  void _setVersionHint(String hint) {
+    _versionHintTimer?.cancel();
+    setState(() => _versionHint = hint);
+    _versionHintTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _versionHint = null);
+    });
   }
 
   @override
@@ -229,7 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _experimentalPane(BuildContext context) {
     final l10n = context.l10n;
-    final settingsService = context.watch<AppSettingsService>();
+    final settingsService = context.read<AppSettingsService>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -242,17 +246,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         // Future me-centric/experimental toggles land here (e.g. Fast Sync
         // #118, CoreScope repeats #524). Empty of features until they arrive.
+        // A plain action (not a switch) — "hide" is a one-shot, and a switch
+        // whose ON state means "hidden" read backwards.
         Card(
-          child: SwitchListTile(
-            secondary: const Icon(Icons.visibility_off_outlined),
+          child: ListTile(
+            leading: const Icon(Icons.visibility_off_outlined),
             title: Text(l10n.settings_experimentalHide),
             subtitle: Text(l10n.settings_experimentalHideSubtitle),
-            value: settingsService.settings.experimentalUnlocked,
-            onChanged: (value) {
-              if (!value) {
-                settingsService.setExperimentalUnlocked(false);
-              }
-            },
+            onTap: () => settingsService.setExperimentalUnlocked(false),
           ),
         ),
       ],
@@ -735,13 +736,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text(l10n.settings_about),
         // Tapping the version number counts toward the #509 unlock and is
         // absorbed here; tapping elsewhere on the row still opens the dialog.
+        // Progress is shown inline (below), never as a snackbar.
         subtitle: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleVersionTap,
-          child: Text(
-            l10n.settings_aboutVersion(
-              _appVersion.isEmpty ? l10n.common_loading : _appVersion,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.settings_aboutVersion(
+                  _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+                ),
+              ),
+              if (_versionHint != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    _versionHint!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         onTap: () => _showAbout(context),

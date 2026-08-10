@@ -548,11 +548,11 @@ class AppLocalizationsUk extends AppLocalizations {
       'These features are experimental and may change or be removed at any time. They default to off.';
 
   @override
-  String get settings_experimentalHide => 'Hide this section';
+  String get settings_experimentalHide => 'Hide Experimental section';
 
   @override
   String get settings_experimentalHideSubtitle =>
-      'Re-hide Experimental. Unlock again with 7 taps on the version row.';
+      'Unlock again anytime with 7 taps on the version row.';
 
   @override
   String get settings_experimentalUnlocked => 'Experimental features unlocked';
