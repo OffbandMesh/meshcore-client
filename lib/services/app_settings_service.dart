@@ -182,6 +182,10 @@ class AppSettingsService extends ChangeNotifier {
     appLogger.setEnabled(value);
   }
 
+  Future<void> setExperimentalUnlocked(bool value) async {
+    await updateSettings(_settings.copyWith(experimentalUnlocked: value));
+  }
+
   Future<void> setMapShowDiscoveryContacts(bool value) async {
     await updateSettings(_settings.copyWith(mapShowDiscoveryContacts: value));
   }

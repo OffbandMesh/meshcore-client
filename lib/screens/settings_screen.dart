@@ -55,6 +55,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBatteryVoltage = false;
   String _appVersion = '';
 
+  // #509 hidden unlock: 7 taps on the version row within a rolling window
+  // reveals the Experimental settings section.
+  static const int _experimentalUnlockTaps = 7;
+  static const Duration _experimentalTapWindow = Duration(seconds: 3);
+  int _versionTapCount = 0;
+  DateTime? _lastVersionTap;
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +74,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
     });
+  }
+
+  void _handleVersionTap() {
+    final l10n = context.l10n;
+    final settingsService = context.read<AppSettingsService>();
+
+    if (settingsService.settings.experimentalUnlocked) {
+      _versionTapCount = 0;
+      _showVersionSnack(l10n.settings_experimentalAlreadyUnlocked);
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_lastVersionTap == null ||
+        now.difference(_lastVersionTap!) > _experimentalTapWindow) {
+      _versionTapCount = 0;
+    }
+    _lastVersionTap = now;
+    _versionTapCount++;
+
+    final remaining = _experimentalUnlockTaps - _versionTapCount;
+    if (remaining <= 0) {
+      _versionTapCount = 0;
+      settingsService.setExperimentalUnlocked(true);
+      _showVersionSnack(l10n.settings_experimentalUnlocked);
+    } else if (remaining <= 3) {
+      _showVersionSnack(
+        l10n.settings_experimentalCountdown(remaining),
+        brief: true,
+      );
+    }
+  }
+
+  void _showVersionSnack(String message, {bool brief = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: brief
+              ? const Duration(milliseconds: 900)
+              : const Duration(seconds: 2),
+        ),
+      );
   }
 
   @override
@@ -89,6 +140,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         firmwareVerCode: c.firmwareVerCode ?? 0,
         offbandCaps: c.offbandCaps ?? 0,
       ),
+    );
+    // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
+    // the About version row. Selects narrowly so the category list only rebuilds
+    // when the flag flips, not on every connector update (same reason as above).
+    final experimentalUnlocked = context.select<AppSettingsService, bool>(
+      (s) => s.settings.experimentalUnlocked,
     );
     return [
       SettingsCategory(
@@ -155,12 +212,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_actions,
         builder: _actionsPane,
       ),
+      if (experimentalUnlocked)
+        SettingsCategory(
+          icon: Icons.science_outlined,
+          title: l10n.settings_experimental,
+          subtitle: l10n.settings_experimentalSubtitle,
+          builder: _experimentalPane,
+        ),
       SettingsCategory(
         icon: Icons.build_outlined,
         title: l10n.settings_debug,
         builder: _diagnosticsPane,
       ),
     ];
+  }
+
+  Widget _experimentalPane(BuildContext context) {
+    final l10n = context.l10n;
+    final settingsService = context.watch<AppSettingsService>();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(l10n.settings_experimentalDescription),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Future me-centric/experimental toggles land here (e.g. Fast Sync
+        // #118, CoreScope repeats #524). Empty of features until they arrive.
+        Card(
+          child: SwitchListTile(
+            secondary: const Icon(Icons.visibility_off_outlined),
+            title: Text(l10n.settings_experimentalHide),
+            subtitle: Text(l10n.settings_experimentalHideSubtitle),
+            value: settingsService.settings.experimentalUnlocked,
+            onChanged: (value) {
+              if (!value) {
+                settingsService.setExperimentalUnlocked(false);
+              }
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _observerPane(BuildContext context) => const ObserverSettingsView();
@@ -637,9 +733,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListTile(
         leading: const Icon(Icons.info_outline),
         title: Text(l10n.settings_about),
-        subtitle: Text(
-          l10n.settings_aboutVersion(
-            _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+        // Tapping the version number counts toward the #509 unlock and is
+        // absorbed here; tapping elsewhere on the row still opens the dialog.
+        subtitle: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleVersionTap,
+          child: Text(
+            l10n.settings_aboutVersion(
+              _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+            ),
           ),
         ),
         onTap: () => _showAbout(context),
