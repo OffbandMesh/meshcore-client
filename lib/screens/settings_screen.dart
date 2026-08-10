@@ -266,14 +266,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // A plain action (not a switch): "hide" is a one-shot, and a switch
-        // whose ON state means "hidden" read backwards.
+        // Disable, not just hide: turns off every experimental toggle and
+        // re-locks the section, so nothing keeps running invisibly (#553).
         Card(
           child: ListTile(
-            leading: const Icon(Icons.visibility_off_outlined),
-            title: Text(l10n.settings_experimentalHide),
-            subtitle: Text(l10n.settings_experimentalHideSubtitle),
-            onTap: () => settingsService.setExperimentalUnlocked(false),
+            leading: const Icon(Icons.block),
+            title: Text(l10n.settings_experimentalDisable),
+            subtitle: Text(l10n.settings_experimentalDisableSubtitle),
+            onTap: () => settingsService.disableExperimental(),
           ),
         ),
       ],
