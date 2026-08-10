@@ -278,6 +278,20 @@ void main() {
       expect(settings.maxMessageRetries, equals(5));
     });
 
+    test('experimentalUnlocked defaults off and round-trips (#509)', () {
+      expect(AppSettings().experimentalUnlocked, isFalse);
+
+      final unlocked = AppSettings().copyWith(experimentalUnlocked: true);
+      expect(unlocked.experimentalUnlocked, isTrue);
+      expect(unlocked.toJson()['experimental_unlocked'], isTrue);
+
+      final restored = AppSettings.fromJson(unlocked.toJson());
+      expect(restored.experimentalUnlocked, isTrue);
+
+      // Missing key (older persisted settings) defaults to locked.
+      expect(AppSettings.fromJson({}).experimentalUnlocked, isFalse);
+    });
+
     test('toJson includes all new fields', () {
       final settings = AppSettings();
       final json = settings.toJson();

@@ -515,6 +515,36 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_debug => '디버깅';
 
   @override
+  String get settings_experimental => 'Experimental';
+
+  @override
+  String get settings_experimentalSubtitle =>
+      'Advanced and in-development features';
+
+  @override
+  String get settings_experimentalDescription =>
+      'These features are experimental and may change or be removed at any time. They default to off.';
+
+  @override
+  String get settings_experimentalHide => 'Hide this section';
+
+  @override
+  String get settings_experimentalHideSubtitle =>
+      'Re-hide Experimental. Unlock again with 7 taps on the version row.';
+
+  @override
+  String get settings_experimentalUnlocked => 'Experimental features unlocked';
+
+  @override
+  String get settings_experimentalAlreadyUnlocked =>
+      'Experimental features are already unlocked';
+
+  @override
+  String settings_experimentalCountdown(int count) {
+    return '$count more taps to unlock experimental features';
+  }
+
+  @override
   String get settings_companionDebugLog => '동반 디버깅 로그';
 
   @override

@@ -215,6 +215,21 @@
   "settings_rebootDeviceSubtitle": "Restart the MeshCore device",
   "settings_rebootDeviceConfirm": "Are you sure you want to reboot the device? You will be disconnected.",
   "settings_debug": "Debug",
+  "settings_experimental": "Experimental",
+  "settings_experimentalSubtitle": "Advanced and in-development features",
+  "settings_experimentalDescription": "These features are experimental and may change or be removed at any time. They default to off.",
+  "settings_experimentalHide": "Hide this section",
+  "settings_experimentalHideSubtitle": "Re-hide Experimental. Unlock again with 7 taps on the version row.",
+  "settings_experimentalUnlocked": "Experimental features unlocked",
+  "settings_experimentalAlreadyUnlocked": "Experimental features are already unlocked",
+  "settings_experimentalCountdown": "{count} more taps to unlock experimental features",
+  "@settings_experimentalCountdown": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "settings_companionDebugLog": "Companion Debug Log",
   "settings_companionDebugLogSubtitle": "BLE/TCP/USB commands, responses, and raw data",
   "settings_appDebugLog": "App Debug Log",
