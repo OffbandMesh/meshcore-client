@@ -141,7 +141,7 @@ class AppSettings {
   final bool appDebugLogEnabled;
 
   /// Owner-only Experimental settings section, revealed by a 7-tap gesture on
-  /// the version row (#509). Not a security boundary — just keeps advanced/
+  /// the version row (#509). Not a security boundary, just keeps advanced/
   /// me-centric toggles out of the default UI. Persists across restarts.
   final bool experimentalUnlocked;
   final Map<String, String> batteryChemistryByDeviceId;
