@@ -63,7 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const Duration _experimentalTapWindow = Duration(seconds: 3);
   int _versionTapCount = 0;
   DateTime? _lastVersionTap;
-  // Inline feedback shown in the version row itself (no snackbar — a bottom
+  // Inline feedback shown in the version row itself (no snackbar: a bottom
   // snackbar overlaps the very row being tapped and blocks the next tap).
   String? _versionHint;
   Timer? _versionHintTimer;
@@ -246,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         // Future me-centric/experimental toggles land here (e.g. Fast Sync
         // #118, CoreScope repeats #524). Empty of features until they arrive.
-        // A plain action (not a switch) — "hide" is a one-shot, and a switch
+        // A plain action (not a switch): "hide" is a one-shot, and a switch
         // whose ON state means "hidden" read backwards.
         Card(
           child: ListTile(
