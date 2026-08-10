@@ -39,6 +39,7 @@ class CoreScopeService {
         'limit': '1',
       },
     );
+    appLogger.info('GET $uri', tag: 'CoreScope');
     try {
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode != 200) {
@@ -51,11 +52,19 @@ class CoreScopeService {
       final body = jsonDecode(resp.body);
       if (body is! Map) return null;
       final packets = body['packets'];
-      if (packets is! List || packets.isEmpty) return null;
+      if (packets is! List || packets.isEmpty) {
+        appLogger.info('no record yet for $packetHash', tag: 'CoreScope');
+        return null;
+      }
       final first = packets.first;
       if (first is! Map) return null;
       final count = first['observer_count'];
-      return count is num ? count.toInt() : null;
+      final result = count is num ? count.toInt() : null;
+      appLogger.info(
+        'observer_count=$result for $packetHash',
+        tag: 'CoreScope',
+      );
+      return result;
     } catch (e) {
       appLogger.warn('Query failed for $packetHash: $e', tag: 'CoreScope');
       return null;
