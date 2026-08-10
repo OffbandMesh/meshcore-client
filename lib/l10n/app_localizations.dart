@@ -3100,6 +3100,12 @@ abstract class AppLocalizations {
   /// **'CoreScope unreachable'**
   String get channel_coreScopeRefreshFailed;
 
+  /// No description provided for @channel_coreScopeCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations'**
+  String channel_coreScopeCounts(int observers, int observations);
+
   /// No description provided for @chat_successes.
   ///
   /// In en, this message translates to:

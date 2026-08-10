@@ -7,6 +7,16 @@ import '../utils/app_logger.dart';
 /// Default CoreScope instance (OKIMesh). Owner-run; its read API is public.
 const String kDefaultCoreScopeHost = 'map.okimesh.org';
 
+/// The two counts CoreScope reports for a packet. [observers] is the number of
+/// distinct observers (the meaningful reach); [observations] is the total
+/// sightings, which counts one observer hearing the packet via several paths
+/// more than once (this is the "Observations (N)" number in CoreScope's UI).
+class CoreScopeCounts {
+  const CoreScopeCounts({required this.observers, required this.observations});
+  final int observers;
+  final int observations;
+}
+
 /// Queries a CoreScope instance for how many observers reported a given packet,
 /// keyed by the firmware/mesh packet hash (#524). Read-only and best-effort:
 /// any failure (offline, timeout, non-200, bad body, unknown packet) returns
@@ -24,10 +34,10 @@ class CoreScopeService {
   final bool useTls;
   final Duration timeout;
 
-  /// Unique observers that reported the packet with [packetHash]
-  /// (16 lowercase hex chars). Returns null on any error, or when CoreScope
-  /// has no record of the hash yet.
-  Future<int?> fetchObserverCount(String packetHash) async {
+  /// Distinct observers and total observations for [packetHash] (16 lowercase
+  /// hex chars). Returns null on any error, or when CoreScope has no record of
+  /// the hash yet.
+  Future<CoreScopeCounts?> fetchCounts(String packetHash) async {
     if (packetHash.isEmpty) return null;
     final uri = Uri(
       scheme: useTls ? 'https' : 'http',
@@ -58,13 +68,21 @@ class CoreScopeService {
       }
       final first = packets.first;
       if (first is! Map) return null;
-      final count = first['observer_count'];
-      final result = count is num ? count.toInt() : null;
+      final observers = first['observer_count'];
+      if (observers is! num) return null;
+      final observations = first['observation_count'];
+      final counts = CoreScopeCounts(
+        observers: observers.toInt(),
+        observations: observations is num
+            ? observations.toInt()
+            : observers.toInt(),
+      );
       appLogger.info(
-        'observer_count=$result for $packetHash',
+        'observers=${counts.observers} observations=${counts.observations} '
+        'for $packetHash',
         tag: 'CoreScope',
       );
-      return result;
+      return counts;
     } catch (e) {
       appLogger.warn('Query failed for $packetHash: $e', tag: 'CoreScope');
       return null;

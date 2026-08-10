@@ -4789,17 +4789,23 @@ class MeshCoreConnector extends ChangeNotifier {
       for (final secs in _coreScopePollSecs) {
         await Future<void>.delayed(Duration(seconds: secs));
         if (!isConnected) return;
-        final count = await _coreScopeService.fetchObserverCount(pkt.hashHex);
-        if (count == null) continue;
-        if (count > best) {
-          best = count;
+        final counts = await _coreScopeService.fetchCounts(pkt.hashHex);
+        if (counts == null) continue;
+        if (counts.observers > best) {
+          best = counts.observers;
           flat = 0;
           _updateChannelMessageById(
             channelIndex,
             messageId,
-            (m) => m.copyWith(coreScopeObserverCount: count),
+            (m) => m.copyWith(
+              coreScopeObserverCount: counts.observers,
+              coreScopeObservationCount: counts.observations,
+            ),
           );
-          appLogger.info('observer count=$count', tag: 'CoreScope');
+          appLogger.info(
+            'observers=${counts.observers} observations=${counts.observations}',
+            tag: 'CoreScope',
+          );
           notifyListeners();
         } else if (++flat >= _coreScopeStableChecks) {
           return; // stabilised
@@ -4814,21 +4820,26 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Tap-to-refresh: re-query CoreScope for a message's stored on-air hash and
-  /// bump the observer count if it grew (counts only ever climb). Returns the
-  /// fetched count (or null on failure / no stored hash) so the UI can confirm.
-  Future<int?> refreshCoreScopeObserverCount(
+  /// bump the counts if they grew (they only ever climb). Returns the fetched
+  /// counts (or null on failure / no stored hash) so the UI can confirm.
+  Future<CoreScopeCounts?> refreshCoreScopeCounts(
     int channelIndex,
     String messageId,
     String hashHex,
   ) async {
-    final count = await _coreScopeService.fetchObserverCount(hashHex);
-    if (count == null) return null;
+    final counts = await _coreScopeService.fetchCounts(hashHex);
+    if (counts == null) return null;
     _updateChannelMessageById(channelIndex, messageId, (m) {
       final current = m.coreScopeObserverCount ?? 0;
-      return count > current ? m.copyWith(coreScopeObserverCount: count) : m;
+      return counts.observers >= current
+          ? m.copyWith(
+              coreScopeObserverCount: counts.observers,
+              coreScopeObservationCount: counts.observations,
+            )
+          : m;
     });
     notifyListeners();
-    return count;
+    return counts;
   }
 
   void _updateChannelMessageById(
