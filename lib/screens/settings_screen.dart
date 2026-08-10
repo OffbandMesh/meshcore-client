@@ -954,13 +954,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: SelectableText(
-                    value,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: valueColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  // When the row is tappable, use a plain Text so the value is
+                  // part of the InkWell tap target (a SelectableText would eat
+                  // the tap for selection). Copy is still available via the
+                  // button. (#553)
+                  child: onTap != null
+                      ? Text(
+                          value,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: valueColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      : SelectableText(
+                          value,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: valueColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 18),
