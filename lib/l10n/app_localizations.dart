@@ -1126,17 +1126,17 @@ abstract class AppLocalizations {
   /// **'Requires a firmware build with packet-hash support (v22+).'**
   String get settings_coreScopeObserverCountUnsupported;
 
-  /// No description provided for @settings_experimentalHide.
+  /// No description provided for @settings_experimentalDisable.
   ///
   /// In en, this message translates to:
-  /// **'Hide Experimental section'**
-  String get settings_experimentalHide;
+  /// **'Disable experimental features'**
+  String get settings_experimentalDisable;
 
-  /// No description provided for @settings_experimentalHideSubtitle.
+  /// No description provided for @settings_experimentalDisableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Unlock again anytime with 7 taps on the version row.'**
-  String get settings_experimentalHideSubtitle;
+  /// **'Turns off all experimental features and hides this section. Unlock again with 7 taps on the Build row.'**
+  String get settings_experimentalDisableSubtitle;
 
   /// No description provided for @settings_experimentalUnlocked.
   ///

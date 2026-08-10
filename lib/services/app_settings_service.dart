@@ -192,6 +192,17 @@ class AppSettingsService extends ChangeNotifier {
     );
   }
 
+  /// Turn off every experimental feature flag and re-lock the section (#553).
+  /// Add each new experimental toggle here so "Disable" truly disables all.
+  Future<void> disableExperimental() async {
+    await updateSettings(
+      _settings.copyWith(
+        coreScopeObserverCountEnabled: false,
+        experimentalUnlocked: false,
+      ),
+    );
+  }
+
   Future<void> setMapShowDiscoveryContacts(bool value) async {
     await updateSettings(_settings.copyWith(mapShowDiscoveryContacts: value));
   }

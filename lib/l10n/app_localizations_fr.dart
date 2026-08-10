@@ -565,11 +565,11 @@ class AppLocalizationsFr extends AppLocalizations {
       'Requires a firmware build with packet-hash support (v22+).';
 
   @override
-  String get settings_experimentalHide => 'Hide Experimental section';
+  String get settings_experimentalDisable => 'Disable experimental features';
 
   @override
-  String get settings_experimentalHideSubtitle =>
-      'Unlock again anytime with 7 taps on the version row.';
+  String get settings_experimentalDisableSubtitle =>
+      'Turns off all experimental features and hides this section. Unlock again with 7 taps on the Build row.';
 
   @override
   String get settings_experimentalUnlocked => 'Experimental features unlocked';
