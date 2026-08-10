@@ -5751,12 +5751,22 @@ class MeshCoreConnector extends ChangeNotifier {
       secondsSinceLastRx: secSinceRx,
     );
     if (mlTimeout != null) {
-      if (pathLength < 0) {
-        // Flood: trust ML, only enforce firmware formula as floor
-        if (mlTimeout < physicsMin) {
-          return physicsMin;
-        }
-      }
+      // Flood is a single firmware value, not a range: _physicsMinTimeout and
+      // _physicsMaxTimeout both return `500 + (16 * airtime)` for
+      // pathLength < 0, mirroring the firmware's calcFloodTimeoutMillisFor.
+      // A clamp between two equal bounds cannot preserve a prediction, so the
+      // model has never influenced a flood timeout in either direction.
+      //
+      // Previously written as an early return guarded by `mlTimeout <
+      // physicsMin`, above the comment "Flood: trust ML, only enforce firmware
+      // formula as floor". That described behaviour the code did not have, and
+      // read as though the model were consulted here. Stating the constraint
+      // is honest; the branch was not. Behaviour is unchanged (#533).
+      //
+      // Whether flood *should* trust a prediction is unanswered and is not
+      // decided here. Every round trip measured to date was 0-hop direct, so
+      // there is no flood data to decide it from.
+      if (pathLength < 0) return physicsMax;
       return mlTimeout.clamp(physicsMin, physicsMax);
     }
 

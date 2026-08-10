@@ -16,6 +16,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
+import 'package:meshcore_open/services/message_retry_service.dart';
+import 'package:meshcore_open/services/path_history_service.dart';
+import 'package:meshcore_open/services/storage_service.dart';
+import 'package:meshcore_open/services/timeout_prediction_service.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -114,6 +118,111 @@ void main() {
         connector.calculateTimeout(pathLength: 0),
         lessThan(connector.messageRetrievalBudgetMs),
       );
+    });
+  });
+
+  group('flood is a single firmware value, not a range (#533)', () {
+    // The flood branch used to be written as "trust ML, only enforce the
+    // firmware formula as floor". It never did that: _physicsMinTimeout and
+    // _physicsMaxTimeout return the identical expression for pathLength < 0,
+    // so a clamp between them discards any prediction. The branch was removed
+    // and the constraint stated instead, with behaviour unchanged.
+    //
+    // These tests pin the equality the simplification depends on. If a future
+    // change makes the flood floor and ceiling differ, the removed branch would
+    // no longer have been equivalent, and this fails loudly rather than
+    // silently altering flood timeouts.
+
+    // firmware calcFloodTimeoutMillisFor: SEND_TIMEOUT_BASE_MILLIS 500 +
+    // FLOOD_SEND_TIMEOUT_FACTOR 16 * airtime, with the 50 ms fallback airtime.
+    const floodFirmwareValue = 500 + (16 * 50); // 1300
+
+    test('flood returns the firmware formula exactly', () {
+      expect(connector.calculateTimeout(pathLength: -1), floodFirmwareValue);
+    });
+
+    test('flood does not scale with hop count the way direct does', () {
+      // Direct grows per hop; flood has no hop term at all.
+      expect(
+        connector.calculateTimeout(pathLength: -1),
+        isNot(connector.calculateTimeout(pathLength: 0)),
+      );
+      expect(
+        connector.calculateTimeout(pathLength: 1),
+        greaterThan(connector.calculateTimeout(pathLength: 0)),
+      );
+    });
+
+    test('the CLI budget still covers flood through both of its legs', () {
+      // calculateCliTimeout takes the flood branch in the outbound term and in
+      // the reply term, so no flood-specific handling is needed there.
+      expect(
+        connector.calculateCliTimeout(pathLength: -1),
+        floodFirmwareValue +
+            cliReplyDelayMs +
+            floodFirmwareValue +
+            connector.messageRetrievalBudgetMs,
+      );
+    });
+  });
+
+  group('flood ignores the model even when one exists (#533)', () {
+    // The group above only exercises the no-model path. The actual claim is
+    // about what happens when predictTimeout returns a value: for flood it can
+    // never survive, because the floor and the ceiling are the same number.
+    //
+    // This attaches a real predictor, trains it on deliberately huge delivery
+    // times so any prediction is far from the firmware constant, and asserts
+    // flood is unmoved. Verified to pass against the pre-#533 code as well,
+    // which is what makes the branch removal a simplification rather than a
+    // behaviour change.
+
+    late TimeoutPredictionService prediction;
+
+    setUp(() {
+      prediction = TimeoutPredictionService.noStorage();
+      connector.initialize(
+        retryService: MessageRetryService(),
+        pathHistoryService: PathHistoryService(StorageService()),
+        timeoutPredictionService: prediction,
+      );
+      // minObservations is 10; vary the features so training does not discard
+      // them all for zero variance, and make deliveryMs enormous so any
+      // prediction lands nowhere near 1300.
+      for (var i = 0; i < 12; i++) {
+        prediction.recordObservation(
+          contactKey: 'contact$i',
+          pathLength: i.isEven ? -1 : (i % 4),
+          messageBytes: 40 + (i * 12),
+          tripTimeMs: 40000 + (i * 1500),
+        );
+      }
+    });
+
+    test('the predictor is actually trained, so the test is not vacuous', () {
+      expect(prediction.hasModel, isTrue);
+      final predicted = prediction.predictTimeout(
+        pathLength: -1,
+        messageBytes: 172,
+      );
+      expect(predicted, isNotNull);
+      expect(
+        predicted,
+        greaterThan(1300),
+        reason:
+            'the prediction must differ from the flood constant, or this '
+            'group proves nothing',
+      );
+    });
+
+    test('flood still returns the firmware constant', () {
+      expect(connector.calculateTimeout(pathLength: -1), 500 + (16 * 50));
+    });
+
+    test('direct is still clamped to its ceiling, so the clamp is live', () {
+      // Contrast: on a direct path the prediction IS consulted and then
+      // clamped. If this returned the raw prediction the clamp would be broken.
+      expect(connector.calculateTimeout(pathLength: 0), 1050);
     });
   });
 }
