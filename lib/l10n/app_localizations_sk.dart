@@ -605,6 +605,9 @@ class AppLocalizationsSk extends AppLocalizations {
       'Otvorený zdrojový Flutter klient pre MeshCore LoRa sieťové zariadenia.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'Údaje o nadmorskej výške LOS: Open-Meteo (CC BY 4.0)';
 

@@ -611,6 +611,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Egy nyílt forráskódú Flutter kliens a MeshCore LoRa hálózati eszközök számára.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS magassági adatok: Open-Meteo (CC BY 4.0)';
 

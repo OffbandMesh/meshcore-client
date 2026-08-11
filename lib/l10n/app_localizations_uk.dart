@@ -608,6 +608,9 @@ class AppLocalizationsUk extends AppLocalizations {
       'Клієнт Flutter з відкритим вихідним кодом для пристроїв мережі MeshCore LoRa.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'Дані про висоту LOS: Open-Meteo (CC BY 4.0)';
 
