@@ -1759,6 +1759,15 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get channel_senderAddNotConnected =>
+      'Not connected to a radio, so this sender can\'t be added yet';
+
+  @override
+  String channel_senderAddFailed(String error) {
+    return 'Couldn\'t add this sender: $error';
+  }
+
+  @override
   String channel_senderCandidate(String keyPrefix, String type) {
     return '$keyPrefix · $type';
   }
