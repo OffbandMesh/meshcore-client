@@ -614,6 +614,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settings_aboutLicenses => 'View licenses';
 
   @override
+  String get settings_aboutWebsite => 'Offband website';
+
+  @override
+  String get settings_aboutPlayStore => 'Google Play';
+
+  @override
+  String get settings_aboutDonate => 'Donate or sponsor';
+
+  @override
+  String get settings_aboutLinkFailed => 'Could not open the link';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS magassági adatok: Open-Meteo (CC BY 4.0)';
 

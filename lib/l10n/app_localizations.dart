@@ -1210,6 +1210,30 @@ abstract class AppLocalizations {
   /// **'View licenses'**
   String get settings_aboutLicenses;
 
+  /// No description provided for @settings_aboutWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband website'**
+  String get settings_aboutWebsite;
+
+  /// No description provided for @settings_aboutPlayStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Play'**
+  String get settings_aboutPlayStore;
+
+  /// No description provided for @settings_aboutDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Donate or sponsor'**
+  String get settings_aboutDonate;
+
+  /// No description provided for @settings_aboutLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the link'**
+  String get settings_aboutLinkFailed;
+
   /// No description provided for @settings_aboutOpenMeteoAttribution.
   ///
   /// In en, this message translates to:
