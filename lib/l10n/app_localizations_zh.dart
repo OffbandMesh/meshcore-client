@@ -576,6 +576,9 @@ class AppLocalizationsZh extends AppLocalizations {
       '一个开源的 Flutter 客户端，用于 MeshCore LoRa 无线网络设备。';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS 高程数据:Open-Meteo (CC BY 4.0)';
 

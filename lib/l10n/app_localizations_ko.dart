@@ -584,6 +584,9 @@ class AppLocalizationsKo extends AppLocalizations {
       'MeshCore LoRa 메시 네트워크 장치를 위한 오픈 소스 Flutter 클라이언트.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS 고도 데이터: Open-Meteo (CC BY 4.0)';
 

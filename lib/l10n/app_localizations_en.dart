@@ -591,11 +591,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settings_aboutLegalese => '2026 MeshCore Open Source Project';
+  String get settings_aboutLegalese =>
+      '© 2026 Offband. Based on MeshCore Open by zjs81, MIT licensed.';
 
   @override
   String get settings_aboutDescription =>
-      'An open-source Flutter client for MeshCore LoRa mesh networking devices.';
+      'Offband Meshcore is an open-source client for MeshCore LoRa mesh networking devices.';
+
+  @override
+  String get settings_aboutLicenses => 'View licenses';
 
   @override
   String get settings_aboutOpenMeteoAttribution =>

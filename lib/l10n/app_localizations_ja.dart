@@ -584,6 +584,9 @@ class AppLocalizationsJa extends AppLocalizations {
       'MeshCore LoRaメッシュネットワークデバイス用の、オープンソースのFlutterクライアント。';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS 標高データ：Open-Meteo (CC BY 4.0)';
 

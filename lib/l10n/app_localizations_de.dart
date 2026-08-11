@@ -608,6 +608,9 @@ class AppLocalizationsDe extends AppLocalizations {
       'Ein Open-Source-Flutter-Client für MeshCore LoRa-Meshnetzwerkgeräte.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS-Höhendaten: Open-Meteo (CC BY 4.0)';
 

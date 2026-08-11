@@ -228,6 +228,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_debug,
         builder: _diagnosticsPane,
       ),
+      SettingsCategory(
+        icon: Icons.info_outline,
+        title: l10n.settings_about,
+        builder: _aboutPane,
+      ),
     ];
   }
 
@@ -526,8 +531,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildDebugCard(context),
         const SizedBox(height: 16),
         _buildExportCard(connector),
-        const SizedBox(height: 16),
-        _buildAboutCard(context),
       ],
     );
   }
@@ -762,19 +765,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAboutCard(BuildContext context) {
+  // About is its own top-level Settings category (#525/#526), no longer a card
+  // in the Debug pane. Outbound links (offband.org / Play / donate) added by
+  // #527 between the info block and the licenses row.
+  Widget _aboutPane(BuildContext context) {
     final l10n = context.l10n;
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.info_outline),
-        title: Text(l10n.settings_about),
-        subtitle: Text(
-          l10n.settings_aboutVersion(
-            _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(l10n.appTitle),
+                subtitle: Text(
+                  l10n.settings_aboutVersion(
+                    _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.settings_aboutDescription),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.settings_aboutLegalese,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(l10n.settings_aboutLicenses),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: l10n.appTitle,
+                  applicationVersion: _appVersion.isEmpty ? null : _appVersion,
+                  applicationLegalese: l10n.settings_aboutLegalese,
+                ),
+              ),
+            ],
           ),
         ),
-        onTap: () => _showAbout(context),
-      ),
+      ],
     );
   }
 
@@ -1419,22 +1460,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showAbout(BuildContext context) {
-    final l10n = context.l10n;
-    showAboutDialog(
-      context: context,
-      applicationName: l10n.appTitle,
-      applicationVersion: _appVersion.isEmpty
-          ? l10n.common_loading
-          : _appVersion,
-      applicationLegalese: l10n.settings_aboutLegalese,
-      children: [
-        const SizedBox(height: 16),
-        Text(l10n.settings_aboutDescription),
-      ],
     );
   }
 
