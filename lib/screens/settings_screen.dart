@@ -7,6 +7,7 @@ import 'package:meshcore_open/utils/gpx_export.dart';
 import 'package:meshcore_open/widgets/elements_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
@@ -802,6 +803,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 1),
               ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.settings_aboutWebsite),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl('https://offband.org'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.shop_outlined),
+                title: Text(l10n.settings_aboutPlayStore),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl(
+                  'https://play.google.com/store/apps/details?id=app.offband.meshcore',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.favorite_outline),
+                title: Text(l10n.settings_aboutDonate),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl('https://offband.org/donate'),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: Text(l10n.settings_aboutLicenses),
                 trailing: const Icon(Icons.chevron_right),
@@ -817,6 +839,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      if (await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      // fall through to the failure message
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.settings_aboutLinkFailed)),
+      );
+    }
   }
 
   Widget _buildDebugCard(BuildContext context) {
