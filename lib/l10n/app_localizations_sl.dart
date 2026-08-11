@@ -1729,6 +1729,22 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get channel_senderNotHeard => 'Haven\'t heard this node\'s advert yet';
+
+  @override
+  String get channel_senderAlreadyContact => 'Already in contacts';
+
+  @override
+  String channel_senderMultipleMatches(int count) {
+    return '$count nodes use this name';
+  }
+
+  @override
+  String channel_senderCandidate(String keyPrefix, String type) {
+    return '$keyPrefix · $type';
+  }
+
+  @override
   String get chat_successes => 'Uspešni';
 
   @override

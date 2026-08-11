@@ -3136,6 +3136,30 @@ abstract class AppLocalizations {
   /// **'{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations'**
   String channel_coreScopeCounts(int observers, int observations);
 
+  /// No description provided for @channel_senderNotHeard.
+  ///
+  /// In en, this message translates to:
+  /// **'Haven\'t heard this node\'s advert yet'**
+  String get channel_senderNotHeard;
+
+  /// No description provided for @channel_senderAlreadyContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in contacts'**
+  String get channel_senderAlreadyContact;
+
+  /// No description provided for @channel_senderMultipleMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} nodes use this name'**
+  String channel_senderMultipleMatches(int count);
+
+  /// No description provided for @channel_senderCandidate.
+  ///
+  /// In en, this message translates to:
+  /// **'{keyPrefix} · {type}'**
+  String channel_senderCandidate(String keyPrefix, String type);
+
   /// No description provided for @chat_successes.
   ///
   /// In en, this message translates to:

@@ -902,6 +902,27 @@
       }
     }
   },
+  "channel_senderNotHeard": "Haven't heard this node's advert yet",
+  "channel_senderAlreadyContact": "Already in contacts",
+  "channel_senderMultipleMatches": "{count} nodes use this name",
+  "@channel_senderMultipleMatches": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channel_senderCandidate": "{keyPrefix} · {type}",
+  "@channel_senderCandidate": {
+    "placeholders": {
+      "keyPrefix": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
   "chat_successes": "successes",
   "chat_score": "Score",
   "chat_removePath": "Remove path",
