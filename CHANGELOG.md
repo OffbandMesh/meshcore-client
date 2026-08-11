@@ -2,6 +2,35 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.5.0-beta.1] - 2026-08-04
+
+First beta of the 1.5.0 line, for the closed test track. Introduces an Experimental
+section (with CoreScope), an About screen, and repeater CLI and broker fixes.
+
+### Added
+
+- **Experimental section**, unlocked by a hidden 7-tap on the Build row in settings.
+  Disabling it clears all experimental toggles (#509, #553).
+- **OKIMesh CoreScope integration (Experimental).** Query how many OKIMesh CoreScope
+  observers heard each packet, over the 0xC6 protocol, with an observer/observations
+  badge, adaptive polling with backoff, and tap / long-press to refresh (#549, #550).
+  This is tied specifically to the OKIMesh CoreScope service, not a generic or
+  self-hosted backend. Requires forthcoming Offband firmware (0xC6, cap2 bit and
+  firmware ver code >= 22, tracked in #611); it stays inert on current firmware.
+- **About screen** in its own top-level Settings category, with outbound links to
+  the website, Play listing, and donate page (#526, #527).
+
+### Fixed
+
+- Repeater CLI: late replies are surfaced instead of discarded, commands get their
+  own timeout budget, the armed timeout window is reported accurately, and a
+  prefixed reply only completes the command that owns the prefix (#528, #529, #531,
+  #532, #533).
+- Broker: import never changes the broker enabled state, and a blank-field GET no
+  longer leaks the echoed key line (#469, #470).
+- Channel "Send Again" is gated on `repeatCount == 0` rather than sent status
+  (#555).
+
 ## [1.4.0] - 2026-07-30
 
 A follow-up to the 1.3.0 production launch: settings for headless devices, a
