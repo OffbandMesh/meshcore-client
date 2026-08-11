@@ -19,8 +19,10 @@ import '../helpers/gif_helper.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../l10n/l10n.dart';
+import '../l10n/contact_localization.dart';
 import '../models/channel.dart';
 import '../models/channel_message.dart';
+import '../models/contact.dart';
 import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
@@ -30,6 +32,7 @@ import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
 import '../utils/emoji_utils.dart';
 import '../utils/route_transitions.dart';
+import 'chat_screen.dart';
 import 'settings_screen.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/app_shell.dart';
@@ -658,6 +661,166 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     }
   }
 
+  /// Contact actions for the sender of a channel post (#468). Channel frames
+  /// carry no key, so the claimed name is resolved against known + discovered
+  /// contacts. Every node claiming that name gets its own row: an ambiguous
+  /// namesake is never resolved for the user.
+  void _showSenderActions(ChannelMessage message) {
+    if (message.isOutgoing) return;
+    final connector = context.read<MeshCoreConnector>();
+    final candidates = connector.resolveContactsByName(message.senderName);
+    final ambiguous = candidates.length > 1;
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final l10n = sheetContext.l10n;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: _buildAvatar(message.senderName),
+                title: Text(message.senderName),
+                subtitle: ambiguous
+                    ? Text(
+                        l10n.channel_senderMultipleMatches(candidates.length),
+                      )
+                    : null,
+              ),
+              const Divider(height: 1),
+              ..._buildSenderContactEntries(sheetContext, message),
+              ListTile(
+                leading: Icon(Icons.block, color: Colors.red.shade700),
+                title: Text(l10n.block_sender),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _blockChannelSender(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: Text(l10n.common_cancel),
+                onTap: () => Navigator.pop(sheetContext),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Sender contact rows, shared by the avatar-tap sheet and the long-press
+  /// menu so both offer exactly the same actions. An unresolved name says so
+  /// outright instead of silently offering nothing.
+  List<Widget> _buildSenderContactEntries(
+    BuildContext sheetContext,
+    ChannelMessage message,
+  ) {
+    final connector = sheetContext.read<MeshCoreConnector>();
+    final candidates = connector.resolveContactsByName(message.senderName);
+    if (candidates.isEmpty) {
+      return [
+        ListTile(
+          leading: const Icon(Icons.help_outline),
+          title: Text(sheetContext.l10n.channel_senderNotHeard),
+        ),
+      ];
+    }
+    return [
+      for (final candidate in candidates)
+        ..._buildSenderCandidateTiles(
+          sheetContext,
+          candidate,
+          showIdentity: candidates.length > 1,
+        ),
+    ];
+  }
+
+  /// Add/view rows for one resolved sender identity. [showIdentity] prefixes an
+  /// identifying row (pubkey prefix + type) so colliding namesakes stay apart.
+  List<Widget> _buildSenderCandidateTiles(
+    BuildContext sheetContext,
+    Contact candidate, {
+    required bool showIdentity,
+  }) {
+    final l10n = sheetContext.l10n;
+    final connector = sheetContext.read<MeshCoreConnector>();
+    final isKnown = connector.contacts.any(
+      (c) => c.publicKeyHex == candidate.publicKeyHex,
+    );
+
+    return [
+      if (showIdentity)
+        ListTile(
+          dense: true,
+          leading: const Icon(Icons.fingerprint),
+          title: Text(
+            l10n.channel_senderCandidate(
+              candidate.publicKeyHex.substring(
+                0,
+                math.min(8, candidate.publicKeyHex.length),
+              ),
+              candidate.typeLabel(l10n),
+            ),
+          ),
+        ),
+      if (!isKnown)
+        ListTile(
+          leading: const Icon(Icons.add_reaction_sharp),
+          title: Text(l10n.discoveredContacts_addContact),
+          onTap: () {
+            Navigator.pop(sheetContext);
+            _addSenderContact(candidate);
+          },
+        )
+      // A repeater or room server reached through a channel post still needs
+      // its login flow, which lives on the Contacts screen. Say it is already
+      // known rather than dropping the user into a chat that cannot work.
+      else if (candidate.type == advTypeChat)
+        ListTile(
+          leading: const Icon(Icons.chat_bubble_outline),
+          title: Text(l10n.contacts_openChat),
+          onTap: () {
+            Navigator.pop(sheetContext);
+            _openSenderChat(candidate);
+          },
+        )
+      else
+        ListTile(
+          leading: const Icon(Icons.check_circle_outline),
+          title: Text(l10n.channel_senderAlreadyContact),
+        ),
+    ];
+  }
+
+  Future<void> _addSenderContact(Contact candidate) async {
+    final connector = context.read<MeshCoreConnector>();
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    await connector.importDiscoveredContact(candidate);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(content: Text(l10n.discoveredContacts_contactAdded)),
+    );
+  }
+
+  void _openSenderChat(Contact candidate) {
+    final connector = context.read<MeshCoreConnector>();
+    final unread = connector.getUnreadCountForContactKey(
+      candidate.publicKeyHex,
+    );
+    connector.markContactRead(candidate.publicKeyHex);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ChatScreen(contact: candidate, initialUnreadCount: unread),
+      ),
+    );
+  }
+
   /// A channel post is hidden only when its claimed name resolves to at least
   /// one identity and *every* matching pubkey is blocked (an ambiguous namesake
   /// with any unblocked match is still shown), or the name is in blockedNames.
@@ -712,7 +875,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isOutgoing) ...[
-              _buildAvatar(message.senderName),
+              // The avatar is the contact-action shortcut (#468). The sender
+              // name text is deliberately NOT a tap target: on a phone it sits
+              // too close to the message body to hit reliably.
+              GestureDetector(
+                onTap: () => _showSenderActions(message),
+                child: _buildAvatar(message.senderName),
+              ),
               const SizedBox(width: 8),
             ],
             Flexible(
@@ -1819,7 +1988,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 await _deleteMessage(message);
               },
             ),
-            if (!message.isOutgoing)
+            // Same sender contact actions the avatar tap offers (#468), so
+            // long-press remains a superset of every gesture on the message.
+            if (!message.isOutgoing) ...[
+              const Divider(height: 1),
+              ..._buildSenderContactEntries(sheetContext, message),
               ListTile(
                 leading: Icon(Icons.block, color: Colors.red.shade700),
                 title: Text(context.l10n.block_sender),
@@ -1828,6 +2001,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   _blockChannelSender(message);
                 },
               ),
+            ],
             ListTile(
               leading: const Icon(Icons.close),
               title: Text(context.l10n.common_cancel),

@@ -1118,18 +1118,24 @@ class MeshCoreConnector extends ChangeNotifier {
   /// display name matches [name] (case-insensitive). Resolves an anonymous
   /// channel sender (name-only, no pubkey) back to identities for block
   /// matching. Multiple keys => several devices/people share the name.
-  List<String> resolveContactKeysByName(String name) {
+  /// Resolve a claimed name to the identities behind it, known contacts first.
+  ///
+  /// Channel messages carry no key (#468), so a claimed name is all a channel
+  /// sender gives us. A name several nodes share resolves to every one of them:
+  /// callers surface the ambiguity, they never pick a winner.
+  List<Contact> resolveContactsByName(String name) {
     final target = name.trim().toLowerCase();
     if (target.isEmpty) return const [];
-    final keys = <String>{};
-    for (final c in contacts) {
-      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
+    final byKey = <String, Contact>{};
+    for (final c in [...contacts, ...discoveredContacts]) {
+      if (c.name.trim().toLowerCase() != target) continue;
+      byKey.putIfAbsent(c.publicKeyHex, () => c);
     }
-    for (final c in discoveredContacts) {
-      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
-    }
-    return keys.toList();
+    return byKey.values.toList();
   }
+
+  List<String> resolveContactKeysByName(String name) =>
+      resolveContactsByName(name).map((c) => c.publicKeyHex).toList();
 
   Future<void> deleteChannelMessage(ChannelMessage message) async {
     final channelIndex = message.channelIndex;
@@ -2929,6 +2935,12 @@ class MeshCoreConnector extends ChangeNotifier {
 
   @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
+
+  @visibleForTesting
+  List<Contact> get contactsForTest => _contacts;
+
+  @visibleForTesting
+  List<Contact> get discoveredContactsForTest => _discoveredContacts;
 
   @visibleForTesting
   Map<String, List<Message>> get conversationsForTest => _conversations;
