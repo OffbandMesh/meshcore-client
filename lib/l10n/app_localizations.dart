@@ -3154,6 +3154,18 @@ abstract class AppLocalizations {
   /// **'{count} nodes use this name'**
   String channel_senderMultipleMatches(int count);
 
+  /// No description provided for @channel_senderAddNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected to a radio, so this sender can\'t be added yet'**
+  String get channel_senderAddNotConnected;
+
+  /// No description provided for @channel_senderAddFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t add this sender: {error}'**
+  String channel_senderAddFailed(String error);
+
   /// No description provided for @channel_senderCandidate.
   ///
   /// In en, this message translates to:

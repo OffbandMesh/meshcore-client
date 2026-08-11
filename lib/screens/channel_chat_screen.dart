@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../models/community.dart';
 import '../storage/community_store.dart';
+import '../utils/app_logger.dart';
 import '../utils/platform_info.dart';
 import '../helpers/chat_scroll_controller.dart';
 import '../connector/meshcore_protocol.dart';
@@ -797,12 +798,35 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
   Future<void> _addSenderContact(Contact candidate) async {
     final connector = context.read<MeshCoreConnector>();
-    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
-    await connector.importDiscoveredContact(candidate);
+    // importDiscoveredContact silently no-ops without a radio, and sendFrame
+    // throws on a mid-write disconnect. Neither may reach the user as a tap
+    // that just did nothing (#565).
+    if (!connector.isConnected) {
+      _showSenderError(l10n.channel_senderAddNotConnected);
+      return;
+    }
+    try {
+      await connector.importDiscoveredContact(candidate);
+    } catch (e) {
+      appLogger.error('Adding channel sender ${candidate.name} failed: $e');
+      if (!mounted) return;
+      _showSenderError(l10n.channel_senderAddFailed(e.toString()));
+      return;
+    }
     if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(content: Text(l10n.discoveredContacts_contactAdded)),
+    showDismissibleSnackBar(
+      context,
+      content: Text(l10n.discoveredContacts_contactAdded),
+    );
+  }
+
+  void _showSenderError(String message) {
+    showDismissibleSnackBar(
+      context,
+      content: Text(message),
+      backgroundColor: Theme.of(context).colorScheme.error,
+      persist: true,
     );
   }
 

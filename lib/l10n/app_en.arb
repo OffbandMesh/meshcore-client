@@ -912,6 +912,15 @@
       }
     }
   },
+  "channel_senderAddNotConnected": "Not connected to a radio, so this sender can't be added yet",
+  "channel_senderAddFailed": "Couldn't add this sender: {error}",
+  "@channel_senderAddFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "channel_senderCandidate": "{keyPrefix} · {type}",
   "@channel_senderCandidate": {
     "placeholders": {
