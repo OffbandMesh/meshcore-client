@@ -5144,6 +5144,12 @@ abstract class AppLocalizations {
   /// **'Unrequested response from repeater'**
   String get repeater_cliUnmatchedResponse;
 
+  /// No description provided for @repeater_lateResponseDiscarded.
+  ///
+  /// In en, this message translates to:
+  /// **'A late response arrived but was not applied, because you have unsaved changes.'**
+  String get repeater_lateResponseDiscarded;
+
   /// No description provided for @repeater_lateResponseReceived.
   ///
   /// In en, this message translates to:

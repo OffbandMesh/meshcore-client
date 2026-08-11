@@ -221,4 +221,57 @@ void main() {
       expect(surfaced, isEmpty);
     });
   });
+
+  group('unprefixed reply ambiguity (Gemini review)', () {
+    // #532 constrained PREFIXED replies. An unprefixed one still fell back to
+    // "first pending command for this repeater", which with two or more in
+    // flight is map-iteration order, so a caller could receive another
+    // command's output.
+    //
+    // The fallback cannot simply be deleted: firmware only echoes the prefix
+    // when the command exceeds four characters including it
+    // (simple_repeater/MyMesh.cpp, `strlen(command) > 4 && command[2] == '|'`),
+    // so a very short command legitimately replies without one.
+
+    test(
+      'with exactly one pending, an unprefixed reply still resolves it',
+      () async {
+        final only = service.registerPendingForTest(
+          repeater.publicKeyHex,
+          'E1|',
+        );
+
+        service.handleResponse(repeater, 'bare payload');
+
+        expect(await only, 'bare payload');
+        expect(surfaced, isEmpty);
+      },
+    );
+
+    test('with two pending, an unprefixed reply resolves NEITHER', () async {
+      final first = service.registerPendingForTest(
+        repeater.publicKeyHex,
+        'E1|',
+      );
+      final second = service.registerPendingForTest(
+        repeater.publicKeyHex,
+        'E2|',
+      );
+      var firstDone = false, secondDone = false;
+      unawaited(first.then((_) => firstDone = true));
+      unawaited(second.then((_) => secondDone = true));
+
+      service.handleResponse(repeater, 'ambiguous payload');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(firstDone, isFalse);
+      expect(secondDone, isFalse);
+      expect(
+        surfaced.single.response,
+        'ambiguous payload',
+        reason: 'ambiguity must be surfaced, never guessed at',
+      );
+      expect(surfaced.single.command, isNull);
+    });
+  });
 }

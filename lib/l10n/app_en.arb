@@ -1586,6 +1586,7 @@
     }
   },
   "repeater_cliUnmatchedResponse": "Unrequested response from repeater",
+  "repeater_lateResponseDiscarded": "A late response arrived but was not applied, because you have unsaved changes.",
   "repeater_lateResponseReceived": "A late response arrived after the command timed out. See the CLI screen.",
   "repeater_cliQuickGetName": "Get Name",
   "repeater_cliQuickGetRadio": "Get Radio",

@@ -2914,6 +2914,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Unrequested response from repeater';
 
   @override
+  String get repeater_lateResponseDiscarded =>
+      'A late response arrived but was not applied, because you have unsaved changes.';
+
+  @override
   String get repeater_lateResponseReceived =>
       'A late response arrived after the command timed out. See the CLI screen.';
 

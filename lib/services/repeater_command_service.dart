@@ -166,6 +166,11 @@ class RepeaterCommandService {
         () {
           final completer = _pendingCommands[commandId];
           if (completer != null && !completer.isCompleted) {
+            // Prune here as well as on receive. A run of commands that all
+            // time out with no traffic coming back would otherwise accumulate
+            // records until disposal, since handleResponse is the only other
+            // place that prunes and it never runs (Gemini review).
+            _pruneExpiredCommands();
             // Remember what this prefix asked so a reply arriving after the
             // window can still reach the user with its question attached.
             _expiredCommands[prefix] = _ExpiredCommand(
@@ -211,13 +216,7 @@ class RepeaterCommandService {
     // to matching by repeater.
     final matchedId = prefix != null ? _pendingByPrefix[prefix] : null;
     final commandId =
-        matchedId ??
-        (prefix != null
-            ? ''
-            : _pendingCommands.keys.firstWhere(
-                (id) => id.startsWith(repeaterKey),
-                orElse: () => '',
-              ));
+        matchedId ?? (prefix != null ? '' : _solePendingFor(repeaterKey));
 
     if (commandId.isNotEmpty) {
       final completer = _pendingCommands[commandId];
@@ -265,6 +264,28 @@ class RepeaterCommandService {
         sinceTimeout: sinceTimeout,
       ),
     );
+  }
+
+  /// The one command awaiting a reply from [repeaterKey], or `''` when that is
+  /// ambiguous.
+  ///
+  /// An unprefixed reply carries no correlation token, so position is all that
+  /// is left to match on. Firmware only echoes the prefix when the command is
+  /// longer than four characters including it (`simple_repeater/MyMesh.cpp`
+  /// `strlen(command) > 4 && command[2] == '|'`), so a very short command can
+  /// legitimately answer without one and the fallback has to stay.
+  ///
+  /// It is only sound with exactly one candidate though. With two or more,
+  /// "first" is map-iteration order, and choosing one would hand a caller
+  /// another command's output. Ambiguity is surfaced instead of guessed.
+  String _solePendingFor(String repeaterKey) {
+    String? only;
+    for (final id in _pendingCommands.keys) {
+      if (!id.startsWith(repeaterKey)) continue;
+      if (only != null) return '';
+      only = id;
+    }
+    return only ?? '';
   }
 
   Completer<String> _registerPending(String commandId, String prefix) {
