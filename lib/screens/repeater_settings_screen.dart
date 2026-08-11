@@ -194,12 +194,20 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
   /// (#528).
   void _handleUnmatchedResponse(UnmatchedRepeaterResponse unmatched) {
     if (!mounted) return;
-    if (unmatched.command != null) {
-      _handleGetResponse(unmatched.command!, unmatched.response);
-    }
+    // A late reply is stale by definition. Applying it over edits the user
+    // made while waiting would silently discard their input, so it only lands
+    // when nothing is unsaved (Gemini review).
+    final applied =
+        !_hasChanges &&
+        unmatched.command != null &&
+        _handleGetResponse(unmatched.command!, unmatched.response);
     showDismissibleSnackBar(
       context,
-      content: Text(context.l10n.repeater_lateResponseReceived),
+      content: Text(
+        applied
+            ? context.l10n.repeater_lateResponseReceived
+            : context.l10n.repeater_lateResponseDiscarded,
+      ),
     );
   }
 
