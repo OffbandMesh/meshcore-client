@@ -388,6 +388,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _webInitialHandshakeRequestSent = false;
   bool _preserveContactsOnRefresh = false;
   int _autoAddMaxHops = 0;
+  int _manualAddContactsRaw = 0;
   bool _autoAddUsers = false;
   bool _autoAddRepeaters = false;
   bool _autoAddRoomServers = false;
@@ -638,6 +639,12 @@ class MeshCoreConnector extends ChangeNotifier {
   int get telemetryModeLoc => _telemetryModeLoc;
   int get telemetryModeEnv => _telemetryModeEnv;
   int get advertLocationPolicy => _advertLocPolicy;
+
+  /// The device's `manual_add_contacts` pref exactly as reported, for callers
+  /// that must reproduce it rather than interpret it (stock config export,
+  /// #573). [_manualAddContacts] is a derived, inverted view of bit 0 and is
+  /// not what belongs in an export file.
+  int get manualAddContactsRaw => _manualAddContactsRaw;
   int get multiAcks => _multiAcks;
   bool? get clientRepeat => _clientRepeat;
 
@@ -5598,7 +5605,12 @@ class MeshCoreConnector extends ChangeNotifier {
       _telemetryModeEnv = telemetryFlag >> 2 & 0x03;
       _telemetryModeLoc = telemetryFlag >> 4 & 0x03;
 
-      _manualAddContacts = reader.readByte() & 0x01 == 0x00;
+      _manualAddContactsRaw = reader.readByte();
+      // Firmware treats bit 0 as "manual add", so auto-add is on when it is
+      // clear (`isAutoAddEnabled()` in MyMesh.cpp). This flag therefore means
+      // "device is in auto-add mode", despite its name, and drives the one-shot
+      // default-applying pass in _checkManualAddContacts.
+      _manualAddContacts = _manualAddContactsRaw & 0x01 == 0x00;
 
       _currentFreqHz = reader.readUInt32LE();
       _currentBwHz = reader.readUInt32LE();
