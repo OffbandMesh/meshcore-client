@@ -4839,4 +4839,111 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get batteryOptimizationOpenFailed => 'Couldn\'t open battery settings';
+
+  @override
+  String get stockConfig_selectAll => 'Select All';
+
+  @override
+  String get stockConfig_deselectAll => 'Deselect All';
+
+  @override
+  String get stockConfig_sectionName => 'Name';
+
+  @override
+  String get stockConfig_sectionIdentity => 'Private Identity Key';
+
+  @override
+  String get stockConfig_sectionRadio => 'Radio Settings';
+
+  @override
+  String get stockConfig_sectionPosition => 'Position Settings';
+
+  @override
+  String get stockConfig_sectionOther => 'Other Settings';
+
+  @override
+  String get stockConfig_sectionAutoAdd => 'Auto Add Settings';
+
+  @override
+  String stockConfig_sectionChannels(int count) {
+    return 'Channels ($count)';
+  }
+
+  @override
+  String stockConfig_sectionContacts(int count) {
+    return 'Contacts ($count)';
+  }
+
+  @override
+  String get stockConfig_identityWarning =>
+      'Your private key must be kept secret. It should only be exported as a backup.';
+
+  @override
+  String stockConfig_publicKeyLabel(String key) {
+    return 'Public Key: $key';
+  }
+
+  @override
+  String get stockConfig_privateKeyHidden => 'Private Key: hidden';
+
+  @override
+  String get exportConfig_title => 'Export Config';
+
+  @override
+  String get exportConfig_instruction => 'Please select data to export.';
+
+  @override
+  String get exportConfig_allChannels => 'All channels will be exported.';
+
+  @override
+  String get exportConfig_allContacts => 'All contacts will be exported.';
+
+  @override
+  String get exportConfig_nothingSelected =>
+      'Select at least one section to export.';
+
+  @override
+  String get exportConfig_lossyNotice =>
+      'This is the MeshCore stock format, so it cannot carry Offband-only data such as path overrides. Importing this file back into Offband will not restore that data.';
+
+  @override
+  String get exportConfig_omittedTitle => 'Some sections could not be exported';
+
+  @override
+  String exportConfig_omittedUnsupported(String section) {
+    return '$section: this radio\'s firmware was built without it.';
+  }
+
+  @override
+  String exportConfig_omittedNoReply(String section) {
+    return '$section: the device did not respond.';
+  }
+
+  @override
+  String exportConfig_omittedRejected(String section) {
+    return '$section: the device refused the request.';
+  }
+
+  @override
+  String exportConfig_omittedUnavailable(String section) {
+    return '$section: the device has not reported this yet.';
+  }
+
+  @override
+  String get exportConfig_exportAnyway => 'Export anyway';
+
+  @override
+  String get exportConfig_cancel => 'Cancel';
+
+  @override
+  String get exportConfig_shareSubject => 'MeshCore config';
+
+  @override
+  String exportConfig_failed(String message) {
+    return 'Export failed: $message';
+  }
+
+  @override
+  String get exportConfig_notConnected =>
+      'Connect to a device before exporting.';
 }

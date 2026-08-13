@@ -2755,5 +2755,129 @@
   "batteryOptimizationOpenFailed": "Couldn't open battery settings",
   "@batteryOptimizationOpenFailed": {
     "description": "Snackbar shown when the battery-optimization settings screen could not be opened (#443)."
+  },
+  "stockConfig_selectAll": "Select All",
+  "@stockConfig_selectAll": {
+    "description": "Button selecting every section on the stock config export/import screens (#568)."
+  },
+  "stockConfig_deselectAll": "Deselect All",
+  "@stockConfig_deselectAll": {
+    "description": "Button clearing every section on the stock config export/import screens (#568)."
+  },
+  "stockConfig_sectionName": "Name",
+  "@stockConfig_sectionName": {
+    "description": "Config section holding the device's display name (#568)."
+  },
+  "stockConfig_sectionIdentity": "Private Identity Key",
+  "@stockConfig_sectionIdentity": {
+    "description": "Config section holding the node's key pair (#568)."
+  },
+  "stockConfig_sectionRadio": "Radio Settings",
+  "@stockConfig_sectionRadio": {
+    "description": "Config section holding LoRa radio parameters (#568)."
+  },
+  "stockConfig_sectionPosition": "Position Settings",
+  "@stockConfig_sectionPosition": {
+    "description": "Config section holding the device's advertised position (#568)."
+  },
+  "stockConfig_sectionOther": "Other Settings",
+  "@stockConfig_sectionOther": {
+    "description": "Config section holding miscellaneous device preferences (#568)."
+  },
+  "stockConfig_sectionAutoAdd": "Auto Add Settings",
+  "@stockConfig_sectionAutoAdd": {
+    "description": "Config section holding automatic contact-add preferences (#568)."
+  },
+  "stockConfig_sectionChannels": "Channels ({count})",
+  "@stockConfig_sectionChannels": {
+    "description": "Config section holding channels, with how many there are (#568).",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "stockConfig_sectionContacts": "Contacts ({count})",
+  "@stockConfig_sectionContacts": {
+    "description": "Config section holding contacts, with how many there are (#568).",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "stockConfig_identityWarning": "Your private key must be kept secret. It should only be exported as a backup.",
+  "@stockConfig_identityWarning": {
+    "description": "Warning shown beside the identity section when exporting (#568)."
+  },
+  "stockConfig_publicKeyLabel": "Public Key: {key}",
+  "@stockConfig_publicKeyLabel": {
+    "description": "Abbreviated public key shown under the identity section (#568).",
+    "placeholders": { "key": { "type": "String" } }
+  },
+  "stockConfig_privateKeyHidden": "Private Key: hidden",
+  "@stockConfig_privateKeyHidden": {
+    "description": "Placeholder shown instead of the private key, which is never displayed (#568)."
+  },
+  "exportConfig_title": "Export Config",
+  "@exportConfig_title": {
+    "description": "Title of the stock config export screen (#574)."
+  },
+  "exportConfig_instruction": "Please select data to export.",
+  "@exportConfig_instruction": {
+    "description": "Banner instructing the user to pick sections to export (#574)."
+  },
+  "exportConfig_allChannels": "All channels will be exported.",
+  "@exportConfig_allChannels": {
+    "description": "Note that channels export as a whole, with no per-channel choice (#574)."
+  },
+  "exportConfig_allContacts": "All contacts will be exported.",
+  "@exportConfig_allContacts": {
+    "description": "Note that contacts export as a whole, with no per-contact choice (#574)."
+  },
+  "exportConfig_nothingSelected": "Select at least one section to export.",
+  "@exportConfig_nothingSelected": {
+    "description": "Shown when the user tries to export with every section unchecked (#574)."
+  },
+  "exportConfig_lossyNotice": "This is the MeshCore stock format, so it cannot carry Offband-only data such as path overrides. Importing this file back into Offband will not restore that data.",
+  "@exportConfig_lossyNotice": {
+    "description": "Explains that an export drops Offband-only contact fields (#574)."
+  },
+  "exportConfig_omittedTitle": "Some sections could not be exported",
+  "@exportConfig_omittedTitle": {
+    "description": "Title of the dialog listing sections that could not be gathered (#574)."
+  },
+  "exportConfig_omittedUnsupported": "{section}: this radio's firmware was built without it.",
+  "@exportConfig_omittedUnsupported": {
+    "description": "Reason line when firmware lacks the feature entirely, so retrying cannot help (#574).",
+    "placeholders": { "section": { "type": "String" } }
+  },
+  "exportConfig_omittedNoReply": "{section}: the device did not respond.",
+  "@exportConfig_omittedNoReply": {
+    "description": "Reason line when the device did not answer in time (#574).",
+    "placeholders": { "section": { "type": "String" } }
+  },
+  "exportConfig_omittedRejected": "{section}: the device refused the request.",
+  "@exportConfig_omittedRejected": {
+    "description": "Reason line when the device refused the request (#574).",
+    "placeholders": { "section": { "type": "String" } }
+  },
+  "exportConfig_omittedUnavailable": "{section}: the device has not reported this yet.",
+  "@exportConfig_omittedUnavailable": {
+    "description": "Reason line when the value is not known to the app yet (#574).",
+    "placeholders": { "section": { "type": "String" } }
+  },
+  "exportConfig_exportAnyway": "Export anyway",
+  "@exportConfig_exportAnyway": {
+    "description": "Confirms writing the file even though some sections are missing (#574)."
+  },
+  "exportConfig_cancel": "Cancel",
+  "@exportConfig_cancel": {
+    "description": "Dismisses the export without writing a file (#574)."
+  },
+  "exportConfig_shareSubject": "MeshCore config",
+  "@exportConfig_shareSubject": {
+    "description": "Subject line used when sharing an exported config file (#574)."
+  },
+  "exportConfig_failed": "Export failed: {message}",
+  "@exportConfig_failed": {
+    "description": "Snackbar shown when writing the export file failed (#574).",
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "exportConfig_notConnected": "Connect to a device before exporting.",
+  "@exportConfig_notConnected": {
+    "description": "Shown when the export screen has no connected radio to read from (#574)."
   }
 }
