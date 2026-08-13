@@ -27,6 +27,8 @@ import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'export_config_screen.dart';
+import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
 import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
@@ -1552,6 +1554,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Card(
       child: Column(
         children: [
+          // Stock-compatible whole-device backup and restore (#568), distinct
+          // from the GPX exports below, which are map data only.
+          ListTile(
+            leading: const Icon(Icons.save_alt),
+            title: Text(l10n.settings_exportConfig),
+            subtitle: Text(l10n.settings_configBackupSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ExportConfigScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_file),
+            title: Text(l10n.settings_importConfig),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ImportConfigScreen(),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.download_outlined),
             title: Text(l10n.settings_gpxExportRepeaters),

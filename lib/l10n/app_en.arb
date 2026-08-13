@@ -2879,5 +2879,130 @@
   "exportConfig_notConnected": "Connect to a device before exporting.",
   "@exportConfig_notConnected": {
     "description": "Shown when the export screen has no connected radio to read from (#574)."
+  },
+  "importConfig_title": "Import Config",
+  "@importConfig_title": {
+    "description": "Title of the stock config import screen (#576)."
+  },
+  "importConfig_instruction": "Please select data to import.",
+  "@importConfig_instruction": {
+    "description": "Banner instructing the user to pick which sections to import (#576)."
+  },
+  "importConfig_chooseFile": "Choose a config file",
+  "@importConfig_chooseFile": {
+    "description": "Button that opens the file picker to load a config file (#576)."
+  },
+  "importConfig_identityWarning": "Importing this private key will overwrite your current identity.",
+  "@importConfig_identityWarning": {
+    "description": "Warning under the identity section, matching the wording stock uses (#576)."
+  },
+  "importConfig_channelsNote": "New channels will be added. Existing channels will not change.",
+  "@importConfig_channelsNote": {
+    "description": "Explains the additive channel rule, matching stock's wording (#576)."
+  },
+  "importConfig_contactsNote": "New contacts will be added. Existing contacts will be updated.",
+  "@importConfig_contactsNote": {
+    "description": "Explains the contact upsert rule, matching stock's wording (#576)."
+  },
+  "importConfig_nothingSelected": "Select at least one section to import.",
+  "@importConfig_nothingSelected": {
+    "description": "Shown when the user confirms with nothing checked (#576)."
+  },
+  "importConfig_notConnected": "Connect to a device before importing.",
+  "@importConfig_notConnected": {
+    "description": "Shown when there is no connected radio to import into (#576)."
+  },
+  "importConfig_parseFailed": "That file is not a MeshCore config. {message}",
+  "@importConfig_parseFailed": {
+    "description": "Shown when the chosen file could not be parsed (#576).",
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "importConfig_confirmIdentityTitle": "Overwrite this node's identity?",
+  "@importConfig_confirmIdentityTitle": {
+    "description": "Title of the confirmation shown before a destructive identity import (#576)."
+  },
+  "importConfig_confirmIdentityBody": "The node's current identity will be replaced with the one in this file, and every contact's record of this node becomes stale. This cannot be undone except by importing the previous key.",
+  "@importConfig_confirmIdentityBody": {
+    "description": "Body of the destructive identity import confirmation (#576)."
+  },
+  "importConfig_confirmIdentityAccept": "Overwrite identity",
+  "@importConfig_confirmIdentityAccept": {
+    "description": "Confirms the destructive identity import (#576)."
+  },
+  "importConfig_cancel": "Cancel",
+  "@importConfig_cancel": {
+    "description": "Dismisses a config import confirmation (#576)."
+  },
+  "importConfig_resultTitle": "Import finished",
+  "@importConfig_resultTitle": {
+    "description": "Title of the dialog summarising what an import did (#576)."
+  },
+  "importConfig_resultCounts": "{contacts} contacts written, {channels} channels added.",
+  "@importConfig_resultCounts": {
+    "description": "Summary counts after an import (#576).",
+    "placeholders": {
+      "contacts": { "type": "int" },
+      "channels": { "type": "int" }
+    }
+  },
+  "importConfig_resultSkippedHeading": "Channels not imported",
+  "@importConfig_resultSkippedHeading": {
+    "description": "Heading above the list of channels that were skipped (#576)."
+  },
+  "importConfig_resultFailedHeading": "Sections not applied",
+  "@importConfig_resultFailedHeading": {
+    "description": "Heading above the list of sections that could not be applied (#576)."
+  },
+  "importConfig_reasonAlreadyPresent": "already on this device, so it was left unchanged",
+  "@importConfig_reasonAlreadyPresent": {
+    "description": "Skip reason: stock never overwrites an existing channel (#576)."
+  },
+  "importConfig_reasonNoFreeSlot": "no free channel slot on the device",
+  "@importConfig_reasonNoFreeSlot": {
+    "description": "Skip reason: every channel slot is occupied (#576)."
+  },
+  "importConfig_reasonAbsentFromFile": "not present in this file",
+  "@importConfig_reasonAbsentFromFile": {
+    "description": "Failure reason: the file did not contain the section (#576)."
+  },
+  "importConfig_reasonNoReply": "the device did not respond",
+  "@importConfig_reasonNoReply": {
+    "description": "Failure reason: no answer from the device (#576)."
+  },
+  "importConfig_reasonUnsupported": "this radio's firmware was built without it",
+  "@importConfig_reasonUnsupported": {
+    "description": "Failure reason: firmware lacks the feature entirely (#576)."
+  },
+  "importConfig_reasonRejected": "the device refused it",
+  "@importConfig_reasonRejected": {
+    "description": "Failure reason: the device refused the request (#576)."
+  },
+  "importConfig_reasonNotWritable": "this app cannot write every value in it",
+  "@importConfig_reasonNotWritable": {
+    "description": "Failure reason: no supported way to write the value (#576)."
+  },
+  "importConfig_entryLine": "{item}: {reason}",
+  "@importConfig_entryLine": {
+    "description": "One line pairing a channel or section with why it was skipped (#576).",
+    "placeholders": {
+      "item": { "type": "String" },
+      "reason": { "type": "String" }
+    }
+  },
+  "importConfig_close": "Close",
+  "@importConfig_close": {
+    "description": "Dismisses the import result dialog (#576)."
+  },
+  "settings_exportConfig": "Export Config",
+  "@settings_exportConfig": {
+    "description": "Settings entry opening the config export screen (#568)."
+  },
+  "settings_importConfig": "Import Config",
+  "@settings_importConfig": {
+    "description": "Settings entry opening the config import screen (#568)."
+  },
+  "settings_configBackupSubtitle": "Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.",
+  "@settings_configBackupSubtitle": {
+    "description": "Explains what the config export and import entries do (#568)."
   }
 }

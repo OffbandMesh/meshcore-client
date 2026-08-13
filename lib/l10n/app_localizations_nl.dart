@@ -4933,4 +4933,109 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get exportConfig_notConnected =>
       'Connect to a device before exporting.';
+
+  @override
+  String get importConfig_title => 'Import Config';
+
+  @override
+  String get importConfig_instruction => 'Please select data to import.';
+
+  @override
+  String get importConfig_chooseFile => 'Choose a config file';
+
+  @override
+  String get importConfig_identityWarning =>
+      'Importing this private key will overwrite your current identity.';
+
+  @override
+  String get importConfig_channelsNote =>
+      'New channels will be added. Existing channels will not change.';
+
+  @override
+  String get importConfig_contactsNote =>
+      'New contacts will be added. Existing contacts will be updated.';
+
+  @override
+  String get importConfig_nothingSelected =>
+      'Select at least one section to import.';
+
+  @override
+  String get importConfig_notConnected =>
+      'Connect to a device before importing.';
+
+  @override
+  String importConfig_parseFailed(String message) {
+    return 'That file is not a MeshCore config. $message';
+  }
+
+  @override
+  String get importConfig_confirmIdentityTitle =>
+      'Overwrite this node\'s identity?';
+
+  @override
+  String get importConfig_confirmIdentityBody =>
+      'The node\'s current identity will be replaced with the one in this file, and every contact\'s record of this node becomes stale. This cannot be undone except by importing the previous key.';
+
+  @override
+  String get importConfig_confirmIdentityAccept => 'Overwrite identity';
+
+  @override
+  String get importConfig_cancel => 'Cancel';
+
+  @override
+  String get importConfig_resultTitle => 'Import finished';
+
+  @override
+  String importConfig_resultCounts(int contacts, int channels) {
+    return '$contacts contacts written, $channels channels added.';
+  }
+
+  @override
+  String get importConfig_resultSkippedHeading => 'Channels not imported';
+
+  @override
+  String get importConfig_resultFailedHeading => 'Sections not applied';
+
+  @override
+  String get importConfig_reasonAlreadyPresent =>
+      'already on this device, so it was left unchanged';
+
+  @override
+  String get importConfig_reasonNoFreeSlot =>
+      'no free channel slot on the device';
+
+  @override
+  String get importConfig_reasonAbsentFromFile => 'not present in this file';
+
+  @override
+  String get importConfig_reasonNoReply => 'the device did not respond';
+
+  @override
+  String get importConfig_reasonUnsupported =>
+      'this radio\'s firmware was built without it';
+
+  @override
+  String get importConfig_reasonRejected => 'the device refused it';
+
+  @override
+  String get importConfig_reasonNotWritable =>
+      'this app cannot write every value in it';
+
+  @override
+  String importConfig_entryLine(String item, String reason) {
+    return '$item: $reason';
+  }
+
+  @override
+  String get importConfig_close => 'Close';
+
+  @override
+  String get settings_exportConfig => 'Export Config';
+
+  @override
+  String get settings_importConfig => 'Import Config';
+
+  @override
+  String get settings_configBackupSubtitle =>
+      'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.';
 }
