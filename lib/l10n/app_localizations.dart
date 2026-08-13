@@ -3136,11 +3136,17 @@ abstract class AppLocalizations {
   /// **'{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations'**
   String channel_coreScopeCounts(int observers, int observations);
 
-  /// No description provided for @channel_senderNotHeard.
+  /// No description provided for @channel_senderNameUnknown.
   ///
   /// In en, this message translates to:
-  /// **'Haven\'t heard this node\'s advert yet'**
-  String get channel_senderNotHeard;
+  /// **'No node known by that name'**
+  String get channel_senderNameUnknown;
+
+  /// No description provided for @channel_senderNameUnknownHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding needs an advert from this node'**
+  String get channel_senderNameUnknownHint;
 
   /// No description provided for @channel_senderAlreadyContact.
   ///

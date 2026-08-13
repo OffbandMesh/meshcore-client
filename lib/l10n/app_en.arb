@@ -902,7 +902,8 @@
       }
     }
   },
-  "channel_senderNotHeard": "Haven't heard this node's advert yet",
+  "channel_senderNameUnknown": "No node known by that name",
+  "channel_senderNameUnknownHint": "Adding needs an advert from this node",
   "channel_senderAlreadyContact": "Already in contacts",
   "channel_senderMultipleMatches": "{count} nodes use this name",
   "@channel_senderMultipleMatches": {
