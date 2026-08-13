@@ -213,6 +213,17 @@ const int cmdSetAutoAddConfig = 58;
 const int cmdGetAutoAddConfig = 59;
 const int cmdSetPathHashMode = 61;
 
+/// Read the node's 64-byte identity. Compiled out of some firmware builds
+/// (`ENABLE_PRIVATE_KEY_EXPORT`), in which case the device answers
+/// [respCodeDisabled] rather than [respCodePrivateKey]. (#578)
+const int cmdExportPrivateKey = 23;
+
+/// Overwrite the node's identity with a 64-byte key. Like the export command
+/// this can be compiled out (`ENABLE_PRIVATE_KEY_IMPORT`). Firmware validates
+/// the key and answers [respCodeErr] with [errCodeIllegalArg] if it is
+/// malformed. (#578)
+const int cmdImportPrivateKey = 24;
+
 // Text message types
 const int txtTypePlain = 0;
 const int txtTypeCliData = 1;
@@ -255,6 +266,18 @@ const int respCodeChannelInfo = 18;
 const int respCodeCustomVars = 21;
 const int respCodeAutoAddConfig = 25;
 const int respCodeStats = 24;
+
+/// Reply to [cmdExportPrivateKey]: this byte followed by
+/// [privateKeySize] bytes. (#578)
+const int respCodePrivateKey = 14;
+
+/// One-byte reply meaning the firmware was built without the requested
+/// feature. Distinct from [respCodeErr], which reports a runtime failure of a
+/// command the firmware does support. (#578)
+const int respCodeDisabled = 15;
+
+/// A node identity is 64 bytes: the Ed25519 secret followed by its public key.
+const int privateKeySize = 64;
 
 /// Offband fork-only extension space (0xC0+), never collides with upstream,
 /// never submitted upstream. Request and reply share the code. (#135)
@@ -664,6 +687,9 @@ const int payloadTypeRawCustom =
     0x0F; // custom packet as raw bytes, for applications with custom encryption, payloads, etc
 
 //auto-add flags
+/// Firmware clamps `autoadd_max_hops` to this value. 0 means no limit. (#578)
+const int autoAddMaxHopsLimit = 64;
+
 const int autoAddOverwriteOldestFlag =
     1 << 0; // 0x01 - overwrite oldest non-favourite when full
 const int autoAddChatFlag =
@@ -1420,6 +1446,7 @@ Uint8List buildSetAutoAddConfigFrame({
   required bool autoAddRoomServer,
   required bool autoAddSensor,
   required bool overwriteOldest,
+  int? maxHops,
 }) {
   final writer = BufferWriter();
   writer.writeByte(cmdSetAutoAddConfig);
@@ -1430,6 +1457,32 @@ Uint8List buildSetAutoAddConfigFrame({
   if (autoAddSensor) flags |= autoAddSensorFlag;
   if (overwriteOldest) flags |= autoAddOverwriteOldestFlag;
   writer.writeByte(flags);
+  // Firmware applies the hop limit only when the frame carries a third byte,
+  // so omitting [maxHops] leaves the device's current limit untouched. It
+  // clamps to [autoAddMaxHopsLimit] on its side; we clamp here too so the
+  // value we believe we sent is the value that lands. (#578)
+  if (maxHops != null) {
+    writer.writeByte(maxHops.clamp(0, autoAddMaxHopsLimit));
+  }
+  return writer.toBytes();
+}
+
+/// Request the node's identity. See [cmdExportPrivateKey] for availability.
+Uint8List buildExportPrivateKeyFrame() =>
+    Uint8List.fromList([cmdExportPrivateKey]);
+
+/// Overwrite the node's identity. [identity] must be [privateKeySize] bytes.
+Uint8List buildImportPrivateKeyFrame(Uint8List identity) {
+  if (identity.length != privateKeySize) {
+    throw ArgumentError.value(
+      identity.length,
+      'identity',
+      'a node identity is exactly $privateKeySize bytes',
+    );
+  }
+  final writer = BufferWriter();
+  writer.writeByte(cmdImportPrivateKey);
+  writer.writeBytes(identity);
   return writer.toBytes();
 }
 
