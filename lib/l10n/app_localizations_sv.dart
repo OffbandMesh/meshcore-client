@@ -1724,7 +1724,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get channel_senderNotHeard => 'Haven\'t heard this node\'s advert yet';
+  String get channel_senderNameUnknown => 'No node known by that name';
+
+  @override
+  String get channel_senderNameUnknownHint =>
+      'Adding needs an advert from this node';
 
   @override
   String get channel_senderAlreadyContact => 'Already in contacts';

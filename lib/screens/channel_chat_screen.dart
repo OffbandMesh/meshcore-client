@@ -722,10 +722,14 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final connector = sheetContext.read<MeshCoreConnector>();
     final candidates = connector.resolveContactsByName(message.senderName);
     if (candidates.isEmpty) {
+      // States what we actually know: nothing matches this name. Claiming the
+      // node was never heard would be a guess, since it may be known under an
+      // older advert name (#579).
       return [
         ListTile(
           leading: const Icon(Icons.help_outline),
-          title: Text(sheetContext.l10n.channel_senderNotHeard),
+          title: Text(sheetContext.l10n.channel_senderNameUnknown),
+          subtitle: Text(sheetContext.l10n.channel_senderNameUnknownHint),
         ),
       ];
     }
