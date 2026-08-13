@@ -27,6 +27,7 @@ import '../models/contact.dart';
 import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
+import '../services/corescope_service.dart';
 import '../widgets/channel_notify_mode.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
@@ -1920,17 +1921,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     if (hash == null) return;
     final connector = context.read<MeshCoreConnector>();
     final l10n = context.l10n;
-    final counts = await connector.refreshCoreScopeCounts(
+    final result = await connector.refreshCoreScopeCounts(
       message.channelIndex ?? _currentChannel.index,
       message.messageId,
       hash,
     );
     if (!mounted) return;
-    _showCoreScopeBanner(
-      counts == null
-          ? l10n.channel_coreScopeRefreshFailed
-          : l10n.channel_coreScopeCounts(counts.observers, counts.observations),
-    );
+    final text = switch (result.status) {
+      CoreScopeStatus.found => l10n.channel_coreScopeCounts(
+        result.counts!.observers,
+        result.counts!.observations,
+      ),
+      CoreScopeStatus.notFound => l10n.channel_coreScopeNotFound,
+      CoreScopeStatus.unreachable => l10n.channel_coreScopeRefreshFailed,
+    };
+    _showCoreScopeBanner(text);
   }
 
   /// Top banner (out of the way of the composer), auto-dismissed after a few
