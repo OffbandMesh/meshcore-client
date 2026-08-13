@@ -891,6 +891,7 @@
   },
   "channel_coreScopeRefresh": "Refresh CoreScope observers",
   "channel_coreScopeRefreshFailed": "CoreScope unreachable",
+  "channel_coreScopeNotFound": "Not seen by CoreScope yet",
   "channel_coreScopeCounts": "{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations",
   "@channel_coreScopeCounts": {
     "placeholders": {

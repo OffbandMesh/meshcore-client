@@ -3130,6 +3130,12 @@ abstract class AppLocalizations {
   /// **'CoreScope unreachable'**
   String get channel_coreScopeRefreshFailed;
 
+  /// No description provided for @channel_coreScopeNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not seen by CoreScope yet'**
+  String get channel_coreScopeNotFound;
+
   /// No description provided for @channel_coreScopeCounts.
   ///
   /// In en, this message translates to:

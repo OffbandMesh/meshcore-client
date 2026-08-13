@@ -17,6 +17,25 @@ class CoreScopeCounts {
   final int observations;
 }
 
+/// Outcome of a CoreScope query, so the UI can tell "no record of this packet
+/// yet" apart from "couldn't reach CoreScope" (#571).
+enum CoreScopeStatus { found, notFound, unreachable }
+
+class CoreScopeResult {
+  const CoreScopeResult(this.status, [this.counts]);
+  final CoreScopeStatus status;
+  final CoreScopeCounts? counts;
+
+  static const CoreScopeResult notFound = CoreScopeResult(
+    CoreScopeStatus.notFound,
+  );
+  static const CoreScopeResult unreachable = CoreScopeResult(
+    CoreScopeStatus.unreachable,
+  );
+  factory CoreScopeResult.found(CoreScopeCounts counts) =>
+      CoreScopeResult(CoreScopeStatus.found, counts);
+}
+
 /// Queries a CoreScope instance for how many observers reported a given packet,
 /// keyed by the firmware/mesh packet hash (#524). Read-only and best-effort:
 /// any failure (offline, timeout, non-200, bad body, unknown packet) returns
@@ -35,10 +54,10 @@ class CoreScopeService {
   final Duration timeout;
 
   /// Distinct observers and total observations for [packetHash] (16 lowercase
-  /// hex chars). Returns null on any error, or when CoreScope has no record of
-  /// the hash yet.
-  Future<CoreScopeCounts?> fetchCounts(String packetHash) async {
-    if (packetHash.isEmpty) return null;
+  /// hex chars). `notFound` = CoreScope reachable but has no record of the hash
+  /// yet; `unreachable` = network/HTTP/parse error. Never throws.
+  Future<CoreScopeResult> fetchCounts(String packetHash) async {
+    if (packetHash.isEmpty) return CoreScopeResult.unreachable;
     final uri = Uri(
       scheme: useTls ? 'https' : 'http',
       host: host,
@@ -57,19 +76,20 @@ class CoreScopeService {
           'HTTP ${resp.statusCode} for hash $packetHash',
           tag: 'CoreScope',
         );
-        return null;
+        return CoreScopeResult.unreachable;
       }
       final body = jsonDecode(resp.body);
-      if (body is! Map) return null;
+      if (body is! Map) return CoreScopeResult.unreachable;
       final packets = body['packets'];
-      if (packets is! List || packets.isEmpty) {
+      if (packets is! List) return CoreScopeResult.unreachable;
+      if (packets.isEmpty) {
         appLogger.info('no record yet for $packetHash', tag: 'CoreScope');
-        return null;
+        return CoreScopeResult.notFound;
       }
       final first = packets.first;
-      if (first is! Map) return null;
+      if (first is! Map) return CoreScopeResult.unreachable;
       final observers = first['observer_count'];
-      if (observers is! num) return null;
+      if (observers is! num) return CoreScopeResult.unreachable;
       final observations = first['observation_count'];
       final counts = CoreScopeCounts(
         observers: observers.toInt(),
@@ -82,10 +102,10 @@ class CoreScopeService {
         'for $packetHash',
         tag: 'CoreScope',
       );
-      return counts;
+      return CoreScopeResult.found(counts);
     } catch (e) {
       appLogger.warn('Query failed for $packetHash: $e', tag: 'CoreScope');
-      return null;
+      return CoreScopeResult.unreachable;
     }
   }
 

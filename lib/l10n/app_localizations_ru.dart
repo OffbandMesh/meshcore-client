@@ -1733,6 +1733,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get channel_coreScopeRefreshFailed => 'CoreScope unreachable';
 
   @override
+  String get channel_coreScopeNotFound => 'Not seen by CoreScope yet';
+
+  @override
   String channel_coreScopeCounts(int observers, int observations) {
     String _temp0 = intl.Intl.pluralLogic(
       observers,
