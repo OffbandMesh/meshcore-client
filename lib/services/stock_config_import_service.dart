@@ -68,14 +68,27 @@ class StockConfigImportResult {
     required this.channelsAdded,
   });
 
+  /// Sections whose commands were **sent** to the device without error.
+  ///
+  /// This is not device confirmation. Apart from the identity import, which
+  /// waits for a real OK or ERR, the firmware's generic OK for these commands
+  /// is not currently awaited, so a frame lost or refused after it left our
+  /// side would still land here. Wiring per-command confirmation is tracked
+  /// separately; until then this set means "sent", and the UI says so rather
+  /// than claiming more than we know.
   final Set<StockConfigSection> applied;
+
   final Map<StockConfigSection, StockConfigImportIssue> failed;
 
   /// Channels in the file that were not written, each with a reason. Shown to
   /// the user; never discarded.
   final List<SkippedChannel> skippedChannels;
 
+  /// Contacts whose write command was sent. See [applied] for why this is a
+  /// send count and not a confirmed count.
   final int contactsWritten;
+
+  /// Channels whose write command was sent. Same caveat as [contactsWritten].
   final int channelsAdded;
 
   bool get isComplete => failed.isEmpty && skippedChannels.isEmpty;
@@ -280,7 +293,12 @@ class StockConfigImportService {
     var written = 0;
     for (final contact in contacts) {
       final path = contact.outPath;
-      final hasPosition = contact.latitude != 0 || contact.longitude != 0;
+      // Position is always passed through, including (0, 0). Suppressing zero
+      // would be pointless here: the frame builder emits the position block
+      // whenever lastModified is present, which it always is below, so a
+      // suppressed position writes 0/0 anyway. Passing it straight through
+      // means the file's value is what lands, with no special case to
+      // misread.
       await _connector.sendFrame(
         buildUpdateContactPathFrame(
           contact.publicKey,
@@ -291,8 +309,8 @@ class StockConfigImportService {
           type: contact.type,
           flags: contact.flags,
           name: contact.name,
-          lat: hasPosition ? contact.latitude : null,
-          lon: hasPosition ? contact.longitude : null,
+          lat: contact.latitude,
+          lon: contact.longitude,
           lastModified: DateTime.fromMillisecondsSinceEpoch(
             contact.lastModified * 1000,
           ),
