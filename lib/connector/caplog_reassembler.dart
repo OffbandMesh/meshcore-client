@@ -71,23 +71,26 @@ class CaplogBusyException implements Exception {
       'CaplogBusyException: device busy, another stream is in flight';
 }
 
-/// Thrown when the reassembled caplog byte count doesn't match the length the
-/// device announced in its START frame. (#430)
-class CaplogTruncatedException implements Exception {
-  const CaplogTruncatedException({
+/// Result of a caplog download. On a clean transfer [received] == [expected]
+/// and [truncated] is false; on a short transfer [bytes] still carry everything
+/// that was reassembled and [truncated] is true. A partial capture is kept and
+/// handed back rather than discarded, so the user can still save/share it. (#580)
+class CaplogDownload {
+  const CaplogDownload({
+    required this.bytes,
     required this.received,
     required this.expected,
-    this.chunks,
+    required this.chunks,
   });
+
+  /// The reassembled bytes (complete, or partial when [truncated]).
+  final Uint8List bytes;
   final int received;
   final int expected;
 
-  /// Number of CHUNK frames the client accumulated before END, a diagnostic to
-  /// tell client/transport frame loss apart from the firmware streaming short.
-  final int? chunks;
+  /// Number of CHUNK frames accumulated before END, a diagnostic to tell
+  /// client/transport frame loss apart from the firmware streaming short.
+  final int chunks;
 
-  @override
-  String toString() =>
-      'CaplogTruncatedException: received $received of $expected bytes'
-      '${chunks != null ? ' in $chunks chunks' : ''}';
+  bool get truncated => received != expected;
 }

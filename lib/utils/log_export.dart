@@ -43,6 +43,11 @@ class LogExport {
         : context.l10n.debugLog_saveLog;
   }
 
+  /// Short verb for a compound button label like "Download & save". Mobile
+  /// shares via the OS sheet; desktop and web save a file (web via a browser
+  /// download), so "save" fits both. (#580)
+  static String get actionVerb => (!kIsWeb && _isMobile) ? 'share' : 'save';
+
   /// Export the combined on-disk app+BLE log (the App/BLE log screens). On web
   /// there is no on-disk file, so [webContent] supplies the text to download.
   static Future<void> shareLogs(

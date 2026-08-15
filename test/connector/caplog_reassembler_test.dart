@@ -113,4 +113,27 @@ void main() {
       expect(end.bytes, Uint8List.fromList(expected));
     });
   });
+
+  group('CaplogDownload', () {
+    test('truncated when received < expected, and keeps the partial bytes', () {
+      final d = CaplogDownload(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        received: 3,
+        expected: 10,
+        chunks: 2,
+      );
+      expect(d.truncated, isTrue);
+      expect(d.bytes, Uint8List.fromList([1, 2, 3]));
+    });
+
+    test('not truncated when received == expected', () {
+      final d = CaplogDownload(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        received: 3,
+        expected: 3,
+        chunks: 1,
+      );
+      expect(d.truncated, isFalse);
+    });
+  });
 }
