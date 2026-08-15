@@ -2937,9 +2937,9 @@
   "@importConfig_resultTitle": {
     "description": "Title of the dialog summarising what an import did (#576)."
   },
-  "importConfig_resultCounts": "{contacts} contacts written, {channels} channels added.",
+  "importConfig_resultCounts": "Sent {contacts} contacts and {channels} channels to the device.",
   "@importConfig_resultCounts": {
-    "description": "Summary counts after an import (#576).",
+    "description": "Summary counts after an import. Deliberately says sent, not applied: apart from identity these commands are not confirmed by the device yet (#576).",
     "placeholders": {
       "contacts": { "type": "int" },
       "channels": { "type": "int" }

@@ -155,6 +155,19 @@ void main() {
       expect(stock.outPath, isNull);
     });
 
+    test('a zero position stays zero rather than becoming absent', () {
+      // Review flagged (0, 0) as a lost position on import. It is not: the
+      // frame builder writes the position block whenever lastModified is
+      // present, so zero lands as zero. Pinned here so the export side of the
+      // pair cannot start emitting something else.
+      final stock = toStockContact(makeContact(latitude: 0, longitude: 0));
+
+      expect(stock.latitude, 0);
+      expect(stock.longitude, 0);
+      expect(stock.toJson()['latitude'], '0.0');
+      expect(stock.toJson()['longitude'], '0.0');
+    });
+
     test('flags and type pass through untouched', () {
       final stock = toStockContact(makeContact(type: 3, flags: 15));
 

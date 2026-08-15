@@ -8506,10 +8506,10 @@ abstract class AppLocalizations {
   /// **'Import finished'**
   String get importConfig_resultTitle;
 
-  /// Summary counts after an import (#576).
+  /// Summary counts after an import. Deliberately says sent, not applied: apart from identity these commands are not confirmed by the device yet (#576).
   ///
   /// In en, this message translates to:
-  /// **'{contacts} contacts written, {channels} channels added.'**
+  /// **'Sent {contacts} contacts and {channels} channels to the device.'**
   String importConfig_resultCounts(int contacts, int channels);
 
   /// Heading above the list of channels that were skipped (#576).

@@ -4982,7 +4982,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String importConfig_resultCounts(int contacts, int channels) {
-    return '$contacts contacts written, $channels channels added.';
+    return 'Sent $contacts contacts and $channels channels to the device.';
   }
 
   @override
