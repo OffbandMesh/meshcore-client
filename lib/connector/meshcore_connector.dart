@@ -292,7 +292,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _blockDumpInFlight = false;
   final Set<String> _blockKeysTouchedDuringDump = {};
   // Caplog serial-capture download (0xC4) streamed reassembly (#430).
-  Completer<Uint8List>? _caplogCompleter;
+  Completer<CaplogDownload>? _caplogCompleter;
   CaplogReassembler? _caplogReassembler;
   bool _caplogAwaitingStart = false;
   Completer<CaplogAck>? _caplogAckCompleter;
@@ -4638,18 +4638,19 @@ class MeshCoreConnector extends ChangeNotifier {
   /// (0xC4). Sends the request and reassembles the START/CHUNK*/END stream into
   /// the raw captured bytes.
   ///
-  /// Throws [StateError] if a download is already in flight,
+  /// Returns a [CaplogDownload] carrying the reassembled bytes. A short transfer
+  /// is NOT an error: the result's [CaplogDownload.truncated] is set and the
+  /// partial [CaplogDownload.bytes] are kept so the caller can still save/share
+  /// them (#580). Throws [StateError] if a download is already in flight,
   /// [CaplogBusyException] if the device rejects because another stream is
-  /// already in flight, [CaplogTruncatedException] if the byte count doesn't
-  /// match the announced length, or [TimeoutException] if it never finishes.
-  /// (#430)
-  Future<Uint8List> downloadCaplog({
+  /// already in flight, or [TimeoutException] if it never finishes. (#430)
+  Future<CaplogDownload> downloadCaplog({
     Duration timeout = const Duration(seconds: 30),
   }) async {
     if (_caplogCompleter != null) {
       throw StateError('A caplog download is already in progress');
     }
-    final completer = Completer<Uint8List>();
+    final completer = Completer<CaplogDownload>();
     _caplogCompleter = completer;
     _caplogReassembler = CaplogReassembler();
     _caplogAwaitingStart = true;
@@ -4712,7 +4713,14 @@ class MeshCoreConnector extends ChangeNotifier {
           '$_caplogChunks chunks',
           tag: 'Caplog',
         );
-        completer.complete(event.bytes);
+        completer.complete(
+          CaplogDownload(
+            bytes: event.bytes!,
+            received: event.bytes!.length,
+            expected: event.bytes!.length,
+            chunks: _caplogChunks,
+          ),
+        );
         break;
       case CaplogStatus.truncated:
         _appDebugLogService?.warn(
@@ -4720,8 +4728,11 @@ class MeshCoreConnector extends ChangeNotifier {
           '${event.expected} bytes in $_caplogChunks chunks',
           tag: 'Caplog',
         );
-        completer.completeError(
-          CaplogTruncatedException(
+        // Not an error: hand back the partial bytes so the caller can still
+        // save/share them (#580).
+        completer.complete(
+          CaplogDownload(
+            bytes: event.bytes!,
             received: event.bytes!.length,
             expected: event.expected!,
             chunks: _caplogChunks,

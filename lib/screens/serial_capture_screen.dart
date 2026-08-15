@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
   int _durationMinutes = 5;
   bool _busy = false;
   String? _error;
+  String? _warning;
   bool _wasConnected = false;
 
   DateTime? _startedAt;
@@ -247,11 +249,12 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _warning = null;
     });
     try {
-      final bytes = await c.downloadCaplog();
+      final result = await c.downloadCaplog();
       if (!mounted) return;
-      if (bytes.isEmpty) {
+      if (result.bytes.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Buffer is empty, nothing to download.'),
@@ -259,15 +262,36 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
         );
         return;
       }
+      // A truncated capture is kept, not discarded: mark the file partial (so a
+      // partial log is never mistaken for a complete one) and warn the user, but
+      // still write and offer to save/share it (#580).
       final dir = await getTemporaryDirectory();
       final ts = DateTime.now();
       final name =
           'serial-capture-'
           '${ts.year}${_pad2(ts.month)}${_pad2(ts.day)}-'
-          '${_pad2(ts.hour)}${_pad2(ts.minute)}${_pad2(ts.second)}.txt';
+          '${_pad2(ts.hour)}${_pad2(ts.minute)}${_pad2(ts.second)}'
+          '${result.truncated ? '-partial' : ''}.txt';
       final file = File('${dir.path}${Platform.pathSeparator}$name');
-      await file.writeAsBytes(bytes);
+      if (result.truncated) {
+        final header = utf8.encode(
+          '# PARTIAL Offband serial capture: '
+          '${result.received} of ${result.expected} bytes in '
+          '${result.chunks} chunks. Incomplete '
+          '(see OffbandMesh/meshcore-firmware#711).\n\n',
+        );
+        await file.writeAsBytes([...header, ...result.bytes]);
+      } else {
+        await file.writeAsBytes(result.bytes);
+      }
       if (!mounted) return;
+      if (result.truncated) {
+        setState(
+          () => _warning =
+              'Partial capture: ${result.received} of ${result.expected} '
+              'bytes. Saving what was captured.',
+        );
+      }
       await LogExport.shareFile(
         context,
         file,
@@ -279,8 +303,6 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
           () => _error = 'Device busy (another transfer in progress). Retry.',
         );
       }
-    } on CaplogTruncatedException catch (e) {
-      if (mounted) setState(() => _error = 'Capture truncated: $e');
     } on TimeoutException {
       if (mounted) setState(() => _error = 'No response from device.');
     } catch (e) {
@@ -381,6 +403,24 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
               ),
             ),
           ),
+        if (_warning != null)
+          Card(
+            color: Theme.of(context).colorScheme.tertiaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_outlined),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_warning!)),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => _warning = null),
+                  ),
+                ],
+              ),
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -451,7 +491,7 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
         OutlinedButton.icon(
           onPressed: _busy || capturing ? null : _download,
           icon: Icon(LogExport.icon),
-          label: const Text('Download & share'),
+          label: Text('Download & ${LogExport.actionVerb}'),
         ),
         const SizedBox(height: 8),
         TextButton.icon(
