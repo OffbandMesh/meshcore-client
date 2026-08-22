@@ -2821,23 +2821,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String repeater_cliLateResponse(String command, String seconds) {
-    return 'Late response to \"$command\" (arrived ${seconds}s after timeout)';
-  }
-
-  @override
-  String get repeater_cliUnmatchedResponse =>
-      'Unrequested response from repeater';
-
-  @override
-  String get repeater_lateResponseDiscarded =>
-      'A late response arrived but was not applied, because you have unsaved changes.';
-
-  @override
-  String get repeater_lateResponseReceived =>
-      'A late response arrived after the command timed out. See the CLI screen.';
-
-  @override
   String get repeater_cliQuickGetName => '이름을 알려주세요';
 
   @override
