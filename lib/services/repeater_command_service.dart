@@ -77,9 +77,16 @@ class RepeaterCommandService {
   /// its window can still be presented with the request it answers.
   static const Duration lateReplyRetention = Duration(minutes: 2);
 
-  /// Invoked when a reply cannot be handed to a waiting command. Consumers
-  /// must surface this to the user: the reply is a real answer from the
-  /// repeater and dropping it silently loses it for good (#528).
+  /// Invoked when a reply cannot be handed to a waiting command.
+  ///
+  /// Every such reply is already written to the app log by
+  /// [_surfaceUnmatchedResponse], which is the diagnostics channel and is what
+  /// keeps this from being a silent drop (#528).
+  ///
+  /// This sink exists for tests and for any future diagnostics view. **No
+  /// screen wires it.** Late arrivals became ordinary noise once #529 widened
+  /// the window, and the owner asked for them off the UI: log them, do not put
+  /// them in front of users (#589).
   void Function(UnmatchedRepeaterResponse)? onUnmatchedResponse;
 
   RepeaterCommandService(this._connector);
@@ -245,13 +252,14 @@ class RepeaterCommandService {
     if (expired != null) {
       appLogger.warn(
         'Late reply to "${expired.command}" from $repeaterKey arrived '
-        '${sinceTimeout!.inMilliseconds}ms after its window closed',
+        '${sinceTimeout!.inMilliseconds}ms after its window closed: '
+        '$responsePayload',
         tag: 'RepeaterCommand',
       );
     } else {
       appLogger.warn(
         'Reply from $repeaterKey matched no pending or recently expired '
-        'command (prefix: ${prefix ?? 'none'})',
+        'command (prefix: ${prefix ?? 'none'}): $responsePayload',
         tag: 'RepeaterCommand',
       );
     }

@@ -52,29 +52,7 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     super.initState();
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
     _commandService = RepeaterCommandService(connector);
-    _commandService!.onUnmatchedResponse = _handleUnmatchedResponse;
     _setupMessageListener();
-  }
-
-  /// A reply the command future never received, because its window had already
-  /// closed. It is still the repeater's real answer, so it goes into the
-  /// history instead of being dropped (#528).
-  void _handleUnmatchedResponse(UnmatchedRepeaterResponse unmatched) {
-    if (!mounted) return;
-    setState(() {
-      _commandHistory.add({
-        'type': 'late',
-        'text': unmatched.response,
-        'command': unmatched.command ?? '',
-        'seconds': unmatched.sinceTimeout == null
-            ? ''
-            : (unmatched.sinceTimeout!.inMilliseconds / 1000).toStringAsFixed(
-                1,
-              ),
-        'timestamp': DateTime.now().toString(),
-      });
-    });
-    _scrollToBottom();
   }
 
   @override
@@ -125,9 +103,9 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     if (parsed == null) return;
     if (!_matchesRepeaterPrefix(parsed.senderPrefix)) return;
 
-    // The service routes this either to the waiting command's future, which
-    // _sendCommand appends to history, or to onUnmatchedResponse when the
-    // window has already closed. Both paths reach the transcript (#528).
+    // Goes to the waiting command's future, which _sendCommand appends to the
+    // transcript. A reply whose window already closed is logged by the service
+    // to the app log and deliberately not shown here (#589).
     _commandService?.handleResponse(widget.repeater, parsed.text);
   }
 
@@ -211,15 +189,6 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     _commandFocusNode.requestFocus();
 
     _scrollToBottom();
-  }
-
-  String _lateResponseLabel(Map<String, String> entry) {
-    final command = entry['command'] ?? '';
-    final seconds = entry['seconds'] ?? '';
-    if (command.isEmpty || seconds.isEmpty) {
-      return context.l10n.repeater_cliUnmatchedResponse;
-    }
-    return context.l10n.repeater_cliLateResponse(command, seconds);
   }
 
   void _scrollToBottom() {
@@ -488,25 +457,15 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
       itemBuilder: (context, index) {
         final entry = _commandHistory[index];
         final isCommand = entry['type'] == 'command';
-        final isLate = entry['type'] == 'late';
         final scheme = Theme.of(context).colorScheme;
 
-        final Color badgeColor;
-        final Color badgeIconColor;
-        final IconData badgeIcon;
-        if (isCommand) {
-          badgeColor = scheme.primaryContainer;
-          badgeIconColor = scheme.onPrimaryContainer;
-          badgeIcon = Icons.chevron_right;
-        } else if (isLate) {
-          badgeColor = scheme.tertiaryContainer;
-          badgeIconColor = scheme.onTertiaryContainer;
-          badgeIcon = Icons.history;
-        } else {
-          badgeColor = scheme.secondaryContainer;
-          badgeIconColor = scheme.onSecondaryContainer;
-          badgeIcon = Icons.arrow_back;
-        }
+        final badgeColor = isCommand
+            ? scheme.primaryContainer
+            : scheme.secondaryContainer;
+        final badgeIconColor = isCommand
+            ? scheme.onPrimaryContainer
+            : scheme.onSecondaryContainer;
+        final badgeIcon = isCommand ? Icons.chevron_right : Icons.arrow_back;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -526,18 +485,6 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (isLate)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          _lateResponseLabel(entry),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: scheme.tertiary,
-                          ),
-                        ),
-                      ),
                     SelectableText(
                       entry['text']!,
                       style: TextStyle(
