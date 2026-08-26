@@ -7045,8 +7045,15 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       final retryService = _retryService;
+      // Channel sends draw this same frame. While one is awaiting its own
+      // RESP_CODE_SENT the frame is ambiguous, so the retry service must not
+      // adopt an unpredicted hash into a direct message (#581).
       if (retryService != null &&
-          retryService.updateMessageFromSent(ackHash, timeoutMs)) {
+          retryService.updateMessageFromSent(
+            ackHash,
+            timeoutMs,
+            allowUnpredictedAdoption: _pendingChannelSentQueue.isEmpty,
+          )) {
         return;
       }
 
