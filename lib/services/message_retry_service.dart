@@ -391,7 +391,74 @@ class MessageRetryService extends ChangeNotifier {
     _onMessageResolved(messageId, contact.publicKeyHex);
   }
 
-  bool updateMessageFromSent(int ackHash, int timeoutMs) {
+  /// Message ids whose send reached the radio but whose RESP_CODE_SENT has not
+  /// arrived yet.
+  List<String> get _sendsAwaitingConfirmation => _sentConfirmationTimers.keys
+      .where((id) => _pendingMessages[id]?.status == MessageStatus.pending)
+      .toList();
+
+  /// The radio is authoritative for the expected-ACK hash it reports in
+  /// RESP_CODE_SENT. Firmware forks build the message payload differently, so
+  /// the hash recomputed locally can disagree while the send itself is fine.
+  /// When that happened the message stayed pending, the 8s watchdog from #395
+  /// marked an already-delivered DM failed, and the genuine ACK later matched
+  /// nothing because every downstream map is only populated on the match path.
+  /// Captured on a Wadamesh radio in #449.
+  ///
+  /// This frame is the reply to our own CMD_SEND_TXT_MSG, so adopt the radio's
+  /// value when exactly one send is awaiting confirmation. With zero or several
+  /// candidates the correlation would be a guess, so keep the old behaviour.
+  ///
+  /// [allowed] is false when a channel message is also awaiting its
+  /// RESP_CODE_SENT. Channel sends share this frame, so adopting there could
+  /// attach a channel message's confirmation to an unrelated direct message.
+  String? _adoptUnpredictedSentHash(
+    String ackHashHex,
+    RetryServiceConfig config, {
+    required bool allowed,
+  }) {
+    if (!allowed) {
+      config.debugLogService?.warn(
+        'RESP_CODE_SENT: ACK hash $ackHashHex matches no pending message and a '
+        'channel send is also awaiting confirmation, not adopting',
+        tag: 'AckHash',
+      );
+      return null;
+    }
+
+    final awaiting = _sendsAwaitingConfirmation;
+    if (awaiting.length != 1) {
+      config.debugLogService?.warn(
+        'RESP_CODE_SENT: ACK hash $ackHashHex matches no pending message and '
+        '${awaiting.length} sends are awaiting confirmation, ignoring',
+        tag: 'AckHash',
+      );
+      return null;
+    }
+
+    final messageId = awaiting.first;
+    final message = _pendingMessages[messageId];
+    final text = message?.text ?? '';
+    final shortText = text.length > 20 ? '${text.substring(0, 20)}...' : text;
+    config.debugLogService?.warn(
+      'RESP_CODE_SENT: ACK hash $ackHashHex is not the hash we predicted, '
+      'adopting the radio value for "$shortText" (the radio is authoritative, '
+      'see #449)',
+      tag: 'AckHash',
+    );
+
+    // Drop the stale prediction so it cannot mis-match a later reply.
+    _expectedHashToMessageId.removeWhere((_, id) => id == messageId);
+    return messageId;
+  }
+
+  /// [allowUnpredictedAdoption] must be false when a channel message is also
+  /// awaiting its RESP_CODE_SENT, because that frame could belong to either.
+  bool updateMessageFromSent(
+    int ackHash,
+    int timeoutMs, {
+    bool allowUnpredictedAdoption = true,
+  }) {
     final config = _config;
     if (config == null) return false;
 
@@ -424,8 +491,15 @@ class MessageRetryService extends ChangeNotifier {
     }
 
     if (messageId == null || contact == null) {
-      debugPrint('No pending message found for ACK hash: $ackHashHex');
-      return false;
+      final adopted = _adoptUnpredictedSentHash(
+        ackHashHex,
+        config,
+        allowed: allowUnpredictedAdoption,
+      );
+      if (adopted == null) return false;
+      messageId = adopted;
+      contact = _pendingContacts[adopted];
+      if (contact == null) return false;
     }
 
     final message = _pendingMessages[messageId]!;
