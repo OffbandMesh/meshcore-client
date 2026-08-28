@@ -1,11 +1,11 @@
 {
-    "name": "meshcore_open",
-    "short_name": "meshcore_open",
+    "name": "Offband Meshcore",
+    "short_name": "Offband",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F1412",
+    "theme_color": "#0F1412",
+    "description": "Open-source MeshCore client for LoRa mesh radios. Direct and channel chat, live node map, and repeater administration over Bluetooth, USB, or TCP.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
