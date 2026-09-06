@@ -260,6 +260,83 @@ class Contact {
     }
   }
 
+  /// Parses a contact from the reference-app share URI, or null if malformed.
+  ///
+  /// `meshcore://contact/add?name=<url-encoded>&public_key=<64 hex>&type=<1-4>`
+  ///
+  /// Spec: MeshCore firmware `docs/qr_codes.md`, the format the stock mobile
+  /// app emits for both its contact QR and its share link. The payload is a
+  /// BARE public key, not a signed advert, so the result is an identity stub:
+  /// no path, no position, nothing the mesh has confirmed. A QR is this same
+  /// URI rendered visually, so scanning shares this parser. (#625)
+  ///
+  /// Returns null for the fork's older `meshcore://<raw advert hex>` form,
+  /// whose host is the leading hex rather than `contact`. Callers keep handling
+  /// that separately: it carries a full signed advert and is strictly richer.
+  static Contact? fromShareUri(String uri) {
+    final parsed = Uri.tryParse(uri.trim());
+    if (parsed == null || parsed.scheme != 'meshcore') return null;
+    if (parsed.host != 'contact') return null;
+    if (parsed.path.replaceAll('/', '') != 'add') return null;
+
+    final keyHex = parsed.queryParameters['public_key'];
+    if (keyHex == null || keyHex.length != pubKeySize * 2) return null;
+
+    final Uint8List publicKey;
+    try {
+      publicKey = hex2Uint8List(keyHex);
+    } on FormatException {
+      return null;
+    }
+
+    // `type` is optional; stock always emits it, but a key alone is still a
+    // usable identity. Out-of-range values are rejected rather than clamped:
+    // in a three-parameter URI an impossible type signals corruption, and
+    // silently mis-typing a contact is a user-visible defect. Widen this
+    // deliberately if the spec ever adds a type.
+    final typeRaw = parsed.queryParameters['type'];
+    int type = advTypeChat;
+    if (typeRaw != null && typeRaw.isNotEmpty) {
+      final parsedType = int.tryParse(typeRaw);
+      if (parsedType == null ||
+          parsedType < advTypeChat ||
+          parsedType > advTypeSensor) {
+        return null;
+      }
+      type = parsedType;
+    }
+
+    final name = parsed.queryParameters['name'];
+
+    return Contact(
+      publicKey: publicKey,
+      // Matches fromFrame's convention for a nameless contact.
+      name: (name == null || name.isEmpty) ? 'Unknown' : name,
+      type: type,
+      flags: 0,
+      // Flood until the mesh teaches us a path. Mirrors the firmware's
+      // OUT_PATH_UNKNOWN for a contact that has never been routed to.
+      pathLength: -1,
+      path: Uint8List(0),
+      // Deliberately the epoch, NOT DateTime.now().
+      //
+      // This maps to the firmware's `last_advert_timestamp`, which the advert
+      // handler compares with `timestamp <= last_advert_timestamp` and treats
+      // a non-greater value as a replay attack (`BaseChatMesh.cpp:142-145`).
+      // Stamping "now" would leave this contact permanently deaf to its own
+      // adverts, because advert timestamps come from the SENDER's clock and
+      // clocks in the field run years behind. Zero lets any genuine advert win
+      // and upgrade the stub in place. (#620)
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+      // No advert packet, so this contact cannot be re-shared until one
+      // arrives. The share path already gates on rawPacket.
+      rawPacket: null,
+    );
+  }
+
+  /// True if [uri] is a valid reference-app contact share URI. (#625)
+  static bool isValidShareUri(String uri) => fromShareUri(uri) != null;
+
   @override
   bool operator ==(Object other) =>
       other is Contact && publicKeyHex == other.publicKeyHex;
