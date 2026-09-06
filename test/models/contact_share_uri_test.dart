@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/contact.dart';
@@ -157,6 +159,73 @@ void main() {
       const good = 'meshcore://contact/add?name=N&public_key=$_key&type=2';
       expect(Contact.isValidShareUri(good), isTrue);
       expect(Contact.isValidShareUri('meshcore://channel/add?name=x'), isFalse);
+    });
+  });
+
+  group('Contact share URI emit (#626)', () {
+    Contact stub(String name, int type) => Contact(
+      publicKey: hex2Uint8List(_key),
+      name: name,
+      type: type,
+      pathLength: -1,
+      path: Uint8List(0),
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+
+    test('buildShareUri emits the documented parameter shape', () {
+      expect(
+        Contact.buildShareUri(publicKeyHex: _key, name: 'Bob', type: 2),
+        'meshcore://contact/add?name=Bob&public_key=$_key&type=2',
+      );
+    });
+
+    test('type defaults to companion when not supplied', () {
+      expect(
+        Contact.buildShareUri(publicKeyHex: _key, name: 'Bob'),
+        endsWith('&type=$advTypeChat'),
+      );
+    });
+
+    test('toShareUri round-trips through fromShareUri', () {
+      for (final name in [
+        'Bob',
+        'Two Words',
+        'DIRT WIZARD 🧙',
+        'amp&equals=hash#q',
+        'Ka8sbi',
+      ]) {
+        final original = stub(name, advTypeRepeater);
+        final back = Contact.fromShareUri(original.toShareUri());
+        expect(back, isNotNull, reason: 'name "$name" should round-trip');
+        expect(back!.name, name);
+        expect(back.publicKeyHex, original.publicKeyHex);
+        expect(back.type, original.type);
+      }
+    });
+
+    test('reserved characters in a name are encoded, not emitted raw', () {
+      // A raw & or = would silently truncate or forge query parameters.
+      final uri = stub('a&b=c', advTypeChat).toShareUri();
+      expect(uri.contains('name=a&b=c'), isFalse);
+      expect(Contact.fromShareUri(uri)!.name, 'a&b=c');
+    });
+
+    test('every documented type survives a round-trip', () {
+      for (final t in [
+        advTypeChat,
+        advTypeRepeater,
+        advTypeRoom,
+        advTypeSensor,
+      ]) {
+        expect(Contact.fromShareUri(stub('N', t).toShareUri())!.type, t);
+      }
+    });
+
+    test('what we emit is what we accept', () {
+      expect(
+        Contact.isValidShareUri(stub('N', advTypeChat).toShareUri()),
+        true,
+      );
     });
   });
 }
