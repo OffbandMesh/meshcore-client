@@ -260,6 +260,33 @@ class Contact {
     }
   }
 
+  /// Reference-app contact share URI for this contact, the inverse of
+  /// [fromShareUri]. This is what the stock app accepts, so emitting it is
+  /// what makes Offband cards and QRs importable by non-Offband users. (#626)
+  ///
+  /// Note this shares only the identity. It carries no path and no advert, so
+  /// the receiving side gets an unverified stub exactly as we do.
+  String toShareUri() =>
+      buildShareUri(publicKeyHex: publicKeyHex, name: name, type: type);
+
+  /// Builds the reference-app contact share URI from raw parts.
+  ///
+  /// Separate from [toShareUri] so the local device can share its OWN identity,
+  /// which is a public key and a node name rather than a [Contact]. (#626)
+  ///
+  /// Spaces are percent-encoded rather than emitted as `+`. Both decode to a
+  /// space, and this matches [Channel.toShareUri], which is already documented
+  /// as round-tripping with the reference app's QR. (#161)
+  static String buildShareUri({
+    required String publicKeyHex,
+    required String name,
+    int type = advTypeChat,
+  }) =>
+      'meshcore://contact/add'
+      '?name=${Uri.encodeComponent(name)}'
+      '&public_key=$publicKeyHex'
+      '&type=$type';
+
   /// Parses a contact from the reference-app share URI, or null if malformed.
   ///
   /// `meshcore://contact/add?name=<url-encoded>&public_key=<64 hex>&type=<1-4>`
