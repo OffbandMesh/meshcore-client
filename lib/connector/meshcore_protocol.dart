@@ -1188,6 +1188,7 @@ Uint8List buildUpdateContactPathFrame(
   double? lat,
   double? lon,
   DateTime? lastModified,
+  DateTime? lastAdvert,
 }) {
   final writer = BufferWriter();
   writer.writeByte(cmdAddUpdateContact);
@@ -1202,9 +1203,20 @@ Uint8List buildUpdateContactPathFrame(
   // Name (32 bytes, null-padded)
   writer.writeCString(name, maxNameSize);
 
-  // Timestamp
-  final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-  writer.writeUInt32LE(timestamp);
+  // Mandatory last_advert_timestamp. Defaults to now, which is right for the
+  // path-update callers: they refresh a contact the radio already learned from
+  // a real advert.
+  //
+  // A key-only add MUST pass the epoch instead (#627). The firmware compares
+  // this field against every incoming advert with
+  // `timestamp <= last_advert_timestamp` and silently discards the non-greater
+  // ones as replay attacks (`BaseChatMesh.cpp:142-145`). Advert timestamps come
+  // from the SENDER's clock, and clocks in the field run years behind, so
+  // stamping "now" on a contact that has never adverted would leave it
+  // permanently deaf to its own adverts. Zero lets any genuine advert win.
+  final advertSeconds =
+      (lastAdvert ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  writer.writeUInt32LE(advertSeconds < 0 ? 0 : advertSeconds);
 
   // Optional [Lat x4, Lon x4][timestamp x4] tail per the doc comment above.
   // Emit 8 bytes of position (zero-filled when only lastModified is provided)

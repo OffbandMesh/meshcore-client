@@ -4073,6 +4073,48 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds a contact from an identity alone: a public key, a name and a type,
+  /// with no advert behind it. (#627)
+  ///
+  /// This is the path behind manual key entry, a scanned QR, and a pasted
+  /// `meshcore://contact/add` card. It uses the stock `CMD_ADD_UPDATE_CONTACT`
+  /// (command 9), whose handler creates the contact outright when the key is
+  /// unknown, so it needs no capability gate and works on stock firmware, not
+  /// just Offband builds.
+  ///
+  /// Returns false when not connected. The radio answers with a generic OK, or
+  /// an error when its contact table is full.
+  Future<bool> addContactByKey(Contact stub) async {
+    if (!isConnected) return false;
+
+    await sendFrame(
+      buildUpdateContactPathFrame(
+        stub.publicKey,
+        // No path is known, so send an empty one and let the flood sentinel
+        // below carry the meaning. The builder pads this to the full width.
+        Uint8List(0),
+        // Negative maps to the firmware's OUT_PATH_UNKNOWN (0xFF): flood until
+        // the mesh teaches us a route back.
+        -1,
+        type: stub.type,
+        flags: 0,
+        name: stub.name,
+        // The whole point of this path. Anything else here would trip the
+        // firmware advert replay guard and leave the contact permanently deaf
+        // to its own adverts. See buildUpdateContactPathFrame. (#620)
+        lastAdvert: DateTime.fromMillisecondsSinceEpoch(0),
+      ),
+      expectsGenericAck: true,
+    );
+
+    // Mirror the device write into local state, keeping lastSeen at the epoch
+    // so the contact continues to read as unverified until a real advert
+    // arrives and upgrades it. (#630)
+    _handleContactAdvert(stub);
+    notifyListeners();
+    return true;
+  }
+
   Future<void> importDiscoveredContact(Contact contact) async {
     if (!isConnected) return;
 
