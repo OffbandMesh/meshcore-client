@@ -2510,6 +2510,13 @@
     }
   },
   "contacts_addByKeyFailed": "Could not add the contact. Check the radio connection.",
+  "contacts_myContactQr": "My contact QR",
+  "contacts_myContactQrInstructions": "Have them scan this, or send them the link below. It works even if they have never heard your advert.",
+  "contacts_contactLinkCopied": "Contact link copied",
+  "contacts_qrNeedsConnection": "Connect to a radio first, so the app knows your public key.",
+  "contacts_scanContactQr": "Scan contact QR",
+  "contacts_scanContactQrInstructions": "Point the camera at a MeshCore contact QR",
+  "contacts_invalidContactQr": "That QR is not a MeshCore contact",
   "contacts_ShareContact": "Copy contact to Clipboard",
   "contacts_ShareContactZeroHop": "Share contact by advert",
   "contacts_zeroHopContactAdvertSent": "Sent contact by advert.",

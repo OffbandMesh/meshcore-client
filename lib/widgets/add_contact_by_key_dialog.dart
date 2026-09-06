@@ -6,6 +6,8 @@ import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../models/contact.dart';
+import '../screens/contact_qr_scanner_screen.dart';
+import '../utils/platform_info.dart';
 
 /// Adds a contact from an identity alone: a public key, a name and a type.
 ///
@@ -73,6 +75,23 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
     if (_keyError != null) setState(() => _keyError = null);
   }
 
+  /// mobile_scanner covers Android, iOS, macOS and web, but not Windows or
+  /// Linux. On those the QR half of the exchange is the RENDER side: show your
+  /// own code from the desktop and let the other person scan it with a phone.
+  static bool get _cameraAvailable =>
+      PlatformInfo.isMobile || PlatformInfo.isMacOS || PlatformInfo.isWeb;
+
+  Future<void> _scan() async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ContactQrScannerScreen()),
+    );
+    if (!mounted || scanned == null) return;
+    // Route the scan through the same handler as a paste. A QR is only the
+    // link rendered visually, so it must not get its own code path.
+    _keyController.text = scanned;
+    _onKeyChanged(scanned);
+  }
+
   Future<void> _submit() async {
     final l10n = context.l10n;
     if (!_keyLooksValid) {
@@ -138,6 +157,13 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
                 errorText: _keyError,
                 errorMaxLines: 2,
                 border: const OutlineInputBorder(),
+                suffixIcon: _cameraAvailable
+                    ? IconButton(
+                        icon: const Icon(Icons.qr_code_scanner),
+                        tooltip: l10n.contacts_scanContactQr,
+                        onPressed: _submitting ? null : _scan,
+                      )
+                    : null,
               ),
               onChanged: _onKeyChanged,
             ),

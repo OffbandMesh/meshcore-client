@@ -4373,6 +4373,30 @@ class AppLocalizationsNl extends AppLocalizations {
       'Could not add the contact. Check the radio connection.';
 
   @override
+  String get contacts_myContactQr => 'My contact QR';
+
+  @override
+  String get contacts_myContactQrInstructions =>
+      'Have them scan this, or send them the link below. It works even if they have never heard your advert.';
+
+  @override
+  String get contacts_contactLinkCopied => 'Contact link copied';
+
+  @override
+  String get contacts_qrNeedsConnection =>
+      'Connect to a radio first, so the app knows your public key.';
+
+  @override
+  String get contacts_scanContactQr => 'Scan contact QR';
+
+  @override
+  String get contacts_scanContactQrInstructions =>
+      'Point the camera at a MeshCore contact QR';
+
+  @override
+  String get contacts_invalidContactQr => 'That QR is not a MeshCore contact';
+
+  @override
   String get contacts_ShareContact => 'Contact naar Klembord kopiëren';
 
   @override
