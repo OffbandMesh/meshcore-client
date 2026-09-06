@@ -34,6 +34,7 @@ import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
+import '../widgets/add_contact_by_key_dialog.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
@@ -410,6 +411,19 @@ class _ContactsScreenState extends State<ContactsScreen>
                     builder: (context) => const DiscoveryScreen(),
                   ),
                 ),
+              ),
+              // Provisional home so key entry is reachable. The proper
+              // add-contact surface, split away from the advert affordance,
+              // is #632 under epic #623.
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.key_outlined),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_addByKey),
+                  ],
+                ),
+                onTap: () => showAddContactByKeyDialog(context),
               ),
             ],
             icon: const Icon(Icons.more_vert),

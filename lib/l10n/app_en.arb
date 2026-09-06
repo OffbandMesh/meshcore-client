@@ -2493,6 +2493,23 @@
   "contacts_floodAdvert": "Flood Advert",
   "contacts_copyAdvertToClipboard": "Copy Advert to Clipboard",
   "contacts_addContactFromClipboard": "Add Contact from Clipboard",
+  "contacts_addByKey": "Add by public key",
+  "contacts_addByKeyDescription": "Add someone using the public key they gave you. Works even if you have never heard their advert.",
+  "contacts_publicKeyLabel": "Public key",
+  "contacts_publicKeyHelper": "64 hex characters, or paste a meshcore:// contact link",
+  "contacts_publicKeyInvalid": "Enter 64 hex characters, or a meshcore:// contact link",
+  "contacts_nameLabel": "Name",
+  "contacts_typeLabel": "Type",
+  "contacts_addByKeyUnverifiedNote": "Not confirmed on air yet. The name is whatever you type here until this node sends an advert.",
+  "contacts_addByKeyAdded": "Added {name}",
+  "@contacts_addByKeyAdded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_addByKeyFailed": "Could not add the contact. Check the radio connection.",
   "contacts_ShareContact": "Copy contact to Clipboard",
   "contacts_ShareContactZeroHop": "Share contact by advert",
   "contacts_zeroHopContactAdvertSent": "Sent contact by advert.",

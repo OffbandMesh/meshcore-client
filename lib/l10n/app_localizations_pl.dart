@@ -4366,6 +4366,43 @@ class AppLocalizationsPl extends AppLocalizations {
   String get contacts_addContactFromClipboard => 'Dodaj kontakt z schowka';
 
   @override
+  String get contacts_addByKey => 'Add by public key';
+
+  @override
+  String get contacts_addByKeyDescription =>
+      'Add someone using the public key they gave you. Works even if you have never heard their advert.';
+
+  @override
+  String get contacts_publicKeyLabel => 'Public key';
+
+  @override
+  String get contacts_publicKeyHelper =>
+      '64 hex characters, or paste a meshcore:// contact link';
+
+  @override
+  String get contacts_publicKeyInvalid =>
+      'Enter 64 hex characters, or a meshcore:// contact link';
+
+  @override
+  String get contacts_nameLabel => 'Name';
+
+  @override
+  String get contacts_typeLabel => 'Type';
+
+  @override
+  String get contacts_addByKeyUnverifiedNote =>
+      'Not confirmed on air yet. The name is whatever you type here until this node sends an advert.';
+
+  @override
+  String contacts_addByKeyAdded(String name) {
+    return 'Added $name';
+  }
+
+  @override
+  String get contacts_addByKeyFailed =>
+      'Could not add the contact. Check the radio connection.';
+
+  @override
   String get contacts_ShareContact => 'Kopiuj kontakt do schowka';
 
   @override

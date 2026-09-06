@@ -7450,6 +7450,66 @@ abstract class AppLocalizations {
   /// **'Add Contact from Clipboard'**
   String get contacts_addContactFromClipboard;
 
+  /// No description provided for @contacts_addByKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Add by public key'**
+  String get contacts_addByKey;
+
+  /// No description provided for @contacts_addByKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Add someone using the public key they gave you. Works even if you have never heard their advert.'**
+  String get contacts_addByKeyDescription;
+
+  /// No description provided for @contacts_publicKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Public key'**
+  String get contacts_publicKeyLabel;
+
+  /// No description provided for @contacts_publicKeyHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'64 hex characters, or paste a meshcore:// contact link'**
+  String get contacts_publicKeyHelper;
+
+  /// No description provided for @contacts_publicKeyInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter 64 hex characters, or a meshcore:// contact link'**
+  String get contacts_publicKeyInvalid;
+
+  /// No description provided for @contacts_nameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get contacts_nameLabel;
+
+  /// No description provided for @contacts_typeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get contacts_typeLabel;
+
+  /// No description provided for @contacts_addByKeyUnverifiedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed on air yet. The name is whatever you type here until this node sends an advert.'**
+  String get contacts_addByKeyUnverifiedNote;
+
+  /// No description provided for @contacts_addByKeyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {name}'**
+  String contacts_addByKeyAdded(String name);
+
+  /// No description provided for @contacts_addByKeyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add the contact. Check the radio connection.'**
+  String get contacts_addByKeyFailed;
+
   /// No description provided for @contacts_ShareContact.
   ///
   /// In en, this message translates to:
