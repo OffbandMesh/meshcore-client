@@ -155,4 +155,69 @@ void main() {
       expect(lonBytes.getInt32(0, Endian.little), (-123.123456 * 1e6).round());
     });
   });
+
+  group('last_advert_timestamp for key-only adds (#627)', () {
+    // 1 cmd + 32 pubKey + 1 type + 1 flags + 1 pathLen + 64 path + 32 name.
+    const int advertTsOffset = 132;
+
+    int advertTs(Uint8List frame) => ByteData.sublistView(
+      frame,
+      advertTsOffset,
+      advertTsOffset + 4,
+    ).getUint32(0, Endian.little);
+
+    test('a key-only add writes zero, not the current time', () {
+      // The whole point. The firmware discards any advert whose timestamp is
+      // <= this value as a replay attack (BaseChatMesh.cpp:142-145), and
+      // advert timestamps come from the SENDER's clock. Writing "now" here
+      // would leave a key-added contact permanently deaf to its own adverts.
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List(0),
+        -1,
+        name: 'Bob',
+        lastAdvert: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+      expect(advertTs(frame), 0);
+    });
+
+    test(
+      'omitting lastAdvert still stamps now, so path updates are unchanged',
+      () {
+        final before = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final frame = buildUpdateContactPathFrame(pubKey, path, 1);
+        final after = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+        expect(advertTs(frame), greaterThanOrEqualTo(before));
+        expect(advertTs(frame), lessThanOrEqualTo(after));
+      },
+    );
+
+    test('a pre-epoch value clamps to zero rather than wrapping', () {
+      // writeUInt32LE on a negative would wrap to a huge timestamp, which is
+      // the worst possible value for the replay guard.
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List(0),
+        -1,
+        lastAdvert: DateTime.fromMillisecondsSinceEpoch(-86400000),
+      );
+      expect(advertTs(frame), 0);
+    });
+
+    test('a key-only add is a full-length frame with the flood sentinel', () {
+      // The firmware guard is only `len >= 36`, but updateContactFromFrame
+      // reads through offset 136 regardless (MyMesh.cpp:295-318), so a short
+      // frame would have it read past what we sent. Never trim this.
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        Uint8List(0),
+        -1,
+        name: 'Bob',
+        lastAdvert: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+      expect(frame.length, greaterThanOrEqualTo(baseFrameLength));
+      expect(frame[pathLenOffset], 0xFF);
+    });
+  });
 }
