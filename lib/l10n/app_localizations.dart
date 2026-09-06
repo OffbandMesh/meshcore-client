@@ -7510,6 +7510,48 @@ abstract class AppLocalizations {
   /// **'Could not add the contact. Check the radio connection.'**
   String get contacts_addByKeyFailed;
 
+  /// No description provided for @contacts_myContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'My contact QR'**
+  String get contacts_myContactQr;
+
+  /// No description provided for @contacts_myContactQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Have them scan this, or send them the link below. It works even if they have never heard your advert.'**
+  String get contacts_myContactQrInstructions;
+
+  /// No description provided for @contacts_contactLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact link copied'**
+  String get contacts_contactLinkCopied;
+
+  /// No description provided for @contacts_qrNeedsConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a radio first, so the app knows your public key.'**
+  String get contacts_qrNeedsConnection;
+
+  /// No description provided for @contacts_scanContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan contact QR'**
+  String get contacts_scanContactQr;
+
+  /// No description provided for @contacts_scanContactQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Point the camera at a MeshCore contact QR'**
+  String get contacts_scanContactQrInstructions;
+
+  /// No description provided for @contacts_invalidContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'That QR is not a MeshCore contact'**
+  String get contacts_invalidContactQr;
+
   /// No description provided for @contacts_ShareContact.
   ///
   /// In en, this message translates to:

@@ -35,6 +35,7 @@ import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/add_contact_by_key_dialog.dart';
+import '../widgets/my_contact_qr_dialog.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
@@ -424,6 +425,16 @@ class _ContactsScreenState extends State<ContactsScreen>
                   ],
                 ),
                 onTap: () => showAddContactByKeyDialog(context),
+              ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_myContactQr),
+                  ],
+                ),
+                onTap: () => showMyContactQrDialog(context),
               ),
             ],
             icon: const Icon(Icons.more_vert),
