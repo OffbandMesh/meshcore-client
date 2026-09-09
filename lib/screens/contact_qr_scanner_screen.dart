@@ -3,7 +3,19 @@ import 'package:flutter/material.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../l10n/l10n.dart';
 import '../models/contact.dart';
+import '../utils/platform_info.dart';
 import '../widgets/qr_scanner_widget.dart';
+
+/// Whether a contact QR can be scanned on this platform.
+///
+/// `mobile_scanner` covers Android, iOS, macOS and web, but not Windows or
+/// Linux. On those the QR half of the exchange is the RENDER side: show your
+/// own code from the desktop and let the other person scan it with a phone.
+///
+/// Lives here rather than on a caller because both the key-entry field and the
+/// contacts menu need it. (#629)
+bool get contactQrScanAvailable =>
+    PlatformInfo.isMobile || PlatformInfo.isMacOS || PlatformInfo.isWeb;
 
 /// Scans a contact QR and pops the raw `meshcore://contact/add` string. (#629)
 ///

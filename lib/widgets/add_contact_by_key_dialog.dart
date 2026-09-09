@@ -7,7 +7,6 @@ import '../l10n/l10n.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../models/contact.dart';
 import '../screens/contact_qr_scanner_screen.dart';
-import '../utils/platform_info.dart';
 
 /// Adds a contact from an identity alone: a public key, a name and a type.
 ///
@@ -18,15 +17,22 @@ import '../utils/platform_info.dart';
 /// The field also accepts a whole `meshcore://contact/add` link, since that is
 /// what someone is most likely to paste, and a QR is only that same link
 /// rendered visually.
-Future<void> showAddContactByKeyDialog(BuildContext context) {
+/// [initialKeyText] seeds the key field, so a scan taken from somewhere else
+/// can open this already filled in rather than making the user paste. (#629)
+Future<void> showAddContactByKeyDialog(
+  BuildContext context, {
+  String? initialKeyText,
+}) {
   return showDialog<void>(
     context: context,
-    builder: (_) => const _AddContactByKeyDialog(),
+    builder: (_) => _AddContactByKeyDialog(initialKeyText: initialKeyText),
   );
 }
 
 class _AddContactByKeyDialog extends StatefulWidget {
-  const _AddContactByKeyDialog();
+  const _AddContactByKeyDialog({this.initialKeyText});
+
+  final String? initialKeyText;
 
   @override
   State<_AddContactByKeyDialog> createState() => _AddContactByKeyDialogState();
@@ -38,6 +44,18 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
   int _type = advTypeChat;
   String? _keyError;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final seed = widget.initialKeyText;
+    if (seed != null && seed.isNotEmpty) {
+      _keyController.text = seed;
+      // Route the seed through the same handler as a paste, so a full link
+      // populates name and type instead of sitting there as raw text.
+      _onKeyChanged(seed);
+    }
+  }
 
   @override
   void dispose() {
@@ -74,12 +92,6 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
     }
     if (_keyError != null) setState(() => _keyError = null);
   }
-
-  /// mobile_scanner covers Android, iOS, macOS and web, but not Windows or
-  /// Linux. On those the QR half of the exchange is the RENDER side: show your
-  /// own code from the desktop and let the other person scan it with a phone.
-  static bool get _cameraAvailable =>
-      PlatformInfo.isMobile || PlatformInfo.isMacOS || PlatformInfo.isWeb;
 
   Future<void> _scan() async {
     final scanned = await Navigator.of(context).push<String>(
@@ -157,7 +169,7 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
                 errorText: _keyError,
                 errorMaxLines: 2,
                 border: const OutlineInputBorder(),
-                suffixIcon: _cameraAvailable
+                suffixIcon: contactQrScanAvailable
                     ? IconButton(
                         icon: const Icon(Icons.qr_code_scanner),
                         tooltip: l10n.contacts_scanContactQr,
