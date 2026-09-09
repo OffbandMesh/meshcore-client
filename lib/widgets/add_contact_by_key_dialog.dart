@@ -72,10 +72,16 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
     Contact.buildShareUri(publicKeyHex: _cleanedKey, name: 'x', type: _type),
   );
 
-  /// If a full contact link was pasted, absorb every field from it rather than
-  /// making the user retype a name they already have.
+  /// If a full contact link OR a channel contact card was pasted, absorb every
+  /// field from it rather than making the user retype a name they already have.
+  ///
+  /// Both formats are accepted because both are real and a user will meet both:
+  /// the `meshcore://` link comes from a QR or a DM, and the compact
+  /// `<key:type:name>` card is what appears in channel traffic, including the
+  /// cards this app itself posts. Accepting only the link would mean rejecting
+  /// our own output.
   void _onKeyChanged(String raw) {
-    final pasted = Contact.fromShareUri(raw);
+    final pasted = Contact.fromShareUri(raw) ?? Contact.fromChannelShare(raw);
     if (pasted != null) {
       setState(() {
         _keyController.value = TextEditingValue(

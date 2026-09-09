@@ -305,6 +305,67 @@ void main() {
       expect(stub('Bob', advTypeRepeater).toChannelShare(), '<$_key:2:Bob>');
     });
 
+    test('what we emit, we can also parse back', () {
+      // Without this the app would emit a format it could not itself accept,
+      // and pasting our own card into the add dialog would be rejected.
+      final c = stub('Roger KY4RS', advTypeRepeater);
+      final back = Contact.fromChannelShare(c.toChannelShare());
+      expect(back, isNotNull);
+      expect(back!.publicKeyHex, _key);
+      expect(back.name, 'Roger KY4RS');
+      expect(back.type, advTypeRepeater);
+      // Same unverified stub as the URI path.
+      expect(back.lastSeen, DateTime.fromMillisecondsSinceEpoch(0));
+      expect(back.pathLength, -1);
+    });
+
+    test('a name containing colons survives the split', () {
+      // The name is the final field, so the parser must split on the first two
+      // colons only. Splitting on the last one would eat the name.
+      final back = Contact.fromChannelShare('<$_key:1:a:b:c>');
+      expect(back, isNotNull);
+      expect(back!.name, 'a:b:c');
+    });
+
+    test('a card embedded in a longer message is still found', () {
+      // This is how it actually arrives: someone captions their card.
+      final back = Contact.fromChannelShare(
+        'here is mine <$_key:1:Bob> add me',
+      );
+      expect(back, isNotNull);
+      expect(back!.name, 'Bob');
+    });
+
+    test('emoji and CJK names round-trip', () {
+      for (final n in ['DIRT WIZARD 🧙', '中文节点', 'ノード']) {
+        final back = Contact.fromChannelShare(
+          Contact.buildChannelShare(publicKeyHex: _key, name: n),
+        );
+        expect(back, isNotNull, reason: 'name "$n" should parse');
+        expect(back!.name, n);
+      }
+    });
+
+    test('rejects malformed cards', () {
+      for (final bad in [
+        '<$_key:1>', // only one colon
+        '<$_key>', // no colons
+        '<0011:1:Bob>', // key too short
+        '<${_key}ff:1:Bob>', // key too long
+        '<${_key.replaceRange(0, 2, 'zz')}:1:Bob>', // not hex
+        '<$_key:9:Bob>', // type out of range
+        '<$_key:x:Bob>', // type not numeric
+        'no brackets at all',
+        '',
+      ]) {
+        expect(
+          Contact.fromChannelShare(bad),
+          isNull,
+          reason: '"$bad" should be rejected',
+        );
+      }
+    });
+
     test('the compact form is materially cheaper than the URI', () {
       // This is the whole reason both formats exist. Channel text shares a
       // 160-byte payload with the "Sender: " prefix, so the difference is

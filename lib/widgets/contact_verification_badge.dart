@@ -27,20 +27,34 @@ enum ContactVerification {
 
 /// Resolves the verification state for [contact].
 ///
-/// The advert check is first because it is free and covers most contacts; only
-/// an unverified contact pays for a message scan, which keeps this cheap on a
-/// long contact list.
+/// This runs from a widget `build` inside a contact `ListView`, so it does as
+/// little as possible:
+///
+/// 1. An advert-verified contact returns immediately on a single integer
+///    comparison. That is most contacts, and no message list is touched.
+/// 2. Only a key-only contact scans, and it scans **newest first**, because a
+///    delivered message is overwhelmingly likely to be recent.
+///
+/// A `lastMessageAt == epoch` shortcut was considered and **rejected**:
+/// `_setContactLastMessageAt` maintains that field only for `advTypeChat`, so
+/// a key-added repeater that had been messaged would have reported the wrong
+/// badge. A cheap wrong answer is worse than a slightly slower right one.
+///
+/// Remaining worst case is a key-only contact carrying many messages of which
+/// none ever delivered. If that shows up in practice the fix is a cached flag
+/// set once on first delivery, not a bounded scan, which could misreport.
 ContactVerification resolveContactVerification(
   Contact contact,
   MeshCoreConnector connector,
 ) {
   if (contact.isAdvertVerified) return ContactVerification.advertVerified;
-  final delivered = connector
-      .getMessages(contact)
-      .any((m) => m.status == MessageStatus.delivered);
-  return delivered
-      ? ContactVerification.keyConfirmed
-      : ContactVerification.keyOnly;
+  final messages = connector.getMessages(contact);
+  for (var i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].status == MessageStatus.delivered) {
+      return ContactVerification.keyConfirmed;
+    }
+  }
+  return ContactVerification.keyOnly;
 }
 
 /// A small, deliberately calm indicator of how far a contact is confirmed.

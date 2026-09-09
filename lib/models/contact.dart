@@ -325,6 +325,59 @@ class Contact {
     return '<$publicKeyHex:$type:$safeName>';
   }
 
+  /// Parses the compact channel share `<key:type:name>`, or null. (#611)
+  ///
+  /// The counterpart to [toChannelShare]. Without this the app would emit a
+  /// format it could not itself accept, and a user copying a card out of a
+  /// channel and pasting it into the add dialog would be rejected.
+  ///
+  /// Splits on the FIRST TWO colons only. The name is the final field and may
+  /// contain colons, spaces, emoji and CJK, so splitting on the last colon or
+  /// on every colon corrupts real names.
+  ///
+  /// Rendering a received card as a tappable Add Contact affordance is #610 and
+  /// is separate; this only handles text pasted or scanned into the add flow.
+  static Contact? fromChannelShare(String text) {
+    final trimmed = text.trim();
+    // Tolerate a card embedded in a longer message, which is how it arrives.
+    final start = trimmed.indexOf('<');
+    final end = trimmed.lastIndexOf('>');
+    if (start < 0 || end <= start) return null;
+    final body = trimmed.substring(start + 1, end);
+
+    final firstColon = body.indexOf(':');
+    if (firstColon < 0) return null;
+    final secondColon = body.indexOf(':', firstColon + 1);
+    if (secondColon < 0) return null;
+
+    final keyHex = body.substring(0, firstColon).toLowerCase();
+    if (keyHex.length != pubKeySize * 2) return null;
+    final Uint8List publicKey;
+    try {
+      publicKey = hex2Uint8List(keyHex);
+    } on FormatException {
+      return null;
+    }
+
+    final type = int.tryParse(body.substring(firstColon + 1, secondColon));
+    if (type == null || type < advTypeChat || type > advTypeSensor) return null;
+
+    final name = body.substring(secondColon + 1);
+
+    return Contact(
+      publicKey: publicKey,
+      name: name.isEmpty ? 'Unknown' : name,
+      type: type,
+      flags: 0,
+      pathLength: -1,
+      path: Uint8List(0),
+      // Same unverified stub as the URI path, and for the same reason: the
+      // epoch keeps the firmware advert replay guard from muting it. (#620)
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+      rawPacket: null,
+    );
+  }
+
   /// Parses a contact from the reference-app share URI, or null if malformed.
   ///
   /// `meshcore://contact/add?name=<url-encoded>&public_key=<64 hex>&type=<1-4>`
