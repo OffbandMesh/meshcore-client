@@ -7576,6 +7576,36 @@ abstract class AppLocalizations {
   /// **'Not heard yet'**
   String get contacts_lastSeenNever;
 
+  /// No description provided for @chat_attachTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to message'**
+  String get chat_attachTooltip;
+
+  /// No description provided for @chat_attachGif.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF'**
+  String get chat_attachGif;
+
+  /// No description provided for @chat_attachMyContact.
+  ///
+  /// In en, this message translates to:
+  /// **'My contact card'**
+  String get chat_attachMyContact;
+
+  /// No description provided for @chat_attachMyContactSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Puts your public key in the message so anyone here can add you'**
+  String get chat_attachMyContactSubtitle;
+
+  /// No description provided for @chat_contactCardNeedsConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a radio first, so the app knows your public key.'**
+  String get chat_contactCardNeedsConnection;
+
   /// No description provided for @contacts_ShareContact.
   ///
   /// In en, this message translates to:

@@ -4427,6 +4427,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get contacts_lastSeenNever => 'Not heard yet';
 
   @override
+  String get chat_attachTooltip => 'Add to message';
+
+  @override
+  String get chat_attachGif => 'GIF';
+
+  @override
+  String get chat_attachMyContact => 'My contact card';
+
+  @override
+  String get chat_attachMyContactSubtitle =>
+      'Puts your public key in the message so anyone here can add you';
+
+  @override
+  String get chat_contactCardNeedsConnection =>
+      'Connect to a radio first, so the app knows your public key.';
+
+  @override
   String get contacts_ShareContact => 'Copiar contacto al Portapapeles';
 
   @override
