@@ -2,7 +2,36 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+// `flutter/widgets.dart` re-exports package:characters, which supplies the
+// grapheme-cluster iteration used by utf8TruncateToBytes below.
 import 'package:flutter/widgets.dart';
+
+/// Encodes [s] as UTF-8, truncated to at most [maxBytes], never splitting a
+/// character. (#636)
+///
+/// Truncation stops on a **grapheme cluster** boundary, not a byte boundary and
+/// not merely a codepoint boundary. Cutting on bytes puts invalid UTF-8 on the
+/// wire, which every reader then renders as replacement characters. Cutting
+/// between codepoints is valid UTF-8 but still wrong: a ZWJ emoji sequence is
+/// several codepoints joined by U+200D plus a variation selector, so a
+/// codepoint-safe cut can still leave a bare glyph, a dangling joiner, or an
+/// orphaned selector.
+///
+/// The on-wire name field is 32 bytes including a null terminator, so callers
+/// pass 31. That holds roughly 10 CJK characters, or two ZWJ emoji.
+Uint8List utf8TruncateToBytes(String s, int maxBytes) {
+  if (maxBytes <= 0) return Uint8List(0);
+  final whole = utf8.encode(s);
+  if (whole.length <= maxBytes) return Uint8List.fromList(whole);
+
+  final out = <int>[];
+  for (final cluster in s.characters) {
+    final encoded = utf8.encode(cluster);
+    if (out.length + encoded.length > maxBytes) break;
+    out.addAll(encoded);
+  }
+  return Uint8List.fromList(out);
+}
 
 // Buffer Reader - sequential binary data reader with pointer tracking
 class BufferReader {
@@ -132,8 +161,10 @@ class BufferWriter {
 
   void writeCString(String string, int maxLength) {
     final bytes = Uint8List(maxLength);
-    final encoded = utf8.encode(string);
-    for (var i = 0; i < maxLength - 1 && i < encoded.length; i++) {
+    // Grapheme-safe: a raw byte copy would cut a multi-byte character in half
+    // and put invalid UTF-8 on the wire. (#636)
+    final encoded = utf8TruncateToBytes(string, maxLength - 1);
+    for (var i = 0; i < encoded.length; i++) {
       bytes[i] = encoded[i];
     }
     writeBytes(bytes);
@@ -1065,13 +1096,14 @@ Uint8List buildSendSelfAdvertFrame({bool flood = false}) {
 // Build CMD_SET_ADVERT_NAME frame
 // Format: [cmd][name...]
 Uint8List buildSetAdvertNameFrame(String name) {
-  final nameBytes = utf8.encode(name);
-  final nameLen = nameBytes.length < maxNameSize
-      ? nameBytes.length
-      : maxNameSize - 1;
+  // Grapheme-safe. This one matters most of the three: it sets THIS device's
+  // own advert name, which is what every other node on the mesh sees, what is
+  // embedded in the contact cards this device emits, and what other clients
+  // match against. Corrupt it once and the corruption propagates outward.
+  // (#636)
   final writer = BufferWriter();
   writer.writeByte(cmdSetAdvertName);
-  writer.writeBytes(Uint8List.fromList(nameBytes.sublist(0, nameLen)));
+  writer.writeBytes(utf8TruncateToBytes(name, maxNameSize - 1));
   return writer.toBytes();
 }
 
