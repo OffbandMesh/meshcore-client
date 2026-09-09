@@ -228,4 +228,92 @@ void main() {
       );
     });
   });
+
+  group('Compact channel contact share (#611)', () {
+    Contact stub(String name, int type) => Contact(
+      publicKey: hex2Uint8List(_key),
+      name: name,
+      type: type,
+      pathLength: -1,
+      path: Uint8List(0),
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+
+    test('matches the shape observed on the live mesh', () {
+      // Real traffic in #test and #hamradio carries <key:type:name>, with the
+      // angle brackets as literal delimiters. Key is synthetic here; the repo
+      // is public.
+      expect(
+        Contact.buildChannelShare(publicKeyHex: _key, name: 'KE8AFF', type: 1),
+        '<$_key:1:KE8AFF>',
+      );
+    });
+
+    test('a name with spaces is carried verbatim', () {
+      // One of the two observed samples was "Roger KY4RS".
+      expect(
+        Contact.buildChannelShare(
+          publicKeyHex: _key,
+          name: 'Roger KY4RS',
+          type: advTypeChat,
+        ),
+        '<$_key:1:Roger KY4RS>',
+      );
+    });
+
+    test('angle brackets are stripped from the name', () {
+      // A bracket in the name would truncate the payload for every parser
+      // reading it, so the emitter must not produce one.
+      final out = Contact.buildChannelShare(
+        publicKeyHex: _key,
+        name: 'we<ird>name',
+        type: advTypeChat,
+      );
+      expect(out, '<$_key:1:weirdname>');
+      expect('>'.allMatches(out).length, 1);
+      expect('<'.allMatches(out).length, 1);
+    });
+
+    test('a colon in the name survives, since the name is the final field', () {
+      // A correct parser splits on the first two colons and takes the rest as
+      // the name, so this needs no escaping.
+      expect(
+        Contact.buildChannelShare(
+          publicKeyHex: _key,
+          name: 'a:b',
+          type: advTypeChat,
+        ),
+        '<$_key:1:a:b>',
+      );
+    });
+
+    test('every documented type is emitted numerically', () {
+      for (final t in [
+        advTypeChat,
+        advTypeRepeater,
+        advTypeRoom,
+        advTypeSensor,
+      ]) {
+        expect(
+          Contact.buildChannelShare(publicKeyHex: _key, name: 'N', type: t),
+          '<$_key:$t:N>',
+        );
+      }
+    });
+
+    test('toChannelShare uses the contact own key, type and name', () {
+      expect(stub('Bob', advTypeRepeater).toChannelShare(), '<$_key:2:Bob>');
+    });
+
+    test('the compact form is materially cheaper than the URI', () {
+      // This is the whole reason both formats exist. Channel text shares a
+      // 160-byte payload with the "Sender: " prefix, so the difference is
+      // airtime, not tidiness.
+      final c = stub('KE8AFF', advTypeChat);
+      final compact = c.toChannelShare().length;
+      final uri = c.toShareUri().length;
+      expect(compact, lessThan(uri));
+      expect(uri - compact, greaterThan(30));
+    });
+  });
 }

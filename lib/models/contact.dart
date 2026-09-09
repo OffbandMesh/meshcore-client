@@ -296,6 +296,35 @@ class Contact {
       '&public_key=$publicKeyHex'
       '&type=$type';
 
+  /// Compact contact share for a CHANNEL message, `<key:type:name>`. (#611)
+  ///
+  /// This is a second, different format from [toShareUri], and deliberately so.
+  /// It is what real clients put on the air, observed live in `#test` and
+  /// `#hamradio`, and it is far cheaper: about 75 bytes against 117 for the
+  /// equivalent URI. Channel text shares a 160-byte payload with the
+  /// `Sender: ` prefix, so that difference is airtime, not neatness.
+  ///
+  /// Use the URI form for a QR, a DM, or an out-of-band paste. Use this for a
+  /// channel.
+  String toChannelShare() =>
+      buildChannelShare(publicKeyHex: publicKeyHex, name: name, type: type);
+
+  /// Builds the compact channel share from raw parts, so this device can share
+  /// its OWN identity without constructing a [Contact]. (#611)
+  ///
+  /// Angle brackets are the delimiters, so any in [name] are dropped: a name
+  /// carrying one would truncate the payload for every parser reading it. A
+  /// colon is left alone, because the name is the final field and a correct
+  /// parser splits on the first two colons only.
+  static String buildChannelShare({
+    required String publicKeyHex,
+    required String name,
+    int type = advTypeChat,
+  }) {
+    final safeName = name.replaceAll('<', '').replaceAll('>', '');
+    return '<$publicKeyHex:$type:$safeName>';
+  }
+
   /// Parses a contact from the reference-app share URI, or null if malformed.
   ///
   /// `meshcore://contact/add?name=<url-encoded>&public_key=<64 hex>&type=<1-4>`

@@ -1243,6 +1243,76 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// The composer `+` picker. (#611)
+  ///
+  /// Owner decision: one `+` beside the text entry, offering GIF and Contact
+  /// for now, rather than a dedicated button per thing you can attach. The
+  /// sendable set stays small because a channel message shares a 160-byte
+  /// payload with the `Sender: ` prefix.
+  void _showAttachPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.gif_box),
+              title: Text(sheetContext.l10n.chat_attachGif),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showGifPicker(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: Text(sheetContext.l10n.chat_attachMyContact),
+              subtitle: Text(sheetContext.l10n.chat_attachMyContactSubtitle),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _insertMyContactCard(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Puts this device's own contact card into the composer. (#611)
+  ///
+  /// Inserts rather than sends, matching the GIF picker, so the text can be
+  /// reviewed and captioned before it goes out.
+  ///
+  /// Emits the compact `<key:type:name>` form observed on the live mesh, NOT
+  /// the `meshcore://` URI. The URI is ~117 bytes against ~75 here, and the
+  /// channel payload budget is 160 including the `Sender: ` prefix.
+  void _insertMyContactCard(BuildContext context) {
+    final connector = Provider.of<MeshCoreConnector>(context, listen: false);
+    final keyHex = connector.selfPublicKeyHex;
+    if (keyHex.length != pubKeySize * 2) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.chat_contactCardNeedsConnection),
+      );
+      return;
+    }
+
+    final card = Contact.buildChannelShare(
+      publicKeyHex: keyHex,
+      name: connector.selfName ?? '',
+      // This device is a companion.
+      type: advTypeChat,
+    );
+
+    // Append rather than replace, so a caption already typed is not lost.
+    final existing = _textController.text.trimRight();
+    _textController.text = existing.isEmpty ? card : '$existing $card';
+    _textController.selection = TextSelection.collapsed(
+      offset: _textController.text.length,
+    );
+  }
+
   Widget _buildAvatar(String senderName) {
     final initial = _getFirstCharacterOrEmoji(senderName);
     final color = _getColorForName(senderName);
@@ -1382,9 +1452,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.gif_box),
-                onPressed: () => _showGifPicker(context),
-                tooltip: context.l10n.chat_sendGif,
+                icon: const Icon(Icons.add),
+                onPressed: () => _showAttachPicker(context),
+                tooltip: context.l10n.chat_attachTooltip,
               ),
               if (settings.translationEnabled)
                 MessageTranslationButton(
