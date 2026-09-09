@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../helpers/link_handler.dart';
+import 'contact_card_chip.dart';
 
 class TranslatedMessageContent extends StatelessWidget {
   final String displayText;
@@ -24,6 +25,15 @@ class TranslatedMessageContent extends StatelessWidget {
 
   // A leading `@[Name] ` reply prefix.
   static final RegExp _replyPrefix = RegExp(r'^@\[([^\]]+)\]\s+');
+
+  /// A contact share card, `<64-hex key:type:name>`, rendered as a tappable
+  /// Add Contact chip rather than the raw text it used to show. (#610)
+  ///
+  /// This is the format real clients put on the air, confirmed because the
+  /// stock app renders it as a native Add Contact button. The name is the final
+  /// field and may contain colons and spaces, so it is matched greedily to the
+  /// closing bracket; brackets themselves are stripped by the emitter.
+  static final RegExp _contactCard = RegExp(r'<[0-9a-fA-F]{64}:\d+:[^>]*>');
 
   /// The name of a leading `@[Name]` reply mention, or null. Lets callers show
   /// a reply chip above content that isn't rendered as text (e.g. a reply-gif,
@@ -50,27 +60,42 @@ class TranslatedMessageContent extends StatelessWidget {
   }
 
   Widget _buildText(BuildContext context, String text, TextStyle textStyle) {
-    if (!_mention.hasMatch(text)) {
+    final hasMention = _mention.hasMatch(text);
+    final hasCard = _contactCard.hasMatch(text);
+    if (!hasMention && !hasCard) {
       return LinkHandler.buildLinkifyText(
         context: context,
         text: text,
         style: textStyle,
       );
     }
-    // Mentions can't be interleaved with the Linkify widget, so a message that
-    // contains a mention renders as rich text with chip spans (links inside a
-    // mention message are not tappable, same as the prior leading-mention
-    // path). Messages without a mention keep full link support above.
+    // Neither chip can be interleaved with the Linkify widget, so a message
+    // containing one renders as rich text with chip spans (links inside such a
+    // message are not tappable, same as the prior leading-mention path).
+    // Messages with neither keep full link support above.
+    //
+    // Both patterns are collected and sorted by position, so a message
+    // carrying a mention AND a contact card renders both in the right order.
+    // They cannot overlap: a mention is `@[...]`, a card is `<...>`.
+    final matches = <Match>[
+      ..._mention.allMatches(text),
+      ..._contactCard.allMatches(text),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+
     final spans = <InlineSpan>[];
     var last = 0;
-    for (final m in _mention.allMatches(text)) {
+    for (final m in matches) {
+      if (m.start < last) continue;
       if (m.start > last) {
         spans.add(TextSpan(text: text.substring(last, m.start)));
       }
+      final isCard = text[m.start] == '<';
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
-          child: mentionChip(context, m.group(1)!, textStyle),
+          child: isCard
+              ? ContactCardChip(card: m.group(0)!, style: textStyle)
+              : mentionChip(context, m.group(1)!, textStyle),
         ),
       );
       last = m.end;
