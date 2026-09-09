@@ -7552,6 +7552,30 @@ abstract class AppLocalizations {
   /// **'That QR is not a MeshCore contact'**
   String get contacts_invalidContactQr;
 
+  /// No description provided for @contacts_verifiedByAdvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed on air. This node sent a signed advert.'**
+  String get contacts_verifiedByAdvert;
+
+  /// No description provided for @contacts_verifiedByMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Key confirmed. A message with this contact went through, which only works with the matching key.'**
+  String get contacts_verifiedByMessage;
+
+  /// No description provided for @contacts_verifiedKeyOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Added from a key. Nothing has confirmed it on air yet.'**
+  String get contacts_verifiedKeyOnly;
+
+  /// No description provided for @contacts_lastSeenNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not heard yet'**
+  String get contacts_lastSeenNever;
+
   /// No description provided for @contacts_ShareContact.
   ///
   /// In en, this message translates to:

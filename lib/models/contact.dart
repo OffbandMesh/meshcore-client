@@ -260,6 +260,15 @@ class Contact {
     }
   }
 
+  /// True once this contact has been confirmed on air by a signed advert.
+  ///
+  /// [lastSeen] maps to the firmware `last_advert_timestamp`, which a contact
+  /// created from a bare key deliberately carries as the epoch so the advert
+  /// replay guard cannot mute it (#627). That same sentinel doubles as the
+  /// verification signal, for free, and it clears itself the moment a genuine
+  /// advert arrives and the radio rewrites the field. (#630)
+  bool get isAdvertVerified => lastSeen.millisecondsSinceEpoch != 0;
+
   /// Reference-app contact share URI for this contact, the inverse of
   /// [fromShareUri]. This is what the stock app accepts, so emitting it is
   /// what makes Offband cards and QRs importable by non-Offband users. (#626)

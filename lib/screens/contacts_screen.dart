@@ -35,6 +35,7 @@ import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/add_contact_by_key_dialog.dart';
+import '../widgets/contact_verification_badge.dart';
 import '../widgets/my_contact_qr_dialog.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -1641,7 +1642,22 @@ class _ContactTile extends StatelessWidget {
                   ),
                 ],
               )
-            : Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            : Row(
+                children: [
+                  // Reads as a column of state down the list. Calm by design:
+                  // a key-added contact is not a problem, just less confirmed
+                  // (#630).
+                  ContactVerificationBadge(contact: contact),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      contact.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1747,6 +1763,14 @@ class _ContactTile extends StatelessWidget {
   }
 
   String _formatLastSeen(BuildContext context, DateTime lastSeen) {
+    // A contact added from a bare key carries the epoch deliberately, so the
+    // firmware advert replay guard cannot mute it (#627). Rendering that
+    // through the relative formatter would claim it was last seen tens of
+    // thousands of days ago, which is worse than saying nothing. (#630)
+    if (lastSeen.millisecondsSinceEpoch == 0) {
+      return context.l10n.contacts_lastSeenNever;
+    }
+
     final now = DateTime.now();
     final diff = now.difference(lastSeen);
 
