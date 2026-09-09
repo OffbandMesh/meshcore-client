@@ -4402,6 +4402,19 @@ class AppLocalizationsSl extends AppLocalizations {
   String get contacts_lastSeenNever => 'Not heard yet';
 
   @override
+  String contacts_cardAddContact(String name) {
+    return 'Add $name';
+  }
+
+  @override
+  String contacts_cardAlreadyAdded(String name) {
+    return '$name';
+  }
+
+  @override
+  String get contacts_cardAlreadyAddedTooltip => 'Already in your contacts';
+
+  @override
   String get chat_attachTooltip => 'Add to message';
 
   @override

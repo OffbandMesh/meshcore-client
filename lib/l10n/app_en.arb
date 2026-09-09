@@ -2521,6 +2521,23 @@
   "contacts_verifiedByMessage": "Key confirmed. A message with this contact went through, which only works with the matching key.",
   "contacts_verifiedKeyOnly": "Added from a key. Nothing has confirmed it on air yet.",
   "contacts_lastSeenNever": "Not heard yet",
+  "contacts_cardAddContact": "Add {name}",
+  "@contacts_cardAddContact": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_cardAlreadyAdded": "{name}",
+  "@contacts_cardAlreadyAdded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_cardAlreadyAddedTooltip": "Already in your contacts",
   "chat_attachTooltip": "Add to message",
   "chat_attachGif": "GIF",
   "chat_attachMyContact": "My contact card",

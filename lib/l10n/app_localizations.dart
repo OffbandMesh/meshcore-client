@@ -7576,6 +7576,24 @@ abstract class AppLocalizations {
   /// **'Not heard yet'**
   String get contacts_lastSeenNever;
 
+  /// No description provided for @contacts_cardAddContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Add {name}'**
+  String contacts_cardAddContact(String name);
+
+  /// No description provided for @contacts_cardAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}'**
+  String contacts_cardAlreadyAdded(String name);
+
+  /// No description provided for @contacts_cardAlreadyAddedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in your contacts'**
+  String get contacts_cardAlreadyAddedTooltip;
+
   /// No description provided for @chat_attachTooltip.
   ///
   /// In en, this message translates to:
