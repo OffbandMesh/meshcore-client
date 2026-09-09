@@ -39,41 +39,63 @@ class ContactCardChip extends StatelessWidget {
 
     // Mirrors what stock does: it warned the owner when the contact was
     // already held rather than silently re-adding.
+    //
+    // O(1) against the connector's maintained key set. Scanning `contacts`
+    // here would run per rendered chip on every notification, which is
+    // hundreds of comparisons in a message list on a device with a large
+    // contact book. (Gemini review, #610)
     final known = context.select<MeshCoreConnector, bool>(
-      (c) => c.contacts.any((x) => x.publicKeyHex == parsed.publicKeyHex),
+      (c) => c.isKnownContact(parsed.publicKeyHex),
     );
 
     final label = known
         ? l10n.contacts_cardAlreadyAdded(parsed.name)
         : l10n.contacts_cardAddContact(parsed.name);
 
-    final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: known
-            ? scheme.onSurface.withValues(alpha: 0.08)
-            : scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            known ? Icons.how_to_reg : Icons.person_add_alt_1,
-            size: 15,
-            color: known ? scheme.onSurfaceVariant : scheme.onPrimaryContainer,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: style.copyWith(
-              fontWeight: FontWeight.w500,
+    // A WidgetSpan gives its child unbounded width, so Flexible needs a real
+    // ceiling to ellipsize against. Without this the chip grows to whatever
+    // name the sender chose.
+    final chip = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: known
+              ? scheme.onSurface.withValues(alpha: 0.08)
+              : scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              known ? Icons.how_to_reg : Icons.person_add_alt_1,
+              size: 15,
               color: known
                   ? scheme.onSurfaceVariant
                   : scheme.onPrimaryContainer,
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            // Bounded and ellipsized. The name comes off a public radio channel
+            // and is attacker-controlled, so an unbounded label lets anyone
+            // overflow the message layout by posting a card with a long name.
+            // Reproduced before this: a 405 pixel RenderFlex overflow.
+            // (Gemini review prompted the adversarial case, #610)
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: known
+                      ? scheme.onSurfaceVariant
+                      : scheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
