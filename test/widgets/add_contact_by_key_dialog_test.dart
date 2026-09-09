@@ -137,6 +137,49 @@ void main() {
     );
   });
 
+  testWidgets('a scanned link opens the dialog already populated', (
+    tester,
+  ) async {
+    // The contacts-menu scan route hands its result straight to the dialog, so
+    // the user should not have to paste anything. (#629)
+    final conn = _CapturingConn();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<MeshCoreConnector>.value(
+        value: conn,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showAddContactByKeyDialog(
+                  context,
+                  initialKeyText:
+                      'meshcore://contact/add?name=Scanned+Node'
+                      '&public_key=$_key&type=3',
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // Straight to Add, with nothing typed by hand.
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(conn.added, hasLength(1));
+    final stub = conn.added.single;
+    expect(stub.publicKeyHex, _key);
+    expect(stub.name, 'Scanned Node');
+    expect(stub.type, advTypeRoom);
+    expect(stub.lastSeen, DateTime.fromMillisecondsSinceEpoch(0));
+  });
+
   testWidgets('a missing name falls back rather than blocking the add', (
     tester,
   ) async {

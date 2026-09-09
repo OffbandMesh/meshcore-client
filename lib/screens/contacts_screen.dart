@@ -41,6 +41,7 @@ import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
 import 'chat_screen.dart';
+import 'contact_qr_scanner_screen.dart';
 import 'discovery_screen.dart';
 import 'map_screen.dart';
 import 'repeater_hub_screen.dart';
@@ -427,6 +428,20 @@ class _ContactsScreenState extends State<ContactsScreen>
                 ),
                 onTap: () => showAddContactByKeyDialog(context),
               ),
+              // Scanning is a first-class way in, not just a button buried in
+              // the key field, so it gets its own entry here and routes
+              // straight into the add flow already filled in. (#629)
+              if (contactQrScanAvailable)
+                PopupMenuItem(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.qr_code_scanner),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.contacts_scanContactQr),
+                    ],
+                  ),
+                  onTap: () => _scanContactQr(context),
+                ),
               PopupMenuItem(
                 child: Row(
                   children: [
@@ -940,6 +955,20 @@ class _ContactsScreenState extends State<ContactsScreen>
       case ContactTypeFilter.sensors:
         return contact.type == advTypeSensor;
     }
+  }
+
+  /// Scan a contact QR from the contacts menu, then hand the result to the add
+  /// dialog already populated. (#629)
+  ///
+  /// Same scanner and same parser as the key-field button; only the entry point
+  /// differs. Scanning is how most people will actually add someone, so it
+  /// should not be reachable only from inside a field they have to open first.
+  Future<void> _scanContactQr(BuildContext context) async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ContactQrScannerScreen()),
+    );
+    if (!context.mounted || scanned == null) return;
+    await showAddContactByKeyDialog(context, initialKeyText: scanned);
   }
 
   DateTime _resolveLastSeen(Contact contact) {
