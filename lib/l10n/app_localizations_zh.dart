@@ -4117,6 +4117,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contacts_invalidContactQr => 'That QR is not a MeshCore contact';
 
   @override
+  String get contacts_verifiedByAdvert =>
+      'Confirmed on air. This node sent a signed advert.';
+
+  @override
+  String get contacts_verifiedByMessage =>
+      'Key confirmed. A message with this contact went through, which only works with the matching key.';
+
+  @override
+  String get contacts_verifiedKeyOnly =>
+      'Added from a key. Nothing has confirmed it on air yet.';
+
+  @override
+  String get contacts_lastSeenNever => 'Not heard yet';
+
+  @override
   String get contacts_ShareContact => '复制联系人信息到剪贴板';
 
   @override
