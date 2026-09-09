@@ -54,9 +54,14 @@ class ContactCardChip extends StatelessWidget {
 
     // A WidgetSpan gives its child unbounded width, so Flexible needs a real
     // ceiling to ellipsize against. Without this the chip grows to whatever
-    // name the sender chose.
+    // name the sender chose, which overflowed the message layout.
+    //
+    // Scaled off the viewport rather than a fixed pixel count, so a large
+    // accessibility font on a wide screen is not ellipsized while space
+    // remains, and a narrow phone still gets a sane bound. (Gemini recheck)
+    final maxChipWidth = MediaQuery.sizeOf(context).width * 0.7;
     final chip = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
+      constraints: BoxConstraints(maxWidth: maxChipWidth),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
