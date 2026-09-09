@@ -296,6 +296,13 @@ class Contact {
       '&public_key=$publicKeyHex'
       '&type=$type';
 
+  /// The body of one compact channel share, `<key:type:name>`, captured
+  /// without its delimiters. `[^>]*` cannot cross a closing bracket, so each
+  /// card matches individually even when several sit in one message.
+  static final RegExp _channelShareBody = RegExp(
+    r'<([0-9a-fA-F]{64}:\d+:[^>]*)>',
+  );
+
   /// Compact contact share for a CHANNEL message, `<key:type:name>`. (#611)
   ///
   /// This is a second, different format from [toShareUri], and deliberately so.
@@ -338,12 +345,17 @@ class Contact {
   /// Rendering a received card as a tappable Add Contact affordance is #610 and
   /// is separate; this only handles text pasted or scanned into the add flow.
   static Contact? fromChannelShare(String text) {
-    final trimmed = text.trim();
-    // Tolerate a card embedded in a longer message, which is how it arrives.
-    final start = trimmed.indexOf('<');
-    final end = trimmed.lastIndexOf('>');
-    if (start < 0 || end <= start) return null;
-    final body = trimmed.substring(start + 1, end);
+    // Tolerate a card embedded in a longer message, which is how it arrives,
+    // and take the FIRST well-formed one.
+    //
+    // Deliberately not a scan from the first `<` to the last `>`: a message
+    // carrying two cards would then be read as a single span running from the
+    // first key to the last name and parse as garbage. That is reachable,
+    // because the add dialog passes raw pasted text straight to here.
+    // (Gemini review, #610)
+    final match = _channelShareBody.firstMatch(text);
+    if (match == null) return null;
+    final body = match.group(1)!;
 
     final firstColon = body.indexOf(':');
     if (firstColon < 0) return null;

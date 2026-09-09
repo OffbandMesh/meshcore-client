@@ -77,19 +77,21 @@ class TranslatedMessageContent extends StatelessWidget {
     // Both patterns are collected and sorted by position, so a message
     // carrying a mention AND a contact card renders both in the right order.
     // They cannot overlap: a mention is `@[...]`, a card is `<...>`.
-    final matches = <Match>[
-      ..._mention.allMatches(text),
-      ..._contactCard.allMatches(text),
-    ]..sort((a, b) => a.start.compareTo(b.start));
+    // Each match carries which pattern produced it. Inferring the kind from
+    // the text, e.g. `text[m.start] == '<'`, would silently mis-route the day
+    // a third bracketed pattern is added. (Gemini review, #610)
+    final matches = <(Match, bool isCard)>[
+      ..._mention.allMatches(text).map((m) => (m, false)),
+      ..._contactCard.allMatches(text).map((m) => (m, true)),
+    ]..sort((a, b) => a.$1.start.compareTo(b.$1.start));
 
     final spans = <InlineSpan>[];
     var last = 0;
-    for (final m in matches) {
+    for (final (m, isCard) in matches) {
       if (m.start < last) continue;
       if (m.start > last) {
         spans.add(TextSpan(text: text.substring(last, m.start)));
       }
-      final isCard = text[m.start] == '<';
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,

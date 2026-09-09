@@ -4,37 +4,27 @@
 // app showed a native Add Contact button for the very same payload. Sharing
 // worked outbound only.
 
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:meshcore_open/connector/meshcore_connector.dart';
-import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
-import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/widgets/translated_message_content.dart';
 
 const _key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 const _card = '<$_key:1:Ka8sbi>';
 
 class _Conn extends MeshCoreConnector {
-  _Conn({this.known = const []});
-  final List<Contact> known;
+  _Conn({this.known = const {}});
+
+  /// Public key hexes already in contacts. Mirrors the connector's own
+  /// `_knownContactKeys` set, which is what the chip now consults.
+  final Set<String> known;
 
   @override
-  List<Contact> get contacts => known;
+  bool isKnownContact(String publicKeyHex) => known.contains(publicKeyHex);
 }
-
-Contact _contact(String keyHex) => Contact(
-  publicKey: hex2Uint8List(keyHex),
-  name: 'Ka8sbi',
-  type: advTypeChat,
-  pathLength: -1,
-  path: Uint8List(0),
-  lastSeen: DateTime(2026, 9, 9),
-);
 
 Future<void> _pump(WidgetTester tester, String text, _Conn conn) =>
     tester.pumpWidget(
@@ -72,7 +62,7 @@ void main() {
     tester,
   ) async {
     // Mirrors stock, which warned rather than silently re-adding.
-    await _pump(tester, _card, _Conn(known: [_contact(_key)]));
+    await _pump(tester, _card, _Conn(known: {_key}));
 
     expect(find.byIcon(Icons.how_to_reg), findsOneWidget);
     expect(find.byIcon(Icons.person_add_alt_1), findsNothing);
@@ -111,6 +101,40 @@ void main() {
 
     expect(find.byIcon(Icons.person_add_alt_1), findsNothing);
     expect(find.textContaining('just a normal message'), findsOneWidget);
+  });
+
+  testWidgets('two cards in one message render as two separate chips', (
+    tester,
+  ) async {
+    // Regression for the Gemini review: parsing from the first `<` to the last
+    // `>` would have read this as one span running from the first key to the
+    // second name, and produced garbage.
+    const other =
+        'ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100';
+    await _pump(tester, '$_card and <$other:2:Bob>', _Conn());
+
+    expect(find.byIcon(Icons.person_add_alt_1), findsNWidgets(2));
+    expect(find.textContaining('Ka8sbi'), findsOneWidget);
+    expect(find.textContaining('Bob'), findsOneWidget);
+    expect(find.textContaining(_key), findsNothing);
+  });
+
+  testWidgets('a nested bracket mess yields one card, and it is the outer key', (
+    tester,
+  ) async {
+    // Adversarial input from a public channel. `[^>]*` cannot cross a `>`, so
+    // the match ends at the inner closing bracket and the nested text becomes
+    // part of the OUTER card's name. Exactly one add is offered, for the outer
+    // key, and the tap opens the dialog where the key is visible before
+    // anything is written to the radio. No second key is silently smuggled in.
+    const other =
+        'ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100';
+    await _pump(tester, '<$_key:1:Name <$other:2:Inner>>', _Conn());
+
+    expect(find.byIcon(Icons.person_add_alt_1), findsOneWidget);
+    // The parser took the outer card, so the nested text is shown as the name
+    // rather than being treated as a second identity.
+    expect(find.textContaining('Name <'), findsOneWidget);
   });
 
   testWidgets('names with spaces and emoji survive into the chip label', (

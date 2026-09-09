@@ -943,6 +943,15 @@ class MeshCoreConnector extends ChangeNotifier {
   int get maxContacts => _maxContacts;
   int get maxChannels => _maxChannels;
   Set<String> get knownContactKeys => Set.unmodifiable(_knownContactKeys);
+
+  /// O(1) membership test for a contact by public key hex.
+  ///
+  /// Use this from a widget `build`, never [knownContactKeys], which copies the
+  /// whole set on every call, nor a scan of [contacts]. A received contact card
+  /// asks this question once per rendered chip on every connector
+  /// notification. (#610)
+  bool isKnownContact(String publicKeyHex) =>
+      _knownContactKeys.contains(publicKeyHex);
   double? get contactSyncProgress {
     final total = _contactSyncTotal;
     if (!_isLoadingContacts || total == null || total <= 0) return null;
