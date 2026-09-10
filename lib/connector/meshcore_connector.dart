@@ -181,6 +181,38 @@ enum MeshCoreConnectionState {
 
 enum MeshCoreTransportType { bluetooth, usb, tcp }
 
+/// Outcome of a node-identity read or write. (#578)
+///
+/// [unsupported] is deliberately distinct from [rejected]: the firmware can be
+/// built without identity transfer at all (`ENABLE_PRIVATE_KEY_EXPORT` /
+/// `ENABLE_PRIVATE_KEY_IMPORT`), and a UI must say "this radio cannot do it"
+/// rather than "that failed, try again".
+enum IdentityTransfer {
+  /// The device returned its identity, or accepted the one we sent.
+  ok,
+
+  /// The firmware was compiled without the feature.
+  unsupported,
+
+  /// The device understood the request and refused it, e.g. an invalid key.
+  rejected,
+
+  /// Not connected, or no reply before the timeout.
+  noReply,
+}
+
+/// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
+/// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
+class IdentityExportResult {
+  const IdentityExportResult(this.outcome, [this.identity]);
+
+  final IdentityTransfer outcome;
+
+  /// The 64-byte node identity. Secret material: never log it, never persist
+  /// it outside a user-initiated export file.
+  final Uint8List? identity;
+}
+
 class RepeaterBatterySnapshot {
   final int millivolts;
   final DateTime updatedAt;
@@ -297,6 +329,9 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _caplogAwaitingStart = false;
   Completer<CaplogAck>? _caplogAckCompleter;
   Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
+  // Node identity transfer (#578). Only one of each may be in flight.
+  Completer<IdentityExportResult>? _identityExportCompleter;
+  Completer<IdentityTransfer>? _identityImportCompleter;
 
   /// Outstanding 0xC6 packet-hash queries, keyed "ts_chan" so a reply matches
   /// its request without relying on ordering (#524).
@@ -352,6 +387,8 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _bleInitialSyncStarted = false;
   bool _webInitialHandshakeRequestSent = false;
   bool _preserveContactsOnRefresh = false;
+  int _autoAddMaxHops = 0;
+  int _manualAddContactsRaw = 0;
   bool _autoAddUsers = false;
   bool _autoAddRepeaters = false;
   bool _autoAddRoomServers = false;
@@ -594,10 +631,20 @@ class MeshCoreConnector extends ChangeNotifier {
   bool? get autoAddRoomServers => _autoAddRoomServers;
   bool? get autoAddSensors => _autoAddSensors;
   bool? get autoAddOverwriteOldest => _overwriteOldest;
+
+  /// `autoadd_max_hops`; 0 means no limit. Stays 0 on firmware old enough to
+  /// answer [respCodeAutoAddConfig] with only two bytes. (#578)
+  int get autoAddMaxHops => _autoAddMaxHops;
   int get telemetryModeBase => _telemetryModeBase;
   int get telemetryModeLoc => _telemetryModeLoc;
   int get telemetryModeEnv => _telemetryModeEnv;
   int get advertLocationPolicy => _advertLocPolicy;
+
+  /// The device's `manual_add_contacts` pref exactly as reported, for callers
+  /// that must reproduce it rather than interpret it (stock config export,
+  /// #573). [_manualAddContacts] is a derived, inverted view of bit 0 and is
+  /// not what belongs in an export file.
+  int get manualAddContactsRaw => _manualAddContactsRaw;
   int get multiAcks => _multiAcks;
   bool? get clientRepeat => _clientRepeat;
 
@@ -2933,6 +2980,11 @@ class MeshCoreConnector extends ChangeNotifier {
   void resetConnectionHandshakeStateForTest() =>
       _resetConnectionHandshakeState();
 
+  /// Feeds a device frame through the normal dispatch, so parse paths can be
+  /// exercised without a radio. (#578)
+  @visibleForTesting
+  void handleFrameForTest(List<int> frame) => _handleFrameInner(frame);
+
   @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
 
@@ -4635,6 +4687,129 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Reads the node's 64-byte identity.
+  ///
+  /// Firmware can be built without this (`ENABLE_PRIVATE_KEY_EXPORT`), in which
+  /// case the device answers [respCodeDisabled] and the result is
+  /// [IdentityTransfer.unsupported] rather than a failure. Callers must handle
+  /// that case: it means this radio can never do it, so retrying is pointless
+  /// and an export must proceed without the identity section. (#578)
+  Future<IdentityExportResult> exportPrivateKey({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (!isConnected) {
+      return const IdentityExportResult(IdentityTransfer.noReply);
+    }
+    final existing = _identityExportCompleter;
+    if (existing != null && !existing.isCompleted) {
+      return existing.future.timeout(
+        timeout,
+        onTimeout: () => const IdentityExportResult(IdentityTransfer.noReply),
+      );
+    }
+    final completer = Completer<IdentityExportResult>();
+    _identityExportCompleter = completer;
+    await sendFrame(buildExportPrivateKeyFrame());
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      return const IdentityExportResult(IdentityTransfer.noReply);
+    } finally {
+      if (identical(_identityExportCompleter, completer)) {
+        _identityExportCompleter = null;
+      }
+    }
+  }
+
+  /// Overwrites the node's identity with [identity], which must be
+  /// [privateKeySize] bytes.
+  ///
+  /// **This is destructive.** The node's existing identity is replaced, every
+  /// contact's view of this node becomes stale, and there is no undo short of
+  /// importing the previous key back. Callers must confirm with the user first.
+  /// Availability is firmware-dependent exactly as in [exportPrivateKey]. (#578)
+  Future<IdentityTransfer> importPrivateKey(
+    Uint8List identity, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (identity.length != privateKeySize) {
+      throw ArgumentError.value(
+        identity.length,
+        'identity',
+        'a node identity is exactly $privateKeySize bytes',
+      );
+    }
+    if (!isConnected) return IdentityTransfer.noReply;
+    final completer = Completer<IdentityTransfer>();
+    _identityImportCompleter = completer;
+    await sendFrame(buildImportPrivateKeyFrame(identity));
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      return IdentityTransfer.noReply;
+    } finally {
+      if (identical(_identityImportCompleter, completer)) {
+        _identityImportCompleter = null;
+      }
+    }
+  }
+
+  void _handlePrivateKey(Uint8List frame) {
+    final completer = _identityExportCompleter;
+    _identityExportCompleter = null;
+    if (completer == null || completer.isCompleted) return;
+    if (frame.length < 1 + privateKeySize) {
+      // A short frame is not a usable identity; report it as a refusal rather
+      // than handing a caller a truncated key it might write to a file.
+      appLogger.error(
+        'RESP_CODE_PRIVATE_KEY frame too short: ${frame.length} bytes',
+        tag: 'Connector',
+      );
+      completer.complete(const IdentityExportResult(IdentityTransfer.rejected));
+      return;
+    }
+    // Never log the key itself.
+    completer.complete(
+      IdentityExportResult(
+        IdentityTransfer.ok,
+        Uint8List.sublistView(frame, 1, 1 + privateKeySize),
+      ),
+    );
+  }
+
+  /// RESP_CODE_DISABLED is generic: it means "that feature is not in this
+  /// build". Only an identity request is currently able to provoke it from us,
+  /// so it resolves whichever identity transfer is in flight and is otherwise
+  /// logged rather than silently dropped. (#578)
+  void _handleDisabledFrame() {
+    final export = _identityExportCompleter;
+    _identityExportCompleter = null;
+    if (export != null && !export.isCompleted) {
+      export.complete(const IdentityExportResult(IdentityTransfer.unsupported));
+      return;
+    }
+    final import = _identityImportCompleter;
+    _identityImportCompleter = null;
+    if (import != null && !import.isCompleted) {
+      import.complete(IdentityTransfer.unsupported);
+      return;
+    }
+    appLogger.warn(
+      'Device reported a disabled feature with no request in flight',
+      tag: 'Connector',
+    );
+  }
+
+  /// Lets an in-flight identity import claim a generic OK or ERR frame.
+  /// Returns true when it did, so the shared handlers can stop. (#578)
+  bool _completeIdentityImport(IdentityTransfer outcome) {
+    final completer = _identityImportCompleter;
+    if (completer == null || completer.isCompleted) return false;
+    _identityImportCompleter = null;
+    completer.complete(outcome);
+    return true;
+  }
+
   void _handleOffbandGps(Uint8List frame) {
     if (frame.length < 2) return;
     final text = utf8.decode(frame.sublist(1), allowMalformed: true);
@@ -5183,7 +5358,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
     switch (code) {
       case respCodeOk:
+        // An identity import is confirmed by a generic OK, so it claims the
+        // frame before the shared handler runs. (#578)
+        if (_completeIdentityImport(IdentityTransfer.ok)) break;
         _handleOk();
+        break;
+      case respCodePrivateKey:
+        _handlePrivateKey(frame);
+        break;
+      case respCodeDisabled:
+        _handleDisabledFrame();
         break;
       case respCodeDeviceInfo:
         _handleDeviceInfo(frame);
@@ -5358,6 +5542,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }) => isSyncingChannels && channelSyncInFlight && !hasPendingGenericAck;
 
   void _handleErrorFrame(Uint8List frame) {
+    // An identity import is refused with a generic ERR (illegal argument for a
+    // malformed key), so it claims the frame first. (#578)
+    if (_completeIdentityImport(IdentityTransfer.rejected)) return;
     // A caplog download awaiting its START frame: the firmware answers the
     // generic RESP_CODE_ERR when another stream (block-list / contacts /
     // observer config) is already in flight. Fail the download fast with a
@@ -5472,7 +5659,12 @@ class MeshCoreConnector extends ChangeNotifier {
       _telemetryModeEnv = telemetryFlag >> 2 & 0x03;
       _telemetryModeLoc = telemetryFlag >> 4 & 0x03;
 
-      _manualAddContacts = reader.readByte() & 0x01 == 0x00;
+      _manualAddContactsRaw = reader.readByte();
+      // Firmware treats bit 0 as "manual add", so auto-add is on when it is
+      // clear (`isAutoAddEnabled()` in MyMesh.cpp). This flag therefore means
+      // "device is in auto-add mode", despite its name, and drives the one-shot
+      // default-applying pass in _checkManualAddContacts.
+      _manualAddContacts = _manualAddContactsRaw & 0x01 == 0x00;
 
       _currentFreqHz = reader.readUInt32LE();
       _currentBwHz = reader.readUInt32LE();
@@ -8555,6 +8747,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _autoAddRoomServers = (flags & autoAddRoomServerFlag) != 0;
       _autoAddSensors = (flags & autoAddSensorFlag) != 0;
       _overwriteOldest = (flags & autoAddOverwriteOldestFlag) != 0;
+      // The hop limit is the third byte. Older firmware sends a 2-byte frame,
+      // so its absence is normal and leaves the previous value alone. (#578)
+      if (frame.length > 2) {
+        _autoAddMaxHops = reader.readByte();
+      }
     } catch (e) {
       appLogger.error('Failed to parse auto-add config: $e', tag: 'Connector');
     }

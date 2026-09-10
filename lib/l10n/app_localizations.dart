@@ -8445,6 +8445,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t open battery settings'**
   String get batteryOptimizationOpenFailed;
+
+  /// Button selecting every section on the stock config export/import screens (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get stockConfig_selectAll;
+
+  /// Button clearing every section on the stock config export/import screens (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get stockConfig_deselectAll;
+
+  /// Config section holding the device's display name (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get stockConfig_sectionName;
+
+  /// Config section holding the node's key pair (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Private Identity Key'**
+  String get stockConfig_sectionIdentity;
+
+  /// Config section holding LoRa radio parameters (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Radio Settings'**
+  String get stockConfig_sectionRadio;
+
+  /// Config section holding the device's advertised position (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Position Settings'**
+  String get stockConfig_sectionPosition;
+
+  /// Config section holding miscellaneous device preferences (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Other Settings'**
+  String get stockConfig_sectionOther;
+
+  /// Config section holding automatic contact-add preferences (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Add Settings'**
+  String get stockConfig_sectionAutoAdd;
+
+  /// Config section holding channels, with how many there are (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Channels ({count})'**
+  String stockConfig_sectionChannels(int count);
+
+  /// Config section holding contacts, with how many there are (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts ({count})'**
+  String stockConfig_sectionContacts(int count);
+
+  /// Warning shown beside the identity section when exporting (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Your private key must be kept secret. It should only be exported as a backup.'**
+  String get stockConfig_identityWarning;
+
+  /// Abbreviated public key shown under the identity section (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Public Key: {key}'**
+  String stockConfig_publicKeyLabel(String key);
+
+  /// Placeholder shown instead of the private key, which is never displayed (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Private Key: hidden'**
+  String get stockConfig_privateKeyHidden;
+
+  /// Title of the stock config export screen (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export Config'**
+  String get exportConfig_title;
+
+  /// Banner instructing the user to pick sections to export (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Please select data to export.'**
+  String get exportConfig_instruction;
+
+  /// Note that channels export as a whole, with no per-channel choice (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'All channels will be exported.'**
+  String get exportConfig_allChannels;
+
+  /// Note that contacts export as a whole, with no per-contact choice (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'All contacts will be exported.'**
+  String get exportConfig_allContacts;
+
+  /// Shown when the user tries to export with every section unchecked (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one section to export.'**
+  String get exportConfig_nothingSelected;
+
+  /// Explains that an export drops Offband-only contact fields (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'This is the MeshCore stock format, so it cannot carry Offband-only data such as path overrides. Importing this file back into Offband will not restore that data.'**
+  String get exportConfig_lossyNotice;
+
+  /// Title of the dialog listing sections that could not be gathered (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Some sections could not be exported'**
+  String get exportConfig_omittedTitle;
+
+  /// Reason line when firmware lacks the feature entirely, so retrying cannot help (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: this radio\'s firmware was built without it.'**
+  String exportConfig_omittedUnsupported(String section);
+
+  /// Reason line when the device did not answer in time (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device did not respond.'**
+  String exportConfig_omittedNoReply(String section);
+
+  /// Reason line when the device refused the request (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device refused the request.'**
+  String exportConfig_omittedRejected(String section);
+
+  /// Reason line when the value is not known to the app yet (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device has not reported this yet.'**
+  String exportConfig_omittedUnavailable(String section);
+
+  /// Confirms writing the file even though some sections are missing (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export anyway'**
+  String get exportConfig_exportAnyway;
+
+  /// Dismisses the export without writing a file (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get exportConfig_cancel;
+
+  /// Subject line used when sharing an exported config file (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'MeshCore config'**
+  String get exportConfig_shareSubject;
+
+  /// Snackbar shown when writing the export file failed (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {message}'**
+  String exportConfig_failed(String message);
+
+  /// Shown when the export screen has no connected radio to read from (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a device before exporting.'**
+  String get exportConfig_notConnected;
+
+  /// Title of the stock config import screen (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Import Config'**
+  String get importConfig_title;
+
+  /// Banner instructing the user to pick which sections to import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Please select data to import.'**
+  String get importConfig_instruction;
+
+  /// Button that opens the file picker to load a config file (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a config file'**
+  String get importConfig_chooseFile;
+
+  /// Warning under the identity section, matching the wording stock uses (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Importing this private key will overwrite your current identity.'**
+  String get importConfig_identityWarning;
+
+  /// Explains the additive channel rule, matching stock's wording (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'New channels will be added. Existing channels will not change.'**
+  String get importConfig_channelsNote;
+
+  /// Explains the contact upsert rule, matching stock's wording (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'New contacts will be added. Existing contacts will be updated.'**
+  String get importConfig_contactsNote;
+
+  /// Shown when the user confirms with nothing checked (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one section to import.'**
+  String get importConfig_nothingSelected;
+
+  /// Shown when there is no connected radio to import into (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a device before importing.'**
+  String get importConfig_notConnected;
+
+  /// Shown when the chosen file could not be parsed (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a MeshCore config. {message}'**
+  String importConfig_parseFailed(String message);
+
+  /// Title of the confirmation shown before a destructive identity import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite this node\'s identity?'**
+  String get importConfig_confirmIdentityTitle;
+
+  /// Body of the destructive identity import confirmation (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'The node\'s current identity will be replaced with the one in this file, and every contact\'s record of this node becomes stale. This cannot be undone except by importing the previous key.'**
+  String get importConfig_confirmIdentityBody;
+
+  /// Confirms the destructive identity import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite identity'**
+  String get importConfig_confirmIdentityAccept;
+
+  /// Dismisses a config import confirmation (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get importConfig_cancel;
+
+  /// Title of the dialog summarising what an import did (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Import finished'**
+  String get importConfig_resultTitle;
+
+  /// Summary counts after an import. Deliberately says sent, not applied: apart from identity these commands are not confirmed by the device yet (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Sent {contacts} contacts and {channels} channels to the device.'**
+  String importConfig_resultCounts(int contacts, int channels);
+
+  /// Heading above the list of channels that were skipped (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Channels not imported'**
+  String get importConfig_resultSkippedHeading;
+
+  /// Heading above the list of sections that could not be applied (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Sections not applied'**
+  String get importConfig_resultFailedHeading;
+
+  /// Skip reason: stock never overwrites an existing channel (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'already on this device, so it was left unchanged'**
+  String get importConfig_reasonAlreadyPresent;
+
+  /// Skip reason: every channel slot is occupied (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'no free channel slot on the device'**
+  String get importConfig_reasonNoFreeSlot;
+
+  /// Failure reason: the file did not contain the section (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'not present in this file'**
+  String get importConfig_reasonAbsentFromFile;
+
+  /// Failure reason: no answer from the device (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'the device did not respond'**
+  String get importConfig_reasonNoReply;
+
+  /// Failure reason: firmware lacks the feature entirely (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'this radio\'s firmware was built without it'**
+  String get importConfig_reasonUnsupported;
+
+  /// Failure reason: the device refused the request (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'the device refused it'**
+  String get importConfig_reasonRejected;
+
+  /// Failure reason: no supported way to write the value (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'this app cannot write every value in it'**
+  String get importConfig_reasonNotWritable;
+
+  /// One line pairing a channel or section with why it was skipped (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'{item}: {reason}'**
+  String importConfig_entryLine(String item, String reason);
+
+  /// Dismisses the import result dialog (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get importConfig_close;
+
+  /// Settings entry opening the config export screen (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Export Config'**
+  String get settings_exportConfig;
+
+  /// Settings entry opening the config import screen (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Import Config'**
+  String get settings_importConfig;
+
+  /// Explains what the config export and import entries do (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.'**
+  String get settings_configBackupSubtitle;
 }
 
 class _AppLocalizationsDelegate
