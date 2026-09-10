@@ -292,17 +292,47 @@ jobs:
         run: |
           set -eu
           TAG="${GITHUB_REF_NAME}"
+
+          # Whether a tag publishes as a full release or a prerelease is DERIVED
+          # from the tag, never hardcoded (#652). A bare vMAJOR.MINOR.PATCH is a
+          # full release; anything else is a prerelease.
+          #
+          # Defaulting the unrecognised shape to prerelease is deliberate. The
+          # legacy tags (observer-g2-rc3, v1.1.2-queuediag, v1.1.2-rc.1-b54-rxfed)
+          # belong there, and a tag whose shape we do not recognise can never
+          # publish itself as stable by accident.
+          #
+          # The flag is passed EXPLICITLY in both branches, including the
+          # =false form. gh only changes what it is told to change, so a retry
+          # that omitted the flag was what left a stale prerelease in place.
+          #
+          # --latest is deliberately NOT passed: `gh release create --help`
+          # documents the default as "automatic based on date and version",
+          # which is what we want. Forcing it would promote a back-ported patch
+          # tagged after a newer minor.
+          if printf '%s' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            PRERELEASE_FLAG="--prerelease=false"
+          else
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          echo "Tag ${TAG} resolves to ${PRERELEASE_FLAG}"
+
           if gh release view "${TAG}" >/dev/null 2>&1; then
             # Retry / re-run: refresh assets and notes, then ensure published.
             gh release upload "${TAG}" out/* --clobber
-            gh release edit "${TAG}" --notes-file "${NOTES}" --prerelease --draft=false
+            gh release edit "${TAG}" --notes-file "${NOTES}" "${PRERELEASE_FLAG}" --draft=false
           else
             gh release create "${TAG}" \
               --draft \
               --title "Offband Meshcore ${VERSION}" \
               --notes-file "${NOTES}" \
-              --prerelease
+              "${PRERELEASE_FLAG}"
             gh release upload "${TAG}" out/*
-            gh release edit "${TAG}" --draft=false
+            # The prerelease flag is restated here, not just on create, so both
+            # branches converge on ONE publish call that declares the complete
+            # final state. Relying on create+draft to have persisted the flag
+            # would make publication depend on behaviour we have not verified,
+            # which is the same class of assumption that caused #652.
+            gh release edit "${TAG}" "${PRERELEASE_FLAG}" --draft=false
           fi
           echo "Release ${TAG} published with $(ls out | wc -l) assets."
