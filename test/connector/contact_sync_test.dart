@@ -218,6 +218,94 @@ void main() {
     expect(names(), {'Alpha', 'Echo'});
   });
 
+  group('one contact request at a time (#672)', () {
+    late DateTime now;
+
+    setUp(() {
+      now = DateTime.utc(2026, 9, 23, 6);
+      connector.contactSyncClock = () => now;
+    });
+
+    test('a request during a stream is queued, not sent, list kept', () async {
+      seedSaved();
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(3));
+      connector.handleFrameForTest(_contactFrame(0x11, 'Alpha'));
+
+      await connector.getContacts();
+
+      expect(contactRequests(), 1);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+    });
+
+    test('the queued request runs after END', () async {
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(0));
+      await connector.getContacts(since: 5, preserveExisting: true);
+      connector.handleFrameForTest(_end);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(contactRequests(), 2);
+      expect(sent.last.length, 5, reason: 'the queued incremental request');
+    });
+
+    test('a queued full request wins over an incremental one', () async {
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(0));
+      await connector.getContacts(since: 5, preserveExisting: true);
+      await connector.getContacts();
+      connector.handleFrameForTest(_end);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(contactRequests(), 2);
+      expect(sent.last.length, 1, reason: 'a full request has no since');
+    });
+
+    test('ERR before the stream ends the request and keeps the list', () async {
+      seedSaved();
+      await connector.getContacts();
+      connector.handleFrameForTest(Uint8List.fromList([respCodeErr, 4]));
+
+      expect(connector.isLoadingContacts, isFalse);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+      await connector.getContacts();
+      expect(contactRequests(), 2, reason: 'no longer blocked');
+    });
+
+    test('a request idle for 30 s is treated as lost', () async {
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(3));
+
+      now = now.add(const Duration(seconds: 29));
+      await connector.getContacts();
+      expect(contactRequests(), 1, reason: 'still live at 29 s');
+
+      now = now.add(const Duration(seconds: 2));
+      await connector.getContacts();
+      expect(contactRequests(), 2, reason: 'stale at 31 s');
+    });
+
+    test('contact frames keep a long stream alive', () async {
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(3));
+      now = now.add(const Duration(seconds: 25));
+      connector.handleFrameForTest(_contactFrame(0x11, 'Alpha'));
+      now = now.add(const Duration(seconds: 25));
+
+      await connector.getContacts();
+      expect(contactRequests(), 1);
+    });
+
+    test('a failed send does not leave refreshes blocked', () async {
+      connector.sendFrameOverrideForTest = (_) => throw Exception('usb gone');
+      await expectLater(connector.getContacts(), throwsException);
+
+      connector.sendFrameOverrideForTest = sent.add;
+      await connector.getContacts();
+      expect(contactRequests(), 1);
+    });
+  });
+
   test('an incremental sync never removes anything', () async {
     seedSaved();
     await connector.getContacts(since: 1, preserveExisting: true);
