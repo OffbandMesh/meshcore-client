@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
 
 import '../models/contact.dart';
 import '../utils/app_logger.dart';
@@ -14,6 +15,13 @@ class ContactStore {
       publicKeyHex = value.length > 10 ? value.substring(0, 10) : '';
 
   String get keyFor => '$_keyPrefix$publicKeyHex';
+
+  // Set when the stored list for that key could not be decoded. A save there
+  // is refused until a load succeeds, so a partial in-memory list can never
+  // replace contacts the app merely failed to read (#660, #673).
+  String? _unreadableKey;
+
+  bool get lastLoadFailed => _unreadableKey == keyFor;
 
   Future<List<Contact>> loadContacts() async {
     if (publicKeyHex.isEmpty) {
@@ -47,10 +55,31 @@ class ContactStore {
 
     try {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
-      return jsonList
+      final contacts = jsonList
           .map((entry) => _fromJson(entry as Map<String, dynamic>))
           .toList();
-    } catch (_) {
+      if (_unreadableKey == keyFor) _unreadableKey = null;
+      return contacts;
+    } catch (e) {
+      // SAFELANE 6: a decode failure is not "no contacts". Keep the raw value
+      // somewhere a later save cannot touch, then refuse saves to this key.
+      final key = keyFor;
+      final aside =
+          '$key.unreadable-${DateTime.now().toUtc().millisecondsSinceEpoch}';
+      _unreadableKey = key;
+      final message =
+          'Could not read saved contacts for $key: $e. Raw data kept under '
+          '$aside; saving contacts for this radio is disabled until they load.';
+      debugPrint(message);
+      appLogger.error(message, tag: 'Storage');
+      try {
+        await blobs.write(aside, jsonString);
+      } catch (writeError) {
+        appLogger.error(
+          'Could not keep unreadable contacts aside under $aside: $writeError',
+          tag: 'Storage',
+        );
+      }
       return [];
     }
   }
@@ -58,6 +87,14 @@ class ContactStore {
   Future<void> saveContacts(List<Contact> contacts) async {
     if (publicKeyHex.isEmpty) {
       appLogger.warn('Public key hex is not set. Cannot save contacts.');
+      return;
+    }
+    if (lastLoadFailed) {
+      final message =
+          'Refusing to save ${contacts.length} contact(s) over $keyFor: the '
+          'stored list could not be read, so a save could replace it.';
+      debugPrint(message);
+      appLogger.error(message, tag: 'Storage');
       return;
     }
     final jsonList = contacts.map(_toJson).toList();
