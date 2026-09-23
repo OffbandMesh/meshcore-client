@@ -444,6 +444,19 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _contactSyncRetryUsed = false;
   bool _contactSyncDecisionPending = false;
   ContactSyncShortfall? _contactSyncShortfall;
+  // One contact request at a time: the firmware refuses a second
+  // CMD_GET_CONTACTS mid-stream with ERR_CODE_BAD_STATE. A request made while
+  // one runs is queued and sent after END. A request with no contact frames
+  // for [contactRequestStaleAfter] is treated as lost so a missing END cannot
+  // block every later refresh (#672, owner decision on the 30 s value).
+  static const Duration contactRequestStaleAfter = Duration(seconds: 30);
+  bool _contactRequestInFlight = false;
+  bool _contactStreamStarted = false;
+  DateTime _contactRequestLastActivity = DateTime.fromMillisecondsSinceEpoch(0);
+  ({int? since, bool preserveExisting})? _queuedContactRequest;
+
+  @visibleForTesting
+  DateTime Function() contactSyncClock = DateTime.now;
   bool _isSyncingQueuedMessages = false;
   bool _deferQueuedContactMessagesUntilContacts = false;
   bool _isProcessingDeferredQueuedContactMessages = false;
@@ -3123,6 +3136,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncDeliveredKeys.clear();
     _contactSyncRetryUsed = false;
     _contactSyncDecisionPending = false;
+    _contactRequestInFlight = false;
+    _contactStreamStarted = false;
+    _queuedContactRequest = null;
     _isLoadingContacts = false;
     _hasLoadedContacts = false;
     _isLoadingChannels = false;
@@ -3684,6 +3700,22 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> getContacts({int? since, bool preserveExisting = false}) async {
     if (!isConnected) return;
 
+    if (_contactRequestInFlight) {
+      final idle = contactSyncClock().difference(_contactRequestLastActivity);
+      if (idle < contactRequestStaleAfter) {
+        _queueContactRequest(since: since, preserveExisting: preserveExisting);
+        return;
+      }
+      _appDebugLogService?.warn(
+        'Contact request had no reply for ${idle.inSeconds}s; treating it as '
+        'lost and sending a new one',
+        tag: 'ContactSync',
+      );
+    }
+    _contactRequestInFlight = true;
+    _contactStreamStarted = false;
+    _contactRequestLastActivity = contactSyncClock();
+
     _isLoadingContacts = true;
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
@@ -3694,7 +3726,57 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     notifyListeners();
 
-    await sendFrame(buildGetContactsFrame(since: since));
+    try {
+      await sendFrame(buildGetContactsFrame(since: since));
+    } catch (e) {
+      _endContactRequest();
+      _appDebugLogService?.error(
+        'Contact request could not be sent: $e',
+        tag: 'ContactSync',
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Keeps at most one request waiting. A full request wins over an
+  /// incremental one, since it covers it.
+  void _queueContactRequest({int? since, required bool preserveExisting}) {
+    final queued = _queuedContactRequest;
+    final full = since == null || (queued != null && queued.since == null);
+    _queuedContactRequest = (
+      since: full ? null : since,
+      preserveExisting: preserveExisting && (queued?.preserveExisting ?? true),
+    );
+    _appDebugLogService?.info(
+      'Contact request queued behind the one in flight '
+      '(${full ? 'full' : 'incremental'})',
+      tag: 'ContactSync',
+    );
+  }
+
+  void _endContactRequest() {
+    _contactRequestInFlight = false;
+    _contactStreamStarted = false;
+    _isLoadingContacts = false;
+    _contactSyncIsFull = false;
+  }
+
+  void _runQueuedContactRequest() {
+    final queued = _queuedContactRequest;
+    if (queued == null || _contactRequestInFlight) return;
+    _queuedContactRequest = null;
+    unawaited(
+      getContacts(
+        since: queued.since,
+        preserveExisting: queued.preserveExisting,
+      ).catchError((Object e) {
+        _appDebugLogService?.error(
+          'Queued contact request failed to send: $e',
+          tag: 'ContactSync',
+        );
+      }),
+    );
   }
 
   Future<void> refreshContacts() async {
@@ -5669,6 +5751,8 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeContactsStart:
         debugPrint('Got CONTACTS_START');
+        _contactStreamStarted = true;
+        _contactRequestLastActivity = contactSyncClock();
         _isLoadingContacts = true;
         _contactSyncReceived = 0;
         _contactSyncDeliveredKeys.clear();
@@ -5704,11 +5788,11 @@ class MeshCoreConnector extends ChangeNotifier {
       case respCodeEndOfContacts:
         debugPrint('Got END_OF_CONTACTS');
         final wasFullSync = _contactSyncIsFull && _isLoadingContacts;
-        _isLoadingContacts = false;
+        _endContactRequest();
         _hasLoadedContacts = true;
         _contactSyncUsesSinceFilter = false;
-        _contactSyncIsFull = false;
         if (wasFullSync) _finishFullContactSync();
+        _runQueuedContactRequest();
         unawaited(updateKnownDiscovered());
         notifyListeners();
         unawaited(_persistContacts());
@@ -5820,6 +5904,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // An identity import is refused with a generic ERR (illegal argument for a
     // malformed key), so it claims the frame first. (#578)
     if (_completeIdentityImport(IdentityTransfer.rejected)) return;
+    final caplogWasAwaitingStart = _caplogAwaitingStart;
     // A caplog download awaiting its START frame: the firmware answers the
     // generic RESP_CODE_ERR when another stream (block-list / contacts /
     // observer config) is already in flight. Fail the download fast with a
@@ -5865,6 +5950,25 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelSyncRetries = 0;
       _nextChannelIndexToRequest++;
       unawaited(_requestNextChannel());
+      return;
+    }
+
+    // A contact request the radio refused before streaming (e.g. BAD_STATE
+    // while another stream runs). Only claimed when nothing else could own
+    // the ERR. The saved list is untouched; the request just ends. (#672)
+    if (_contactRequestInFlight &&
+        !_contactStreamStarted &&
+        !caplogWasAwaitingStart &&
+        _pendingGenericAckQueue.isEmpty) {
+      _endContactRequest();
+      _hasLoadedContacts = true;
+      _appDebugLogService?.error(
+        'Radio refused the contact request (error $errCode); saved contacts '
+        'kept',
+        tag: 'ContactSync',
+      );
+      notifyListeners();
+      _runQueuedContactRequest();
       return;
     }
 
@@ -6474,6 +6578,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // push rather than in the contact stream.
       if (_isLoadingContacts) {
         _contactSyncDeliveredKeys.add(contactTmp.publicKeyHex);
+        _contactRequestLastActivity = contactSyncClock();
       }
       if (listEquals(contactTmp.publicKey, _selfPublicKey)) {
         appLogger.info(
