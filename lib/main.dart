@@ -31,6 +31,7 @@ import 'services/window_geometry_service.dart';
 import 'services/store_consolidation_service.dart';
 import 'services/storage_health_service.dart';
 import 'storage/drift/blob_store.dart';
+import 'widgets/contact_sync_shortfall_banner.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
@@ -284,7 +285,20 @@ class MeshCoreApp extends StatelessWidget {
                   child: Consumer<StorageHealthService>(
                     builder: (context, health, _) => StorageUnavailableBanner(
                       show: !health.available,
-                      child: child ?? const SizedBox.shrink(),
+                      child: Consumer<MeshCoreConnector>(
+                        builder: (context, connector, _) =>
+                            ContactSyncShortfallBanner(
+                              shortfall: connector.contactSyncShortfall,
+                              decisionPending:
+                                  connector.contactSyncDecisionPending,
+                              undeliveredCount:
+                                  connector.contactSyncUndeliveredCount,
+                              onDismiss: connector.dismissContactSyncShortfall,
+                              onKeep: connector.resolveContactSyncKeepLocal,
+                              onUseRadio: connector.resolveContactSyncUseRadio,
+                              child: child ?? const SizedBox.shrink(),
+                            ),
+                      ),
                     ),
                   ),
                 ),

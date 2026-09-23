@@ -5198,4 +5198,31 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get settings_configBackupSubtitle =>
       'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.';
+
+  @override
+  String get contactSyncShortfallTitle => 'Contact sync incomplete';
+
+  @override
+  String contactSyncShortfallBody(int declared, int received) {
+    return 'The radio reported $declared contacts but sent $received. Your saved contacts were kept.';
+  }
+
+  @override
+  String contactSyncShortfallBodyNoTotal(int received) {
+    return 'The radio did not report how many contacts it holds and sent $received. Your saved contacts were kept.';
+  }
+
+  @override
+  String get contactSyncDecisionTitle => 'Contact sync still incomplete';
+
+  @override
+  String contactSyncDecisionBody(int received, int removed) {
+    return 'The radio sent only $received contacts again. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes $removed contacts from this app.';
+  }
+
+  @override
+  String get contactSyncKeep => 'Keep my contacts';
+
+  @override
+  String get contactSyncUseRadio => 'Use the radio\'s list';
 }

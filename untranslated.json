@@ -206,7 +206,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "de": [
@@ -416,7 +423,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "es": [
@@ -626,7 +640,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "fr": [
@@ -836,7 +857,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "hu": [
@@ -1046,7 +1074,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "it": [
@@ -1256,7 +1291,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "ja": [
@@ -1466,7 +1508,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "ko": [
@@ -1676,7 +1725,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "nl": [
@@ -1886,7 +1942,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "pl": [
@@ -2096,7 +2159,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "pt": [
@@ -2306,7 +2376,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "ru": [
@@ -2516,7 +2593,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "sk": [
@@ -2726,7 +2810,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "sl": [
@@ -2936,7 +3027,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "sv": [
@@ -3146,7 +3244,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "uk": [
@@ -3356,7 +3461,14 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ],
 
   "zh": [
@@ -3566,6 +3678,13 @@
     "importConfig_close",
     "settings_exportConfig",
     "settings_importConfig",
-    "settings_configBackupSubtitle"
+    "settings_configBackupSubtitle",
+    "contactSyncShortfallTitle",
+    "contactSyncShortfallBody",
+    "contactSyncShortfallBodyNoTotal",
+    "contactSyncDecisionTitle",
+    "contactSyncDecisionBody",
+    "contactSyncKeep",
+    "contactSyncUseRadio"
   ]
 }

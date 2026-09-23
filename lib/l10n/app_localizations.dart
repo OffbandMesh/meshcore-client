@@ -8829,6 +8829,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.'**
   String get settings_configBackupSubtitle;
+
+  /// Persistent banner title when the radio sent fewer contacts than it reported (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Contact sync incomplete'**
+  String get contactSyncShortfallTitle;
+
+  /// Persistent banner body for a short contact sync (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio reported {declared} contacts but sent {received}. Your saved contacts were kept.'**
+  String contactSyncShortfallBody(int declared, int received);
+
+  /// Persistent banner body for a contact sync whose total the radio did not report (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not report how many contacts it holds and sent {received}. Your saved contacts were kept.'**
+  String contactSyncShortfallBodyNoTotal(int received);
+
+  /// Dialog title after the automatic retry of a short contact sync was also short (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Contact sync still incomplete'**
+  String get contactSyncDecisionTitle;
+
+  /// Dialog body asking whether to keep saved contacts or accept the radio's shorter list (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio sent only {received} contacts again. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes {removed} contacts from this app.'**
+  String contactSyncDecisionBody(int received, int removed);
+
+  /// Default dialog action: keep the saved contact list after a short sync (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my contacts'**
+  String get contactSyncKeep;
+
+  /// Dialog action: replace the saved contacts with the radio's shorter list (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Use the radio\'s list'**
+  String get contactSyncUseRadio;
 }
 
 class _AppLocalizationsDelegate

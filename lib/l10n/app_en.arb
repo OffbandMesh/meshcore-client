@@ -3086,5 +3086,54 @@
   "settings_configBackupSubtitle": "Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.",
   "@settings_configBackupSubtitle": {
     "description": "Explains what the config export and import entries do (#568)."
+  },
+  "contactSyncShortfallTitle": "Contact sync incomplete",
+  "@contactSyncShortfallTitle": {
+    "description": "Persistent banner title when the radio sent fewer contacts than it reported (#668)."
+  },
+  "contactSyncShortfallBody": "The radio reported {declared} contacts but sent {received}. Your saved contacts were kept.",
+  "@contactSyncShortfallBody": {
+    "description": "Persistent banner body for a short contact sync (#668).",
+    "placeholders": {
+      "declared": {
+        "type": "int"
+      },
+      "received": {
+        "type": "int"
+      }
+    }
+  },
+  "contactSyncShortfallBodyNoTotal": "The radio did not report how many contacts it holds and sent {received}. Your saved contacts were kept.",
+  "@contactSyncShortfallBodyNoTotal": {
+    "description": "Persistent banner body for a contact sync whose total the radio did not report (#668).",
+    "placeholders": {
+      "received": {
+        "type": "int"
+      }
+    }
+  },
+  "contactSyncDecisionTitle": "Contact sync still incomplete",
+  "@contactSyncDecisionTitle": {
+    "description": "Dialog title after the automatic retry of a short contact sync was also short (#668)."
+  },
+  "contactSyncDecisionBody": "The radio sent only {received} contacts again. Keep your saved contacts, or use the radio's list? Using the radio's list removes {removed} contacts from this app.",
+  "@contactSyncDecisionBody": {
+    "description": "Dialog body asking whether to keep saved contacts or accept the radio's shorter list (#668).",
+    "placeholders": {
+      "received": {
+        "type": "int"
+      },
+      "removed": {
+        "type": "int"
+      }
+    }
+  },
+  "contactSyncKeep": "Keep my contacts",
+  "@contactSyncKeep": {
+    "description": "Default dialog action: keep the saved contact list after a short sync (#668)."
+  },
+  "contactSyncUseRadio": "Use the radio's list",
+  "@contactSyncUseRadio": {
+    "description": "Dialog action: replace the saved contacts with the radio's shorter list (#668)."
   }
 }
