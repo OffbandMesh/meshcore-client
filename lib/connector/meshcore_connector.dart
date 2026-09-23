@@ -241,6 +241,20 @@ class MeshCoreRadioStateSnapshot {
   });
 }
 
+/// A full contact sync that delivered fewer contacts than the radio declared.
+/// [declared] is null when the radio sent no total (older firmware).
+class ContactSyncShortfall {
+  final int? declared;
+  final int received;
+  final int keptLocally;
+
+  const ContactSyncShortfall({
+    required this.declared,
+    required this.received,
+    required this.keptLocally,
+  });
+}
+
 class MeshCoreConnector extends ChangeNotifier {
   // Message windowing to limit memory usage
   static const int _messageWindowSize = 200;
@@ -399,7 +413,6 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _pendingInitialQueuedMessageSync = false;
   bool _bleInitialSyncStarted = false;
   bool _webInitialHandshakeRequestSent = false;
-  bool _preserveContactsOnRefresh = false;
   int _autoAddMaxHops = 0;
   int _manualAddContactsRaw = 0;
   bool _autoAddUsers = false;
@@ -421,6 +434,16 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _contactSyncTotal;
   int _contactSyncReceived = 0;
   bool _contactSyncUsesSinceFilter = false;
+  // A full sync never clears the local list. It records which contacts the
+  // radio delivered, and only a complete sync (received == declared) may drop
+  // the ones it did not. A short sync once replaced the owner's 350 saved
+  // contacts with the 106 the radio sent (#660, #668).
+  bool _contactSyncIsFull = false;
+  int? _contactSyncDeclaredTotal;
+  final Set<String> _contactSyncDeliveredKeys = {};
+  bool _contactSyncRetryUsed = false;
+  bool _contactSyncDecisionPending = false;
+  ContactSyncShortfall? _contactSyncShortfall;
   bool _isSyncingQueuedMessages = false;
   bool _deferQueuedContactMessagesUntilContacts = false;
   bool _isProcessingDeferredQueuedContactMessages = false;
@@ -3066,6 +3089,13 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void handleFrameForTest(List<int> frame) => _handleFrameInner(frame);
 
+  /// When set, [sendFrame] hands frames here instead of a transport.
+  @visibleForTesting
+  void Function(Uint8List data)? sendFrameOverrideForTest;
+
+  @visibleForTesting
+  void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
+
   @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
 
@@ -3088,6 +3118,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
     _contactSyncUsesSinceFilter = false;
+    _contactSyncIsFull = false;
+    _contactSyncDeclaredTotal = null;
+    _contactSyncDeliveredKeys.clear();
+    _contactSyncRetryUsed = false;
+    _contactSyncDecisionPending = false;
     _isLoadingContacts = false;
     _hasLoadedContacts = false;
     _isLoadingChannels = false;
@@ -3302,6 +3337,11 @@ class MeshCoreConnector extends ChangeNotifier {
   }) async {
     if (!isConnected) {
       throw Exception("Not connected to a MeshCore device");
+    }
+    final override = sendFrameOverrideForTest;
+    if (override != null) {
+      override(data);
+      return;
     }
     _bleDebugLogService?.logFrame(data, outgoing: true);
 
@@ -3645,13 +3685,12 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!isConnected) return;
 
     _isLoadingContacts = true;
-    _preserveContactsOnRefresh = preserveExisting;
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
     _contactSyncUsesSinceFilter = since != null;
+    _beginContactSync(full: since == null);
     if (!preserveExisting) {
       _hasLoadedContacts = false;
-      _contacts.clear();
     }
     notifyListeners();
 
@@ -3664,6 +3703,120 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Future<void> refreshContactsSinceLastmod() async {
     await getContacts(since: _latestContactLastmod(), preserveExisting: true);
+  }
+
+  /// The latest short full sync, kept until dismissed or a complete sync.
+  ContactSyncShortfall? get contactSyncShortfall => _contactSyncShortfall;
+
+  /// True after the automatic retry was also short: the owner chooses between
+  /// keeping the local list and accepting the radio's.
+  bool get contactSyncDecisionPending => _contactSyncDecisionPending;
+
+  /// Contacts the app holds that the last full sync did not deliver, i.e. what
+  /// "use the radio's list" would remove.
+  int get contactSyncUndeliveredCount => _contacts
+      .where((c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex))
+      .length;
+
+  /// A full sync is complete only when the radio declared a total and at
+  /// least that many contacts arrived. No declared total (older firmware) is
+  /// unverifiable, so it is never treated as complete.
+  @visibleForTesting
+  static bool isContactSyncComplete({
+    required int? declared,
+    required int received,
+  }) => declared != null && received >= declared;
+
+  void _beginContactSync({required bool full}) {
+    _contactSyncIsFull = full;
+    _contactSyncDeclaredTotal = null;
+    _contactSyncDeliveredKeys.clear();
+    if (full) _contactSyncDecisionPending = false;
+  }
+
+  void _finishFullContactSync() {
+    final declared = _contactSyncDeclaredTotal;
+    final received = _contactSyncReceived;
+    if (isContactSyncComplete(declared: declared, received: received)) {
+      final before = _contacts.length;
+      _contacts.removeWhere(
+        (c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex),
+      );
+      final removed = before - _contacts.length;
+      if (removed > 0) {
+        _appDebugLogService?.info(
+          'Contact sync complete ($received of $declared): removed $removed '
+          'contact(s) the radio no longer holds',
+          tag: 'ContactSync',
+        );
+      }
+      _contactSyncShortfall = null;
+      _contactSyncDecisionPending = false;
+      return;
+    }
+
+    final kept = contactSyncUndeliveredCount;
+    _contactSyncShortfall = ContactSyncShortfall(
+      declared: declared,
+      received: received,
+      keptLocally: kept,
+    );
+    final message =
+        'Contact sync incomplete: radio declared ${declared ?? 'no total'}, '
+        'sent $received. Kept $kept saved contact(s) it did not send; '
+        'nothing removed.';
+    debugPrint(message);
+    _appDebugLogService?.error(message, tag: 'ContactSync');
+
+    if (!_contactSyncRetryUsed) {
+      _contactSyncRetryUsed = true;
+      _appDebugLogService?.warn(
+        'Retrying the contact sync once',
+        tag: 'ContactSync',
+      );
+      unawaited(
+        getContacts().catchError((Object e) {
+          _appDebugLogService?.error(
+            'Contact sync retry failed to send: $e',
+            tag: 'ContactSync',
+          );
+        }),
+      );
+    } else {
+      _contactSyncDecisionPending = true;
+    }
+  }
+
+  /// The owner chose to keep the local list after a short sync.
+  void resolveContactSyncKeepLocal() {
+    _contactSyncDecisionPending = false;
+    _appDebugLogService?.info(
+      'Owner kept the local contact list after a short sync',
+      tag: 'ContactSync',
+    );
+    notifyListeners();
+  }
+
+  /// The owner chose the radio's list after a short sync: drop what it did not
+  /// deliver.
+  Future<void> resolveContactSyncUseRadio() async {
+    final removed = contactSyncUndeliveredCount;
+    _contacts.removeWhere(
+      (c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex),
+    );
+    _contactSyncDecisionPending = false;
+    _contactSyncShortfall = null;
+    _appDebugLogService?.warn(
+      'Owner accepted the radio\'s contact list: removed $removed contact(s)',
+      tag: 'ContactSync',
+    );
+    notifyListeners();
+    await _persistContacts();
+  }
+
+  void dismissContactSyncShortfall() {
+    _contactSyncShortfall = null;
+    notifyListeners();
   }
 
   Future<void> getContactByKey(Uint8List pubKey) async {
@@ -5516,17 +5669,17 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeContactsStart:
         debugPrint('Got CONTACTS_START');
-        if (!_preserveContactsOnRefresh) {
-          _contacts.clear();
-        }
         _isLoadingContacts = true;
         _contactSyncReceived = 0;
+        _contactSyncDeliveredKeys.clear();
+        _contactSyncDeclaredTotal = null;
         // Firmware v3+ includes total contacts after CONTACTS_START.
         // Incremental sync reports total contacts, not filtered result count.
         if (frame.length >= 5 && !_contactSyncUsesSinceFilter) {
           final reader = BufferReader(frame);
           reader.skipBytes(1);
           _contactSyncTotal = reader.readUInt32LE();
+          _contactSyncDeclaredTotal = _contactSyncTotal;
         } else if (!_contactSyncUsesSinceFilter) {
           // Older firmwares may omit the count; use the nRF node capacity as
           // a conservative progress fallback instead of hiding the progress.
@@ -5550,10 +5703,12 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeEndOfContacts:
         debugPrint('Got END_OF_CONTACTS');
+        final wasFullSync = _contactSyncIsFull && _isLoadingContacts;
         _isLoadingContacts = false;
         _hasLoadedContacts = true;
-        _preserveContactsOnRefresh = false;
         _contactSyncUsesSinceFilter = false;
+        _contactSyncIsFull = false;
+        if (wasFullSync) _finishFullContactSync();
         unawaited(updateKnownDiscovered());
         notifyListeners();
         unawaited(_persistContacts());
@@ -5737,8 +5892,6 @@ class MeshCoreConnector extends ChangeNotifier {
       if (contact != null) {
         _pathHistoryService!.handlePathUpdated(contact);
         // Refresh just this specific contact instead of all contacts.
-        // This avoids race conditions with _preserveContactsOnRefresh flag
-        // that can occur when using refreshContactsSinceLastmod().
         getContactByKey(pubKey);
       }
     }
@@ -6315,6 +6468,12 @@ class MeshCoreConnector extends ChangeNotifier {
     if (contactTmp != null) {
       if (isContact && _isLoadingContacts) {
         _contactSyncReceived++;
+      }
+      // Adverts heard mid-sync count as delivered too: the radio holds them,
+      // so a complete sync must not drop them just because they arrived as a
+      // push rather than in the contact stream.
+      if (_isLoadingContacts) {
+        _contactSyncDeliveredKeys.add(contactTmp.publicKeyHex);
       }
       if (listEquals(contactTmp.publicKey, _selfPublicKey)) {
         appLogger.info(
