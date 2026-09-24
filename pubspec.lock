@@ -440,12 +440,11 @@ packages:
     source: hosted
     version: "2.2.3"
   flutter_blue_plus_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_blue_plus_android
-      sha256: d66bdcb0438e643d5de4af914851bdf7322448384795666efe92236626484740
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_blue_plus_android"
+      relative: true
+    source: path
     version: "8.2.2"
   flutter_blue_plus_darwin:
     dependency: transitive

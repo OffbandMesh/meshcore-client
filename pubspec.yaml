@@ -98,6 +98,14 @@ hooks:
           android-x64:
             backends: [cpu]
 
+# Vendored copy of the endorsed Android implementation, patched to close
+# leaked BluetoothGatt handles (#694). Pristine 8.2.2 import first; the
+# patch rides on top as its own commit for reviewability, like the WinRT
+# vendor on #686.
+dependency_overrides:
+  flutter_blue_plus_android:
+    path: packages/flutter_blue_plus_android
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
