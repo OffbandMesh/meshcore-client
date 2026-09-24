@@ -2520,18 +2520,42 @@ class MeshCoreConnector extends ChangeNotifier {
           }
         }
       } else {
-        try {
-          await device.connect(
-            timeout: connectTimeout,
-            mtu: null,
-            license: License.free,
-          );
-        } catch (error) {
-          _appDebugLogService?.error(
-            'device.connect() failure: $error',
-            tag: 'BLE Connect',
-          );
-          rethrow;
+        var attempt = 0;
+        while (true) {
+          attempt++;
+          try {
+            await device.connect(
+              timeout: connectTimeout,
+              mtu: null,
+              license: License.free,
+            );
+            break;
+          } catch (error) {
+            // Android GATT status 133 (ANDROID_SPECIFIC_ERROR) is the
+            // notorious, frequently transient connect failure. Standard
+            // mitigation (#522/#698): clean close, short delay, one bounded
+            // retry before surfacing anything to the user.
+            final isTransient133 =
+                error is FlutterBluePlusException && error.code == 133;
+            _appDebugLogService?.error(
+              'device.connect() failure (attempt $attempt): $error',
+              tag: 'BLE Connect',
+            );
+            if (!isTransient133 || attempt >= 2) rethrow;
+            try {
+              await device.disconnect(queue: false, timeout: 5);
+            } catch (cleanupError) {
+              _appDebugLogService?.warn(
+                'cleanup disconnect before 133 retry failed: $cleanupError',
+                tag: 'BLE Connect',
+              );
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 800));
+            _appDebugLogService?.info(
+              'retrying connect after GATT 133',
+              tag: 'BLE Connect',
+            );
+          }
         }
       }
 

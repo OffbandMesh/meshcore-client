@@ -280,6 +280,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get scanner_bluetoothOffMessage => '블루투스를 켜서 장치를 검색해주세요.';
 
   @override
+  String get scanner_connectFailedTransient =>
+      'The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.';
+
+  @override
+  String get scanner_connectFailedTimeout =>
+      'The connection timed out. Check that the radio is powered, in range, and not already connected to another device.';
+
+  @override
+  String get scanner_connectFailedGeneric =>
+      'Could not connect to the radio. Details are in the App Debug Log.';
+
+  @override
   String get scanner_bleReleaseWarning =>
       'Radio may still be held by this device';
 
