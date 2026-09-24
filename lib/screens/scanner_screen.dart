@@ -346,14 +346,33 @@ class _ScannerScreenState extends State<ScannerScreen> {
         );
         return;
       }
+      // Never show a raw exception to the user (#522/#698): the full detail
+      // goes to the log, the snackbar gets a plain-language message and
+      // persists until dismissed.
+      appLogger.error('Connect failed: $e', tag: 'ScannerScreen');
       if (context.mounted) {
         showDismissibleSnackBar(
           context,
-          content: Text(context.l10n.scanner_connectionFailed(e.toString())),
+          content: Text(
+            context.l10n.scanner_connectionFailed(_describeConnectError(e)),
+          ),
           backgroundColor: Colors.red,
+          persist: true,
         );
       }
     }
+  }
+
+  String _describeConnectError(Object e) {
+    final l10n = context.l10n;
+    if (e is FlutterBluePlusException && e.code == 133) {
+      return l10n.scanner_connectFailedTransient;
+    }
+    if (e is TimeoutException ||
+        (e is FlutterBluePlusException && e.function == 'connect')) {
+      return l10n.scanner_connectFailedTimeout;
+    }
+    return l10n.scanner_connectFailedGeneric;
   }
 
   Future<String?> _promptLinuxPairingPin(

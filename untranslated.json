@@ -1,5 +1,8 @@
 {
   "bg": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -203,6 +206,9 @@
   ],
 
   "de": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -406,6 +412,9 @@
   ],
 
   "es": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -609,6 +618,9 @@
   ],
 
   "fr": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -812,6 +824,9 @@
   ],
 
   "hu": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -1015,6 +1030,9 @@
   ],
 
   "it": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -1218,6 +1236,9 @@
   ],
 
   "ja": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -1421,6 +1442,9 @@
   ],
 
   "ko": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -1624,6 +1648,9 @@
   ],
 
   "nl": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -1827,6 +1854,9 @@
   ],
 
   "pl": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -2030,6 +2060,9 @@
   ],
 
   "pt": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -2233,6 +2266,9 @@
   ],
 
   "ru": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -2436,6 +2472,9 @@
   ],
 
   "sk": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -2639,6 +2678,9 @@
   ],
 
   "sl": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -2842,6 +2884,9 @@
   ],
 
   "sv": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -3045,6 +3090,9 @@
   ],
 
   "uk": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
@@ -3248,6 +3296,9 @@
   ],
 
   "zh": [
+    "scanner_connectFailedTransient",
+    "scanner_connectFailedTimeout",
+    "scanner_connectFailedGeneric",
     "scanner_bleReleaseWarning",
     "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",

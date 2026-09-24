@@ -640,6 +640,24 @@ abstract class AppLocalizations {
   /// **'Please turn on Bluetooth to scan for devices'**
   String get scanner_bluetoothOffMessage;
 
+  /// Human-readable text for an Android GATT 133 connect failure after the bounded retry also failed (#698).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.'**
+  String get scanner_connectFailedTransient;
+
+  /// Human-readable text for a connect timeout (#698).
+  ///
+  /// In en, this message translates to:
+  /// **'The connection timed out. Check that the radio is powered, in range, and not already connected to another device.'**
+  String get scanner_connectFailedTimeout;
+
+  /// Human-readable fallback for any other connect failure; the raw exception goes to the log only (#522/#698).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the radio. Details are in the App Debug Log.'**
+  String get scanner_connectFailedGeneric;
+
   /// Persistent banner title when a BLE disconnect was never confirmed by the OS, so the radio may stay latched and stop advertising (#697).
   ///
   /// In en, this message translates to:
