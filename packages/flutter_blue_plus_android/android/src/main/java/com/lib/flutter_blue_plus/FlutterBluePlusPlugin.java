@@ -790,7 +790,11 @@ public class FlutterBluePlusPlugin implements
                         }
                     }
                     if (gatt == null) {
-                        log(LogLevel.DEBUG, "already disconnected");
+                        // Offband #694: WARN, not DEBUG. This no-op means the Dart
+                        // layer's disconnect resolves instantly with nothing done,
+                        // which is invisible in exported logs at DEBUG level and is
+                        // exactly the fingerprint of an orphaned-handle latch.
+                        log(LogLevel.WARNING, "disconnect: no tracked gatt handle for " + remoteId + " (no work done)");
                         result.success(false);  // no work to do
                         return;
                     }
@@ -801,6 +805,47 @@ public class FlutterBluePlusPlugin implements
 
                     // disconnect
                     gatt.disconnect();
+
+                    // Offband #694: if Android never delivers the DISCONNECTED
+                    // callback, gatt.close() (which normally runs in
+                    // onConnectionStateChange) never happens and this process holds
+                    // the link until it dies. Backstop: if this exact handle is
+                    // still tracked as connected after 5s, force-close it and
+                    // synthesize the disconnect event, mirroring what the
+                    // cancel-while-connecting path below already does.
+                    if (mConnectedDevices.get(remoteId) == gatt) {
+                        final BluetoothGatt disconnectingGatt = gatt;
+                        final String backstopRemoteId = remoteId;
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            boolean stillTracked;
+                            try {
+                                acquireMutex(mMethodCallMutex);
+                                stillTracked = mConnectedDevices.get(backstopRemoteId) == disconnectingGatt;
+                                if (stillTracked) {
+                                    log(LogLevel.WARNING, "disconnect not confirmed after 5s, force-closing: " + backstopRemoteId);
+                                    mConnectedDevices.remove(backstopRemoteId);
+                                    mCurrentlyConnectingDevices.remove(backstopRemoteId);
+                                    try { disconnectingGatt.close(); } catch (Exception e) { /* best effort */ }
+                                }
+                            } finally {
+                                mMethodCallMutex.release();
+                            }
+                            if (stillTracked) {
+                                // random number defined by this fork, alongside
+                                // flutter blue plus's own 23789258 cancel code.
+                                int bmForceClosedErrorCode = 23789259;
+
+                                // see: BmConnectionStateResponse
+                                HashMap<String, Object> backstopResponse = new HashMap<>();
+                                backstopResponse.put("remote_id", backstopRemoteId);
+                                backstopResponse.put("connection_state", bmConnectionStateEnum(BluetoothProfile.STATE_DISCONNECTED));
+                                backstopResponse.put("disconnect_reason_code", bmForceClosedErrorCode);
+                                backstopResponse.put("disconnect_reason_string", "disconnect not confirmed, force-closed");
+
+                                invokeMethodUIThread("OnConnectionStateChanged", backstopResponse);
+                            }
+                        }, 5000);
+                    }
 
                     // was connecting?
                     if (mCurrentlyConnectingDevices.get(remoteId) != null) {
@@ -2200,7 +2245,16 @@ public class FlutterBluePlusPlugin implements
                 // connected?
                 if(newState == BluetoothProfile.STATE_CONNECTED) {
                     // add to connected devices
-                    mConnectedDevices.put(remoteId, gatt);
+                    BluetoothGatt replaced = mConnectedDevices.put(remoteId, gatt);
+
+                    // Offband #694: an overwrite here orphans the replaced handle.
+                    // Nothing else holds a reference, so it can never be closed and
+                    // it keeps the link (and a GATT client slot) until the process
+                    // dies. Close it before it is lost.
+                    if (replaced != null && replaced != gatt) {
+                        log(LogLevel.WARNING, "closing replaced gatt handle: " + remoteId);
+                        try { replaced.close(); } catch (Exception e) { /* best effort */ }
+                    }
 
                     // remove from currently connecting devices
                     mCurrentlyConnectingDevices.remove(remoteId);
