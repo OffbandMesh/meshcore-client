@@ -278,6 +278,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scanner_bluetoothOffMessage => '请开启蓝牙以搜索设备';
 
   @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => '需要 Chrome 浏览器';
 
   @override

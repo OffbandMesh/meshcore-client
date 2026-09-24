@@ -1,5 +1,7 @@
 {
   "bg": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -72,10 +74,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -205,6 +203,8 @@
   ],
 
   "de": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -277,10 +277,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -410,6 +406,8 @@
   ],
 
   "es": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -482,10 +480,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -615,6 +609,8 @@
   ],
 
   "fr": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -687,10 +683,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -820,6 +812,8 @@
   ],
 
   "hu": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -892,10 +886,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -1025,6 +1015,8 @@
   ],
 
   "it": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -1097,10 +1089,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -1230,6 +1218,8 @@
   ],
 
   "ja": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -1302,10 +1292,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -1435,6 +1421,8 @@
   ],
 
   "ko": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -1507,10 +1495,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -1640,6 +1624,8 @@
   ],
 
   "nl": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -1712,10 +1698,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -1845,6 +1827,8 @@
   ],
 
   "pl": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -1917,10 +1901,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -2050,6 +2030,8 @@
   ],
 
   "pt": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -2122,10 +2104,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -2255,6 +2233,8 @@
   ],
 
   "ru": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -2327,10 +2307,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -2460,6 +2436,8 @@
   ],
 
   "sk": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -2532,10 +2510,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -2665,6 +2639,8 @@
   ],
 
   "sl": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -2737,10 +2713,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -2870,6 +2842,8 @@
   ],
 
   "sv": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -2942,10 +2916,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -3075,6 +3045,8 @@
   ],
 
   "uk": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -3147,10 +3119,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",
@@ -3280,6 +3248,8 @@
   ],
 
   "zh": [
+    "scanner_bleReleaseWarning",
+    "scanner_bleReleaseWarningMessage",
     "settings_messageSettings",
     "settings_messageSettingsSubtitle",
     "settings_gpsStatusTitle",
@@ -3352,10 +3322,6 @@
     "path_suggestedRoute",
     "path_searchRepeaters",
     "repeater_cliCommandTimeout",
-    "repeater_cliLateResponse",
-    "repeater_cliUnmatchedResponse",
-    "repeater_lateResponseDiscarded",
-    "repeater_lateResponseReceived",
     "channelPath_routeDirect",
     "channelPath_routeFlood",
     "channelPath_snrLabel",

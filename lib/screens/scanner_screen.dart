@@ -133,6 +133,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   if (_bluetoothState == BluetoothAdapterState.off)
                     _bluetoothOffWarning(context),
 
+                  // Unconfirmed BLE release: the OS never confirmed the last
+                  // disconnect, so this device may still hold the radio and
+                  // keep it from advertising (#689). Persistent until
+                  // dismissed, per the error-visibility standard.
+                  if (connector.bleReleaseUnconfirmed)
+                    _bleReleaseWarning(context, connector),
+
                   // Status bar
                   _buildStatusBar(context, connector),
 
@@ -433,6 +440,48 @@ class _ScannerScreenState extends State<ScannerScreen> {
       tag: 'ScannerScreen',
     );
     return pin;
+  }
+
+  Widget _bleReleaseWarning(BuildContext context, MeshCoreConnector connector) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      color: errorColor.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          Icon(Icons.bluetooth_connected, size: 24, color: errorColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.scanner_bleReleaseWarning,
+                  style: TextStyle(
+                    color: errorColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.scanner_bleReleaseWarningMessage,
+                  style: TextStyle(
+                    color: errorColor.withValues(alpha: 0.85),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: connector.clearBleReleaseWarning,
+            child: Text(context.l10n.common_ok),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _bluetoothOffWarning(BuildContext context) {
