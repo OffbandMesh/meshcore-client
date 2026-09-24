@@ -816,33 +816,43 @@ public class FlutterBluePlusPlugin implements
                     if (mConnectedDevices.get(remoteId) == gatt) {
                         final BluetoothGatt disconnectingGatt = gatt;
                         final String backstopRemoteId = remoteId;
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            boolean stillTracked;
-                            try {
-                                acquireMutex(mMethodCallMutex);
-                                stillTracked = mConnectedDevices.get(backstopRemoteId) == disconnectingGatt;
-                                if (stillTracked) {
-                                    log(LogLevel.WARNING, "disconnect not confirmed after 5s, force-closing: " + backstopRemoteId);
-                                    mConnectedDevices.remove(backstopRemoteId);
-                                    mCurrentlyConnectingDevices.remove(backstopRemoteId);
-                                    try { disconnectingGatt.close(); } catch (Exception e) { /* best effort */ }
+                        final Handler backstopHandler = new Handler(Looper.getMainLooper());
+                        backstopHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                // Never block the main thread on the mutex (ANR
+                                // risk, pre-PR review): if a callback holds it,
+                                // re-check shortly instead of waiting.
+                                if (!mMethodCallMutex.tryAcquire()) {
+                                    backstopHandler.postDelayed(this, 250);
+                                    return;
                                 }
-                            } finally {
-                                mMethodCallMutex.release();
-                            }
-                            if (stillTracked) {
-                                // random number defined by this fork, alongside
-                                // flutter blue plus's own 23789258 cancel code.
-                                int bmForceClosedErrorCode = 23789259;
+                                boolean stillTracked;
+                                try {
+                                    stillTracked = mConnectedDevices.get(backstopRemoteId) == disconnectingGatt;
+                                    if (stillTracked) {
+                                        log(LogLevel.WARNING, "disconnect not confirmed after 5s, force-closing: " + backstopRemoteId);
+                                        mConnectedDevices.remove(backstopRemoteId);
+                                        mCurrentlyConnectingDevices.remove(backstopRemoteId);
+                                        try { disconnectingGatt.close(); } catch (Exception e) { /* best effort */ }
+                                    }
+                                } finally {
+                                    mMethodCallMutex.release();
+                                }
+                                if (stillTracked) {
+                                    // random number defined by this fork, alongside
+                                    // flutter blue plus's own 23789258 cancel code.
+                                    int bmForceClosedErrorCode = 23789259;
 
-                                // see: BmConnectionStateResponse
-                                HashMap<String, Object> backstopResponse = new HashMap<>();
-                                backstopResponse.put("remote_id", backstopRemoteId);
-                                backstopResponse.put("connection_state", bmConnectionStateEnum(BluetoothProfile.STATE_DISCONNECTED));
-                                backstopResponse.put("disconnect_reason_code", bmForceClosedErrorCode);
-                                backstopResponse.put("disconnect_reason_string", "disconnect not confirmed, force-closed");
+                                    // see: BmConnectionStateResponse
+                                    HashMap<String, Object> backstopResponse = new HashMap<>();
+                                    backstopResponse.put("remote_id", backstopRemoteId);
+                                    backstopResponse.put("connection_state", bmConnectionStateEnum(BluetoothProfile.STATE_DISCONNECTED));
+                                    backstopResponse.put("disconnect_reason_code", bmForceClosedErrorCode);
+                                    backstopResponse.put("disconnect_reason_string", "disconnect not confirmed, force-closed");
 
-                                invokeMethodUIThread("OnConnectionStateChanged", backstopResponse);
+                                    invokeMethodUIThread("OnConnectionStateChanged", backstopResponse);
+                                }
                             }
                         }, 5000);
                     }
