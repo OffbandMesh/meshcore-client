@@ -292,6 +292,14 @@ class AppLocalizationsSk extends AppLocalizations {
       'Prosím, zapnite Bluetooth, aby ste mohli skenovať pre zariadenia.';
 
   @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => 'Vyžaduje sa prehliadač Chrome';
 
   @override

@@ -255,6 +255,18 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _lastDeviceId;
   String? _lastDeviceDisplayName;
   bool _manualDisconnect = false;
+
+  // Set when a manual BLE disconnect was never confirmed by the platform, so
+  // the OS may still hold the radio and it stops advertising (#689/#697).
+  // Cleared on the next connect, the next disconnect attempt, or UI dismiss.
+  bool _bleReleaseUnconfirmed = false;
+  bool get bleReleaseUnconfirmed => _bleReleaseUnconfirmed;
+  void clearBleReleaseWarning() {
+    if (!_bleReleaseUnconfirmed) return;
+    _bleReleaseUnconfirmed = false;
+    notifyListeners();
+  }
+
   final MeshCoreUsbManager _usbManager = MeshCoreUsbManager();
   final LinuxBlePairingService _linuxBlePairingService =
       LinuxBlePairingService();
@@ -2364,6 +2376,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceId = _deviceId;
     _lastDeviceDisplayName = _deviceDisplayName;
     _manualDisconnect = false;
+    _bleReleaseUnconfirmed = false;
     _cancelReconnectTimer();
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
@@ -3130,11 +3143,32 @@ class MeshCoreConnector extends ChangeNotifier {
     await _translationService?.releaseModel();
 
     if (!skipBleDeviceDisconnect) {
-      try {
-        // Skip queued BLE operations so disconnect doesn't get stuck behind them.
-        await _device?.disconnect(queue: false);
-      } catch (e) {
-        _appDebugLogService?.warn('Disconnect error: $e', tag: 'BLE Connect');
+      _bleReleaseUnconfirmed = false;
+      var released = _device == null;
+      for (var attempt = 1; attempt <= 2 && !released; attempt++) {
+        try {
+          // Skip queued BLE operations so disconnect doesn't get stuck behind
+          // them. Cap the platform-confirm wait well below FBP's 35 s default;
+          // the vendored Android plugin force-closes and confirms within ~5 s
+          // when the OS never reports the disconnect (#696).
+          await _device?.disconnect(queue: false, timeout: 10);
+          released = true;
+        } catch (e) {
+          _appDebugLogService?.warn(
+            'Disconnect attempt $attempt failed: $e',
+            tag: 'BLE Connect',
+          );
+          if (attempt == 1) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        }
+      }
+      if (!released &&
+          transportAtDisconnect == MeshCoreTransportType.bluetooth) {
+        // Both attempts failed: the OS never confirmed the release, so this
+        // device may still hold the radio and keep it from advertising
+        // (#689). Surfaced as a persistent warning, never swallowed.
+        _bleReleaseUnconfirmed = true;
       }
     } else {
       _appDebugLogService?.info(

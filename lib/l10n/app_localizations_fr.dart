@@ -294,6 +294,14 @@ class AppLocalizationsFr extends AppLocalizations {
       'Veuillez activer le Bluetooth pour rechercher des appareils.';
 
   @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => 'Navigateur Chrome requis';
 
   @override

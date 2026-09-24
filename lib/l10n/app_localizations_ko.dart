@@ -280,6 +280,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String get scanner_bluetoothOffMessage => '블루투스를 켜서 장치를 검색해주세요.';
 
   @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => '크롬 브라우저 필요';
 
   @override

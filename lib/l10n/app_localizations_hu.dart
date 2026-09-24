@@ -291,6 +291,14 @@ class AppLocalizationsHu extends AppLocalizations {
       'Kérjük, kapcsolja be a Bluetooth-ot, hogy eszközök keresése lehessen.';
 
   @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => 'Chrome böngésző szükséges';
 
   @override

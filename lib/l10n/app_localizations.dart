@@ -640,6 +640,18 @@ abstract class AppLocalizations {
   /// **'Please turn on Bluetooth to scan for devices'**
   String get scanner_bluetoothOffMessage;
 
+  /// Persistent banner title when a BLE disconnect was never confirmed by the OS, so the radio may stay latched and stop advertising (#697).
+  ///
+  /// In en, this message translates to:
+  /// **'Radio may still be held by this device'**
+  String get scanner_bleReleaseWarning;
+
+  /// Persistent banner body naming the recovery for an unconfirmed BLE release (#697).
+  ///
+  /// In en, this message translates to:
+  /// **'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.'**
+  String get scanner_bleReleaseWarningMessage;
+
   /// No description provided for @scanner_chromeRequired.
   ///
   /// In en, this message translates to:
