@@ -13,21 +13,34 @@ final class FlutterBluePlusAndroid extends FlutterBluePlusPlatform {
   var _logLevel = LogLevel.none;
   var _logColor = true;
 
-  final _onAdapterStateChangedController = StreamController<BmBluetoothAdapterState>.broadcast();
-  final _onBondStateChangedController = StreamController<BmBondStateResponse>.broadcast();
-  final _onCharacteristicReceivedController = StreamController<BmCharacteristicData>.broadcast();
-  final _onCharacteristicWrittenController = StreamController<BmCharacteristicData>.broadcast();
-  final _onConnectionStateChangedController = StreamController<BmConnectionStateResponse>.broadcast();
-  final _onDescriptorReadController = StreamController<BmDescriptorData>.broadcast();
-  final _onDescriptorWrittenController = StreamController<BmDescriptorData>.broadcast();
-  final _onDetachedFromEngineController = StreamController<BmDetachedFromEngineResponse>.broadcast();
-  final _onDiscoveredServicesController = StreamController<BmDiscoverServicesResult>.broadcast();
-  final _onMtuChangedController = StreamController<BmMtuChangedResponse>.broadcast();
+  final _onAdapterStateChangedController =
+      StreamController<BmBluetoothAdapterState>.broadcast();
+  final _onBondStateChangedController =
+      StreamController<BmBondStateResponse>.broadcast();
+  final _onCharacteristicReceivedController =
+      StreamController<BmCharacteristicData>.broadcast();
+  final _onCharacteristicWrittenController =
+      StreamController<BmCharacteristicData>.broadcast();
+  final _onConnectionStateChangedController =
+      StreamController<BmConnectionStateResponse>.broadcast();
+  final _onDescriptorReadController =
+      StreamController<BmDescriptorData>.broadcast();
+  final _onDescriptorWrittenController =
+      StreamController<BmDescriptorData>.broadcast();
+  final _onDetachedFromEngineController =
+      StreamController<BmDetachedFromEngineResponse>.broadcast();
+  final _onDiscoveredServicesController =
+      StreamController<BmDiscoverServicesResult>.broadcast();
+  final _onMtuChangedController =
+      StreamController<BmMtuChangedResponse>.broadcast();
   final _onNameChangedController = StreamController<BmNameChanged>.broadcast();
   final _onReadRssiController = StreamController<BmReadRssiResult>.broadcast();
-  final _onScanResponseController = StreamController<BmScanResponse>.broadcast();
-  final _onServicesResetController = StreamController<BmBluetoothDevice>.broadcast();
-  final _onTurnOnResponseController = StreamController<BmTurnOnResponse>.broadcast();
+  final _onScanResponseController =
+      StreamController<BmScanResponse>.broadcast();
+  final _onServicesResetController =
+      StreamController<BmBluetoothDevice>.broadcast();
+  final _onTurnOnResponseController =
+      StreamController<BmTurnOnResponse>.broadcast();
 
   @override
   Stream<BmBluetoothAdapterState> get onAdapterStateChanged {
