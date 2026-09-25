@@ -38,11 +38,11 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_blue_plus: ^2.1.0
-  # TODO: Switch to official flserial repo once changes are upstreamed
+  # Vendored from MeshEnvy/flserial 48216310061efc8d5d217cc18014fc2cb501646e
+  # (MIT) so its native serial buffering can be fixed: the 8 KB input ring
+  # overwrote bytes during a contact sync burst (#702, #704).
   flserial:
-    git:
-      url: https://github.com/MeshEnvy/flserial.git
-      ref: 48216310061efc8d5d217cc18014fc2cb501646e
+    path: packages/flserial
   provider: ^6.1.5+1
   shared_preferences: ^2.2.2
   uuid: ^4.3.3
