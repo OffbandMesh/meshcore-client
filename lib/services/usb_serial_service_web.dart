@@ -546,6 +546,12 @@ class UsbSerialService {
       }
       _addFrame(packet.payload);
     }
+    final skipped = _frameDecoder.takeSkipReport();
+    if (skipped != null) {
+      final message = 'USB serial ${skipped.describe()}';
+      debugPrint(message);
+      _debugLogService?.error(message, tag: 'USB Serial');
+    }
   }
 
   void _addFrame(Uint8List payload) {

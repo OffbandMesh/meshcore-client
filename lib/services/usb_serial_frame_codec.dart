@@ -37,13 +37,58 @@ class UsbSerialDecodedPacket {
   bool get isRxFrame => frameStart == usbSerialRxFrameStart;
 }
 
+/// Bytes the decoder could not frame and discarded (#711). Lost bytes mean
+/// lost frames, so callers log this as an error rather than drop it quietly.
+class UsbSerialSkipReport {
+  const UsbSerialSkipReport({required this.count, required this.sample});
+
+  final int count;
+
+  /// The first discarded bytes, for the log.
+  final List<int> sample;
+
+  String describe() {
+    final hex = sample
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join(' ');
+    return 'discarded $count byte(s) that could not be framed '
+        '(first: $hex${count > sample.length ? ' ...' : ''})';
+  }
+}
+
 class UsbSerialFrameDecoder {
+  static const int _skipSampleLength = 16;
+
   final List<int> _rxBuffer = <int>[];
   int _startIndex = 0;
+  int _skipped = 0;
+  final List<int> _skipSample = <int>[];
 
   void reset() {
     _rxBuffer.clear();
     _startIndex = 0;
+    _skipped = 0;
+    _skipSample.clear();
+  }
+
+  /// Returns what was discarded since the last call, or null if nothing was.
+  UsbSerialSkipReport? takeSkipReport() {
+    if (_skipped == 0) return null;
+    final report = UsbSerialSkipReport(
+      count: _skipped,
+      sample: List<int>.unmodifiable(_skipSample),
+    );
+    _skipped = 0;
+    _skipSample.clear();
+    return report;
+  }
+
+  void _skipByte() {
+    _skipped++;
+    if (_skipSample.length < _skipSampleLength) {
+      _skipSample.add(_rxBuffer[_startIndex]);
+    }
+    _startIndex++;
   }
 
   List<UsbSerialDecodedPacket> ingest(Uint8List bytes) {
@@ -63,7 +108,7 @@ class UsbSerialFrameDecoder {
 
       if (_rxBuffer[_startIndex] != usbSerialRxFrameStart &&
           _rxBuffer[_startIndex] != usbSerialTxFrameStart) {
-        _startIndex++;
+        _skipByte();
         _compactBufferIfNeeded();
         continue;
       }
@@ -77,7 +122,7 @@ class UsbSerialFrameDecoder {
       final payloadLength =
           _rxBuffer[_startIndex + 1] | (_rxBuffer[_startIndex + 2] << 8);
       if (payloadLength > usbSerialMaxPayloadLength) {
-        _startIndex++;
+        _skipByte();
         _compactBufferIfNeeded();
         continue;
       }
