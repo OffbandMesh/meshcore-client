@@ -92,9 +92,14 @@ class ContactSyncShortfallBanner extends StatelessWidget {
                   ],
                 ),
               ),
+              // No tooltip: this sits above the Navigator, where there is no
+              // Overlay, and a Tooltip without one blanks the window (#713).
               IconButton(
-                tooltip: l10n.common_close,
-                icon: Icon(Icons.close, color: scheme.onErrorContainer),
+                icon: Icon(
+                  Icons.close,
+                  color: scheme.onErrorContainer,
+                  semanticLabel: l10n.common_close,
+                ),
                 onPressed: onDismiss,
               ),
             ],

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +79,50 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
 
     expect(calls, ['dismiss']);
+  });
+
+  // #713: the app mounts the banner in MaterialApp.builder, above the
+  // Navigator, where there is no Overlay. The tests above mount it under
+  // `home:`, which has one, so they could not see this.
+  group('mounted where the app mounts it (MaterialApp.builder)', () {
+    Widget inBuilder({bool decisionPending = false}) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => ContactSyncShortfallBanner(
+        shortfall: short,
+        decisionPending: decisionPending,
+        undeliveredCount: 244,
+        onDismiss: () => calls.add('dismiss'),
+        onKeep: () => calls.add('keep'),
+        onUseRadio: () => calls.add('useRadio'),
+        child: child ?? const SizedBox.shrink(),
+      ),
+      home: const Scaffold(body: Text('APP')),
+    );
+
+    testWidgets('hovering the close button does not break the app', (
+      tester,
+    ) async {
+      await tester.pumpWidget(inBuilder());
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(tester.getCenter(find.byIcon(Icons.close)));
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Contact sync incomplete'), findsOneWidget);
+      expect(find.text('APP'), findsOneWidget);
+    });
+
+    testWidgets('the decision dialog works there too', (tester) async {
+      await tester.pumpWidget(inBuilder(decisionPending: true));
+      await tester.pump();
+      await tester.tap(find.text('Keep my contacts'));
+
+      expect(tester.takeException(), isNull);
+      expect(calls, ['keep']);
+    });
   });
 
   group('decision pending', () {
