@@ -421,10 +421,16 @@ class UsbSerialService {
     unawaited(disconnect().whenComplete(_closeFrameController));
   }
 
+  // One readList() returns at most 8 KB, so a single read per callback left
+  // the rest of a burst waiting in the native ring (#702, #711). Drain it,
+  // bounded to the ring's 256 KB so a stuck read can never spin forever.
+  static const int _maxReadsPerCallback = 32;
+
   void _handleSerialData(FlSerialEventArgs event) {
     try {
-      final bytes = event.serial.readList();
-      if (bytes.isNotEmpty) {
+      for (var i = 0; i < _maxReadsPerCallback; i++) {
+        final bytes = event.serial.readList();
+        if (bytes.isEmpty) break;
         _ingestRawBytes(Uint8List.fromList(bytes));
       }
     } catch (error, stack) {
@@ -464,6 +470,12 @@ class UsbSerialService {
         continue;
       }
       _addFrame(packet.payload);
+    }
+    final skipped = _frameDecoder.takeSkipReport();
+    if (skipped != null) {
+      final message = 'USB serial ${skipped.describe()}';
+      debugPrint(message);
+      _debugLogService?.error(message, tag: 'USB Serial');
     }
   }
 

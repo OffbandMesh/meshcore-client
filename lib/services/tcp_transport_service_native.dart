@@ -167,6 +167,10 @@ class TcpTransportService {
       }
       _addFrame(packet.payload);
     }
+    final skipped = _frameDecoder.takeSkipReport();
+    if (skipped != null) {
+      _debugLogService?.error('TCP ${skipped.describe()}', tag: 'TCP');
+    }
   }
 
   void _handleSocketError(Object error, [StackTrace? stackTrace]) {

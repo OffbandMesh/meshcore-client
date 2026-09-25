@@ -164,4 +164,81 @@ void main() {
     expect(packets.single.isRxFrame, isTrue);
     expect(packets.single.payload, orderedEquals(<int>[0x88]));
   });
+
+  group('skip report (#711): discarded bytes are never silent', () {
+    test('clean input reports nothing', () {
+      final decoder = UsbSerialFrameDecoder();
+      decoder.ingest(
+        Uint8List.fromList(<int>[usbSerialRxFrameStart, 0x01, 0x00, 0x55]),
+      );
+
+      expect(decoder.takeSkipReport(), isNull);
+    });
+
+    test('counts and samples noise before a frame', () {
+      final decoder = UsbSerialFrameDecoder();
+      final packets = decoder.ingest(
+        Uint8List.fromList(<int>[
+          0xAA,
+          0xBB,
+          usbSerialRxFrameStart,
+          0x01,
+          0x00,
+          0x55,
+        ]),
+      );
+
+      expect(packets.single.payload, orderedEquals(<int>[0x55]));
+      final report = decoder.takeSkipReport()!;
+      expect(report.count, 2);
+      expect(report.sample, orderedEquals(<int>[0xAA, 0xBB]));
+      expect(report.describe(), contains('discarded 2 byte(s)'));
+      expect(report.describe(), contains('aa bb'));
+    });
+
+    test('counts an oversized header and still decodes the next frame', () {
+      final decoder = UsbSerialFrameDecoder();
+      final oversized = usbSerialMaxPayloadLength + 1;
+      final packets = decoder.ingest(
+        Uint8List.fromList(<int>[
+          usbSerialRxFrameStart,
+          oversized & 0xff,
+          (oversized >> 8) & 0xff,
+          usbSerialRxFrameStart,
+          0x01,
+          0x00,
+          0x44,
+        ]),
+      );
+
+      expect(packets.single.payload, orderedEquals(<int>[0x44]));
+      expect(decoder.takeSkipReport()!.count, 3);
+    });
+
+    test('a report is taken once, then cleared', () {
+      final decoder = UsbSerialFrameDecoder();
+      decoder.ingest(Uint8List.fromList(<int>[0x01, 0x02]));
+
+      expect(decoder.takeSkipReport()!.count, 2);
+      expect(decoder.takeSkipReport(), isNull);
+    });
+
+    test('the sample is capped, the count is not', () {
+      final decoder = UsbSerialFrameDecoder();
+      decoder.ingest(Uint8List.fromList(List<int>.filled(40, 0x00)));
+
+      final report = decoder.takeSkipReport()!;
+      expect(report.count, 40);
+      expect(report.sample, hasLength(16));
+      expect(report.describe(), endsWith('...)'));
+    });
+
+    test('reset clears a pending report', () {
+      final decoder = UsbSerialFrameDecoder();
+      decoder.ingest(Uint8List.fromList(<int>[0x01]));
+      decoder.reset();
+
+      expect(decoder.takeSkipReport(), isNull);
+    });
+  });
 }
