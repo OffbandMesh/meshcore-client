@@ -3,8 +3,19 @@
 #include "native_libs/include/tinycthread.h"
 #include "native_libs/include/ringbuffer.h"
 #include <iostream>
+#include <algorithm>
+#include <chrono>
+#include <thread>
 
-#define FL_SERIAL_BUFF_LEN (8 * 1024)
+// Offband (#702/#710): the 8 KB ring overwrote the oldest bytes whenever the
+// radio sent faster than Dart drained it, so a 52 KB contact sync arrived
+// mostly lost. The ring is now 256 KB (a power of two, as the ring's mask
+// needs), the thread never reads more than the ring has room for, and Dart is
+// told about data during a burst rather than only when the port goes idle.
+#define FL_SERIAL_BUFF_LEN (256 * 1024)
+#define FL_SERIAL_READ_CHUNK (8 * 1024)
+#define FL_NOTIFY_BYTES (4 * 1024)
+#define FL_NOTIFY_INTERVAL std::chrono::milliseconds(10)
 
 typedef struct _flserial_
 {
@@ -28,28 +39,56 @@ int SerialThread(void *aArg)
 {
     FlSerial *serial = (FlSerial *)aArg;
     ring_buffer_size_t res = 0;
-    uint8_t buff[FL_SERIAL_BUFF_LEN];
+    uint8_t buff[FL_SERIAL_READ_CHUNK];
     ring_buffer_size_t len = sizeof(buff);
     ring_buffer_size_t total = 0;
-    int isEmpty = 0;
+    auto lastNotify = std::chrono::steady_clock::now();
 
     while (!serial->breakThread)
     {
         try
         {
-            res = (int)serial->serialport->read((uint8_t *)buff, (size_t)len);
+            // Read only what the ring can hold. When it is full, leave the
+            // bytes in the OS driver: USB flow control holds the sender, and
+            // nothing is overwritten.
+            mtx_lock(&serial->inFifo_mutex);
+            ring_buffer_size_t room = RING_BUFFER_MASK((&serial->cinfifo)) -
+                                      ring_buffer_num_items(&serial->cinfifo);
+            mtx_unlock(&serial->inFifo_mutex);
+
+            res = 0;
+            if (room > 0)
+            {
+                res = (int)serial->serialport->read(
+                    (uint8_t *)buff, (size_t)(std::min)(len, room));
+            }
             if (res > 0)
             {
                 mtx_lock(&serial->inFifo_mutex);
                 ring_buffer_queue_arr(&serial->cinfifo, (const char *)buff, res);
                 mtx_unlock(&serial->inFifo_mutex);
                 total += res;
-                if(!serial->serialport->available()){
-                    serial->callback(0, total);
-                    total = 0;
-                } else {
-                    continue;
-                }
+            }
+
+            bool idle = !serial->serialport->available();
+            auto now = std::chrono::steady_clock::now();
+            if (total > 0 &&
+                (idle || room == 0 || total >= FL_NOTIFY_BYTES ||
+                 now - lastNotify >= FL_NOTIFY_INTERVAL))
+            {
+                serial->callback(0, (unsigned int)total);
+                total = 0;
+                lastNotify = now;
+            }
+
+            if (room == 0)
+            {
+                // Give Dart time to drain before trying again.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            else if (res > 0 && !idle)
+            {
+                continue;
             }
 
                 mtx_lock(&serial->outFifo_mutex);
