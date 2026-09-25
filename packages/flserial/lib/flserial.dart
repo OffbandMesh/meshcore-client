@@ -39,13 +39,12 @@ String nativeInt8ToString(Pointer<Int8> pointer, {bool allowMalformed = true}) {
 
 /// String conversion to native pointer, memory should be free outside function
 Pointer<Char> stringToNativeInt8(String str, {Allocator allocator = calloc}) {
-
   final units = utf8.encode(str);
   final result = allocator<Uint8>(units.length + 1);
   final nativeString = result.asTypedList(units.length + 1);
   nativeString.setAll(0, units);
   nativeString[units.length] = 0;
-  
+
   return result.cast<Char>();
 }
 
@@ -56,7 +55,6 @@ Pointer<Char> int8ListToPointerInt8(Uint8List units, Pointer<Uint8> pointer,
   nativeString.setAll(0, units);
   nativeString[units.length] = 0;
   return pointer.cast<Char>();
-  
 }
 
 Pointer<Double> listToPointerDouble(List<double> sample) {
@@ -98,6 +96,7 @@ class FlSerial {
   var onSerialData = StreamController<FlSerialEventArgs>();
   Pointer<Char> serialReadBuff = Pointer.fromAddress(0);
   Pointer<Uint8> serialWriteBuff = Pointer.fromAddress(0);
+
   /// Init should be called at program start, after FlSerial creation
   /// Function is used to make array of internal port structs for 16 parallel processing ports
   int init() {
@@ -179,8 +178,7 @@ class FlSerial {
       flh,
       callback: (cflh, len) async {
         if (len > 0) {
-          onSerialData
-              .add(FlSerialEventArgs(this, len, prevCTS, prevDSR));
+          onSerialData.add(FlSerialEventArgs(this, len, prevCTS, prevDSR));
         }
       },
     );
@@ -251,10 +249,9 @@ class FlSerial {
   Uint8List _readList(int len) {
     _checkFLH(flh);
 
-    if(len > _serialIOBuffLen)
-      {
-        len = _serialIOBuffLen;
-      }
+    if (len > _serialIOBuffLen) {
+      len = _serialIOBuffLen;
+    }
 
     int intres = bindings.fl_read(flh, len, serialReadBuff);
 
@@ -286,7 +283,7 @@ class FlSerial {
   int read() {
     _checkFLH(flh);
 
-    Uint8List data =_readList(1);
+    Uint8List data = _readList(1);
 
     if (data.isNotEmpty) {
       return data.first;
@@ -298,8 +295,8 @@ class FlSerial {
   int write(Uint8List data) {
     _checkFLH(flh);
 
-    Pointer<Char> ptr = int8ListToPointerInt8(data, serialWriteBuff );
-    int res =  bindings.fl_write(flh, data.length, ptr);
+    Pointer<Char> ptr = int8ListToPointerInt8(data, serialWriteBuff);
+    int res = bindings.fl_write(flh, data.length, ptr);
 
     return res;
   }
@@ -310,10 +307,10 @@ class FlSerial {
     bindings.fl_close(flh);
     onSerialData.close();
     Allocator allocator = calloc;
-    if(serialReadBuff.value != 0){
+    if (serialReadBuff.value != 0) {
       allocator.free(serialReadBuff);
     }
-    if(serialWriteBuff.value != 0){
+    if (serialWriteBuff.value != 0) {
       allocator.free(serialWriteBuff);
     }
     flh = -1;
