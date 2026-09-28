@@ -739,6 +739,23 @@ int maxChannelMessageBytes(String? senderName, {int? maxFrameBytes}) {
   return _minPositive(byPayload, byFrame);
 }
 
+/// Fewest bytes a composer needs before it is worth calling usable.
+///
+/// Judgement call, not a protocol constant: below this a user cannot say
+/// anything meaningful, so an apparently-normal text field is misleading and
+/// the guard in #684 explains itself instead. Deliberately larger than the
+/// degenerate values #592 produced (DM 4, channel 1 or 0) so the guard also
+/// catches the near-miss cases, not only the literal zero.
+const int minUsableComposerBytes = 16;
+
+/// Whether [maxBytes] leaves a composer able to carry a real message.
+///
+/// A budget of 0 rejects every keystroke, which is the #592 symptom that read
+/// as a dead keyboard. A budget of 1-15 accepts input but cannot carry a
+/// sentence. Both are cases the user must be told about rather than left to
+/// discover by typing into a field that ignores them (SAFELANE 6).
+bool isComposerBudgetUsable(int maxBytes) => maxBytes >= minUsableComposerBytes;
+
 int _senderNameBytes(String? senderName) {
   if (senderName == null || senderName.isEmpty) return maxNameSize - 1;
   final bytes = utf8.encode(senderName);

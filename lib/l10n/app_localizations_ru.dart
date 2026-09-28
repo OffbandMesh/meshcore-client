@@ -1516,6 +1516,23 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get composerBudgetBlockedTitle =>
+      'Can\'t send messages on this connection';
+
+  @override
+  String composerBudgetLimitedTitle(int maxBytes) {
+    return 'Only $maxBytes characters will fit';
+  }
+
+  @override
+  String get composerBudgetBluetoothCause =>
+      'The Bluetooth link negotiated a very small packet size, which leaves no room for message text. Try reconnecting, or connect by USB or Wi-Fi instead.';
+
+  @override
+  String get composerBudgetGenericCause =>
+      'The connection to the radio left no room for message text. Try reconnecting.';
+
+  @override
   String get chat_messageCopied => 'Сообщение скопировано';
 
   @override
