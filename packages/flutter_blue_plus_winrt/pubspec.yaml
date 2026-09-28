@@ -1,6 +1,8 @@
 name: flutter_blue_plus_winrt
 description: Windows implementation of the flutter_blue_plus plugin.
-version: 0.0.20
+# Vendored from upstream master 7b4504a2 (#686). Version marks it as our
+# patched line; upstream published only up to 0.0.20.
+version: 0.0.20+offband.1
 homepage: https://github.com/chan150/flutter_blue_plus_winrt
 
 environment:
@@ -10,7 +12,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_blue_plus_platform_interface: ">=9.0.0"
+  # Upstream master declares >=9.0.0 but its Dart layer is identical to 0.0.19
+  # and uses nothing 9.x-only (#686). Relaxed so the app stays on 8.2.2; the
+  # 9.x/2.3.x upgrade was deliberately skipped (owner decision on #685).
+  flutter_blue_plus_platform_interface: ">=8.2.2"
 
 dev_dependencies:
   flutter_test:
