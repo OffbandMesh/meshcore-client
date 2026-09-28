@@ -855,8 +855,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // fall through to the failure message
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.settings_aboutLinkFailed)),
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.settings_aboutLinkFailed),
       );
     }
   }
@@ -1064,10 +1065,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: copyValue));
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.l10n.settings_publicKeyCopied),
-                      ),
+                    showDismissibleSnackBar(
+                      context,
+                      content: Text(context.l10n.settings_publicKeyCopied),
                     );
                   },
                 ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../helpers/config_profile_diff.dart';
 import '../../helpers/config_profile_writes.dart';
+import '../../helpers/snack_bar_builder.dart';
 import '../../models/config_profile.dart';
 import '../../services/observer_apply_service.dart';
 import '../../services/observer_config_service.dart';
@@ -79,13 +80,12 @@ class _ConfigProfilePreviewScreenState
           ? '$what applied.'
           : '$what: ${result.failures.length} of ${result.items.length} failed '
                 '(${result.failures.first.error ?? 'error'}).';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: result.allOk
-              ? null
-              : Theme.of(context).colorScheme.error,
-        ),
+      showDismissibleSnackBar(
+        context,
+        content: Text(msg),
+        backgroundColor: result.allOk
+            ? null
+            : Theme.of(context).colorScheme.error,
       );
       await _load(); // re-diff against true state (partial-save recovery)
     } finally {

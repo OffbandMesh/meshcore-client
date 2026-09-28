@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../helpers/snack_bar_builder.dart';
 import '../../models/observer_config.dart';
 import '../../services/observer_config_service.dart';
 
@@ -133,11 +134,10 @@ class _BrokerEditorScreenState extends State<BrokerEditorScreen> {
   }
 
   void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-      ),
+    showDismissibleSnackBar(
+      context,
+      content: Text(msg),
+      backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
     );
   }
 
