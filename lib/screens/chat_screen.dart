@@ -609,6 +609,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ComposerBudgetNotice(
           maxBytes: maxBytes,
           transport: connector.activeTransport,
+          isConnected: connector.isConnected,
         ),
         _buildComposerBar(context, colorScheme, settings, maxBytes, connector),
       ],
