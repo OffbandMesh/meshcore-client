@@ -77,4 +77,63 @@ void main() {
       );
     });
   });
+
+  /// The guard #684 adds. These are the assertions that were left out of this
+  /// file while it lived on a throwaway branch, because the behaviour they
+  /// describe did not exist yet.
+  group('the composer guard recognises an unusable budget (#684)', () {
+    test('a zero budget is not usable', () {
+      // The literal #592 symptom: every keystroke rejected, field looks alive.
+      expect(isComposerBudgetUsable(0), isFalse);
+    });
+
+    test('the degenerate #592 budgets are all caught', () {
+      // DM 4 and channel 1 at the unknown-MTU floor. A field that accepts four
+      // characters is as misleading as one that accepts none, so the guard has
+      // to catch the near-misses, not just zero.
+      expect(
+        isComposerBudgetUsable(
+          maxContactMessageBytes(maxFrameBytes: unknownMtuFrameBudget),
+        ),
+        isFalse,
+        reason: 'the 4-byte DM budget must trigger the notice',
+      );
+      expect(
+        isComposerBudgetUsable(
+          maxChannelMessageBytes(
+            'WSMJ89',
+            maxFrameBytes: unknownMtuFrameBudget,
+          ),
+        ),
+        isFalse,
+        reason: 'the 1-byte channel budget must trigger the notice',
+      );
+    });
+
+    test('the threshold boundary is exact', () {
+      expect(isComposerBudgetUsable(minUsableComposerBytes - 1), isFalse);
+      expect(isComposerBudgetUsable(minUsableComposerBytes), isTrue);
+    });
+
+    test('a healthy link does NOT trigger the notice', () {
+      // The negative test: the guard must stay invisible on a working link, or
+      // it becomes noise that trains users to ignore it.
+      expect(isComposerBudgetUsable(maxContactMessageBytes()), isTrue);
+      expect(isComposerBudgetUsable(maxChannelMessageBytes('WSMJ898')), isTrue);
+      // And at the MTU actually measured on hardware: 247 on Android, 176 on
+      // Windows once the vendored plugin reports it (#686).
+      expect(
+        isComposerBudgetUsable(
+          maxChannelMessageBytes('WSMJ898', maxFrameBytes: 247 - 3),
+        ),
+        isTrue,
+      );
+      expect(
+        isComposerBudgetUsable(
+          maxChannelMessageBytes('WSMJ898', maxFrameBytes: 176 - 3),
+        ),
+        isTrue,
+      );
+    });
+  });
 }

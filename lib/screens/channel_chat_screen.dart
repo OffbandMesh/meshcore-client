@@ -39,6 +39,7 @@ import 'settings_screen.dart';
 import '../utils/dialog_utils.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/channel_drawer_list.dart';
+import '../widgets/composer_budget_notice.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
 import '../widgets/chat_zoom_wrapper.dart';
@@ -1429,6 +1430,12 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Says so out loud when the link leaves no room for text, instead of
+        // presenting a field that silently rejects every keystroke (#684).
+        ComposerBudgetNotice(
+          maxBytes: maxBytes,
+          transport: connector.activeTransport,
+        ),
         if (_replyingToMessage != null)
           Builder(
             builder: (context) {

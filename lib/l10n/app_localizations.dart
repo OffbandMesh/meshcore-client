@@ -2776,6 +2776,30 @@ abstract class AppLocalizations {
   /// **'Message too long (max {maxBytes} bytes).'**
   String chat_messageTooLong(int maxBytes);
 
+  /// No description provided for @composerBudgetBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t send messages on this connection'**
+  String get composerBudgetBlockedTitle;
+
+  /// No description provided for @composerBudgetLimitedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {maxBytes} characters will fit'**
+  String composerBudgetLimitedTitle(int maxBytes);
+
+  /// No description provided for @composerBudgetBluetoothCause.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth link negotiated a very small packet size, which leaves no room for message text. Try reconnecting, or connect by USB or Wi-Fi instead.'**
+  String get composerBudgetBluetoothCause;
+
+  /// No description provided for @composerBudgetGenericCause.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection to the radio left no room for message text. Try reconnecting.'**
+  String get composerBudgetGenericCause;
+
   /// No description provided for @chat_messageCopied.
   ///
   /// In en, this message translates to:
