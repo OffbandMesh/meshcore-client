@@ -1435,6 +1435,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         ComposerBudgetNotice(
           maxBytes: maxBytes,
           transport: connector.activeTransport,
+          isConnected: connector.isConnected,
         ),
         if (_replyingToMessage != null)
           Builder(
