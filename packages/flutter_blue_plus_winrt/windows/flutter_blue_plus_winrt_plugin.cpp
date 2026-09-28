@@ -528,6 +528,19 @@ FlutterBluePlusWinrtPlugin::~FlutterBluePlusWinrtPlugin() {
     revoke_all(connected_devices_);
     revoke_all(currently_connecting_devices_);
     connection_tokens_.clear();
+
+    // Same reasoning for the MTU-change handlers: revoke them and close their
+    // sessions so a late MaxPduSizeChanged can't fire into a destroyed plugin.
+    for (const auto& entry : mtu_tokens_) {
+        auto it = gatt_sessions_.find(entry.first);
+        if (it == gatt_sessions_.end()) continue;
+        try { it->second.as<GattSession>().MaxPduSizeChanged(entry.second); } catch (...) {}
+    }
+    mtu_tokens_.clear();
+    for (const auto& entry : gatt_sessions_) {
+        try { entry.second.as<GattSession>().Close(); } catch (...) {}
+    }
+    gatt_sessions_.clear();
 }
 
 void FlutterBluePlusWinrtPlugin::OnAdvertisementReceived(
@@ -906,6 +919,9 @@ winrt::fire_and_forget FlutterBluePlusWinrtPlugin::ConnectAsync(
                  connection_state[flutter::EncodableValue("connection_state")] = flutter::EncodableValue(1);
                  channel_->InvokeMethod("OnConnectionStateChanged", std::make_unique<flutter::EncodableValue>(connection_state));
                  result->Success(flutter::EncodableValue(true));
+                 // Normally a no-op (the session exists); repairs a connection
+                 // whose earlier session creation failed.
+                 CreateGattSessionAsync(remote_id, it_existing->second.as<BluetoothLEDevice>());
                  co_return;
             }
         }
@@ -988,6 +1004,9 @@ winrt::fire_and_forget FlutterBluePlusWinrtPlugin::ConnectAsync(
                      channel_->InvokeMethod("OnConnectionStateChanged", std::make_unique<flutter::EncodableValue>(connection_state));
                  }
                  result->Success(flutter::EncodableValue(true));
+                 // After the connect result is reported, so a slow or failing
+                 // session creation can never block or fail the connect itself.
+                 CreateGattSessionAsync(remote_id, device);
                  co_return;
             } else {
                  std::vector<BluetoothLEDevice> devices_to_close;
@@ -1255,6 +1274,79 @@ void FlutterBluePlusWinrtPlugin::OnMaxPduSizeChanged(std::string remote_id, cons
             channel_->InvokeMethod("OnMtuChanged", std::make_unique<flutter::EncodableValue>(response));
         } catch(...) {}
     }();
+}
+
+// Creates the GattSession that reports the negotiated ATT PDU size. Upstream
+// never populates gatt_sessions_ / mtu_tokens_, so OnMtuChanged never fires
+// and the Dart layer keeps its 23-byte default forever. Called fire-and-forget
+// only after the connect result has been reported, so a slow or failing
+// session creation can never block or fail the connect. MaintainConnection is
+// deliberately never set: the session only observes the PDU size and must not
+// hold the link open.
+winrt::fire_and_forget FlutterBluePlusWinrtPlugin::CreateGattSessionAsync(
+    std::string remote_id,
+    BluetoothLEDevice device) {
+    auto alive = is_alive_;
+    try {
+        co_await winrt::resume_background();
+        if (!*alive || !device) co_return;
+
+        {
+            std::lock_guard<std::mutex> cache_lock(gatt_cache_mutex_);
+            if (gatt_sessions_.find(remote_id) != gatt_sessions_.end()) co_return;
+        }
+
+        // Created outside gatt_cache_mutex_: never hold it across a co_await.
+        auto session = co_await GattSession::FromDeviceIdAsync(device.BluetoothDeviceId());
+        if (!session) co_return;
+        if (!*alive) { try { session.Close(); } catch (...) {} co_return; }
+
+        // If the device dropped during creation, ClearDeviceResources already
+        // ran and found nothing; storing now would leak the session.
+        if (device.ConnectionStatus() != BluetoothConnectionStatus::Connected) {
+            try { session.Close(); } catch (...) {}
+            co_return;
+        }
+
+        auto token = session.MaxPduSizeChanged(
+            [this, remote_id](GattSession const& sender, IInspectable const& args) {
+                this->OnMaxPduSizeChanged(remote_id, sender, args);
+            });
+
+        bool stored = false;
+        {
+            std::lock_guard<std::mutex> cache_lock(gatt_cache_mutex_);
+            if (gatt_sessions_.find(remote_id) == gatt_sessions_.end()) {
+                gatt_sessions_[remote_id] = session;
+                mtu_tokens_[remote_id] = token;
+                stored = true;
+            }
+        }
+        if (!stored) {
+            // A concurrent connect stored one first; drop ours.
+            try { session.MaxPduSizeChanged(token); } catch (...) {}
+            try { session.Close(); } catch (...) {}
+            co_return;
+        }
+
+        // Close the disconnect/store race: a disconnect landing between the
+        // connected-check and the store means ClearDeviceResources missed our
+        // entry. Re-check and undo (ClearDeviceResources is idempotent).
+        bool still_connected = false;
+        try { still_connected = (device.ConnectionStatus() == BluetoothConnectionStatus::Connected); } catch (...) {}
+        if (!still_connected) {
+            ClearDeviceResources(remote_id);
+            co_return;
+        }
+
+        // Emit the initial value: MaxPduSizeChanged only fires on a change, so
+        // a PDU negotiated before the session existed would never reach Dart.
+        OnMaxPduSizeChanged(remote_id, session, nullptr);
+    } catch (...) {
+        // Best-effort: without a session the Dart layer keeps the 23-byte
+        // default, exactly the pre-patch behavior. Never break the connect.
+        Log("CreateGattSessionAsync failed for %s", remote_id.c_str());
+    }
 }
 
 winrt::fire_and_forget FlutterBluePlusWinrtPlugin::SetNotifyValueAsync(std::shared_ptr<flutter::EncodableMap> args_ptr) {

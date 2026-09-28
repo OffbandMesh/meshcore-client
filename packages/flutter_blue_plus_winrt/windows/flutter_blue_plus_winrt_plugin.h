@@ -160,6 +160,10 @@ class FlutterBluePlusWinrtPlugin : public flutter::Plugin {
       const winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattSession& sender,
       const winrt::Windows::Foundation::IInspectable& args);
 
+  winrt::fire_and_forget CreateGattSessionAsync(
+      std::string remote_id,
+      winrt::Windows::Devices::Bluetooth::BluetoothLEDevice device);
+
   winrt::fire_and_forget PeriodicConnectionCheck();
 
   std::string uint64_to_mac_string(uint64_t addr);
