@@ -13,20 +13,32 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
   var _logLevel = LogLevel.none;
   var _logColor = true;
 
-  final _onAdapterStateChangedController = StreamController<BmBluetoothAdapterState>.broadcast();
-  final _onBondStateChangedController = StreamController<BmBondStateResponse>.broadcast();
-  final _onCharacteristicReceivedController = StreamController<BmCharacteristicData>.broadcast();
-  final _onCharacteristicWrittenController = StreamController<BmCharacteristicData>.broadcast();
-  final _onConnectionStateChangedController = StreamController<BmConnectionStateResponse>.broadcast();
-  final _onDescriptorReadController = StreamController<BmDescriptorData>.broadcast();
-  final _onDescriptorWrittenController = StreamController<BmDescriptorData>.broadcast();
-  final _onDiscoveredServicesController = StreamController<BmDiscoverServicesResult>.broadcast();
-  final _onMtuChangedController = StreamController<BmMtuChangedResponse>.broadcast();
+  final _onAdapterStateChangedController =
+      StreamController<BmBluetoothAdapterState>.broadcast();
+  final _onBondStateChangedController =
+      StreamController<BmBondStateResponse>.broadcast();
+  final _onCharacteristicReceivedController =
+      StreamController<BmCharacteristicData>.broadcast();
+  final _onCharacteristicWrittenController =
+      StreamController<BmCharacteristicData>.broadcast();
+  final _onConnectionStateChangedController =
+      StreamController<BmConnectionStateResponse>.broadcast();
+  final _onDescriptorReadController =
+      StreamController<BmDescriptorData>.broadcast();
+  final _onDescriptorWrittenController =
+      StreamController<BmDescriptorData>.broadcast();
+  final _onDiscoveredServicesController =
+      StreamController<BmDiscoverServicesResult>.broadcast();
+  final _onMtuChangedController =
+      StreamController<BmMtuChangedResponse>.broadcast();
   final _onNameChangedController = StreamController<BmNameChanged>.broadcast();
   final _onReadRssiController = StreamController<BmReadRssiResult>.broadcast();
-  final _onScanResponseController = StreamController<BmScanResponse>.broadcast();
-  final _onServicesResetController = StreamController<BmBluetoothDevice>.broadcast();
-  final _onDetachedFromEngineController = StreamController<BmDetachedFromEngineResponse>.broadcast();
+  final _onScanResponseController =
+      StreamController<BmScanResponse>.broadcast();
+  final _onServicesResetController =
+      StreamController<BmBluetoothDevice>.broadcast();
+  final _onDetachedFromEngineController =
+      StreamController<BmDetachedFromEngineResponse>.broadcast();
 
   @override
   Stream<BmBluetoothAdapterState> get onAdapterStateChanged {
@@ -107,9 +119,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmClearGattCacheRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'clearGattCache',
-      request.remoteId.str,
-    ) == true;
+          'clearGattCache',
+          request.remoteId.str,
+        ) ==
+        true;
   }
 
   @override
@@ -117,9 +130,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmConnectRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'connect',
-      request.toMap(),
-    ) == true;
+          'connect',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -127,9 +141,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmCreateBondRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'createBond',
-      request.toMap(),
-    ) == true;
+          'createBond',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -137,9 +152,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmDisconnectRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'disconnect',
-      request.remoteId.str,
-    ) == true;
+          'disconnect',
+          request.remoteId.str,
+        ) ==
+        true;
   }
 
   @override
@@ -147,9 +163,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmDiscoverServicesRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'discoverServices',
-      request.remoteId.str,
-    ) == true;
+          'discoverServices',
+          request.remoteId.str,
+        ) ==
+        true;
   }
 
   @override
@@ -197,7 +214,7 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     );
   }
 
- @override
+  @override
   Future<PhySupport> getPhySupport(
     PhySupportRequest request,
   ) async {
@@ -217,7 +234,7 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     return BmDevicesList.fromMap(
       await _invokeMethod(
         'getSystemDevices',
-        request.toMap(), 
+        request.toMap(),
       ),
     );
   }
@@ -227,8 +244,9 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmIsSupportedRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'isSupported',
-    ) == true;
+          'isSupported',
+        ) ==
+        true;
   }
 
   @override
@@ -236,9 +254,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmReadCharacteristicRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'readCharacteristic',
-      request.toMap(),
-    ) == true;
+          'readCharacteristic',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -246,9 +265,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmReadDescriptorRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'readDescriptor',
-      request.toMap(),
-    ) == true;
+          'readDescriptor',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -256,9 +276,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmReadRssiRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'readRssi',
-      request.remoteId.str,
-    ) == true;
+          'readRssi',
+          request.remoteId.str,
+        ) ==
+        true;
   }
 
   @override
@@ -266,9 +287,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmRemoveBondRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'removeBond',
-      request.remoteId.str,
-    ) == true;
+          'removeBond',
+          request.remoteId.str,
+        ) ==
+        true;
   }
 
   @override
@@ -276,9 +298,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmConnectionPriorityRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'requestConnectionPriority',
-      request.toMap(),
-    ) == true;
+          'requestConnectionPriority',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -286,9 +309,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmMtuChangeRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'requestMtu',
-      request.toMap(),
-    ) == true;
+          'requestMtu',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -299,9 +323,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     _logColor = request.logColor;
 
     return await _invokeMethod<bool>(
-      'setLogLevel',
-      request.logLevel.index,
-    ) == true;
+          'setLogLevel',
+          request.logLevel.index,
+        ) ==
+        true;
   }
 
   @override
@@ -309,9 +334,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmSetNotifyValueRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'setNotifyValue',
-      request.toMap(),
-    ) == true;
+          'setNotifyValue',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -319,9 +345,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmSetOptionsRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'setOptions',
-      request.toMap(),
-    ) == true;
+          'setOptions',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -329,9 +356,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmPreferredPhy request,
   ) async {
     return await _invokeMethod<bool>(
-      'setPreferredPhy',
-      request.toMap(),
-    ) == true;
+          'setPreferredPhy',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -339,9 +367,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmScanSettings request,
   ) async {
     return await _invokeMethod<bool>(
-      'startScan',
-      request.toMap(),
-    ) == true;
+          'startScan',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -349,8 +378,9 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmStopScanRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'stopScan',
-    ) == true;
+          'stopScan',
+        ) ==
+        true;
   }
 
   @override
@@ -358,8 +388,9 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmTurnOffRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'turnOff',
-    ) == true;
+          'turnOff',
+        ) ==
+        true;
   }
 
   @override
@@ -367,8 +398,9 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmTurnOnRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'turnOn',
-    ) == true;
+          'turnOn',
+        ) ==
+        true;
   }
 
   @override
@@ -376,9 +408,10 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmWriteCharacteristicRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'writeCharacteristic',
-      request.toMap(),
-    ) == true;
+          'writeCharacteristic',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   @override
@@ -386,15 +419,16 @@ final class FlutterBluePlusWinrt extends FlutterBluePlusPlatform {
     BmWriteDescriptorRequest request,
   ) async {
     return await _invokeMethod<bool>(
-      'writeDescriptor',
-      request.toMap(),
-    ) == true;
+          'writeDescriptor',
+          request.toMap(),
+        ) ==
+        true;
   }
 
   Future<T?> _invokeMethod<T>(
     String method, [
-      dynamic arguments,
-    ]) async {
+    dynamic arguments,
+  ]) async {
     // initialize
     await _initFlutterBluePlus();
 
