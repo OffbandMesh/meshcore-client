@@ -98,13 +98,19 @@ hooks:
           android-x64:
             backends: [cpu]
 
-# Vendored copy of the endorsed Android implementation, patched to close
-# leaked BluetoothGatt handles (#694). Pristine 8.2.2 import first; the
-# patch rides on top as its own commit for reviewability, like the WinRT
-# vendor on #686.
+# Both BLE platform implementations are vendored, each a pristine import first
+# with its patch as a separate commit for reviewability.
+#
+# android: patched to close leaked BluetoothGatt handles (#694).
+# winrt:   patched to create the GattSession on connect, so Windows reports the
+#          negotiated MTU. No published version does, which left the Dart cache
+#          at the 23-byte default and capped the composer at 0-4 bytes, reading
+#          as a dead keyboard (#592, fix tracked in #686).
 dependency_overrides:
   flutter_blue_plus_android:
     path: packages/flutter_blue_plus_android
+  flutter_blue_plus_winrt:
+    path: packages/flutter_blue_plus_winrt
 
 dev_dependencies:
   flutter_test:

@@ -299,6 +299,7 @@ class MeshCoreConnector extends ChangeNotifier {
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _notifySubscription;
+  StreamSubscription<int>? _mtuSubscription;
   Timer? _notifyListenersTimer;
   Timer? _selfInfoRetryTimer;
   int _appStartRetryAttempt = 0;
@@ -2395,6 +2396,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _connectionSubscription = null;
       await _notifySubscription?.cancel();
       _notifySubscription = null;
+      await _mtuSubscription?.cancel();
+      _mtuSubscription = null;
       _connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected && isConnected) {
           _handleDisconnection();
@@ -2566,8 +2569,11 @@ class MeshCoreConnector extends ChangeNotifier {
         );
       }
 
-      // Request larger MTU only where the platform path supports it.
-      if (!PlatformInfo.isWeb && !PlatformInfo.isLinux) {
+      // Requesting an MTU is Android-only: flutter_blue_plus throws
+      // "android-only" on every other platform before the platform code runs
+      // (#683). Elsewhere the platform reports the negotiated value on its own
+      // and we pick it up from the mtu stream below.
+      if (PlatformInfo.isAndroid) {
         try {
           final mtu = await device.requestMtu(185);
           _appDebugLogService?.info('MTU set to: $mtu', tag: 'BLE Connect');
@@ -2577,12 +2583,17 @@ class MeshCoreConnector extends ChangeNotifier {
             tag: 'BLE Connect',
           );
         }
-      } else if (PlatformInfo.isLinux) {
-        _appDebugLogService?.info(
-          'Skipping MTU request on Linux; flutter_blue_plus only supports requestMtu on Android',
-          tag: 'BLE Connect',
-        );
       }
+
+      // The MTU can arrive or change after connect. effectiveMaxFrameSize is
+      // read on every composer rebuild, so notifying here is what lets the
+      // message byte budget recover from the 20-byte floor once the real value
+      // is known (#592).
+      await _mtuSubscription?.cancel();
+      _mtuSubscription = device.mtu.listen((mtu) {
+        _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
+        notifyListeners();
+      });
 
       late final List<BluetoothService> services;
       try {
@@ -3153,6 +3164,9 @@ class MeshCoreConnector extends ChangeNotifier {
 
     await _notifySubscription?.cancel();
     _notifySubscription = null;
+
+    await _mtuSubscription?.cancel();
+    _mtuSubscription = null;
 
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
