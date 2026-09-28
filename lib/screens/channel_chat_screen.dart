@@ -644,7 +644,6 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   Future<void> _blockChannelSender(ChannelMessage message) async {
     final connector = context.read<MeshCoreConnector>();
     final blockService = context.read<BlockService>();
-    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
     final name = message.senderName;
     final keys = connector.resolveContactKeysByName(name);
@@ -653,12 +652,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         await blockService.block(key);
       }
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(l10n.block_blocked(name))));
+      showDismissibleSnackBar(context, content: Text(l10n.block_blocked(name)));
     } else {
       await blockService.blockName(name);
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.block_blockedNameOnly(name))),
+      showDismissibleSnackBar(
+        context,
+        content: Text(l10n.block_blockedNameOnly(name)),
       );
     }
   }

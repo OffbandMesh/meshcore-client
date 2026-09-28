@@ -1,56 +1,25 @@
 import 'package:flutter/material.dart';
 
-// showDismissibleSnackBar shows  a [SnackBar] with tap to dismiss
-// all other properties are default and optional
+import '../widgets/top_toast.dart';
+
+/// Shows a transient notification that dismisses on tap, on an upward swipe,
+/// or after [duration].
+///
+/// Kept under its original name so existing call sites are unchanged; the
+/// notification itself moved from a bottom [SnackBar] to a top-anchored
+/// overlay (#638), because the bottom placement covered the chat composer.
 void showDismissibleSnackBar(
   BuildContext context, {
-  Key? key,
   required Widget content,
   Color? backgroundColor,
-  double? elevation,
-  EdgeInsetsGeometry? margin,
-  EdgeInsetsGeometry? padding,
-  double? width,
-  ShapeBorder? shape,
-  HitTestBehavior? hitTestBehavior,
-  SnackBarBehavior? behavior,
-  SnackBarAction? action,
-  double? actionOverflowThreshold,
-  bool? showCloseIcon,
-  Color? closeIconColor,
   Duration? duration,
   bool? persist,
-  Animation<double>? animation,
-  void Function()? onVisible,
-  DismissDirection? dismissDirection,
-  Clip? clipBehavior,
 }) {
-  final messenger = ScaffoldMessenger.of(context);
-  messenger.showSnackBar(
-    SnackBar(
-      key: key,
-      content: GestureDetector(
-        onTap: () => messenger.hideCurrentSnackBar(),
-        child: content,
-      ),
-      backgroundColor: backgroundColor,
-      elevation: elevation,
-      margin: margin,
-      padding: padding,
-      width: width,
-      shape: shape,
-      hitTestBehavior: hitTestBehavior,
-      behavior: behavior,
-      action: action,
-      actionOverflowThreshold: actionOverflowThreshold,
-      showCloseIcon: showCloseIcon,
-      closeIconColor: closeIconColor,
-      duration: duration ?? const Duration(seconds: 4),
-      persist: persist,
-      animation: animation,
-      onVisible: onVisible,
-      dismissDirection: dismissDirection ?? DismissDirection.down,
-      clipBehavior: clipBehavior ?? Clip.hardEdge,
-    ),
+  TopToast.show(
+    context,
+    content: content,
+    backgroundColor: backgroundColor,
+    duration: duration ?? TopToast.defaultDuration,
+    persist: persist ?? false,
   );
 }

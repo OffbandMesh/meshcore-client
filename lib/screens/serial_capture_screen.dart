@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../connector/caplog_reassembler.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
+import '../helpers/snack_bar_builder.dart';
 import '../utils/log_export.dart';
 
 /// Serial-capture diagnostics screen (#430).
@@ -255,10 +256,9 @@ class _SerialCaptureScreenState extends State<SerialCaptureScreen> {
       final result = await c.downloadCaplog();
       if (!mounted) return;
       if (result.bytes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Buffer is empty, nothing to download.'),
-          ),
+        showDismissibleSnackBar(
+          context,
+          content: const Text('Buffer is empty, nothing to download.'),
         );
         return;
       }
