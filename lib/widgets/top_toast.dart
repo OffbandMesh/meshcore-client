@@ -174,30 +174,38 @@ class _TopToastHostState extends State<_TopToastHost>
                     ),
                 child: FadeTransition(
                   opacity: _controller,
-                  child: Material(
-                    color: background,
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(8),
-                    clipBehavior: Clip.antiAlias,
-                    // One recognizer for both gestures: a nested InkWell would
-                    // also splash on the tap-up that ends a dismissing swipe.
-                    child: GestureDetector(
-                      onTap: _dismiss,
-                      onVerticalDragEnd: (details) {
-                        if ((details.primaryVelocity ?? 0) < 0) {
-                          _dismiss();
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        child: DefaultTextStyle(
-                          style: textStyle,
-                          child: IconTheme(
-                            data: IconThemeData(color: textStyle.color),
-                            child: widget.child,
+                  // Parity with SnackBar, which wraps its content the same way
+                  // (snack_bar.dart): without liveRegion a screen reader never
+                  // announces the message at all.
+                  child: Semantics(
+                    container: true,
+                    liveRegion: true,
+                    onDismiss: _dismiss,
+                    child: Material(
+                      color: background,
+                      elevation: 6,
+                      borderRadius: BorderRadius.circular(8),
+                      clipBehavior: Clip.antiAlias,
+                      // One recognizer for both gestures: a nested InkWell would
+                      // also splash on the tap-up that ends a dismissing swipe.
+                      child: GestureDetector(
+                        onTap: _dismiss,
+                        onVerticalDragEnd: (details) {
+                          if ((details.primaryVelocity ?? 0) < 0) {
+                            _dismiss();
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          child: DefaultTextStyle(
+                            style: textStyle,
+                            child: IconTheme(
+                              data: IconThemeData(color: textStyle.color),
+                              child: widget.child,
+                            ),
                           ),
                         ),
                       ),
