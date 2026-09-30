@@ -507,6 +507,19 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_activeTransport != MeshCoreTransportType.bluetooth) {
       return maxFrameSize;
     }
+    // Web Bluetooth exposes no ATT MTU to page script: there is no API for it,
+    // so `mtuNow` can only ever be the 23-byte default and the floor below
+    // would cap every composer at 0-4 bytes forever (#718, the #592 symptom).
+    //
+    // The floor exists because a raw single characteristic write larger than
+    // the PDU is rejected and wedges the send path (#395). That failure mode is
+    // not reachable here: the browser owns fragmentation, and the Web Bluetooth
+    // spec caps one write at 512 bytes, rejecting anything larger with
+    // InvalidModificationError. maxFrameSize (172) is well inside that, so the
+    // write cannot be oversized no matter what the link negotiated.
+    if (PlatformInfo.isWeb) {
+      return maxFrameSize;
+    }
     final mtu = _device?.mtuNow ?? 0;
     // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
     // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize],
