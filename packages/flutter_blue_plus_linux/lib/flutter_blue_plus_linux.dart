@@ -212,21 +212,41 @@ final class FlutterBluePlusLinux extends FlutterBluePlusPlatform {
   Stream<BmMtuChangedResponse> get onMtuChanged {
     return _client.devicesChanged
         .switchMap((devices) {
-          final streams = <Stream<BlueZDevice>>[];
+          return MergeStream(
+            devices.map((device) {
+              // Rebuild the per-characteristic subscriptions whenever the
+              // device's own properties change, NOT just when the device list
+              // does. devicesChanged only fires on deviceAdded/deviceRemoved,
+              // and at the moment a device is added BlueZ has not finished
+              // service discovery, so gattServices is still empty: this plugin
+              // waits on `while (!device.servicesResolved)` elsewhere for
+              // exactly that reason. Subscribing only on the device-list event
+              // would therefore attach to nothing and miss every later MTU for
+              // that device, permanently. ServicesResolved flipping true is a
+              // device property change, so this re-runs once characteristics
+              // actually exist. Same nested shape _initFlutterBluePlus uses.
+              return device.propertiesChanged
+                  .startWith(const <String>[]).switchMap((_) {
+                final streams = <Stream<BlueZDevice>>[];
 
-          for (final device in devices) {
-            for (final service in device.gattServices) {
-              for (final characteristic in service.characteristics) {
-                streams.add(
-                  characteristic.propertiesChanged
-                      .where((properties) => properties.contains('MTU'))
-                      .map((properties) => device),
-                );
-              }
-            }
-          }
+                for (final service in device.gattServices) {
+                  for (final characteristic in service.characteristics) {
+                    streams.add(
+                      characteristic.propertiesChanged
+                          .where((properties) => properties.contains('MTU'))
+                          .map((properties) => device),
+                    );
+                  }
+                }
 
-          return MergeStream(streams);
+                // Emit once on every rebuild so an MTU already negotiated
+                // before we were listening is reported, instead of waiting
+                // for a change that may never come. Harmless when unknown:
+                // the 0 is filtered out downstream.
+                return MergeStream(streams).startWith(device);
+              });
+            }),
+          );
         })
         .map((device) {
           var best = 0;
