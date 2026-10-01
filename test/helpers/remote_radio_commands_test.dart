@@ -89,6 +89,44 @@ void main() {
     });
   });
 
+  group('preset path hash on remote nodes (#735)', () {
+    test('published bytes become the zero-based CLI mode', () {
+      final philly = preset('philly', hashBytes: 2);
+      final socal = preset('socal', hashBytes: 3);
+      expect(
+        setPathHashModeCommand(philly.pathHashMode!),
+        'set path.hash.mode 1',
+      );
+      expect(
+        setPathHashModeCommand(socal.pathHashMode!),
+        'set path.hash.mode 2',
+      );
+      expect(preset('usa').pathHashMode, isNull);
+    });
+
+    test('a preset path hash is held back from a temporary change', () {
+      expect(
+        sendsPresetPathHash(temporaryRadio: true, pathHashFromPreset: true),
+        isFalse,
+      );
+      expect(
+        sendsPresetPathHash(temporaryRadio: false, pathHashFromPreset: true),
+        isTrue,
+      );
+    });
+
+    test('a path hash set by hand is always sent', () {
+      expect(
+        sendsPresetPathHash(temporaryRadio: true, pathHashFromPreset: false),
+        isTrue,
+      );
+      expect(
+        sendsPresetPathHash(temporaryRadio: false, pathHashFromPreset: false),
+        isTrue,
+      );
+    });
+  });
+
   group('matchRemotePresetId (#734)', () {
     final presets = [
       preset('arizona', tx: 20),

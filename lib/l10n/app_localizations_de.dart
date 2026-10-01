@@ -2660,6 +2660,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get repeater_tempRadioMinutes => 'Duration (minutes)';
 
   @override
+  String get repeater_tempRadioPathHashNote =>
+      'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.';
+
+  @override
   String repeater_tempRadioMinutesInvalid(int max) {
     return '1 to $max minutes';
   }

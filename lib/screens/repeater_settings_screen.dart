@@ -160,6 +160,9 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
 
   // Advanced
   int _pathHashMode = 0; // 0-2
+
+  /// The pending path hash came from a preset rather than the user (#735).
+  bool _pathHashFromPreset = false;
   final TextEditingController _txDelayController = TextEditingController();
   final TextEditingController _directTxDelayController =
       TextEditingController();
@@ -215,8 +218,16 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
       _bandwidth = bw;
       _spreadingFactor = preset.spreadingFactor.value;
       _codingRate = preset.codingRate.value;
+      final hashMode = preset.pathHashMode;
+      if (hashMode != null) {
+        _pathHashMode = hashMode;
+        _pathHashFromPreset = true;
+      }
     });
     _markChanged(_SettingField.radio);
+    if (preset.pathHashMode != null) {
+      _markChanged(_SettingField.pathHashMode);
+    }
   }
 
   String? _selectedPresetId(List<RadioPreset> presets) => matchRemotePresetId(
@@ -914,10 +925,15 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           command: 'set owner.info $encoded',
         ));
       }
-      if (_dirtyFields.contains(_SettingField.pathHashMode)) {
+      final holdPresetPathHash = !sendsPresetPathHash(
+        temporaryRadio: _tempRadio,
+        pathHashFromPreset: _pathHashFromPreset,
+      );
+      if (_dirtyFields.contains(_SettingField.pathHashMode) &&
+          !holdPresetPathHash) {
         pending.add((
           field: _SettingField.pathHashMode,
-          command: 'set path.hash.mode $_pathHashMode',
+          command: setPathHashModeCommand(_pathHashMode),
         ));
       }
       if (_dirtyFields.contains(_SettingField.txDelay) &&
@@ -993,6 +1009,15 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           }
         }
         await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      // A preset path hash held back from a temporary save stays pending,
+      // so a later normal save can still apply it.
+      if (holdPresetPathHash &&
+          _dirtyFields.contains(_SettingField.pathHashMode)) {
+        retainDirty.add(_SettingField.pathHashMode);
+      } else if (!retainDirty.contains(_SettingField.pathHashMode)) {
+        _pathHashFromPreset = false;
       }
 
       // Only clear password fields if every password command succeeded,
@@ -1456,6 +1481,18 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                 ),
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _markChanged(_SettingField.radio),
+              ),
+            if (_tempRadio &&
+                _pathHashFromPreset &&
+                _dirtyFields.contains(_SettingField.pathHashMode))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  l10n.repeater_tempRadioPathHashNote,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             const SizedBox(height: 8),
             _buildFeatureToggleRow(
@@ -2086,7 +2123,10 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                   ],
                   onChanged: (v) {
                     if (v != null) {
-                      setState(() => _pathHashMode = v);
+                      setState(() {
+                        _pathHashMode = v;
+                        _pathHashFromPreset = false;
+                      });
                       _markChanged(_SettingField.pathHashMode);
                     }
                   },

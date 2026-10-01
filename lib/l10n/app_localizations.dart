@@ -4706,6 +4706,12 @@ abstract class AppLocalizations {
   /// **'Duration (minutes)'**
   String get repeater_tempRadioMinutes;
 
+  /// No description provided for @repeater_tempRadioPathHashNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.'**
+  String get repeater_tempRadioPathHashNote;
+
   /// No description provided for @repeater_tempRadioMinutesInvalid.
   ///
   /// In en, this message translates to:

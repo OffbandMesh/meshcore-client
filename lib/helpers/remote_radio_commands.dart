@@ -56,6 +56,18 @@ List<T> withRetuneLast<T>(List<T> commands, bool Function(T) retunes) => [
 
 bool isRetuneCommand(String command) => command.startsWith('tempradio ');
 
+/// Stock CLI: path hash mode, zero-based (2 bytes = mode 1).
+String setPathHashModeCommand(int mode) => 'set path.hash.mode $mode';
+
+/// Whether a path hash that came from a preset goes out in this save (#735).
+/// Firmware has no temporary path hash, so with a temporary radio change it
+/// would outlive the revert; it stays pending for a normal save instead. A
+/// path hash the user set by hand is always sent.
+bool sendsPresetPathHash({
+  required bool temporaryRadio,
+  required bool pathHashFromPreset,
+}) => !(temporaryRadio && pathHashFromPreset);
+
 /// The preset whose radio values match the form's, or null for custom values.
 /// The form holds frequency as text (the repeater reports e.g. "908.205017"),
 /// so frequency matches to the nearest kHz. TX power is not compared: the

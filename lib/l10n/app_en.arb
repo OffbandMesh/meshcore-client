@@ -1462,6 +1462,7 @@
   "repeater_tempRadio": "Apply temporarily",
   "repeater_tempRadioSubtitle": "Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.",
   "repeater_tempRadioMinutes": "Duration (minutes)",
+  "repeater_tempRadioPathHashNote": "This preset's path hash size isn't applied with a temporary change: the node can't revert it on its own. It stays pending for a normal save.",
   "repeater_tempRadioMinutesInvalid": "1 to {max} minutes",
   "@repeater_tempRadioMinutesInvalid": {
     "placeholders": {
