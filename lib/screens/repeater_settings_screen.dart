@@ -6,9 +6,13 @@ import '../l10n/l10n.dart';
 import '../models/contact.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
+import '../models/radio_preset.dart';
+import '../services/radio_preset_service.dart';
 import '../services/repeater_command_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/path_management_dialog.dart';
+import '../widgets/radio_preset_picker.dart';
+import '../helpers/remote_radio_commands.dart';
 import '../helpers/snack_bar_builder.dart';
 
 class RepeaterSettingsScreen extends StatefulWidget {
@@ -185,7 +189,37 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     _commandService = RepeaterCommandService(connector);
     _setupMessageListener();
     _loadSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Provider.of<RadioPresetService>(context, listen: false).refreshIfStale();
+    });
   }
+
+  /// Fill the radio fields from a preset (#734). TX power is not part of a
+  /// remote preset: it is a separate command on these nodes.
+  void _applyPreset(RadioPreset preset) {
+    setState(() {
+      _freqController.text = preset.frequencyMHz.toStringAsFixed(3);
+      final bw = preset.bandwidth.hz;
+      if (!_bandwidthOptions.contains(bw)) {
+        _bandwidthOptions
+          ..add(bw)
+          ..sort();
+      }
+      _bandwidth = bw;
+      _spreadingFactor = preset.spreadingFactor.value;
+      _codingRate = preset.codingRate.value;
+    });
+    _markChanged(_SettingField.radio);
+  }
+
+  String? _selectedPresetId(List<RadioPreset> presets) => matchRemotePresetId(
+    presets,
+    frequencyText: _freqController.text,
+    bandwidthHz: _bandwidth,
+    spreadingFactor: _spreadingFactor,
+    codingRate: _codingRate,
+  );
 
   @override
   void dispose() {
@@ -1249,6 +1283,20 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
               onRefresh: _refreshRadioSettings,
             ),
             const Divider(),
+            Consumer<RadioPresetService>(
+              builder: (context, service, _) {
+                final presets = service.presets
+                    .where((p) => !p.offGrid)
+                    .toList();
+                return RadioPresetPicker(
+                  service: service,
+                  presets: presets,
+                  selectedId: _selectedPresetId(presets),
+                  onSelected: _applyPreset,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _freqController,
               decoration: InputDecoration(
