@@ -147,6 +147,7 @@ void main() {
           bandwidthHz: 62500,
           spreadingFactor: 9,
           codingRate: 8,
+          pathHashMode: 0,
         ),
         'arizona',
       );
@@ -157,6 +158,7 @@ void main() {
           bandwidthHz: 500000,
           spreadingFactor: 10,
           codingRate: 5,
+          pathHashMode: 0,
         ),
         'oki',
       );
@@ -170,6 +172,7 @@ void main() {
           bandwidthHz: 62500,
           spreadingFactor: 9,
           codingRate: 5,
+          pathHashMode: 0,
         ),
         isNull,
       );
@@ -180,6 +183,7 @@ void main() {
           bandwidthHz: 62500,
           spreadingFactor: 9,
           codingRate: 8,
+          pathHashMode: 0,
         ),
         isNull,
       );
@@ -193,6 +197,7 @@ void main() {
           bandwidthHz: 62500,
           spreadingFactor: 9,
           codingRate: 8,
+          pathHashMode: 0,
         ),
         isNull,
       );
@@ -203,9 +208,39 @@ void main() {
           bandwidthHz: null,
           spreadingFactor: 9,
           codingRate: 8,
+          pathHashMode: 0,
         ),
         isNull,
       );
+    });
+
+    test('a path hash preset only matches a node on that mode (#747)', () {
+      final usaPair = [
+        preset(
+          'canada',
+          mhz: 910.525,
+          sf: LoRaSpreadingFactor.sf7,
+          cr: LoRaCodingRate.cr4_5,
+          hashBytes: 3,
+        ),
+        preset(
+          'usa',
+          mhz: 910.525,
+          sf: LoRaSpreadingFactor.sf7,
+          cr: LoRaCodingRate.cr4_5,
+        ),
+      ];
+      String? match(int mode) => matchRemotePresetId(
+        usaPair,
+        frequencyText: '910.525',
+        bandwidthHz: 62500,
+        spreadingFactor: 7,
+        codingRate: 5,
+        pathHashMode: mode,
+      );
+      expect(match(0), 'usa');
+      expect(match(1), 'usa');
+      expect(match(2), 'canada');
     });
   });
 }

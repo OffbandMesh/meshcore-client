@@ -236,6 +236,7 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     bandwidthHz: _bandwidth,
     spreadingFactor: _spreadingFactor,
     codingRate: _codingRate,
+    pathHashMode: _pathHashMode,
   );
 
   @override

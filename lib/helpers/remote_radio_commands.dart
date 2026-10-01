@@ -71,13 +71,15 @@ bool sendsPresetPathHash({
 /// The preset whose radio values match the form's, or null for custom values.
 /// The form holds frequency as text (the repeater reports e.g. "908.205017"),
 /// so frequency matches to the nearest kHz. TX power is not compared: the
-/// remote screen sets it separately.
+/// remote screen sets it separately. A preset with a path hash only matches
+/// a node on that mode (#747): MeshCore's "Canada" and "USA" differ only there.
 String? matchRemotePresetId(
   List<RadioPreset> presets, {
   required String frequencyText,
   required int? bandwidthHz,
   required int? spreadingFactor,
   required int? codingRate,
+  required int pathHashMode,
 }) {
   final mhz = double.tryParse(frequencyText.trim());
   if (mhz == null ||
@@ -91,7 +93,8 @@ String? matchRemotePresetId(
     if (p.frequencyKHz == khz &&
         p.bandwidth.hz == bandwidthHz &&
         p.spreadingFactor.value == spreadingFactor &&
-        p.codingRate.value == codingRate) {
+        p.codingRate.value == codingRate &&
+        presetPathHashMatches(p, pathHashMode + 1)) {
       return p.id;
     }
   }
