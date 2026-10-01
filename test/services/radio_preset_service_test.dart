@@ -283,7 +283,7 @@ void main() {
       final merged = mergeRadioPresets(upstream.presets, overlay.presets);
       expect(merged.length, 59);
       final philly = merged.firstWhere((p) => p.title == 'USA - Philly Mesh');
-      expect(philly.frequencyHz, 919500);
+      expect(philly.frequencyKHz, 919500);
       expect(philly.bandwidth, LoRaBandwidth.bw500);
       expect(philly.pathHashMode, 1);
       final euNarrow = merged.firstWhere((p) => p.title == 'EU/UK (Narrow)');

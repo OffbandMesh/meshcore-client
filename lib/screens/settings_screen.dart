@@ -2152,7 +2152,8 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     _RadioSettingsSnapshot snapshot, {
     int? frequencyHz,
   }) {
-    return (frequencyHz ?? preset.frequencyHz) == snapshot.frequencyHz &&
+    // _RadioSettingsSnapshot.frequencyHz is also kHz, despite its name.
+    return (frequencyHz ?? preset.frequencyKHz) == snapshot.frequencyHz &&
         preset.bandwidth == snapshot.bandwidth &&
         preset.spreadingFactor == snapshot.spreadingFactor &&
         preset.codingRate == snapshot.codingRate &&

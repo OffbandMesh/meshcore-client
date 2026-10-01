@@ -60,7 +60,7 @@ void main() {
       final socal = r.presets[0];
       expect(socal.id, 'meshcore:USA - Southern California');
       expect(socal.region, 'USA');
-      expect(socal.frequencyHz, 927875);
+      expect(socal.frequencyKHz, 927875);
       expect(socal.bandwidth, LoRaBandwidth.bw62_5);
       expect(socal.spreadingFactor, LoRaSpreadingFactor.sf7);
       expect(socal.codingRate, LoRaCodingRate.cr4_5);

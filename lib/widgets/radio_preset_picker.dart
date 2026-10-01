@@ -36,6 +36,7 @@ class RadioPresetPicker extends StatelessWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final selected = _byId(selectedId)?.id;
+    final titlesById = {for (final p in presets) p.id: p.title};
     final items = <DropdownMenuItem<String>>[];
     String? region;
     for (final preset in presets) {
@@ -99,16 +100,20 @@ class RadioPresetPicker extends StatelessWidget {
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: Text(
-                  _byId(item.value)?.title ?? '',
+                  titlesById[item.value] ?? '',
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
           items: items,
-          onChanged: (id) {
-            final preset = _byId(id);
-            if (preset != null) onSelected(preset);
-          },
+          // Disabled while a refresh runs, so a pick can't vanish when the
+          // refreshed list lands.
+          onChanged: service.refreshing
+              ? null
+              : (id) {
+                  final preset = _byId(id);
+                  if (preset != null) onSelected(preset);
+                },
         ),
         _PresetStatus(service: service),
       ],

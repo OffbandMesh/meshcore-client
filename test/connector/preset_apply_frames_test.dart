@@ -36,14 +36,14 @@ void main() {
     final philly = named('USA - Philly Mesh');
     // The form sends MHz * 1000, i.e. kHz; stock stores freq / 1000.0 as MHz.
     final frame = buildSetRadioParamsFrame(
-      philly.frequencyHz,
+      philly.frequencyKHz,
       philly.bandwidth.hz,
       philly.spreadingFactor.value,
       philly.codingRate.value,
     );
     expect(frame, [cmdSetRadioParams, ...le32(919500), ...le32(500000), 10, 5]);
     // Inside stock's accepted ranges (150000-2500000 kHz, BW <= 500000 Hz).
-    expect(philly.frequencyHz, inInclusiveRange(150000, 2500000));
+    expect(philly.frequencyKHz, inInclusiveRange(150000, 2500000));
     expect(philly.bandwidth.hz, lessThanOrEqualTo(500000));
   });
 

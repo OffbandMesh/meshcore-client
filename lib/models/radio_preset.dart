@@ -54,7 +54,8 @@ class RadioPreset {
   /// A client-repeat (off-grid) frequency rather than a regional preset.
   final bool offGrid;
 
-  int get frequencyHz => (frequencyMHz * 1000).round();
+  /// Frequency in kHz, the unit CMD_SET_RADIO_PARAMS carries.
+  int get frequencyKHz => (frequencyMHz * 1000).round();
 
   /// The firmware's path hash mode for [pathHashBytes], or null to leave it.
   ///
