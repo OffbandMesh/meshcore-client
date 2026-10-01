@@ -86,7 +86,7 @@ Code lands in `OffbandMesh/config-profiles`.
 | **C1 · Picker on the remote-node settings screen (#734):** Repeater and Room Server share it. | 3 |
 | **C2 · Temporary checkbox (#662):** `tempradio`, sent last, duration capped. Tests. | 3 |
 | **C3 · Path hash via `set path.hash.mode` (#735):** tests. | 2 |
-| **C5 · Sensor admin entry point (new issue at merge):** log in to a Sensor and reach the same settings screen. Depends on owner choice 1. | 3 |
+| **C5 · Sensor admin entry point (new issue at merge):** log in to a Sensor and reach the same settings screen (owner choice 1: in scope). | 3 |
 | **C4 · Epic verification (#736)** | 1 |
 
 ### Epic D: integration testing (#737)
@@ -146,8 +146,8 @@ Code lands in `OffbandMesh/config-profiles`.
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | Sensors have no admin path in the app today | Add one (C5): log in, reuse the repeater settings screen | Drop Sensor from this Feature and file it separately | ⭐ A | |
-| 2 | When does your hardware testing happen? | Once, at Epic D, before any merge; the chain runs straight through. Risk: a hardware fault in B is found only after C is built on it, so the rework is bigger. | After each Epic, before the next starts. Catches faults earlier, but the chain pauses for you each time. | ⭐ A (your stated direction) | |
+| 1 | Sensors have no admin path in the app today | Add one (C5): log in, reuse the repeater settings screen | Drop Sensor from this Feature and file it separately | ⭐ A | **A**: add the Sensor admin path (2026-10-01) |
+| 2 | When does your hardware testing happen? | Once, at Epic D, before any merge; the chain runs straight through. Risk: a hardware fault in B is found only after C is built on it, so the rework is bigger. | After each Epic, before the next starts. Catches faults earlier, but the chain pauses for you each time. | ⭐ A (your stated direction) | **A**: at the end; the chain does not stop between Epics (2026-10-01) |
 
 ## 9. Carried-in work
 
