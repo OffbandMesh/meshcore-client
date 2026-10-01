@@ -127,6 +127,12 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
   int? _spreadingFactor;
   int? _codingRate;
 
+  /// Apply the radio params with `tempradio` (reverting after the duration)
+  /// instead of persisting them with `set radio` (#662).
+  bool _tempRadio = false;
+  final TextEditingController _tempRadioMinutesController =
+      TextEditingController(text: '$kTempRadioDefaultMinutes');
+
   // Location settings
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lonController = TextEditingController();
@@ -230,6 +236,7 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     _guestPasswordController.dispose();
     _freqController.dispose();
     _txPowerController.dispose();
+    _tempRadioMinutesController.dispose();
     _latController.dispose();
     _lonController.dispose();
     _ownerInfoController.dispose();
@@ -743,6 +750,22 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
     final repeater = _resolveRepeater(connector);
 
+    final tempRadioMinutes = parseTempRadioMinutes(
+      _tempRadioMinutesController.text,
+    );
+    if (_tempRadio &&
+        _dirtyFields.contains(_SettingField.radio) &&
+        tempRadioMinutes == null) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(
+          context.l10n.repeater_tempRadioMinutesInvalid(kTempRadioMaxMinutes),
+        ),
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -784,11 +807,22 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           _codingRate != null) {
         final freqText = _freqController.text.trim();
         if (double.tryParse(freqText) != null) {
-          final bwKHz = _bandwidth! / 1000;
           pending.add((
             field: _SettingField.radio,
-            command:
-                'set radio $freqText,$bwKHz,$_spreadingFactor,$_codingRate',
+            command: _tempRadio
+                ? tempRadioCommand(
+                    freqText,
+                    _bandwidth!,
+                    _spreadingFactor!,
+                    _codingRate!,
+                    tempRadioMinutes!,
+                  )
+                : setRadioCommand(
+                    freqText,
+                    _bandwidth!,
+                    _spreadingFactor!,
+                    _codingRate!,
+                  ),
           ));
         }
       }
@@ -927,7 +961,10 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
       final retainDirty = <_SettingField>{};
       var passwordsFailed = false;
       var rebootNeeded = false;
-      for (final entry in pending) {
+      for (final entry in withRetuneLast(
+        pending,
+        (e) => isRetuneCommand(e.command),
+      )) {
         var failed = false;
         try {
           final response = await _commandService!.sendCommand(
@@ -1395,6 +1432,31 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                 }
               },
             ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(l10n.repeater_tempRadio),
+              subtitle: Text(l10n.repeater_tempRadioSubtitle),
+              value: _tempRadio,
+              onChanged: (value) {
+                setState(() => _tempRadio = value ?? false);
+                _markChanged(_SettingField.radio);
+              },
+            ),
+            if (_tempRadio)
+              TextField(
+                controller: _tempRadioMinutesController,
+                decoration: InputDecoration(
+                  labelText: l10n.repeater_tempRadioMinutes,
+                  helperText: l10n.repeater_tempRadioMinutesInvalid(
+                    kTempRadioMaxMinutes,
+                  ),
+                  border: const OutlineInputBorder(),
+                  suffixText: 'min',
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _markChanged(_SettingField.radio),
+              ),
             const SizedBox(height: 8),
             _buildFeatureToggleRow(
               title: l10n.repeater_rxGain,

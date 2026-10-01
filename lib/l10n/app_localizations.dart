@@ -4688,6 +4688,30 @@ abstract class AppLocalizations {
   /// **'Coding Rate'**
   String get repeater_codingRate;
 
+  /// No description provided for @repeater_tempRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply temporarily'**
+  String get repeater_tempRadio;
+
+  /// No description provided for @repeater_tempRadioSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.'**
+  String get repeater_tempRadioSubtitle;
+
+  /// No description provided for @repeater_tempRadioMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration (minutes)'**
+  String get repeater_tempRadioMinutes;
+
+  /// No description provided for @repeater_tempRadioMinutesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'1 to {max} minutes'**
+  String repeater_tempRadioMinutesInvalid(int max);
+
   /// No description provided for @repeater_locationSettings.
   ///
   /// In en, this message translates to:
