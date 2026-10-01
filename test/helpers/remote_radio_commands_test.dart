@@ -47,6 +47,16 @@ void main() {
       expect(tempRadioCommand('910.525', 62500, 7, 5, 60), endsWith(',7,5,60'));
     });
 
+    test(
+      'the default duration is valid, so no error shows by default (#748)',
+      () {
+        expect(
+          parseTempRadioMinutes('$kTempRadioDefaultMinutes'),
+          kTempRadioDefaultMinutes,
+        );
+      },
+    );
+
     test('duration must be 1 to the firmware overflow bound', () {
       expect(parseTempRadioMinutes('1440'), 1440);
       expect(parseTempRadioMinutes(' 1 '), 1);
