@@ -1203,7 +1203,8 @@ Uint8List buildSetChannelFrame(int channelIndex, String name, Uint8List psk) {
 // Build CMD_SET_RADIO_PARAMS frame
 // Format: [cmd][freq x4][bw x4][sf][cr] (pre-v9)
 //         [cmd][freq x4][bw x4][sf][cr][repeat] (firmware v9+)
-// freq: frequency in Hz (300000-2500000)
+// freq: frequency in kHz despite the parameter name (stock firmware stores
+//       freq / 1000.0 as MHz and accepts 150000-2500000)
 // bw: bandwidth in Hz (7000-500000)
 // sf: spreading factor (5-12)
 // cr: coding rate (5-8)

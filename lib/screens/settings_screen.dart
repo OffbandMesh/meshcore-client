@@ -2402,6 +2402,15 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
         ),
       );
       await widget.connector.sendFrame(buildSetRadioTxPowerFrame(txPower));
+      // A preset that carries a path hash size sets it too (stock
+      // CMD_SET_PATH_HASH_MODE, #730). Sent whenever the preset has one,
+      // rather than compared against the reported width, which reads as 1
+      // when device info is short (#240). Setting the same mode is harmless.
+      final pathHashMode = _presetById(_selectedPresetId)?.pathHashMode;
+      if (pathHashMode != null) {
+        _logRadioSettingsState('Setting preset path hash mode $pathHashMode');
+        await widget.connector.setPathHashMode(pathHashMode);
+      }
       await widget.connector.refreshDeviceInfo();
       final rememberedSnapshot = _clientRepeat
           ? _lastNonRepeatSnapshot
