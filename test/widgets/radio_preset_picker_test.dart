@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
@@ -123,6 +125,27 @@ void main() {
       find.byType(DropdownButtonFormField<String>),
     );
     expect(field.initialValue, isNull);
+  });
+
+  testWidgets('a good refresh shows no error (#748)', (tester) async {
+    final files = {
+      for (final f in [kUpstreamPresetFile, kOverlayPresetFile])
+        f: File('$kRadioPresetAssetDir$f').readAsStringSync(),
+    };
+    service = RadioPresetService(
+      prefs: await SharedPreferences.getInstance(),
+      loadAsset: (_) async => throw StateError('no assets in this test'),
+      fetch: (url) async => files[url.split('/').last]!,
+    );
+    await pump(tester);
+    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.pumpAndSettle();
+    expect(service.refreshError, isNull);
+    expect(find.textContaining('Presets updated'), findsOneWidget);
+    expect(
+      find.text("Couldn't update presets. Showing the saved list."),
+      findsNothing,
+    );
   });
 
   testWidgets('a failed refresh stays on screen as an error', (tester) async {
