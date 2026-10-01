@@ -2157,7 +2157,9 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
         preset.bandwidth == snapshot.bandwidth &&
         preset.spreadingFactor == snapshot.spreadingFactor &&
         preset.codingRate == snapshot.codingRate &&
-        (preset.txPowerDbm == null || preset.txPowerDbm == snapshot.txPowerDbm);
+        (preset.txPowerDbm == null ||
+            preset.txPowerDbm == snapshot.txPowerDbm) &&
+        presetPathHashMatches(preset, widget.connector.pathHashByteWidth);
   }
 
   String? _findMatchingPresetIdForSnapshot(_RadioSettingsSnapshot snapshot) {

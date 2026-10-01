@@ -194,6 +194,53 @@ void main() {
     });
   });
 
+  group('presetPathHashMatches (#747)', () {
+    final r = parseUpstreamPresets(
+      upstream([
+        {
+          'title': 'Canada',
+          'frequency': '910.525',
+          'spreading_factor': '7',
+          'bandwidth': '62.5',
+          'coding_rate': '5',
+          'network_settings': {'path_hash_size': 3},
+        },
+        {
+          'title': 'USA',
+          'frequency': '910.525',
+          'spreading_factor': '7',
+          'bandwidth': '62.5',
+          'coding_rate': '5',
+        },
+      ]),
+    );
+    final canada = r.presets[0];
+    final usa = r.presets[1];
+
+    test('a preset with a path hash only fits a radio on that size', () {
+      expect(presetPathHashMatches(canada, 3), isTrue);
+      expect(presetPathHashMatches(canada, 2), isFalse);
+      expect(presetPathHashMatches(canada, 1), isFalse);
+    });
+
+    test('a preset without one fits any radio', () {
+      for (final bytes in [1, 2, 3]) {
+        expect(presetPathHashMatches(usa, bytes), isTrue);
+      }
+    });
+
+    test('a USA radio on 1- or 2-byte hashes is not mistaken for Canada', () {
+      // Same radio values; Canada sorts first by region, so without the
+      // path hash check it wins (the D1 screenshot).
+      for (final bytes in [1, 2]) {
+        final fitting = r.presets
+            .where((p) => presetPathHashMatches(p, bytes))
+            .map((p) => p.title);
+        expect(fitting, ['USA']);
+      }
+    });
+  });
+
   group('path hash bytes to firmware mode (#649)', () {
     test('published bytes map to the zero-based firmware mode', () {
       expect(pathHashModeForBytes(1), 0);

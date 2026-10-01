@@ -66,6 +66,13 @@ class RadioPreset {
   int? get pathHashMode => pathHashModeForBytes(pathHashBytes);
 }
 
+/// Whether a radio using [radioPathHashBytes] fits [preset]'s path hash
+/// (#747). Presets without a path hash fit any radio; one with a size only
+/// fits a radio on that size. Without this, presets that differ only by path
+/// hash (MeshCore's "Canada" 3-byte and "USA") are indistinguishable.
+bool presetPathHashMatches(RadioPreset preset, int radioPathHashBytes) =>
+    preset.pathHashBytes == null || preset.pathHashBytes == radioPathHashBytes;
+
 /// Zero-based firmware path hash mode for a published size in bytes (1-3).
 /// Null for null or out-of-range input, so nothing is sent.
 int? pathHashModeForBytes(int? bytes) {
