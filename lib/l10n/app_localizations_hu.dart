@@ -696,6 +696,31 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settings_presets => 'Előre beállított beállítások';
 
   @override
+  String get settings_presetSourceMeshCore => 'MeshCore';
+
+  @override
+  String get settings_presetSourceOffband => 'Offband';
+
+  @override
+  String get settings_presetsRefresh => 'Update presets';
+
+  @override
+  String get settings_presetsUpdating => 'Updating presets...';
+
+  @override
+  String get settings_presetsUpdateFailed =>
+      'Couldn\'t update presets. Showing the saved list.';
+
+  @override
+  String settings_presetsUpdatedAt(String date) {
+    return 'Presets updated $date';
+  }
+
+  @override
+  String get settings_presetsBundled =>
+      'Presets included with this version of the app';
+
+  @override
   String get settings_frequency => 'Frekvencia (MHz)';
 
   @override
