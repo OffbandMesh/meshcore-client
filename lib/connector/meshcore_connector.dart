@@ -503,13 +503,34 @@ class MeshCoreConnector extends ChangeNotifier {
   /// handle); a device that negotiates a smaller MTU than [maxFrameSize] assumes
   /// would otherwise reject a max-length message and wedge the send path (#395).
   /// USB/TCP have no such per-write cap, so they take the full [maxFrameSize].
-  int get effectiveMaxFrameSize {
-    if (_activeTransport != MeshCoreTransportType.bluetooth) {
+  int get effectiveMaxFrameSize => resolveFrameBudget(
+    transport: _activeTransport,
+    isWeb: PlatformInfo.isWeb,
+    mtuNow: _device?.mtuNow ?? 0,
+  );
+
+  /// The frame-budget decision, as a pure function of its three inputs.
+  ///
+  /// Extracted from [effectiveMaxFrameSize] so every branch is reachable from a
+  /// VM test. In particular the web branch is not otherwise testable at all:
+  /// `kIsWeb` is a compile-time constant, so a VM test can never enter it, and
+  /// CI runs the suite on the VM only. This getter decides the composer's byte
+  /// budget on every platform and had collapsed it to zero on three of them
+  /// (#592, #686, #717, #718), so it is pinned by test rather than by comment.
+  ///
+  /// [mtuNow] is 0 when no device is attached.
+  @visibleForTesting
+  static int resolveFrameBudget({
+    required MeshCoreTransportType transport,
+    required bool isWeb,
+    required int mtuNow,
+  }) {
+    if (transport != MeshCoreTransportType.bluetooth) {
       return maxFrameSize;
     }
     // Web Bluetooth exposes no ATT MTU to page script: there is no API for it,
-    // so `mtuNow` can only ever be the 23-byte default and the floor below
-    // would cap every composer at 0-4 bytes forever (#718, the #592 symptom).
+    // so mtuNow can only ever be the 23-byte default and the floor below would
+    // cap every composer at 0-4 bytes forever (#718, the #592 symptom).
     //
     // The floor exists because a raw single characteristic write larger than
     // the PDU is rejected and wedges the send path (#395). That failure mode is
@@ -517,17 +538,16 @@ class MeshCoreConnector extends ChangeNotifier {
     // spec caps one write at 512 bytes, rejecting anything larger with
     // InvalidModificationError. maxFrameSize (172) is well inside that, so the
     // write cannot be oversized no matter what the link negotiated.
-    if (PlatformInfo.isWeb) {
+    if (isWeb) {
       return maxFrameSize;
     }
-    final mtu = _device?.mtuNow ?? 0;
     // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
     // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize],
     // defaulting an unknown link to the largest size would authorize an
     // oversized write (#395 review).
     const minWritable = 20;
-    if (mtu <= 0) return minWritable;
-    final writable = mtu - 3;
+    if (mtuNow <= 0) return minWritable;
+    final writable = mtuNow - 3;
     if (writable >= maxFrameSize) return maxFrameSize;
     return writable < minWritable ? minWritable : writable;
   }
