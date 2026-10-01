@@ -296,6 +296,26 @@ void main() {
       expect(contactRequests(), 1);
     });
 
+    test('a stream that never ends is ended at 30 s without pruning', () async {
+      seedSaved();
+      await connector.getContacts();
+      connector.handleFrameForTest(_start(3));
+      connector.handleFrameForTest(_contactFrame(0x11, 'Alpha'));
+      await connector.getContacts(since: 5, preserveExisting: true);
+
+      now = now.add(const Duration(seconds: 29));
+      connector.checkStaleContactRequest();
+      expect(connector.isLoadingContacts, isTrue, reason: 'live at 29 s');
+
+      now = now.add(const Duration(seconds: 2));
+      connector.checkStaleContactRequest();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+      expect(contactRequests(), 2, reason: 'the queued request ran');
+      expect(sent.last.length, 5, reason: 'the queued incremental request');
+    });
+
     test('a failed send does not leave refreshes blocked', () async {
       connector.sendFrameOverrideForTest = (_) => throw Exception('usb gone');
       await expectLater(connector.getContacts(), throwsException);
