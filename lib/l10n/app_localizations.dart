@@ -1270,6 +1270,12 @@ abstract class AppLocalizations {
   /// **'LOS elevation data: Open-Meteo (CC BY 4.0)'**
   String get settings_aboutOpenMeteoAttribution;
 
+  /// No description provided for @settings_aboutPresetsAttribution.
+  ///
+  /// In en, this message translates to:
+  /// **'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.'**
+  String get settings_aboutPresetsAttribution;
+
   /// No description provided for @settings_infoName.
   ///
   /// In en, this message translates to:

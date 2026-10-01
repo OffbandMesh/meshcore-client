@@ -638,6 +638,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'LOS elevation data: Open-Meteo (CC BY 4.0)';
 
   @override
+  String get settings_aboutPresetsAttribution =>
+      'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.';
+
+  @override
   String get settings_infoName => 'Name';
 
   @override

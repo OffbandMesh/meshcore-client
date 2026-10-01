@@ -803,6 +803,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       l10n.settings_aboutLegalese,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.settings_aboutPresetsAttribution,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
               ),

@@ -186,6 +186,18 @@ Creative Commons Attribution 4.0 International (CC BY 4.0)
 https://creativecommons.org/licenses/by/4.0/
 ''',
     );
+    yield const LicenseEntryWithLineBreaks(
+      <String>['MeshCore suggested radio presets'],
+      '''
+Regional radio presets are MeshCore's suggested settings, maintained by Liam
+Cottle for MeshCore and published at https://api.meshcore.nz/api/v1/config.
+Offband mirrors them unmodified in OffbandMesh/config-profiles and adds its
+own regional presets alongside.
+
+MeshCore: https://github.com/meshcore-dev/MeshCore
+Mirror and credit: https://github.com/OffbandMesh/config-profiles#credit
+''',
+    );
   });
 }
 
