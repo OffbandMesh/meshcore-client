@@ -445,7 +445,7 @@ packages:
       path: "packages/flutter_blue_plus_android"
       relative: true
     source: path
-    version: "8.2.2"
+    version: "8.2.2+offband.1"
   flutter_blue_plus_darwin:
     dependency: transitive
     description:
@@ -455,12 +455,11 @@ packages:
     source: hosted
     version: "8.2.2"
   flutter_blue_plus_linux:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_blue_plus_linux
-      sha256: c08563ccef620be5a06dd6b895ee51ecd986d1fcab1edd2dbc3fa125518abb21
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_blue_plus_linux"
+      relative: true
+    source: path
     version: "8.2.2"
   flutter_blue_plus_platform_interface:
     dependency: "direct main"
