@@ -1177,6 +1177,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get contacts_manageRepeater => 'Gérer le répéteur';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Gérer le Room Server';
 
   @override

@@ -1172,6 +1172,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get contacts_manageRepeater => 'Repeater verwalten';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Raum-Server verwalten';
 
   @override

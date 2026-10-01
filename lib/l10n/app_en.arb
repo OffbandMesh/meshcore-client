@@ -541,6 +541,7 @@
     }
   },
   "contacts_manageRepeater": "Manage Repeater",
+  "contacts_manageSensor": "Manage Sensor",
   "contacts_manageRoom": "Manage Room Server",
   "contacts_roomLogin": "Room Server Login",
   "contacts_openChat": "Open Chat",

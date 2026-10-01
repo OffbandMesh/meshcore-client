@@ -2182,6 +2182,12 @@ abstract class AppLocalizations {
   /// **'Manage Repeater'**
   String get contacts_manageRepeater;
 
+  /// No description provided for @contacts_manageSensor.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Sensor'**
+  String get contacts_manageSensor;
+
   /// No description provided for @contacts_manageRoom.
   ///
   /// In en, this message translates to:

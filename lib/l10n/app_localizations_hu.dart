@@ -1178,6 +1178,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get contacts_manageRepeater => 'Ellenőriző eszköz kezelése';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'A szobai szerver kezelése';
 
   @override

@@ -1183,6 +1183,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get contacts_manageRepeater => 'Zarządzaj przekaźnikiem';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Zarządzaj Serwerem Pokoju';
 
   @override

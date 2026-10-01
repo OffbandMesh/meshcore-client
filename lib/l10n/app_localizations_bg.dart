@@ -1177,6 +1177,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get contacts_manageRepeater => 'Управление на Повтарящ се Елемент';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Управление на сървър за стая';
 
   @override

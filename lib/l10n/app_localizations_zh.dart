@@ -1106,6 +1106,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contacts_manageRepeater => '管理转发节点';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => '管理房间服务器';
 
   @override

@@ -1120,6 +1120,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get contacts_manageRepeater => '리피터 관리';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => '방 서버 관리';
 
   @override

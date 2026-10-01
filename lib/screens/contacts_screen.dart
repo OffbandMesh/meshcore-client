@@ -1509,6 +1509,20 @@ class _ContactsScreenState extends State<ContactsScreen>
                 },
               ),
             ] else ...[
+              // Sensors run the same admin login and CLI as repeaters
+              // (stock SensorMesh), so they share the repeater admin hub (#745).
+              if (contact.type == advTypeSensor)
+                ListTile(
+                  leading: const Icon(
+                    Icons.sensors_outlined,
+                    color: Colors.orange,
+                  ),
+                  title: Text(context.l10n.contacts_manageSensor),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showRepeaterLogin(context, contact);
+                  },
+                ),
               if (contact.pathLength > 0)
                 ListTile(
                   leading: const Icon(Icons.radar, color: Colors.green),

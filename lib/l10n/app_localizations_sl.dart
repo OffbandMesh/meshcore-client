@@ -1162,6 +1162,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get contacts_manageRepeater => 'Upravljaj Ponovitve';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Upravljajte strežnik sobe';
 
   @override

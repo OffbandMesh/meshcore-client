@@ -1166,6 +1166,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get contacts_manageRepeater => 'Beheer Repeater';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Beheer Ruimte Server';
 
   @override

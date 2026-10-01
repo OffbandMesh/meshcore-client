@@ -1163,6 +1163,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get contacts_manageRepeater => 'Spravovať opakované zoznamy';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Spravovať server miestnosti';
 
   @override

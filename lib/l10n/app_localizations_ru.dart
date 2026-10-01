@@ -1174,6 +1174,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get contacts_manageRepeater => 'Управление репитером';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Управление сервером комнат';
 
   @override

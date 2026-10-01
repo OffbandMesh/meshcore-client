@@ -1173,6 +1173,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get contacts_manageRepeater => 'Gerenciar Repetidor';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => 'Gerenciar Servidor de Sala';
 
   @override
