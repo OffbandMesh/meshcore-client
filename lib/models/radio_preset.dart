@@ -55,6 +55,21 @@ class RadioPreset {
   final bool offGrid;
 
   int get frequencyHz => (frequencyMHz * 1000).round();
+
+  /// The firmware's path hash mode for [pathHashBytes], or null to leave it.
+  ///
+  /// Presets publish the size in bytes; firmware takes a zero-based mode
+  /// (`sendFlood(..., path_hash_mode + 1)`): 1 byte = mode 0, 2 bytes = mode 1,
+  /// 3 bytes = mode 2. Passing a published 2 straight through would select
+  /// 3-byte hashes and put the node off its mesh.
+  int? get pathHashMode => pathHashModeForBytes(pathHashBytes);
+}
+
+/// Zero-based firmware path hash mode for a published size in bytes (1-3).
+/// Null for null or out-of-range input, so nothing is sent.
+int? pathHashModeForBytes(int? bytes) {
+  if (bytes == null || bytes < 1 || bytes > 3) return null;
+  return bytes - 1;
 }
 
 class RadioPresetFormatException implements Exception {

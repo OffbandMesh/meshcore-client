@@ -193,4 +193,46 @@ void main() {
       expect(upstreamRegionFor('New Zealand (Gisborne)'), 'New Zealand');
     });
   });
+
+  group('path hash bytes to firmware mode (#649)', () {
+    test('published bytes map to the zero-based firmware mode', () {
+      expect(pathHashModeForBytes(1), 0);
+      expect(pathHashModeForBytes(2), 1);
+      expect(pathHashModeForBytes(3), 2);
+    });
+
+    test('a published 2 never becomes mode 2 (3-byte hashes)', () {
+      expect(pathHashModeForBytes(2), isNot(2));
+    });
+
+    test('absent or out-of-range sizes send nothing', () {
+      expect(pathHashModeForBytes(null), isNull);
+      expect(pathHashModeForBytes(0), isNull);
+      expect(pathHashModeForBytes(4), isNull);
+    });
+
+    test('a parsed preset exposes its mode', () {
+      final r = parseUpstreamPresets(
+        upstream([
+          {
+            'title': 'Canada',
+            'frequency': '910.525',
+            'spreading_factor': '7',
+            'bandwidth': '62.5',
+            'coding_rate': '5',
+            'network_settings': {'path_hash_size': 3},
+          },
+          {
+            'title': 'USA',
+            'frequency': '910.525',
+            'spreading_factor': '7',
+            'bandwidth': '62.5',
+            'coding_rate': '5',
+          },
+        ]),
+      );
+      expect(r.presets[0].pathHashMode, 2);
+      expect(r.presets[1].pathHashMode, isNull);
+    });
+  });
 }
