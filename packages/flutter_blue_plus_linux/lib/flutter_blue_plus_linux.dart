@@ -193,9 +193,68 @@ final class FlutterBluePlusLinux extends FlutterBluePlusPlatform {
     return _onDiscoveredServicesController.stream;
   }
 
+  // OFFBAND PATCH (#717). Upstream returns Stream.empty() here, so no MTU ever
+  // reaches the Dart layer on Linux, FlutterBluePlus._mtuValues is never
+  // populated, and mtuNow stays on its 23-byte ATT default for the whole
+  // session. Anything sizing a write off the MTU is then permanently capped at
+  // the minimum, which locked this app's message composer at 0 bytes (#592).
+  //
+  // BlueZ does expose the negotiated ATT MTU: it is a property on
+  // org.bluez.GattCharacteristic1, surfaced by the bluez package this plugin
+  // already depends on as BlueZGattCharacteristic.mtu. The value was always one
+  // layer down, just never read.
+  //
+  // Emits the largest MTU reported across a device's characteristics. They
+  // describe one ATT link so they should agree; taking the max stops a
+  // characteristic that has not been exercised yet, and so reports nothing,
+  // from dragging the figure back down.
   @override
   Stream<BmMtuChangedResponse> get onMtuChanged {
-    return Stream.empty();
+    return _client.devicesChanged
+        .switchMap((devices) {
+          final streams = <Stream<BlueZDevice>>[];
+
+          for (final device in devices) {
+            for (final service in device.gattServices) {
+              for (final characteristic in service.characteristics) {
+                streams.add(
+                  characteristic.propertiesChanged
+                      .where((properties) => properties.contains('MTU'))
+                      .map((properties) => device),
+                );
+              }
+            }
+          }
+
+          return MergeStream(streams);
+        })
+        .map((device) {
+          var best = 0;
+
+          for (final service in device.gattServices) {
+            for (final characteristic in service.characteristics) {
+              final mtu = characteristic.mtu;
+              if (mtu != null && mtu > best) {
+                best = mtu;
+              }
+            }
+          }
+
+          return BmMtuChangedResponse(
+            remoteId: device.remoteId,
+            mtu: best,
+            success: true,
+            errorCode: 0,
+            errorString: '',
+          );
+        })
+        // Never report 0: FlutterBluePlus would cache it and mtuNow would then
+        // hand callers a worse answer than its own 23-byte default.
+        .where((response) => response.mtu > 0)
+        .distinct(
+          (previous, next) =>
+              previous.remoteId == next.remoteId && previous.mtu == next.mtu,
+        );
   }
 
   @override

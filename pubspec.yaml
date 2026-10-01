@@ -106,9 +106,14 @@ hooks:
 #          negotiated MTU. No published version does, which left the Dart cache
 #          at the 23-byte default and capped the composer at 0-4 bytes, reading
 #          as a dead keyboard (#592, fix tracked in #686).
+# linux:   patched to report the negotiated MTU from BlueZ. Upstream returns an
+#          empty stream, so the MTU never reached Dart and the composer was
+#          capped at 0 bytes, the same end state as Windows (#717).
 dependency_overrides:
   flutter_blue_plus_android:
     path: packages/flutter_blue_plus_android
+  flutter_blue_plus_linux:
+    path: packages/flutter_blue_plus_linux
   flutter_blue_plus_winrt:
     path: packages/flutter_blue_plus_winrt
 
