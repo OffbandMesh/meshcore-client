@@ -454,6 +454,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _contactStreamStarted = false;
   DateTime _contactRequestLastActivity = DateTime.fromMillisecondsSinceEpoch(0);
   ({int? since, bool preserveExisting})? _queuedContactRequest;
+  Timer? _contactRequestWatchdog;
 
   @visibleForTesting
   DateTime Function() contactSyncClock = DateTime.now;
@@ -3136,6 +3137,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncDeliveredKeys.clear();
     _contactSyncRetryUsed = false;
     _contactSyncDecisionPending = false;
+    _contactRequestWatchdog?.cancel();
+    _contactRequestWatchdog = null;
     _contactRequestInFlight = false;
     _contactStreamStarted = false;
     _queuedContactRequest = null;
@@ -3715,6 +3718,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactRequestInFlight = true;
     _contactStreamStarted = false;
     _contactRequestLastActivity = contactSyncClock();
+    _armContactRequestWatchdog();
 
     _isLoadingContacts = true;
     _contactSyncTotal = null;
@@ -3756,10 +3760,45 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _endContactRequest() {
+    _contactRequestWatchdog?.cancel();
+    _contactRequestWatchdog = null;
     _contactRequestInFlight = false;
     _contactStreamStarted = false;
     _isLoadingContacts = false;
     _contactSyncIsFull = false;
+  }
+
+  void _armContactRequestWatchdog() {
+    _contactRequestWatchdog?.cancel();
+    final idle = contactSyncClock().difference(_contactRequestLastActivity);
+    final wait = contactRequestStaleAfter - idle;
+    _contactRequestWatchdog = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      checkStaleContactRequest,
+    );
+  }
+
+  /// Ends a request whose stream went silent for [contactRequestStaleAfter]
+  /// without END, so it cannot hold the queue or the loading state until some
+  /// later refresh happens to run. Nothing is pruned: an unfinished stream is
+  /// never a complete sync.
+  @visibleForTesting
+  void checkStaleContactRequest() {
+    if (!_contactRequestInFlight) return;
+    final idle = contactSyncClock().difference(_contactRequestLastActivity);
+    if (idle < contactRequestStaleAfter) {
+      _armContactRequestWatchdog();
+      return;
+    }
+    _appDebugLogService?.warn(
+      'Contact request had no reply for ${idle.inSeconds}s; ending it, saved '
+      'contacts kept',
+      tag: 'ContactSync',
+    );
+    _endContactRequest();
+    _hasLoadedContacts = true;
+    notifyListeners();
+    _runQueuedContactRequest();
   }
 
   void _runQueuedContactRequest() {
@@ -8793,6 +8832,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
     _channelsChangedDebounce?.cancel();
+    _contactRequestWatchdog?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();
