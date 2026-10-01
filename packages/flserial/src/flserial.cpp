@@ -182,6 +182,11 @@ FFI_PLUGIN_EXPORT int fl_open(int flh, char *portname, int baudrate)
 
     FlSerial *port = new FlSerial();
     port->breakThread = 0;
+    // Before anything can fail or start the reader thread: the thread locks
+    // inFifo_mutex on its first pass, and _fl_close_slot destroys both even
+    // when open() threw.
+    mtx_init(&port->inFifo_mutex, mtx_plain);
+    mtx_init(&port->outFifo_mutex, mtx_plain);
 
     flserial_tab[porth] = port;
 
@@ -208,8 +213,6 @@ FFI_PLUGIN_EXPORT int fl_open(int flh, char *portname, int baudrate)
         port->serialport->setParity(serial::parity_t::parity_none);
         port->serialport->setStopbits(serial::stopbits_one);
         thrd_create(&port->cthread, SerialThread, (void *)port);
-        mtx_init(&port->inFifo_mutex, mtx_plain);
-        mtx_init(&port->outFifo_mutex, mtx_plain);
     }
     catch (const serial::IOException &ioe)
     {
