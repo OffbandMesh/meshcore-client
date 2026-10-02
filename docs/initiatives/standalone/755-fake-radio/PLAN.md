@@ -160,9 +160,9 @@ Each Epic ends with a verification task and gets one PR. The first task reproduc
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | Where #601 lives | Move it into this Feature (A2); #598 depends on #755 | Leave it under #598 and build a second fake here | ⭐ A | |
-| 2 | Manual runner (C3) | In this Feature | Later, separately | ⭐ A (it's the "USB cables are tied up" case, and small once the TCP adapter exists) | |
-| 3 | Remote-node emulation (B3) | In this Feature | Later, separately | ⭐ A (it covers the #647 remote-preset gap in CI) | |
+| 1 | Where #601 lives | Move it into this Feature (A2); #598 depends on #755 | Leave it under #598 and build a second fake here | ⭐ A | **A** (2026-10-02) |
+| 2 | Manual runner (C3) | In this Feature | Later, separately | ⭐ A (it's the "USB cables are tied up" case, and small once the TCP adapter exists) | **A** (2026-10-02) |
+| 3 | Remote-node emulation (B3) | In this Feature | Later, separately | ⭐ A (it covers the #647 remote-preset gap in CI) | **A** (2026-10-02) |
 
 ## Decisions
 
@@ -172,6 +172,7 @@ Each Epic ends with a verification task and gets one PR. The first task reproduc
 | 2026-10-02 | Stock and Offband are emulated as separate profiles. |
 | 2026-10-02 | The firmware publishes the protocol manifest at every tag and merge (firmware#1318); the fake radio consumes it, never a hand copy. |
 | 2026-10-02 | Behavior is checked against captured traces from a real Offband radio and a radio flashed to stock. |
+| 2026-10-02 | Section 8: all three recommendations accepted. #601 moves under Epic A (#756); the manual runner and remote-node emulation are in scope. |
 
 ## 9. Carried-in work
 
