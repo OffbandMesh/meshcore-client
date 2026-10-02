@@ -453,8 +453,28 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _contactSyncIsFull = false;
   int? _contactSyncDeclaredTotal;
   final Set<String> _contactSyncDeliveredKeys = {};
-  bool _contactSyncRetryUsed = false;
   bool _contactSyncDecisionPending = false;
+  // Forced resync (#703): after a short full sync the app waits for the link to
+  // settle, syncs again (at most [contactSyncMaxFullStreams] full syncs per
+  // connection, owner decision), then asks the radio by key for each saved
+  // contact still missing. Only a contact the radio answers "not found" for is
+  // ever removed by it. All of this is per connection: a disconnect or radio
+  // switch bumps [_recoveryRun] and drops it.
+  static const int contactSyncMaxFullStreams = 3;
+  static const Duration defaultContactRecoverySettle = Duration(seconds: 10);
+  static const Duration defaultContactKeyCheckGap = Duration(milliseconds: 250);
+  @visibleForTesting
+  Duration contactRecoverySettle = defaultContactRecoverySettle;
+  @visibleForTesting
+  Duration contactKeyCheckGap = defaultContactKeyCheckGap;
+  int _contactFullStreams = 0;
+  int _recoveryRun = 0;
+  String? _recoveryRadioKey;
+  final Set<String> _recoveryDelivered = {};
+  final Set<String> _recoveryGone = {};
+  bool _recoveryCheckingKeys = false;
+  Timer? _recoverySettleTimer;
+  DateTime _lastRadioFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   ContactSyncShortfall? _contactSyncShortfall;
   // One contact request at a time: the firmware refuses a second
   // CMD_GET_CONTACTS mid-stream with ERR_CODE_BAD_STATE. A request made while
@@ -3164,7 +3184,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncIsFull = false;
     _contactSyncDeclaredTotal = null;
     _contactSyncDeliveredKeys.clear();
-    _contactSyncRetryUsed = false;
+    _contactFullStreams = 0;
+    _recoveryRun++;
+    _recoveryRadioKey = null;
+    _recoveryDelivered.clear();
+    _recoveryGone.clear();
+    _recoveryCheckingKeys = false;
+    _recoverySettleTimer?.cancel();
+    _recoverySettleTimer = null;
     _contactSyncDecisionPending = false;
     _contactRequestWatchdog?.cancel();
     _contactRequestWatchdog = null;
@@ -3758,6 +3785,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
     _contactSyncUsesSinceFilter = since != null;
+    if (since == null) _recoverySettleTimer?.cancel();
     _beginContactSync(full: since == null);
     if (!preserveExisting) {
       _hasLoadedContacts = false;
@@ -3870,8 +3898,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Contacts the app holds that the last full sync did not deliver, i.e. what
   /// "use the radio's list" would remove.
   int get contactSyncUndeliveredCount => _contacts
-      .where((c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex))
+      .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
       .length;
+
+  /// Saved contacts the radio answered "not found" for during recovery.
+  int get contactSyncConfirmedGoneCount => _recoveryGone.length;
 
   /// A full sync is complete only when the radio declared a total and at
   /// least that many contacts arrived. No declared total (older firmware) is
@@ -3892,6 +3923,13 @@ class MeshCoreConnector extends ChangeNotifier {
   void _finishFullContactSync() {
     final declared = _contactSyncDeclaredTotal;
     final received = _contactSyncReceived;
+    _contactFullStreams++;
+    if (_recoveryRadioKey != selfPublicKeyHex) {
+      _recoveryRadioKey = selfPublicKeyHex;
+      _recoveryDelivered.clear();
+      _recoveryGone.clear();
+    }
+    _recoveryDelivered.addAll(_contactSyncDeliveredKeys);
     if (isContactSyncComplete(declared: declared, received: received)) {
       final before = _contacts.length;
       _contacts.removeWhere(
@@ -3907,39 +3945,128 @@ class MeshCoreConnector extends ChangeNotifier {
       }
       _contactSyncShortfall = null;
       _contactSyncDecisionPending = false;
+      _recoveryDelivered.clear();
+      _recoveryGone.clear();
+      return;
+    }
+
+    _appDebugLogService?.warn(
+      'Contact sync short: radio declared ${declared ?? 'no total'}, sent '
+      '$received (full sync $_contactFullStreams of '
+      '$contactSyncMaxFullStreams). Nothing removed.',
+      tag: 'ContactSync',
+    );
+    // A user refresh during the by-key checks only adds what it delivered;
+    // the checks finish the run.
+    if (_recoveryCheckingKeys) return;
+
+    final unionComplete =
+        declared != null && _recoveryDelivered.length >= declared;
+    if (!unionComplete && _contactFullStreams < contactSyncMaxFullStreams) {
+      _scheduleRecoveryStream(_recoveryRun);
+      return;
+    }
+    unawaited(_checkMissingContactsByKey(_recoveryRun, declared));
+  }
+
+  void _scheduleRecoveryStream(int run) {
+    _recoverySettleTimer?.cancel();
+    _recoverySettleTimer = Timer(
+      contactRecoverySettle,
+      () => _runRecoveryStreamWhenSettled(run),
+    );
+  }
+
+  /// Waits until the radio has been quiet for [contactRecoverySettle] and no
+  /// other startup sync is running, so recovery never hammers the link.
+  void _runRecoveryStreamWhenSettled(int run) {
+    if (run != _recoveryRun || !isConnected) return;
+    final busy =
+        _contactRequestInFlight ||
+        _isSyncingChannels ||
+        _channelSyncInFlight ||
+        isSyncingQueuedMessages;
+    final quietFor = contactSyncClock().difference(_lastRadioFrameAt);
+    if (busy || quietFor < contactRecoverySettle) {
+      final wait = busy
+          ? contactRecoverySettle
+          : contactRecoverySettle - quietFor;
+      _recoverySettleTimer = Timer(
+        wait < const Duration(seconds: 1) ? const Duration(seconds: 1) : wait,
+        () => _runRecoveryStreamWhenSettled(run),
+      );
+      return;
+    }
+    _appDebugLogService?.info(
+      'Contact recovery: full sync ${_contactFullStreams + 1} of '
+      '$contactSyncMaxFullStreams',
+      tag: 'ContactSync',
+    );
+    unawaited(
+      getContacts().catchError((Object e) {
+        _appDebugLogService?.error(
+          'Contact recovery sync failed to send: $e',
+          tag: 'ContactSync',
+        );
+      }),
+    );
+  }
+
+  /// After the last full sync: asks the radio, one key at a time and spaced
+  /// apart, about each saved contact no sync delivered. Removes only the ones
+  /// it answers "not found" for, and only when every declared contact has
+  /// been accounted for; otherwise the owner decides.
+  Future<void> _checkMissingContactsByKey(int run, int? declared) async {
+    final missing = _contacts
+        .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
+        .map((c) => c.publicKey)
+        .toList();
+    _recoveryCheckingKeys = true;
+    for (final key in missing) {
+      await Future<void>.delayed(contactKeyCheckGap);
+      if (run != _recoveryRun || !isConnected) return;
+      final result = await checkContactOnRadio(key);
+      if (run != _recoveryRun) return;
+      final hex = pubKeyToHex(key);
+      if (result == ContactKeyCheckResult.onRadio) {
+        _recoveryDelivered.add(hex);
+      } else if (result == ContactKeyCheckResult.notFound) {
+        _recoveryGone.add(hex);
+      }
+    }
+    _recoveryCheckingKeys = false;
+
+    final accounted = _recoveryDelivered.length;
+    if (declared != null && accounted >= declared) {
+      final gone = Set<String>.of(_recoveryGone);
+      _contacts.removeWhere((c) => gone.contains(c.publicKeyHex));
+      _appDebugLogService?.info(
+        'Contact recovery complete ($accounted of $declared): removed '
+        '${gone.length} contact(s) the radio no longer holds',
+        tag: 'ContactSync',
+      );
+      _contactSyncShortfall = null;
+      _contactSyncDecisionPending = false;
+      notifyListeners();
+      await _persistContacts();
       return;
     }
 
     final kept = contactSyncUndeliveredCount;
     _contactSyncShortfall = ContactSyncShortfall(
       declared: declared,
-      received: received,
+      received: accounted,
       keptLocally: kept,
     );
+    _contactSyncDecisionPending = true;
     final message =
-        'Contact sync incomplete: radio declared ${declared ?? 'no total'}, '
-        'sent $received. Kept $kept saved contact(s) it did not send; '
-        'nothing removed.';
+        'Contact sync incomplete after $_contactFullStreams full sync(s): '
+        'radio declared ${declared ?? 'no total'}, app has $accounted. Kept '
+        '$kept saved contact(s) it did not send (${_recoveryGone.length} '
+        'confirmed gone); nothing removed.';
     debugPrint(message);
     _appDebugLogService?.error(message, tag: 'ContactSync');
-
-    if (!_contactSyncRetryUsed) {
-      _contactSyncRetryUsed = true;
-      _appDebugLogService?.warn(
-        'Retrying the contact sync once',
-        tag: 'ContactSync',
-      );
-      unawaited(
-        getContacts().catchError((Object e) {
-          _appDebugLogService?.error(
-            'Contact sync retry failed to send: $e',
-            tag: 'ContactSync',
-          );
-        }),
-      );
-    } else {
-      _contactSyncDecisionPending = true;
-    }
+    notifyListeners();
   }
 
   /// The owner chose to keep the local list after a short sync.
@@ -3952,13 +4079,11 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The owner chose the radio's list after a short sync: drop what it did not
-  /// deliver.
+  /// The owner chose the radio's list after a short sync: drop what no sync on
+  /// this connection delivered (confirmed gone, or never sent by the radio).
   Future<void> resolveContactSyncUseRadio() async {
     final removed = contactSyncUndeliveredCount;
-    _contacts.removeWhere(
-      (c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex),
-    );
+    _contacts.removeWhere((c) => !_recoveryDelivered.contains(c.publicKeyHex));
     _contactSyncDecisionPending = false;
     _contactSyncShortfall = null;
     _appDebugLogService?.warn(
@@ -5834,6 +5959,7 @@ class MeshCoreConnector extends ChangeNotifier {
   void _handleFrameInner(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
+    _lastRadioFrameAt = contactSyncClock();
 
     final frame = Uint8List.fromList(data);
     _receivedFramesController.add(frame);
@@ -8935,6 +9061,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelsChangedDebounce?.cancel();
     _contactRequestWatchdog?.cancel();
     _pendingKeyCheck?.timer?.cancel();
+    _recoverySettleTimer?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();

@@ -65,6 +65,9 @@ void main() {
 
     connector = MeshCoreConnector();
     connector.contactsForTest.clear();
+    connector.contactRecoverySettle = Duration.zero;
+    connector.contactKeyCheckGap = Duration.zero;
+    connector.contactKeyCheckTimeout = const Duration(milliseconds: 20);
     sent = [];
     connector.sendFrameOverrideForTest = sent.add;
     connector.setConnectedForTest();
@@ -136,70 +139,236 @@ void main() {
     expect(contactRequests(), 1, reason: 'no retry after a complete sync');
   });
 
-  test('a short sync removes nothing, merges, reports, and retries', () async {
+  Future<void> settle() =>
+      Future<void>.delayed(const Duration(milliseconds: 5));
+
+  int byKeyRequests() =>
+      sent.where((f) => f.isNotEmpty && f[0] == cmdGetContactByKey).length;
+
+  /// Answers the recovery request the app just sent with [streamed].
+  Future<void> answerStream(int? declared, List<Uint8List> streamed) async {
+    connector.handleFrameForTest(
+      declared == null
+          ? Uint8List.fromList([respCodeContactsStart])
+          : _start(declared),
+    );
+    for (final f in streamed) {
+      connector.handleFrameForTest(f);
+    }
+    connector.handleFrameForTest(_end);
+    await settle();
+  }
+
+  /// Three short full syncs that each deliver only Alpha; the by-key checks
+  /// that follow get no reply, so every missing contact stays unresolved.
+  Future<void> threeShortSyncs({int? declared = 350}) async {
+    seedSaved();
+    final alpha = [_contactFrame(0x11, 'Alpha')];
+    await connector.getContacts();
+    await answerStream(declared, alpha);
+    await answerStream(declared, alpha);
+    await answerStream(declared, alpha);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+
+  test('a short sync removes nothing, merges, and recovers quietly', () async {
     seedSaved();
     await fullSync(
       declared: 350,
       streamed: [_contactFrame(0x11, 'Alpha'), _contactFrame(0x44, 'Delta')],
     );
+    await settle();
 
     expect(names(), {'Alpha', 'Bravo', 'Charlie', 'Delta'});
-    final shortfall = connector.contactSyncShortfall!;
-    expect(shortfall.declared, 350);
-    expect(shortfall.received, 2);
-    expect(shortfall.keptLocally, 2);
+    expect(
+      connector.contactSyncShortfall,
+      isNull,
+      reason: 'no banner while recovery is still running',
+    );
     expect(connector.contactSyncDecisionPending, isFalse);
-    expect(contactRequests(), 2, reason: 'one automatic retry');
+    expect(contactRequests(), 2, reason: 'recovery sync after the settle');
   });
 
   test('no declared total is never treated as complete', () async {
-    seedSaved();
-    await connector.getContacts();
-    connector.handleFrameForTest(Uint8List.fromList([respCodeContactsStart]));
-    connector.handleFrameForTest(_contactFrame(0x11, 'Alpha'));
-    connector.handleFrameForTest(_end);
-    await Future<void>.delayed(Duration.zero);
+    await threeShortSyncs(declared: null);
 
     expect(names(), {'Alpha', 'Bravo', 'Charlie'});
     expect(connector.contactSyncShortfall!.declared, isNull);
+    expect(connector.contactSyncDecisionPending, isTrue);
   });
 
-  group('after the retry is also short', () {
-    Future<void> twoShortSyncs() async {
-      seedSaved();
-      final streamed = [_contactFrame(0x11, 'Alpha')];
-      await fullSync(declared: 350, streamed: streamed);
-      // The retry was sent by the first END; the radio answers it short too.
-      connector.handleFrameForTest(_start(350));
-      connector.handleFrameForTest(streamed.first);
-      connector.handleFrameForTest(_end);
-      await Future<void>.delayed(Duration.zero);
-    }
+  group('still short after three full syncs', () {
+    test('stops at three, checks the rest by key, removes nothing', () async {
+      await threeShortSyncs();
 
-    test('the owner decision is raised and nothing is removed', () async {
-      await twoShortSyncs();
-
+      expect(contactRequests(), 3, reason: 'owner cap: 3 per connection');
+      expect(byKeyRequests(), 2, reason: 'Bravo and Charlie, one each');
       expect(connector.contactSyncDecisionPending, isTrue);
       expect(connector.contactSyncUndeliveredCount, 2);
       expect(names(), {'Alpha', 'Bravo', 'Charlie'});
-      expect(contactRequests(), 2, reason: 'retry is bounded to one');
+      final shortfall = connector.contactSyncShortfall!;
+      expect(shortfall.declared, 350);
+      expect(shortfall.received, 1);
+      expect(shortfall.keptLocally, 2);
     });
 
     test('keep my contacts leaves the list as is', () async {
-      await twoShortSyncs();
+      await threeShortSyncs();
       connector.resolveContactSyncKeepLocal();
 
       expect(connector.contactSyncDecisionPending, isFalse);
       expect(names(), {'Alpha', 'Bravo', 'Charlie'});
     });
 
-    test('use the radio list drops what it did not send', () async {
-      await twoShortSyncs();
+    test('use the radio list drops what no sync delivered', () async {
+      await threeShortSyncs();
       await connector.resolveContactSyncUseRadio();
 
       expect(connector.contactSyncDecisionPending, isFalse);
       expect(connector.contactSyncShortfall, isNull);
       expect(names(), {'Alpha'});
+    });
+  });
+
+  group('forced resync (#703)', () {
+    test('the cap and pacing defaults are pinned', () {
+      expect(MeshCoreConnector.contactSyncMaxFullStreams, 3);
+      expect(
+        MeshCoreConnector.defaultContactRecoverySettle,
+        const Duration(seconds: 10),
+      );
+      expect(
+        MeshCoreConnector.defaultContactKeyCheckGap,
+        const Duration(milliseconds: 250),
+      );
+      expect(
+        MeshCoreConnector().contactKeyCheckTimeout,
+        const Duration(seconds: 5),
+      );
+    });
+
+    test(
+      'syncs that each miss different contacts add up to complete',
+      () async {
+        seedSaved();
+        await connector.getContacts();
+        await answerStream(3, [
+          _contactFrame(0x11, 'Alpha'),
+          _contactFrame(0x22, 'Bravo'),
+        ]);
+        await answerStream(3, [
+          _contactFrame(0x22, 'Bravo'),
+          _contactFrame(0x33, 'Charlie'),
+        ]);
+        await settle();
+
+        expect(contactRequests(), 2, reason: 'no third sync once complete');
+        expect(byKeyRequests(), 0);
+        expect(connector.contactSyncShortfall, isNull);
+        expect(connector.contactSyncDecisionPending, isFalse);
+        expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+      },
+    );
+
+    test('only a contact the radio says is gone is removed', () async {
+      seedSaved();
+      connector.contactsForTest.add(_saved(0x44, 'Delta'));
+      await connector.getContacts();
+      await answerStream(3, [
+        _contactFrame(0x11, 'Alpha'),
+        _contactFrame(0x22, 'Bravo'),
+      ]);
+      await answerStream(3, [
+        _contactFrame(0x11, 'Alpha'),
+        _contactFrame(0x33, 'Charlie'),
+      ]);
+      expect(byKeyRequests(), 1, reason: 'Delta, the only one missing');
+      connector.handleFrameForTest(
+        Uint8List.fromList([respCodeErr, errCodeNotFound]),
+      );
+      await settle();
+
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+      expect(connector.contactSyncShortfall, isNull);
+    });
+
+    test(
+      'a contact with no answer is kept even when the rest add up',
+      () async {
+        seedSaved();
+        connector.contactsForTest.add(_saved(0x44, 'Delta'));
+        await connector.getContacts();
+        await answerStream(3, [
+          _contactFrame(0x11, 'Alpha'),
+          _contactFrame(0x22, 'Bravo'),
+        ]);
+        await answerStream(3, [_contactFrame(0x33, 'Charlie')]);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(names(), {'Alpha', 'Bravo', 'Charlie', 'Delta'});
+      },
+    );
+
+    test('a by-key answer counts toward complete', () async {
+      seedSaved();
+      await connector.getContacts();
+      final alpha = [_contactFrame(0x11, 'Alpha')];
+      await answerStream(3, alpha);
+      await answerStream(3, alpha);
+      await answerStream(3, alpha);
+      connector.handleFrameForTest(_contactFrame(0x22, 'Bravo'));
+      await settle();
+      connector.handleFrameForTest(_contactFrame(0x33, 'Charlie'));
+      await settle();
+
+      expect(connector.contactSyncShortfall, isNull);
+      expect(connector.contactSyncDecisionPending, isFalse);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+    });
+
+    test('a disconnect mid-recovery stops it and removes nothing', () async {
+      seedSaved();
+      connector.contactRecoverySettle = const Duration(milliseconds: 30);
+      await fullSync(declared: 350, streamed: [_contactFrame(0x11, 'Alpha')]);
+      connector.resetConnectionHandshakeStateForTest();
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(contactRequests(), 1, reason: 'no recovery after disconnect');
+      expect(byKeyRequests(), 0);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+    });
+
+    test('a new connection starts with no recovery state', () async {
+      seedSaved();
+      await connector.getContacts();
+      await answerStream(3, [
+        _contactFrame(0x11, 'Alpha'),
+        _contactFrame(0x22, 'Bravo'),
+      ]);
+      connector.resetConnectionHandshakeStateForTest();
+
+      await connector.getContacts();
+      await answerStream(3, [_contactFrame(0x11, 'Alpha')]);
+
+      expect(
+        connector.contactSyncUndeliveredCount,
+        2,
+        reason: 'Bravo from the old connection must not count',
+      );
+    });
+
+    test('recovery waits for the radio to go quiet', () async {
+      var now = DateTime.utc(2026, 10, 2, 6);
+      connector.contactSyncClock = () => now;
+      connector.contactRecoverySettle = const Duration(milliseconds: 10);
+      seedSaved();
+      await fullSync(declared: 350, streamed: [_contactFrame(0x11, 'Alpha')]);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(contactRequests(), 1, reason: 'radio not quiet yet');
+
+      now = now.add(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      expect(contactRequests(), 2);
     });
   });
 
