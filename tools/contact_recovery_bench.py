@@ -98,6 +98,8 @@ def main():
     ap.add_argument("--pulls", type=int, default=3)
     ap.add_argument("--settle", type=float, default=10.0, help="seconds between pulls")
     args = ap.parse_args()
+    # Radio names can carry emoji the Windows console code page cannot print.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     ser = serial.Serial(args.port, 115200, timeout=0.05)
     try:
