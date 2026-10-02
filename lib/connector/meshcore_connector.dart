@@ -476,7 +476,10 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _recoveryRadioKey;
   final Set<String> _recoveryDelivered = {};
   final Set<String> _recoveryGone = {};
+  int? _recoveryDeclared;
+  DateTime? _recoveryWaitingSince;
   bool _recoveryCheckingKeys = false;
+  static const Duration contactRecoveryMaxWait = Duration(minutes: 2);
   Timer? _recoverySettleTimer;
   DateTime _lastRadioFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   ContactSyncShortfall? _contactSyncShortfall;
@@ -3193,6 +3196,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _recoveryRadioKey = null;
     _recoveryDelivered.clear();
     _recoveryGone.clear();
+    _recoveryDeclared = null;
+    _recoveryWaitingSince = null;
     _recoveryCheckingKeys = false;
     _recoverySettleTimer?.cancel();
     _recoverySettleTimer = null;
@@ -3934,6 +3939,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _recoveryGone.clear();
     }
     _recoveryDelivered.addAll(_contactSyncDeliveredKeys);
+    if (declared != null) _recoveryDeclared = declared;
     if (isContactSyncComplete(declared: declared, received: received)) {
       final before = _contacts.length;
       _contacts.removeWhere(
@@ -3970,11 +3976,12 @@ class MeshCoreConnector extends ChangeNotifier {
       _scheduleRecoveryStream(_recoveryRun);
       return;
     }
-    unawaited(_checkMissingContactsByKey(_recoveryRun, declared));
+    unawaited(_checkMissingContactsByKey(_recoveryRun));
   }
 
   void _scheduleRecoveryStream(int run) {
     _recoverySettleTimer?.cancel();
+    _recoveryWaitingSince = contactSyncClock();
     _recoverySettleTimer = Timer(
       contactRecoverySettle,
       () => _runRecoveryStreamWhenSettled(run),
@@ -3992,6 +3999,20 @@ class MeshCoreConnector extends ChangeNotifier {
         isSyncingQueuedMessages;
     final quietFor = contactSyncClock().difference(_lastRadioFrameAt);
     if (busy || quietFor < contactRecoverySettle) {
+      final waited = contactSyncClock().difference(
+        _recoveryWaitingSince ?? contactSyncClock(),
+      );
+      if (waited >= contactRecoveryMaxWait) {
+        // Never let a busy link hide a short sync: stop waiting and let the
+        // owner decide, without sending anything more. (Gemini review)
+        _appDebugLogService?.warn(
+          'Contact recovery gave up waiting for a quiet link after '
+          '${waited.inSeconds}s',
+          tag: 'ContactSync',
+        );
+        unawaited(_checkMissingContactsByKey(run, checkKeys: false));
+        return;
+      }
       final wait = busy
           ? contactRecoverySettle
           : contactRecoverySettle - quietFor;
@@ -4020,11 +4041,16 @@ class MeshCoreConnector extends ChangeNotifier {
   /// apart, about each saved contact no sync delivered. Removes only the ones
   /// it answers "not found" for, and only when every declared contact has
   /// been accounted for; otherwise the owner decides.
-  Future<void> _checkMissingContactsByKey(int run, int? declared) async {
-    final missing = _contacts
-        .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
-        .map((c) => c.publicKey)
-        .toList();
+  Future<void> _checkMissingContactsByKey(
+    int run, {
+    bool checkKeys = true,
+  }) async {
+    final missing = !checkKeys
+        ? const <Uint8List>[]
+        : _contacts
+              .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
+              .map((c) => c.publicKey)
+              .toList();
     _recoveryCheckingKeys = true;
     for (final key in missing) {
       await Future<void>.delayed(contactKeyCheckGap);
@@ -4040,6 +4066,8 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     _recoveryCheckingKeys = false;
 
+    // The latest total: a refresh during the checks may have changed it.
+    final declared = _recoveryDeclared;
     final accounted = _recoveryDelivered.length;
     if (declared != null && accounted >= declared) {
       final gone = Set<String>.of(_recoveryGone);
@@ -4100,6 +4128,7 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void dismissContactSyncShortfall() {
+    if (_contactSyncDecisionPending) return;
     _contactSyncShortfall = null;
     notifyListeners();
   }
@@ -6850,6 +6879,12 @@ class MeshCoreConnector extends ChangeNotifier {
       if (_isLoadingContacts) {
         _contactSyncDeliveredKeys.add(contactTmp.publicKeyHex);
         _contactRequestLastActivity = contactSyncClock();
+      }
+      // Any frame for a key proves the radio holds it now, so recovery must
+      // not remove it even if an earlier check said "not found".
+      if (_recoveryRadioKey != null) {
+        _recoveryGone.remove(contactTmp.publicKeyHex);
+        _recoveryDelivered.add(contactTmp.publicKeyHex);
       }
       if (listEquals(contactTmp.publicKey, _selfPublicKey)) {
         appLogger.info(

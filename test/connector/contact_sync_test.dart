@@ -357,6 +357,81 @@ void main() {
       );
     });
 
+    test('a contact the radio holds again after "not found" is kept', () async {
+      seedSaved();
+      connector.contactsForTest
+        ..add(_saved(0x44, 'Delta'))
+        ..add(_saved(0x55, 'Echo'));
+      await connector.getContacts();
+      await answerStream(3, [
+        _contactFrame(0x11, 'Alpha'),
+        _contactFrame(0x22, 'Bravo'),
+      ]);
+      await answerStream(3, [_contactFrame(0x33, 'Charlie')]);
+      connector.handleFrameForTest(
+        Uint8List.fromList([respCodeErr, errCodeNotFound]),
+      );
+      await settle();
+      connector.handleFrameForTest(
+        _contactFrame(0x44, 'Delta', code: pushCodeNewAdvert),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(names(), contains('Delta'));
+    });
+
+    test('a busy link cannot hide a short sync', () async {
+      var now = DateTime.utc(2026, 10, 2, 6);
+      connector.contactSyncClock = () => now;
+      connector.contactRecoverySettle = const Duration(milliseconds: 10);
+      seedSaved();
+      await fullSync(declared: 350, streamed: [_contactFrame(0x11, 'Alpha')]);
+      now = now.add(MeshCoreConnector.contactRecoveryMaxWait);
+      connector.handleFrameForTest(
+        Uint8List.fromList([pushCodeAdvert, ...List<int>.filled(32, 0x11)]),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+
+      expect(contactRequests(), 1, reason: 'no sync onto a busy link');
+      expect(byKeyRequests(), 0);
+      expect(connector.contactSyncDecisionPending, isTrue);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+    });
+
+    test('the latest declared total decides the result', () async {
+      connector.contactKeyCheckTimeout = const Duration(milliseconds: 100);
+      seedSaved();
+      final alpha = [_contactFrame(0x11, 'Alpha')];
+      await connector.getContacts();
+      await answerStream(350, alpha);
+      await answerStream(350, alpha);
+      await answerStream(350, alpha);
+      // By-key checks are running; a refresh reports a new total of 2, and
+      // Charlie turns up while the checks are still going.
+      await connector.getContacts();
+      await answerStream(2, alpha);
+      connector.handleFrameForTest(_contactFrame(0x33, 'Charlie'));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      expect(connector.contactSyncShortfall, isNull);
+      expect(connector.contactSyncDecisionPending, isFalse);
+      expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+    });
+
+    test('the banner cannot be dismissed while a decision is open', () async {
+      await threeShortSyncs();
+      connector.dismissContactSyncShortfall();
+
+      expect(connector.contactSyncShortfall, isNotNull);
+    });
+
+    test('the give-up wait is pinned', () {
+      expect(
+        MeshCoreConnector.contactRecoveryMaxWait,
+        const Duration(minutes: 2),
+      );
+    });
+
     test('recovery waits for the radio to go quiet', () async {
       var now = DateTime.utc(2026, 10, 2, 6);
       connector.contactSyncClock = () => now;
