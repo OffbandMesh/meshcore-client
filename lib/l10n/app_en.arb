@@ -3136,7 +3136,7 @@
   "@contactSyncShortfallTitle": {
     "description": "Persistent banner title when the radio sent fewer contacts than it reported (#668)."
   },
-  "contactSyncShortfallBody": "The radio reported {declared} contacts but sent {received}. Your saved contacts were kept.",
+  "contactSyncShortfallBody": "The radio reported {declared} contacts; after checking again the app has {received}. Your saved contacts were kept.",
   "@contactSyncShortfallBody": {
     "description": "Persistent banner body for a short contact sync (#668).",
     "placeholders": {
@@ -3148,7 +3148,7 @@
       }
     }
   },
-  "contactSyncShortfallBodyNoTotal": "The radio did not report how many contacts it holds and sent {received}. Your saved contacts were kept.",
+  "contactSyncShortfallBodyNoTotal": "The radio did not report how many contacts it holds; after checking again the app has {received}. Your saved contacts were kept.",
   "@contactSyncShortfallBodyNoTotal": {
     "description": "Persistent banner body for a contact sync whose total the radio did not report (#668).",
     "placeholders": {
@@ -3161,7 +3161,7 @@
   "@contactSyncDecisionTitle": {
     "description": "Dialog title after the automatic retry of a short contact sync was also short (#668)."
   },
-  "contactSyncDecisionBody": "The radio sent only {received} contacts again. Keep your saved contacts, or use the radio's list? Using the radio's list removes {removed} contacts from this app.",
+  "contactSyncDecisionBody": "After checking again the app still has only {received} of the radio's contacts. Keep your saved contacts, or use the radio's list? Using the radio's list removes {removed} contacts from this app.",
   "@contactSyncDecisionBody": {
     "description": "Dialog body asking whether to keep saved contacts or accept the radio's shorter list (#668).",
     "placeholders": {
@@ -3180,5 +3180,14 @@
   "contactSyncUseRadio": "Use the radio's list",
   "@contactSyncUseRadio": {
     "description": "Dialog action: replace the saved contacts with the radio's shorter list (#668)."
+  },
+  "contactSyncConfirmedGone": "{count, plural, =1{1 saved contact is no longer on the radio.} other{{count} saved contacts are no longer on the radio.}}",
+  "@contactSyncConfirmedGone": {
+    "description": "Extra sentence on the short-sync banner and dialog: saved contacts the radio answered 'not found' for (#764).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }
