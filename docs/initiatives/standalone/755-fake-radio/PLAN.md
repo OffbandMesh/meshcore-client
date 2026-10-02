@@ -123,9 +123,9 @@ Each Epic ends with a verification task and gets one PR. The first task reproduc
 | **What merging this plan authorizes** | Running Epics A to D in order without stopping between them: code, tests, builds, and one PR per Epic, stacked. | Canon: once the plan grant is minted, run the whole chain. |
 | **Merges** | Held to the end of the Feature, in order A, B, C, D, after the owner's D1 session. | Canon. |
 | **Epic verification** | Command mode: the merge hook runs `flutter test` on each PR's exact commit. | This Feature is test infrastructure; its own suites are the evidence. It also spares the owner a verify step per PR. |
-| **Owner steps during the run** | None until D1. Before D1: flash one radio to stock. At D1: the runner session and the two radio captures, in one sitting. | Canon: owner steps are one message, at the end. |
+| **Owner steps during the run** | None until D1. Before D1: pick the radio to flash to stock and mint its flash grant. At D1: the runner session and the two radio captures, in one sitting. | Canon: owner steps are one message, at the end. |
 | **Stops** | A new decision; a fault I can't fix; a firmware reply I can't find a source for. | |
-| **Flash** | None by the session. Before D1 the owner flashes one radio of his choice to stock MeshCore companion firmware himself (for example with the official MeshCore web flasher). | Finding 12. `scripts/pio-flash` is built for Offband builds; its stock path isn't verified, so the session doesn't flash. |
+| **Flash** | One: before D1, the session flashes one radio the owner picks to a stock MeshCore companion release file, with `scripts/pio-flash` under a `dw-approve flash` for that exact device. | Finding 12. `pio-flash` flashes any firmware file, stock included (owner, 2026-10-02). No other device is touched. |
 
 ```grant-terms
 {
@@ -133,7 +133,7 @@ Each Epic ends with a verification task and gets one PR. The first task reproduc
   "chain": true,
   "verification": { "mode": "command", "command": "flutter test" },
   "merge": { "budget": 4, "basis": "One PR per Epic: A (#756), B (#757), C (#758), D (#759: conformance fixtures and OUTCOMES.md)." },
-  "flash": null,
+  "flash": { "budget": 1, "basis": "One radio flashed to a stock MeshCore companion release for the D1 stock trace capture (finding 12)." },
   "reset": null,
   "expires_after_hours": 168
 }
@@ -172,6 +172,7 @@ Each Epic ends with a verification task and gets one PR. The first task reproduc
 | 2026-10-02 | Stock and Offband are emulated as separate profiles. |
 | 2026-10-02 | The firmware publishes the protocol manifest at every tag and merge (firmware#1318); the fake radio consumes it, never a hand copy. |
 | 2026-10-02 | Behavior is checked against captured traces from a real Offband radio and a radio flashed to stock. |
+| 2026-10-02 | The session flashes the stock radio with `scripts/pio-flash`, which flashes stock files too (owner). |
 | 2026-10-02 | Section 8: all three recommendations accepted. #601 moves under Epic A (#756); the manual runner and remote-node emulation are in scope. |
 
 ## 9. Carried-in work
