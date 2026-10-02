@@ -1120,6 +1120,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get contacts_manageRepeater => '리피터 관리';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => '방 서버 관리';
 
   @override
@@ -2552,6 +2555,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get repeater_codingRate => '코딩 속도';
+
+  @override
+  String get repeater_tempRadio => 'Apply temporarily';
+
+  @override
+  String get repeater_tempRadioSubtitle =>
+      'Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.';
+
+  @override
+  String get repeater_tempRadioMinutes => 'Duration (minutes)';
+
+  @override
+  String get repeater_tempRadioPathHashNote =>
+      'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.';
+
+  @override
+  String repeater_tempRadioMinutesInvalid(int max) {
+    return '1 to $max minutes';
+  }
 
   @override
   String get repeater_locationSettings => '위치 설정';

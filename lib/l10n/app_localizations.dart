@@ -2182,6 +2182,12 @@ abstract class AppLocalizations {
   /// **'Manage Repeater'**
   String get contacts_manageRepeater;
 
+  /// No description provided for @contacts_manageSensor.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Sensor'**
+  String get contacts_manageSensor;
+
   /// No description provided for @contacts_manageRoom.
   ///
   /// In en, this message translates to:
@@ -4687,6 +4693,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Coding Rate'**
   String get repeater_codingRate;
+
+  /// No description provided for @repeater_tempRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply temporarily'**
+  String get repeater_tempRadio;
+
+  /// No description provided for @repeater_tempRadioSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.'**
+  String get repeater_tempRadioSubtitle;
+
+  /// No description provided for @repeater_tempRadioMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration (minutes)'**
+  String get repeater_tempRadioMinutes;
+
+  /// No description provided for @repeater_tempRadioPathHashNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.'**
+  String get repeater_tempRadioPathHashNote;
+
+  /// No description provided for @repeater_tempRadioMinutesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'1 to {max} minutes'**
+  String repeater_tempRadioMinutesInvalid(int max);
 
   /// No description provided for @repeater_locationSettings.
   ///

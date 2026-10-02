@@ -541,6 +541,7 @@
     }
   },
   "contacts_manageRepeater": "Manage Repeater",
+  "contacts_manageSensor": "Manage Sensor",
   "contacts_manageRoom": "Manage Room Server",
   "contacts_roomLogin": "Room Server Login",
   "contacts_openChat": "Open Chat",
@@ -1459,6 +1460,18 @@
   "repeater_bandwidth": "Bandwidth",
   "repeater_spreadingFactor": "Spreading Factor",
   "repeater_codingRate": "Coding Rate",
+  "repeater_tempRadio": "Apply temporarily",
+  "repeater_tempRadioSubtitle": "Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.",
+  "repeater_tempRadioMinutes": "Duration (minutes)",
+  "repeater_tempRadioPathHashNote": "This preset's path hash size isn't applied with a temporary change: the node can't revert it on its own. It stays pending for a normal save.",
+  "repeater_tempRadioMinutesInvalid": "1 to {max} minutes",
+  "@repeater_tempRadioMinutesInvalid": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
   "repeater_locationSettings": "Location Settings",
   "repeater_latitude": "Latitude",
   "repeater_latitudeHelper": "Decimal degrees (e.g., 37.7749)",
