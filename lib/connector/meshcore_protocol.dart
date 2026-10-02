@@ -493,6 +493,10 @@ const int errCodeIllegalArg = 6;
 /// it defensively against a stale or mis-gated client. (#304)
 const int errCodeUnsupportedCmd = 1;
 
+/// `ERR_CODE_NOT_FOUND`: e.g. `CMD_GET_CONTACT_BY_KEY` for a key the radio does
+/// not hold. (#762)
+const int errCodeNotFound = 2;
+
 Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
     Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
 Uint8List buildOffbandBlockRemoveFrame(Uint8List pubKey) =>

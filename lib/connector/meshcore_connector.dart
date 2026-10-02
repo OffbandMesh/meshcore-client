@@ -255,6 +255,18 @@ class ContactSyncShortfall {
   });
 }
 
+/// What the radio said when asked for one contact by key. (#762)
+enum ContactKeyCheckResult { onRadio, notFound, unresolved }
+
+class _PendingKeyCheck {
+  final String keyHex;
+  final DateTime startedAt;
+  final Completer<ContactKeyCheckResult> done = Completer();
+  Timer? timer;
+
+  _PendingKeyCheck({required this.keyHex, required this.startedAt});
+}
+
 class MeshCoreConnector extends ChangeNotifier {
   // Message windowing to limit memory usage
   static const int _messageWindowSize = 200;
@@ -455,6 +467,14 @@ class MeshCoreConnector extends ChangeNotifier {
   DateTime _contactRequestLastActivity = DateTime.fromMillisecondsSinceEpoch(0);
   ({int? since, bool preserveExisting})? _queuedContactRequest;
   Timer? _contactRequestWatchdog;
+  // One CMD_GET_CONTACT_BY_KEY check at a time. Its NOT_FOUND reply carries no
+  // key, so the check only trusts one that nothing else could own: see
+  // [_notFoundIsForKeyCheck]. (#762)
+  _PendingKeyCheck? _pendingKeyCheck;
+  DateTime? _untrackedByKeyAt;
+
+  @visibleForTesting
+  Duration contactKeyCheckTimeout = const Duration(seconds: 5);
 
   @visibleForTesting
   DateTime Function() contactSyncClock = DateTime.now;
@@ -3151,6 +3171,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactRequestInFlight = false;
     _contactStreamStarted = false;
     _queuedContactRequest = null;
+    final keyCheck = _pendingKeyCheck;
+    if (keyCheck != null) {
+      _finishKeyCheck(keyCheck, ContactKeyCheckResult.unresolved);
+    }
+    _untrackedByKeyAt = null;
     _isLoadingContacts = false;
     _hasLoadedContacts = false;
     _isLoadingChannels = false;
@@ -3951,7 +3976,65 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Future<void> getContactByKey(Uint8List pubKey) async {
     if (!isConnected) return;
+    _untrackedByKeyAt = contactSyncClock();
     await sendFrame(buildGetContactByKeyFrame(pubKey));
+  }
+
+  /// Asks the radio whether it still holds [pubKey]. Only one check runs at a
+  /// time; a second call while one is pending returns
+  /// [ContactKeyCheckResult.unresolved] without sending. A timeout, a send
+  /// failure, a disconnect, or a NOT_FOUND that something else may own are all
+  /// unresolved, never [ContactKeyCheckResult.notFound]. (#762)
+  Future<ContactKeyCheckResult> checkContactOnRadio(Uint8List pubKey) async {
+    if (!isConnected || _pendingKeyCheck != null) {
+      return ContactKeyCheckResult.unresolved;
+    }
+    final check = _PendingKeyCheck(
+      keyHex: pubKeyToHex(pubKey),
+      startedAt: contactSyncClock(),
+    );
+    _pendingKeyCheck = check;
+    check.timer = Timer(
+      contactKeyCheckTimeout,
+      () => _finishKeyCheck(check, ContactKeyCheckResult.unresolved),
+    );
+    try {
+      await sendFrame(buildGetContactByKeyFrame(pubKey));
+    } catch (e) {
+      _appDebugLogService?.warn(
+        'Contact check could not be sent: $e',
+        tag: 'ContactSync',
+      );
+      _finishKeyCheck(check, ContactKeyCheckResult.unresolved);
+    }
+    return check.done.future;
+  }
+
+  void _finishKeyCheck(_PendingKeyCheck check, ContactKeyCheckResult result) {
+    check.timer?.cancel();
+    if (identical(_pendingKeyCheck, check)) _pendingKeyCheck = null;
+    if (!check.done.isCompleted) check.done.complete(result);
+  }
+
+  void _resolveKeyCheckOnContact(Uint8List frame) {
+    final check = _pendingKeyCheck;
+    if (check == null || frame.length < 1 + pubKeySize) return;
+    if (pubKeyToHex(frame.sublist(1, 1 + pubKeySize)) == check.keyHex) {
+      _finishKeyCheck(check, ContactKeyCheckResult.onRadio);
+    }
+  }
+
+  /// A NOT_FOUND belongs to the pending check only when no other request that
+  /// can draw an ERR is in flight, and no untracked by-key request was sent
+  /// since the check started.
+  bool _notFoundIsForKeyCheck(int errCode, _PendingKeyCheck check) {
+    final untracked = _untrackedByKeyAt;
+    return errCode == errCodeNotFound &&
+        !_contactRequestInFlight &&
+        !_isSyncingChannels &&
+        !_channelSyncInFlight &&
+        _pendingGenericAckQueue.isEmpty &&
+        (untracked == null || untracked.isBefore(check.startedAt));
   }
 
   Future<void> sendMessage(
@@ -5832,6 +5915,7 @@ class MeshCoreConnector extends ChangeNotifier {
       case respCodeContact:
         debugPrint('Got CONTACT');
         _handleContact(frame);
+        _resolveKeyCheckOnContact(frame);
         break;
       case respCodeEndOfContacts:
         debugPrint('Got END_OF_CONTACTS');
@@ -5983,6 +6067,14 @@ class MeshCoreConnector extends ChangeNotifier {
       'Firmware responded with error code: $errCode',
       tag: 'Protocol',
     );
+
+    final keyCheck = _pendingKeyCheck;
+    if (keyCheck != null &&
+        !caplogWasAwaitingStart &&
+        _notFoundIsForKeyCheck(errCode, keyCheck)) {
+      _finishKeyCheck(keyCheck, ContactKeyCheckResult.notFound);
+      return;
+    }
 
     // An in-flight channel GET that draws an ERR means that slot is empty,
     // advance to the next index the instant the ERR lands instead of waiting
@@ -8842,6 +8934,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _radioStatsPollTimer?.cancel();
     _channelsChangedDebounce?.cancel();
     _contactRequestWatchdog?.cancel();
+    _pendingKeyCheck?.timer?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();
