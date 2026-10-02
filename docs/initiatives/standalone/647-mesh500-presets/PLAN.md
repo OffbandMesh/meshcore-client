@@ -159,3 +159,10 @@ Code lands in `OffbandMesh/config-profiles`.
 | #661 (OKI stopgap, closed) | A1 |
 | #650 (source decision, closed) | Decisions recorded; this plan implements them |
 | Sensor admin path (finding 10) | C5, new issue when this plan merges |
+
+## 10. Amendments
+
+| Date | Change | Why |
+|---|---|---|
+| 2026-10-01 | Epic A (config-profiles#3) merged **before** D1, not at the end. The owner minted its grant separately. App PRs still merge after D1. | Gap in this plan: D1 checks preset refresh, which can't pass until the files are on config-profiles `main`. Stopping for A only at the end made D1 untestable. |
+| 2026-10-01 | Added #748: a live test that refreshes from the real config-profiles URLs in CI, plus tests that each preset error message is absent under ideal conditions. | Owner requirement after "Couldn't update presets" reached him on two test builds. No build goes to him while that error still appears under ideal conditions. |
