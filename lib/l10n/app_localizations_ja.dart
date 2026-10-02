@@ -623,6 +623,10 @@ class AppLocalizationsJa extends AppLocalizations {
       'LOS 標高データ：Open-Meteo (CC BY 4.0)';
 
   @override
+  String get settings_aboutPresetsAttribution =>
+      'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.';
+
+  @override
   String get settings_infoName => '名前';
 
   @override
@@ -667,6 +671,31 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settings_presets => 'プリセット';
+
+  @override
+  String get settings_presetSourceMeshCore => 'MeshCore';
+
+  @override
+  String get settings_presetSourceOffband => 'Offband';
+
+  @override
+  String get settings_presetsRefresh => 'Update presets';
+
+  @override
+  String get settings_presetsUpdating => 'Updating presets...';
+
+  @override
+  String get settings_presetsUpdateFailed =>
+      'Couldn\'t update presets. Showing the saved list.';
+
+  @override
+  String settings_presetsUpdatedAt(String date) {
+    return 'Presets updated $date';
+  }
+
+  @override
+  String get settings_presetsBundled =>
+      'Presets included with this version of the app';
 
   @override
   String get settings_frequency => '周波数 (MHz)';

@@ -13,9 +13,11 @@ import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../models/offband_gps_status.dart';
+import '../models/radio_preset.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/app_settings_service.dart';
+import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
@@ -32,6 +34,7 @@ import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
 import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
+import '../widgets/radio_preset_picker.dart';
 import '../widgets/sync_progress_overlay.dart';
 
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
@@ -798,6 +801,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 12),
                     Text(
                       l10n.settings_aboutLegalese,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.settings_aboutPresetsAttribution,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -2029,15 +2037,19 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
   LoRaCodingRate _codingRate = LoRaCodingRate.cr4_5;
   final _txPowerController = TextEditingController(text: '20');
   bool _clientRepeat = false;
-  int? _selectedPresetIndex;
+  String? _selectedPresetId;
   _RadioSettingsSnapshot? _lastNonRepeatSnapshot;
+  late final RadioPresetService _presetService;
 
   AppDebugLogService get _appLog =>
       Provider.of<AppDebugLogService>(context, listen: false);
 
+  List<RadioPreset> get _presets => _presetService.presets;
+
   @override
   void initState() {
     super.initState();
+    _presetService = Provider.of<RadioPresetService>(context, listen: false);
 
     // Populate with current settings if available
     if (widget.connector.currentFreqHz != null) {
@@ -2085,64 +2097,95 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     }
 
     _clientRepeat = widget.connector.clientRepeat ?? false;
-    _selectedPresetIndex = _findMatchingPresetIndex();
+    _selectedPresetId = _findMatchingPresetId();
     if (_clientRepeat) {
       _lastNonRepeatSnapshot =
           _sessionRememberedNonRepeatSnapshot() ??
           _inferNonRepeatSnapshotForRepeatEnabled();
-      _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+      _selectedPresetId = _findMatchingPresetIdForSnapshot(
         _lastNonRepeatSnapshot!,
       );
     } else {
       _lastNonRepeatSnapshot = _nonRepeatSnapshotForCurrentSelection();
     }
+    _presetService.addListener(_onPresetsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _logRadioSettingsState('Dialog initialized');
+      _presetService.refreshIfStale();
     });
   }
 
   @override
   void dispose() {
+    _presetService.removeListener(_onPresetsChanged);
     _frequencyController.dispose();
     _txPowerController.dispose();
     super.dispose();
   }
 
-  void _applyPreset(int index) {
+  /// A refresh can change the list under an open form; re-match the selection.
+  void _onPresetsChanged() {
+    if (!mounted) return;
+    setState(_syncPresetSelection);
+  }
+
+  RadioPreset? _presetById(String? id) {
+    if (id == null) return null;
+    return _presets.where((p) => p.id == id).firstOrNull;
+  }
+
+  void _applyPreset(RadioPreset preset) {
     setState(() {
-      _applyPresetState(index);
+      _applyPresetState(preset);
     });
-    _logRadioSettingsState(
-      'Applied preset ${RadioSettings.presets[index].$1} (#$index)',
-    );
+    _logRadioSettingsState('Applied preset ${preset.title} (${preset.id})');
   }
 
-  int? _findMatchingPresetIndex() {
-    return _findMatchingPresetIndexForSnapshot(_currentSnapshot());
+  String? _findMatchingPresetId() {
+    return _findMatchingPresetIdForSnapshot(_currentSnapshot());
   }
 
-  int? _findMatchingPresetIndexForSnapshot(_RadioSettingsSnapshot snapshot) {
-    for (final i in _visiblePresetIndexes()) {
-      final preset = RadioSettings.presets[i].$2;
-      if (preset.frequencyHz == snapshot.frequencyHz &&
-          preset.bandwidth == snapshot.bandwidth &&
-          preset.spreadingFactor == snapshot.spreadingFactor &&
-          preset.codingRate == snapshot.codingRate &&
-          preset.txPowerDbm == snapshot.txPowerDbm) {
-        return i;
+  /// A preset without TX power (every upstream one) matches any power.
+  bool _presetMatches(
+    RadioPreset preset,
+    _RadioSettingsSnapshot snapshot, {
+    int? frequencyHz,
+  }) {
+    // _RadioSettingsSnapshot.frequencyHz is also kHz, despite its name.
+    return (frequencyHz ?? preset.frequencyKHz) == snapshot.frequencyHz &&
+        preset.bandwidth == snapshot.bandwidth &&
+        preset.spreadingFactor == snapshot.spreadingFactor &&
+        preset.codingRate == snapshot.codingRate &&
+        (preset.txPowerDbm == null ||
+            preset.txPowerDbm == snapshot.txPowerDbm) &&
+        presetPathHashMatches(preset, widget.connector.pathHashByteWidth);
+  }
+
+  String? _findMatchingPresetIdForSnapshot(_RadioSettingsSnapshot snapshot) {
+    for (final preset in _visiblePresets()) {
+      if (_presetMatches(preset, snapshot)) {
+        return preset.id;
       }
     }
     return null;
   }
 
-  Iterable<int> _visiblePresetIndexes() sync* {
-    for (var i = 0; i < RadioSettings.presets.length; i++) {
-      if (_isOffGridPresetIndex(i)) {
-        continue;
-      }
-      yield i;
-    }
+  Iterable<RadioPreset> _visiblePresets() => _presets.where((p) => !p.offGrid);
+
+  /// The snapshot a preset sets; TX power stays as it is when the preset has
+  /// none.
+  _RadioSettingsSnapshot _snapshotForPreset(
+    RadioPreset preset,
+    int currentTxPowerDbm,
+  ) {
+    return _RadioSettingsSnapshot(
+      frequencyMHz: preset.frequencyMHz,
+      bandwidth: preset.bandwidth,
+      spreadingFactor: preset.spreadingFactor,
+      codingRate: preset.codingRate,
+      txPowerDbm: preset.txPowerDbm ?? currentTxPowerDbm,
+    );
   }
 
   _RadioSettingsSnapshot _currentSnapshot() {
@@ -2157,10 +2200,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     );
   }
 
-  bool _isOffGridPresetIndex(int? index) {
-    if (index == null) return false;
-    return RadioSettings.presets[index].$1.startsWith('Off-Grid ');
-  }
+  bool _isOffGridPreset(String? id) => _presetById(id)?.offGrid ?? false;
 
   double _offGridFrequencyForBaseFrequency(double baseFrequencyMHz) {
     if (baseFrequencyMHz < 500) return 433.0;
@@ -2188,7 +2228,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
 
   _RadioSettingsSnapshot _nonRepeatSnapshotForCurrentSelection() {
     final current = _currentSnapshot();
-    if (!_isOffGridPresetIndex(_selectedPresetIndex)) {
+    if (!_isOffGridPreset(_selectedPresetId)) {
       return current;
     }
     return _fallbackNonRepeatSnapshot(current.frequencyMHz);
@@ -2202,23 +2242,12 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
 
   _RadioSettingsSnapshot _inferNonRepeatSnapshotForRepeatEnabled() {
     final current = _currentSnapshot();
-    for (final i in _visiblePresetIndexes()) {
-      final preset = RadioSettings.presets[i].$2;
+    for (final preset in _visiblePresets()) {
       final offGridFreqHz =
           (_offGridFrequencyForBaseFrequency(preset.frequencyMHz) * 1000)
               .round();
-      if (offGridFreqHz == current.frequencyHz &&
-          preset.bandwidth == current.bandwidth &&
-          preset.spreadingFactor == current.spreadingFactor &&
-          preset.codingRate == current.codingRate &&
-          preset.txPowerDbm == current.txPowerDbm) {
-        return _RadioSettingsSnapshot(
-          frequencyMHz: preset.frequencyMHz,
-          bandwidth: preset.bandwidth,
-          spreadingFactor: preset.spreadingFactor,
-          codingRate: preset.codingRate,
-          txPowerDbm: preset.txPowerDbm,
-        );
+      if (_presetMatches(preset, current, frequencyHz: offGridFreqHz)) {
+        return _snapshotForPreset(preset, current.txPowerDbm);
       }
     }
     return _fallbackNonRepeatSnapshot(current.frequencyMHz);
@@ -2232,14 +2261,10 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     _txPowerController.text = snapshot.txPowerDbm.toString();
   }
 
-  void _applyPresetState(int index) {
-    final preset = RadioSettings.presets[index].$2;
-    final baseSnapshot = _RadioSettingsSnapshot(
-      frequencyMHz: preset.frequencyMHz,
-      bandwidth: preset.bandwidth,
-      spreadingFactor: preset.spreadingFactor,
-      codingRate: preset.codingRate,
-      txPowerDbm: preset.txPowerDbm,
+  void _applyPresetState(RadioPreset preset) {
+    final baseSnapshot = _snapshotForPreset(
+      preset,
+      int.tryParse(_txPowerController.text) ?? 20,
     );
     final frequencyMHz = _clientRepeat
         ? _offGridFrequencyForBaseFrequency(baseSnapshot.frequencyMHz)
@@ -2248,13 +2273,13 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     _bandwidth = preset.bandwidth;
     _spreadingFactor = preset.spreadingFactor;
     _codingRate = preset.codingRate;
-    _txPowerController.text = preset.txPowerDbm.toString();
-    _selectedPresetIndex = index;
+    _txPowerController.text = baseSnapshot.txPowerDbm.toString();
+    _selectedPresetId = preset.id;
     _lastNonRepeatSnapshot = baseSnapshot;
   }
 
   void _syncPresetSelection() {
-    final previousPresetIndex = _selectedPresetIndex;
+    final previousPresetId = _selectedPresetId;
     final previousLastNonRepeat = _lastNonRepeatSnapshot;
     if (_clientRepeat) {
       final baseSnapshot =
@@ -2272,25 +2297,25 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
           txPowerDbm: int.tryParse(_txPowerController.text) ?? 20,
         );
       }
-      _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+      _selectedPresetId = _findMatchingPresetIdForSnapshot(
         _lastNonRepeatSnapshot ?? baseSnapshot,
       );
-      if (previousPresetIndex != _selectedPresetIndex ||
+      if (previousPresetId != _selectedPresetId ||
           previousLastNonRepeat != _lastNonRepeatSnapshot) {
         _logRadioSettingsState(
-          'Preset match updated while repeat enabled: ${_presetLabel(previousPresetIndex)} -> ${_presetLabel(_selectedPresetIndex)}',
+          'Preset match updated while repeat enabled: ${_presetLabel(previousPresetId)} -> ${_presetLabel(_selectedPresetId)}',
         );
       }
       return;
     }
     _lastNonRepeatSnapshot = _nonRepeatSnapshotForCurrentSelection();
-    _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+    _selectedPresetId = _findMatchingPresetIdForSnapshot(
       _lastNonRepeatSnapshot!,
     );
-    if (previousPresetIndex != _selectedPresetIndex ||
+    if (previousPresetId != _selectedPresetId ||
         previousLastNonRepeat != _lastNonRepeatSnapshot) {
       _logRadioSettingsState(
-        'Preset sync updated state from ${_presetLabel(previousPresetIndex)} to ${_presetLabel(_selectedPresetIndex)}',
+        'Preset sync updated state from ${_presetLabel(previousPresetId)} to ${_presetLabel(_selectedPresetId)}',
       );
     }
   }
@@ -2385,6 +2410,15 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
         ),
       );
       await widget.connector.sendFrame(buildSetRadioTxPowerFrame(txPower));
+      // A preset that carries a path hash size sets it too (stock
+      // CMD_SET_PATH_HASH_MODE, #730). Sent whenever the preset has one,
+      // rather than compared against the reported width, which reads as 1
+      // when device info is short (#240). Setting the same mode is harmless.
+      final pathHashMode = _presetById(_selectedPresetId)?.pathHashMode;
+      if (pathHashMode != null) {
+        _logRadioSettingsState('Setting preset path hash mode $pathHashMode');
+        await widget.connector.setPathHashMode(pathHashMode);
+      }
       await widget.connector.refreshDeviceInfo();
       final rememberedSnapshot = _clientRepeat
           ? _lastNonRepeatSnapshot
@@ -2411,11 +2445,12 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     }
   }
 
-  String _presetLabel(int? index) {
-    if (index == null) {
+  String _presetLabel(String? id) {
+    if (id == null) {
       return 'custom';
     }
-    return '${RadioSettings.presets[index].$1} (#$index)';
+    final preset = _presetById(id);
+    return preset == null ? id : '${preset.title} ($id)';
   }
 
   String _formatSnapshot(_RadioSettingsSnapshot? snapshot) {
@@ -2439,7 +2474,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
       'cr=${_codingRate.label} '
       'tx=${_txPowerController.text}dBm '
       'repeat=$_clientRepeat '
-      'preset=${_presetLabel(_selectedPresetIndex)} '
+      'preset=${_presetLabel(_selectedPresetId)} '
       'lastNonRepeat=${_formatSnapshot(_lastNonRepeatSnapshot)}',
       tag: 'RadioSettings',
     );
@@ -2448,31 +2483,18 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final presetService = context.watch<RadioPresetService>();
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<int>(
-          key: ValueKey<int?>(_selectedPresetIndex),
-          initialValue: _selectedPresetIndex,
-          decoration: InputDecoration(
-            labelText: l10n.settings_presets,
-            border: const OutlineInputBorder(),
-          ),
-          items: [
-            for (final i in _visiblePresetIndexes())
-              DropdownMenuItem(
-                value: i,
-                child: Text(RadioSettings.presets[i].$1),
-              ),
-          ],
-          onChanged: (index) {
-            if (index != null) {
-              _applyPreset(index);
-            }
-          },
+        RadioPresetPicker(
+          service: presetService,
+          presets: _visiblePresets().toList(),
+          selectedId: _selectedPresetId,
+          onSelected: _applyPreset,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         TextField(
           controller: _frequencyController,
           onChanged: (_) => _handleManualSettingsChanged('frequency'),

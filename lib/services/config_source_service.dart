@@ -76,6 +76,10 @@ class ConfigSourceService {
     return parseConfigProfile(await _get(url));
   }
 
+  /// Fetch a file's raw text (radio presets, #728). Same cache-busting and
+  /// failure messages as the catalog and profile fetches.
+  Future<String> fetchText(String url) => _get(url);
+
   Future<String> _get(String url) async {
     final http.Response resp;
     try {

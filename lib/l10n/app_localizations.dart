@@ -1270,6 +1270,12 @@ abstract class AppLocalizations {
   /// **'LOS elevation data: Open-Meteo (CC BY 4.0)'**
   String get settings_aboutOpenMeteoAttribution;
 
+  /// No description provided for @settings_aboutPresetsAttribution.
+  ///
+  /// In en, this message translates to:
+  /// **'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.'**
+  String get settings_aboutPresetsAttribution;
+
   /// No description provided for @settings_infoName.
   ///
   /// In en, this message translates to:
@@ -1359,6 +1365,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Presets'**
   String get settings_presets;
+
+  /// No description provided for @settings_presetSourceMeshCore.
+  ///
+  /// In en, this message translates to:
+  /// **'MeshCore'**
+  String get settings_presetSourceMeshCore;
+
+  /// No description provided for @settings_presetSourceOffband.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband'**
+  String get settings_presetSourceOffband;
+
+  /// No description provided for @settings_presetsRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Update presets'**
+  String get settings_presetsRefresh;
+
+  /// No description provided for @settings_presetsUpdating.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating presets...'**
+  String get settings_presetsUpdating;
+
+  /// No description provided for @settings_presetsUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update presets. Showing the saved list.'**
+  String get settings_presetsUpdateFailed;
+
+  /// No description provided for @settings_presetsUpdatedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Presets updated {date}'**
+  String settings_presetsUpdatedAt(String date);
+
+  /// No description provided for @settings_presetsBundled.
+  ///
+  /// In en, this message translates to:
+  /// **'Presets included with this version of the app'**
+  String get settings_presetsBundled;
 
   /// No description provided for @settings_frequency.
   ///

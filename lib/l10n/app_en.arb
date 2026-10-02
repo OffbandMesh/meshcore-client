@@ -274,6 +274,7 @@
   "settings_aboutDonate": "Donate or sponsor",
   "settings_aboutLinkFailed": "Could not open the link",
   "settings_aboutOpenMeteoAttribution": "LOS elevation data: Open-Meteo (CC BY 4.0)",
+  "settings_aboutPresetsAttribution": "Regional radio presets: MeshCore's suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.",
   "settings_infoName": "Name",
   "settings_infoId": "ID",
   "settings_infoStatus": "Status",
@@ -289,6 +290,20 @@
   "settings_infoContactsCount": "Contacts Count",
   "settings_infoChannelCount": "Channel Count",
   "settings_presets": "Presets",
+  "settings_presetSourceMeshCore": "MeshCore",
+  "settings_presetSourceOffband": "Offband",
+  "settings_presetsRefresh": "Update presets",
+  "settings_presetsUpdating": "Updating presets...",
+  "settings_presetsUpdateFailed": "Couldn't update presets. Showing the saved list.",
+  "settings_presetsUpdatedAt": "Presets updated {date}",
+  "@settings_presetsUpdatedAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "settings_presetsBundled": "Presets included with this version of the app",
   "settings_frequency": "Frequency (MHz)",
   "settings_frequencyHelper": "300.0 - 2500.0",
   "settings_frequencyInvalid": "Invalid frequency (300-2500 MHz)",

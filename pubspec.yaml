@@ -146,6 +146,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/radio_presets/
 
 flutter_launcher_icons:
   android: true
