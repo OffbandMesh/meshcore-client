@@ -5285,12 +5285,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String contactSyncShortfallBody(int declared, int received) {
-    return 'The radio reported $declared contacts but sent $received. Your saved contacts were kept.';
+    return 'The radio reported $declared contacts; after checking again the app has $received. Your saved contacts were kept.';
   }
 
   @override
   String contactSyncShortfallBodyNoTotal(int received) {
-    return 'The radio did not report how many contacts it holds and sent $received. Your saved contacts were kept.';
+    return 'The radio did not report how many contacts it holds; after checking again the app has $received. Your saved contacts were kept.';
   }
 
   @override
@@ -5298,7 +5298,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String contactSyncDecisionBody(int received, int removed) {
-    return 'The radio sent only $received contacts again. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes $removed contacts from this app.';
+    return 'After checking again the app still has only $received of the radio\'s contacts. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes $removed contacts from this app.';
   }
 
   @override
@@ -5306,4 +5306,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get contactSyncUseRadio => 'Use the radio\'s list';
+
+  @override
+  String contactSyncConfirmedGone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saved contacts are no longer on the radio.',
+      one: '1 saved contact is no longer on the radio.',
+    );
+    return '$_temp0';
+  }
 }

@@ -230,7 +230,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "de": [
@@ -464,7 +465,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "es": [
@@ -698,7 +700,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "fr": [
@@ -932,7 +935,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "hu": [
@@ -1166,7 +1170,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "it": [
@@ -1400,7 +1405,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "ja": [
@@ -1634,7 +1640,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "ko": [
@@ -1868,7 +1875,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "nl": [
@@ -2102,7 +2110,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "pl": [
@@ -2336,7 +2345,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "pt": [
@@ -2570,7 +2580,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "ru": [
@@ -2804,7 +2815,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "sk": [
@@ -3038,7 +3050,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "sl": [
@@ -3272,7 +3285,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "sv": [
@@ -3506,7 +3520,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "uk": [
@@ -3740,7 +3755,8 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ],
 
   "zh": [
@@ -3974,6 +3990,7 @@
     "contactSyncDecisionTitle",
     "contactSyncDecisionBody",
     "contactSyncKeep",
-    "contactSyncUseRadio"
+    "contactSyncUseRadio",
+    "contactSyncConfirmedGone"
   ]
 }

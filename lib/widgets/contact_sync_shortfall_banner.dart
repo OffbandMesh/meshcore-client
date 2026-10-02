@@ -4,9 +4,10 @@ import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 
 /// Shown above the whole app when a full contact sync delivered fewer contacts
-/// than the radio reported (#668). The banner stays until dismissed. When the
-/// automatic retry was also short, a modal asks whether to keep the saved
-/// contacts (the default) or accept the radio's shorter list.
+/// than the radio reported (#668), after the forced resync (#703) has tried
+/// and is still short. The banner stays until dismissed, and a modal asks
+/// whether to keep the saved contacts (the default) or accept the radio's
+/// shorter list.
 ///
 /// SAFELANE §6: the short sync that silently replaced 350 saved contacts with
 /// 106 (#660) must now be loud. Sits in `MaterialApp.builder`, above the
@@ -50,18 +51,31 @@ class ContactSyncShortfallBanner extends StatelessWidget {
       children: [
         content,
         const ModalBarrier(dismissible: false, color: Colors.black54),
-        Center(child: _decision(context, current?.received ?? 0)),
+        Center(
+          child: _decision(
+            context,
+            current?.received ?? 0,
+            current?.confirmedGone ?? 0,
+          ),
+        ),
       ],
     );
   }
+
+  static String _withGone(String text, int gone, BuildContext context) =>
+      gone > 0 ? '$text ${context.l10n.contactSyncConfirmedGone(gone)}' : text;
 
   Widget _banner(BuildContext context, ContactSyncShortfall current) {
     final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
     final declared = current.declared;
-    final body = declared == null
-        ? l10n.contactSyncShortfallBodyNoTotal(current.received)
-        : l10n.contactSyncShortfallBody(declared, current.received);
+    final body = _withGone(
+      declared == null
+          ? l10n.contactSyncShortfallBodyNoTotal(current.received)
+          : l10n.contactSyncShortfallBody(declared, current.received),
+      current.confirmedGone,
+      context,
+    );
     return Material(
       color: scheme.errorContainer,
       child: SafeArea(
@@ -109,11 +123,17 @@ class ContactSyncShortfallBanner extends StatelessWidget {
     );
   }
 
-  Widget _decision(BuildContext context, int received) {
+  Widget _decision(BuildContext context, int received, int gone) {
     final l10n = context.l10n;
     return AlertDialog(
       title: Text(l10n.contactSyncDecisionTitle),
-      content: Text(l10n.contactSyncDecisionBody(received, undeliveredCount)),
+      content: Text(
+        _withGone(
+          l10n.contactSyncDecisionBody(received, undeliveredCount),
+          gone,
+          context,
+        ),
+      ),
       actions: [
         TextButton(
           onPressed: onUseRadio,

@@ -8941,13 +8941,13 @@ abstract class AppLocalizations {
   /// Persistent banner body for a short contact sync (#668).
   ///
   /// In en, this message translates to:
-  /// **'The radio reported {declared} contacts but sent {received}. Your saved contacts were kept.'**
+  /// **'The radio reported {declared} contacts; after checking again the app has {received}. Your saved contacts were kept.'**
   String contactSyncShortfallBody(int declared, int received);
 
   /// Persistent banner body for a contact sync whose total the radio did not report (#668).
   ///
   /// In en, this message translates to:
-  /// **'The radio did not report how many contacts it holds and sent {received}. Your saved contacts were kept.'**
+  /// **'The radio did not report how many contacts it holds; after checking again the app has {received}. Your saved contacts were kept.'**
   String contactSyncShortfallBodyNoTotal(int received);
 
   /// Dialog title after the automatic retry of a short contact sync was also short (#668).
@@ -8959,7 +8959,7 @@ abstract class AppLocalizations {
   /// Dialog body asking whether to keep saved contacts or accept the radio's shorter list (#668).
   ///
   /// In en, this message translates to:
-  /// **'The radio sent only {received} contacts again. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes {removed} contacts from this app.'**
+  /// **'After checking again the app still has only {received} of the radio\'s contacts. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes {removed} contacts from this app.'**
   String contactSyncDecisionBody(int received, int removed);
 
   /// Default dialog action: keep the saved contact list after a short sync (#668).
@@ -8973,6 +8973,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use the radio\'s list'**
   String get contactSyncUseRadio;
+
+  /// Extra sentence on the short-sync banner and dialog: saved contacts the radio answered 'not found' for (#764).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 saved contact is no longer on the radio.} other{{count} saved contacts are no longer on the radio.}}'**
+  String contactSyncConfirmedGone(int count);
 }
 
 class _AppLocalizationsDelegate

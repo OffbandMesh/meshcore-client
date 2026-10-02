@@ -248,10 +248,14 @@ class ContactSyncShortfall {
   final int received;
   final int keptLocally;
 
+  /// Saved contacts the radio answered "not found" for (#764).
+  final int confirmedGone;
+
   const ContactSyncShortfall({
     required this.declared,
     required this.received,
     required this.keptLocally,
+    this.confirmedGone = 0,
   });
 }
 
@@ -4057,6 +4061,7 @@ class MeshCoreConnector extends ChangeNotifier {
       declared: declared,
       received: accounted,
       keptLocally: kept,
+      confirmedGone: _recoveryGone.length,
     );
     _contactSyncDecisionPending = true;
     final message =

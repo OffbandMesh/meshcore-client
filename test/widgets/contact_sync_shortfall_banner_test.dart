@@ -53,11 +53,75 @@ void main() {
 
     expect(find.text('Contact sync incomplete'), findsOneWidget);
     expect(
-      find.textContaining('reported 350 contacts but sent 106'),
+      find.textContaining(
+        'reported 350 contacts; after checking again the app has 106',
+      ),
       findsOneWidget,
     );
     expect(find.text('APP'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  // #764: contacts the radio answered "not found" for are named, and only
+  // when there are any.
+  group('confirmed gone', () {
+    const withGone = ContactSyncShortfall(
+      declared: 350,
+      received: 340,
+      keptLocally: 10,
+      confirmedGone: 4,
+    );
+
+    testWidgets('banner names them when there are some', (tester) async {
+      await tester.pumpWidget(build(shortfall: withGone));
+
+      expect(
+        find.textContaining('4 saved contacts are no longer on the radio.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('one reads in the singular', (tester) async {
+      await tester.pumpWidget(
+        build(
+          shortfall: const ContactSyncShortfall(
+            declared: 350,
+            received: 349,
+            keptLocally: 1,
+            confirmedGone: 1,
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('1 saved contact is no longer on the radio.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('banner says nothing about it when there are none', (
+      tester,
+    ) async {
+      await tester.pumpWidget(build(shortfall: short));
+
+      expect(find.textContaining('no longer on the radio'), findsNothing);
+    });
+
+    testWidgets('the decision dialog names them too', (tester) async {
+      await tester.pumpWidget(
+        build(shortfall: withGone, decisionPending: true, undelivered: 10),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining(
+            '4 saved contacts are no longer on the radio.',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('no declared total uses its own wording', (tester) async {
