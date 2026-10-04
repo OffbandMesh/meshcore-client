@@ -418,6 +418,30 @@ void main() {
       expect(names(), {'Alpha', 'Bravo', 'Charlie'});
     });
 
+    test(
+      'a complete sync during the by-key checks ends the recovery',
+      () async {
+        seedSaved();
+        final alpha = [_contactFrame(0x11, 'Alpha')];
+        await connector.getContacts();
+        await answerStream(350, alpha);
+        await answerStream(350, alpha);
+        await answerStream(350, alpha);
+        // The by-key checks are running; a refresh now comes back complete.
+        await connector.getContacts();
+        await answerStream(3, [
+          _contactFrame(0x11, 'Alpha'),
+          _contactFrame(0x22, 'Bravo'),
+          _contactFrame(0x33, 'Charlie'),
+        ]);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(connector.contactSyncShortfall, isNull);
+        expect(connector.contactSyncDecisionPending, isFalse);
+        expect(names(), {'Alpha', 'Bravo', 'Charlie'});
+      },
+    );
+
     test('the banner cannot be dismissed while a decision is open', () async {
       await threeShortSyncs();
       connector.dismissContactSyncShortfall();
