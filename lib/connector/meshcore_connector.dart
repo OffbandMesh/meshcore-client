@@ -3957,6 +3957,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _contactSyncDecisionPending = false;
       _recoveryDelivered.clear();
       _recoveryGone.clear();
+      // A complete sync ends any recovery still running, so a leftover by-key
+      // loop cannot report a shortfall against the cleared union. (Gemini)
+      _recoveryRun++;
+      _recoveryCheckingKeys = false;
+      _recoverySettleTimer?.cancel();
       return;
     }
 
