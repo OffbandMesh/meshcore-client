@@ -2366,28 +2366,7 @@ class MeshCoreConnector extends ChangeNotifier {
         },
       );
 
-      _setState(MeshCoreConnectionState.connected);
-      _pendingInitialChannelSync = true;
-      _pendingInitialQueuedMessageSync = true;
-      _pendingInitialContactsSync = true;
-      await _requestDeviceInfo();
-      _startBatteryPolling();
-      if (_radioStatsPollRefCount > 0) _startRadioStatsPolling();
-
-      var gotSelfInfo = await _waitForSelfInfo(
-        timeout: const Duration(seconds: 3),
-      );
-      if (!gotSelfInfo) {
-        await refreshDeviceInfo();
-        gotSelfInfo = await _waitForSelfInfo(
-          timeout: const Duration(seconds: 3),
-        );
-      }
-      if (!gotSelfInfo) {
-        throw StateError('Timed out waiting for SELF_INFO during TCP connect');
-      }
-
-      await syncTime();
+      await _runConnectedHandshake();
     } catch (error) {
       _appDebugLogService?.error('TCP connection error: $error', tag: 'TCP');
       final tcpConnectCancelledBeforeHandshake =
@@ -2407,6 +2386,43 @@ class MeshCoreConnector extends ChangeNotifier {
       await disconnect(manual: false);
       rethrow;
     }
+  }
+
+  /// What TCP runs once frames flow: connected, device info, SELF_INFO (one
+  /// retry), then the clock. Shared with [connectInProcessForTest] so tests
+  /// drive the same sequence. (#768)
+  Future<void> _runConnectedHandshake() async {
+    _setState(MeshCoreConnectionState.connected);
+    _pendingInitialChannelSync = true;
+    _pendingInitialQueuedMessageSync = true;
+    _pendingInitialContactsSync = true;
+    await _requestDeviceInfo();
+    _startBatteryPolling();
+    if (_radioStatsPollRefCount > 0) _startRadioStatsPolling();
+
+    var gotSelfInfo = await _waitForSelfInfo(
+      timeout: const Duration(seconds: 3),
+    );
+    if (!gotSelfInfo) {
+      await refreshDeviceInfo();
+      gotSelfInfo = await _waitForSelfInfo(timeout: const Duration(seconds: 3));
+    }
+    if (!gotSelfInfo) {
+      throw StateError('Timed out waiting for SELF_INFO during TCP connect');
+    }
+
+    await syncTime();
+  }
+
+  /// Runs the TCP handshake with frames going to [sendFrameOverrideForTest]
+  /// and replies arriving through [handleFrameForTest]: the fake radio's
+  /// in-process path (#768). No socket is opened.
+  @visibleForTesting
+  Future<void> connectInProcessForTest() async {
+    _manualDisconnect = false;
+    _resetConnectionHandshakeState();
+    _activeTransport = MeshCoreTransportType.tcp;
+    await _runConnectedHandshake();
   }
 
   @visibleForTesting
