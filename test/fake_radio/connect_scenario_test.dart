@@ -9,10 +9,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fake_radio/fake_radio.dart';
 import '../support/fake_radio/fake_radio_adapters.dart';
 import '../support/fake_radio/fake_radio_codes.dart';
+import '../support/fake_radio/fake_radio_profile.dart';
 import '../support/fake_radio/fake_radio_seed.dart';
 
 // #767 (A1 of #755): the real connector against a radio, over both the real
-// TCP path and the in-process seam (#768).
+// TCP path and the in-process seam (#768), under both firmware profiles
+// (#769). Epic A verification (#771) adds the determinism run.
 
 FakeRadioSeed _seed() => FakeRadioSeed(
   channels: [FakeChannel(index: 0, name: 'Public')],
@@ -36,20 +38,23 @@ void main() {
   late OffbandDatabase db;
   late MeshCoreConnector connector;
 
-  setUp(() async {
+  Future<void> freshConnector() async {
     SharedPreferences.setMockInitialValues({});
     PrefsManager.reset();
     await PrefsManager.initialize();
     db = OffbandDatabase(NativeDatabase.memory());
     BlobStore.overrideForTest(BlobStore(db));
     connector = MeshCoreConnector();
-  });
+  }
 
-  tearDown(() async {
+  Future<void> dropConnector() async {
     await connector.disconnect();
     BlobStore.clearTestOverride();
     await db.close();
-  });
+  }
+
+  setUp(freshConnector);
+  tearDown(dropConnector);
 
   Future<void> expectSynced(FakeRadio radio) async {
     expect(connector.isConnected, isTrue);
@@ -78,28 +83,74 @@ void main() {
         fwCmdGetContacts,
       ]),
     );
+    // What the client concluded about the firmware matches the profile.
+    if (radio.profile.offband) {
+      expect(connector.offbandCaps, radio.profile.offbandCaps);
+      expect(connector.offbandCaps2, radio.profile.offbandCaps2);
+    } else {
+      expect(connector.offbandCaps, isNull);
+      expect(connector.offbandCaps2, isNull);
+      expect(codes.where((c) => c >= fwOffbandConfig && c <= 0xCF), isEmpty);
+    }
+  }
+
+  final profiles = {
+    'Offband': FakeRadioProfile.offband,
+    'stock': FakeRadioProfile.stock,
+  };
+
+  for (final entry in profiles.entries) {
+    group(entry.key, () {
+      test(
+        'over TCP: connects, loads self info, channels and contacts',
+        () async {
+          final radio = FakeRadio(seed: _seed(), profile: entry.value());
+          final server = await FakeRadioTcpServer.start(radio);
+          addTearDown(server.close);
+          await connector.connectTcp(host: server.host, port: server.port);
+          await expectSynced(radio);
+        },
+        timeout: const Timeout(Duration(seconds: 30)),
+      );
+
+      test(
+        'in-process: connects, loads self info, channels and contacts',
+        () async {
+          final radio = FakeRadio(seed: _seed(), profile: entry.value());
+          final link = await FakeRadioInProcess.connect(connector, radio);
+          addTearDown(link.close);
+          await expectSynced(radio);
+        },
+        timeout: const Timeout(Duration(seconds: 30)),
+      );
+    });
   }
 
   test(
-    'over TCP: connects, loads self info, channels and contacts',
+    'same seed, same result over 20 connects (#771)',
     () async {
-      final radio = FakeRadio(seed: _seed());
-      final server = await FakeRadioTcpServer.start(radio);
-      addTearDown(server.close);
-      await connector.connectTcp(host: server.host, port: server.port);
-      await expectSynced(radio);
-    },
-    timeout: const Timeout(Duration(seconds: 30)),
-  );
+      String outcome() => [
+        connector.selfName,
+        connector.offbandCaps,
+        (connector.channels.map((c) => c.name).toList()..sort()).join(','),
+        (connector.contacts.map((c) => c.name).toList()..sort()).join(','),
+      ].join('|');
 
-  test(
-    'in-process: connects, loads self info, channels and contacts',
-    () async {
-      final radio = FakeRadio(seed: _seed());
-      final link = await FakeRadioInProcess.connect(connector, radio);
-      addTearDown(link.close);
-      await expectSynced(radio);
+      String? first;
+      for (var run = 0; run < 20; run++) {
+        if (run > 0) {
+          await dropConnector();
+          await freshConnector();
+        }
+        final radio = FakeRadio(seed: _seed());
+        final link = await FakeRadioInProcess.connect(connector, radio);
+        await expectSynced(radio);
+        final now = outcome();
+        first ??= now;
+        expect(now, first, reason: 'run $run differed');
+        await link.close();
+      }
     },
-    timeout: const Timeout(Duration(seconds: 30)),
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }
