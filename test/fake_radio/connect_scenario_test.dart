@@ -71,18 +71,21 @@ void main() {
       what: 'contacts',
     );
     // The data came from the radio: the handshake really ran against it.
-    final codes = radio.received.map((f) => f[0]).toSet();
-    expect(
-      codes,
-      containsAll([
-        fwCmdDeviceQuery,
-        fwCmdAppStart,
-        fwCmdSetDeviceTime,
-        fwCmdGetChannel,
-        fwCmdSyncNextMessage,
-        fwCmdGetContacts,
-      ]),
+    // Waited for, not sampled: over TCP a sent frame is only queued, so the
+    // closing SET_DEVICE_TIME can land just after the sync data does.
+    const handshake = [
+      fwCmdDeviceQuery,
+      fwCmdAppStart,
+      fwCmdSetDeviceTime,
+      fwCmdGetChannel,
+      fwCmdSyncNextMessage,
+      fwCmdGetContacts,
+    ];
+    await _until(
+      () => radio.received.map((f) => f[0]).toSet().containsAll(handshake),
+      what: 'the handshake commands at the radio',
     );
+    final codes = radio.received.map((f) => f[0]).toSet();
     // What the client concluded about the firmware matches the profile.
     if (radio.profile.offband) {
       expect(connector.offbandCaps, radio.profile.offbandCaps);
