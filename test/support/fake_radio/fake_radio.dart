@@ -173,6 +173,21 @@ class FakeRadio {
         autoAddConfig = cmd[1];
         if (len >= 3) autoAddMaxHops = cmd[2] > 64 ? 64 : cmd[2];
         return [okFrame()];
+      case fwCmdSetRadioParams when len >= 11:
+        return [_setRadioParams(cmd)];
+      case fwCmdSetRadioTxPower when len >= 2:
+        // MyMesh.cpp:2946-2955: int8, -9 to MAX_LORA_TX_POWER.
+        final power = cmd[1] >= 128 ? cmd[1] - 256 : cmd[1];
+        if (power < -9 || power > seed.maxTxPowerDbm) {
+          return [errFrame(fwErrIllegalArg)];
+        }
+        txPowerDbm = power;
+        return [okFrame()];
+      case fwCmdSetPathHashMode when len >= 3 && cmd[1] == 0:
+        // MyMesh.cpp:2990-2997: modes 0-2 (1-3 byte hashes).
+        if (cmd[2] >= 3) return [errFrame(fwErrIllegalArg)];
+        pathHashMode = cmd[2];
+        return [okFrame()];
       case fwCmdSetOtherParams when len >= 2:
         // MyMesh.cpp:2974.
         manualAddContacts = cmd[1];
@@ -260,6 +275,54 @@ class FakeRadio {
       ];
     }
     return [errFrame(fwErrIllegalArg)];
+  }
+
+  /// The bands where client repeat is allowed (`repeat_freq_ranges`,
+  /// MyMesh.cpp:1720-1727, default build), in kHz.
+  static const List<(int, int)> repeatFreqRanges = [
+    (433000, 433000),
+    (869495, 869495),
+    (918000, 918000),
+  ];
+
+  /// CMD_SET_RADIO_PARAMS (MyMesh.cpp:2910-2945). Frequency in kHz, bandwidth
+  /// in Hz; an optional trailing byte turns client repeat on, which only some
+  /// frequencies allow.
+  Uint8List _setRadioParams(Uint8List cmd) {
+    final freq = _u32At(cmd, 1);
+    final bw = _u32At(cmd, 5);
+    final newSf = cmd[9];
+    final newCr = cmd[10];
+    final repeat = cmd.length > 11 ? cmd[11] : 0;
+    if (repeat != 0 &&
+        !repeatFreqRanges.any((r) => freq >= r.$1 && freq <= r.$2)) {
+      return errFrame(fwErrIllegalArg);
+    }
+    if (freq < 150000 ||
+        freq > 2500000 ||
+        newSf < 5 ||
+        newSf > 12 ||
+        newCr < 5 ||
+        newCr > 8 ||
+        bw < 7000 ||
+        bw > 500000) {
+      return errFrame(fwErrIllegalArg);
+    }
+    freqKhz = freq;
+    bwHz = bw;
+    sf = newSf;
+    cr = newCr;
+    clientRepeat = repeat != 0;
+    return okFrame();
+  }
+
+  /// Firmware keeps frequency and bandwidth as `float` thousands
+  /// (`_prefs.freq = freq / 1000.0`) and reports `(uint32_t)(_prefs.freq *
+  /// 1000)` (MyMesh.cpp:2574,2931); this reproduces that single-precision round
+  /// trip rather than echoing the integer.
+  static int _floatRoundTrip(int value) {
+    final stored = Float32List.fromList([value / 1000.0])[0];
+    return Float32List.fromList([stored * 1000])[0].truncate();
   }
 
   /// CMD_SEND_TXT_MSG (MyMesh.cpp:2587-2632). A plain message gets
@@ -542,8 +605,8 @@ class FakeRadio {
       ..addByte(advertLocPolicy)
       ..addByte(telemetryModes)
       ..addByte(manualAddContacts)
-      ..add(_u32(freqKhz))
-      ..add(_u32(bwHz))
+      ..add(_u32(_floatRoundTrip(freqKhz)))
+      ..add(_u32(_floatRoundTrip(bwHz)))
       ..addByte(sf)
       ..addByte(cr)
       ..add(utf8.encode(name));
