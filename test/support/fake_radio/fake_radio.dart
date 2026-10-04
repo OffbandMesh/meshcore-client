@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import 'fake_clock.dart';
 import 'fake_radio_codes.dart';
 import 'fake_radio_profile.dart';
@@ -81,6 +83,24 @@ class FakeRadio {
   /// Every command frame received, in order, for assertions.
   final List<Uint8List> received = [];
 
+  /// The protocol version the app declared in CMD_DEVICE_QUERY
+  /// (`app_target_ver`, MyMesh.cpp:2421). Picks the V3 or legacy message frames.
+  int appTargetVer = 3;
+
+  /// Direct messages the client asked the radio to send, in order.
+  final List<FakeSentDirect> sentDirect = [];
+
+  /// Channel messages the client asked the radio to send, in order.
+  final List<FakeSentChannel> sentChannel = [];
+
+  /// How long after a direct send the recipient's ACK arrives, on [clock].
+  Duration ackDelay = const Duration(seconds: 1);
+
+  /// `est_timeout` reported in RESP_CODE_SENT, in milliseconds.
+  int estTimeoutMs = 3000;
+
+  final List<_SentPktHash> _pktHashRing = [];
+
   final StreamController<Uint8List> _pushes =
       StreamController<Uint8List>.broadcast(sync: true);
 
@@ -101,7 +121,12 @@ class FakeRadio {
     }
     switch (cmd[0]) {
       case fwCmdDeviceQuery when len >= 2:
+        appTargetVer = cmd[1];
         return [deviceInfoFrame()];
+      case fwCmdSendTxtMsg when len >= 14:
+        return [_sendDirect(cmd)];
+      case fwCmdSendChannelTxtMsg when len >= 7:
+        return [_sendChannel(cmd)];
       case fwCmdAppStart when len >= 8:
         return [selfInfoFrame()];
       case fwCmdGetContacts:
@@ -186,16 +211,8 @@ class FakeRadio {
         ];
       case fwOffbandBlock when len >= 2:
         return _block(cmd);
-      case fwOffbandPktHash when len >= 2 && cmd[1] == fwPktHashGet:
-        // MyMesh.cpp:2114-2133: exactly 7 bytes; the fake keeps no send ring,
-        // so every well-formed query is an unknown key.
-        return [
-          Uint8List.fromList([
-            fwOffbandPktHash,
-            fwPktHashErr,
-            len != 7 ? fwPktHashErrMalformed : fwPktHashErrUnknownKey,
-          ]),
-        ];
+      case fwOffbandPktHash when len >= 2:
+        return [_pktHashQuery(cmd)];
       default:
         return [errFrame(fwErrUnsupportedCmd)];
     }
@@ -243,6 +260,241 @@ class FakeRadio {
       ];
     }
     return [errFrame(fwErrIllegalArg)];
+  }
+
+  /// CMD_SEND_TXT_MSG (MyMesh.cpp:2587-2632). A plain message gets
+  /// RESP_CODE_SENT with the expected ACK, and the ACK arrives as
+  /// PUSH_CODE_SEND_CONFIRMED after [ackDelay]. A CLI command expects no ACK.
+  Uint8List _sendDirect(Uint8List cmd) {
+    final txtType = cmd[1];
+    final attempt = cmd[2];
+    final timestamp = _u32At(cmd, 3);
+    final prefix = cmd.sublist(7, 13);
+    final text = _cString(cmd, 13);
+    final to = contactByPrefix(prefix);
+    if (to == null) return errFrame(fwErrNotFound);
+    if (txtType != fwTxtTypePlain && txtType != fwTxtTypeCliData) {
+      return errFrame(fwErrUnsupportedCmd);
+    }
+    final ack = txtType == fwTxtTypePlain
+        ? expectedAck(timestamp, attempt, text)
+        : 0;
+    final sent = FakeSentDirect(
+      to: to,
+      txtType: txtType,
+      attempt: attempt,
+      timestamp: timestamp,
+      text: text,
+      expectedAck: ack,
+    );
+    sentDirect.add(sent);
+    if (ack != 0) _scheduleAck(sent);
+    onDirectSent?.call(sent);
+    return Uint8List.fromList([
+      fwRespSent,
+      to.outPathLength < 0 ? 1 : 0, // MSG_SEND_SENT_FLOOD
+      ..._u32(ack),
+      ..._u32(estTimeoutMs),
+    ]);
+  }
+
+  /// Called for every direct send, after it is recorded; B3's remote nodes
+  /// answer CLI commands from here.
+  void Function(FakeSentDirect sent)? onDirectSent;
+
+  /// Number of upcoming ACKs to lose, as if they never came back (B4).
+  int acksToDrop = 0;
+
+  void _scheduleAck(FakeSentDirect sent) {
+    if (acksToDrop > 0) {
+      acksToDrop--;
+      return;
+    }
+    clock.schedule(ackDelay, () {
+      push(
+        Uint8List.fromList([
+          fwPushSendConfirmed,
+          ..._u32(sent.expectedAck),
+          ..._u32(ackDelay.inMilliseconds), // trip_time (MyMesh.cpp:592)
+        ]),
+      );
+    });
+  }
+
+  /// `composeMsgPacket` (src/helpers/BaseChatMesh.cpp:440-451): the first 4
+  /// bytes of SHA-256 over timestamp, attempt & 3, the text, then the sender's
+  /// public key, read little-endian.
+  int expectedAck(int timestamp, int attempt, String text) {
+    final digest = sha256.convert([
+      ..._u32(timestamp),
+      attempt & 3,
+      ...utf8.encode(text),
+      ...seed.publicKey,
+    ]).bytes;
+    return ByteData.sublistView(
+      Uint8List.fromList(digest),
+      0,
+      4,
+    ).getUint32(0, Endian.little);
+  }
+
+  /// CMD_SEND_CHANNEL_TXT_MSG (MyMesh.cpp:2633-2675): OK for a known channel,
+  /// NOT_FOUND otherwise. Offband records the packet hash for 0xC6.
+  Uint8List _sendChannel(Uint8List cmd) {
+    final txtType = cmd[1];
+    final index = cmd[2];
+    final timestamp = _u32At(cmd, 3);
+    final text = _cString(cmd, 7);
+    if (txtType != fwTxtTypePlain) return errFrame(fwErrUnsupportedCmd);
+    if (!channels.containsKey(index) || index >= seed.maxChannels) {
+      return errFrame(fwErrNotFound);
+    }
+    sentChannel.add(
+      FakeSentChannel(index: index, timestamp: timestamp, text: text),
+    );
+    if (profile.offband) _recordPktHash(timestamp, index, text);
+    return okFrame();
+  }
+
+  /// `recordSentPktHash` (MyMesh.cpp:228-243): 8 slots, a repeated key
+  /// overwrites, otherwise the oldest goes. The fake's "hash" is the first 8
+  /// bytes of SHA-256 over the key and text: stable, not the on-air hash.
+  void _recordPktHash(int timestamp, int index, String text) {
+    final hash = Uint8List.fromList(
+      sha256
+          .convert([..._u32(timestamp), index, ...utf8.encode(text)])
+          .bytes
+          .sublist(0, 8),
+    );
+    final at = _pktHashRing.indexWhere(
+      (e) => e.timestamp == timestamp && e.index == index,
+    );
+    if (at >= 0) {
+      _pktHashRing[at] = _SentPktHash(timestamp, index, hash);
+      return;
+    }
+    if (_pktHashRing.length == 8) _pktHashRing.removeAt(0);
+    _pktHashRing.add(_SentPktHash(timestamp, index, hash));
+  }
+
+  /// The hash 0xC6 would return for a channel send, or null if not retained.
+  Uint8List? sentPktHash(int timestamp, int index) {
+    for (final e in _pktHashRing) {
+      if (e.timestamp == timestamp && e.index == index) return e.hash;
+    }
+    return null;
+  }
+
+  /// 0xC6 (MyMesh.cpp:2114-2152).
+  Uint8List _pktHashQuery(Uint8List cmd) {
+    Uint8List err(int reason) =>
+        Uint8List.fromList([fwOffbandPktHash, fwPktHashErr, reason]);
+    if (cmd[1] != fwPktHashGet || cmd.length != 7) {
+      return err(fwPktHashErrMalformed);
+    }
+    final timestamp = _u32At(cmd, 2);
+    final index = cmd[6];
+    final hash = sentPktHash(timestamp, index);
+    if (hash == null) return err(fwPktHashErrUnknownKey);
+    return Uint8List.fromList([
+      fwOffbandPktHash,
+      fwPktHashGet,
+      ..._u32(timestamp),
+      index,
+      ...hash,
+    ]);
+  }
+
+  /// A direct message arriving over the mesh (`queueMessage`,
+  /// MyMesh.cpp:616-656): queued for CMD_SYNC_NEXT_MESSAGE, then the
+  /// PUSH_CODE_MSG_WAITING tickle. Offband drops it if the sender is blocked.
+  void receiveDirect(
+    FakeContact from,
+    String text, {
+    int txtType = fwTxtTypePlain,
+    int? timestamp,
+    int snrQuarterDb = 40,
+    int rssiDbm = -60,
+    int? floodPathLength,
+  }) {
+    if (profile.offband &&
+        blockedKeys.any((k) => _sameKey(k, from.publicKey))) {
+      return;
+    }
+    final head = appTargetVer >= 3
+        ? [fwRespContactMsgRecvV3, snrQuarterDb & 0xFF, 0, _rssi(rssiDbm)]
+        : [fwRespContactMsgRecv];
+    _queue([
+      ...head,
+      ...from.publicKey.sublist(0, 6),
+      floodPathLength ?? 0xFF,
+      txtType,
+      ..._u32(timestamp ?? clock.epochSeconds),
+      ...utf8.encode(text),
+    ]);
+  }
+
+  /// A channel message arriving over the mesh (`onChannelMessageRecv`,
+  /// MyMesh.cpp:921-952). MeshCore puts the sender in the text: "Name: msg".
+  void receiveChannel(
+    int index,
+    String text, {
+    int? timestamp,
+    int snrQuarterDb = 40,
+    int rssiDbm = -60,
+    int? floodPathLength,
+  }) {
+    final head = appTargetVer >= 3
+        ? [fwRespChannelMsgRecvV3, snrQuarterDb & 0xFF, 0, _rssi(rssiDbm)]
+        : [fwRespChannelMsgRecv];
+    _queue([
+      ...head,
+      index,
+      floodPathLength ?? 0xFF,
+      fwTxtTypePlain,
+      ..._u32(timestamp ?? clock.epochSeconds),
+      ...utf8.encode(text),
+    ]);
+  }
+
+  /// `MAX_FRAME_SIZE` (src/helpers/BaseSerialInterface.h: 176) truncation,
+  /// offline queue, then the tickle.
+  void _queue(List<int> frame) {
+    final bytes = frame.length > 176 ? frame.sublist(0, 176) : frame;
+    offlineQueue.add(Uint8List.fromList(bytes));
+    push(Uint8List.fromList([fwPushMsgWaiting]));
+  }
+
+  /// `rssiToInt8` (MyMesh.cpp:610): clamped to int8, as a byte.
+  static int _rssi(int dbm) =>
+      (dbm < -128 ? -128 : (dbm > 127 ? 127 : dbm)) & 0xFF;
+
+  FakeContact? contactByPrefix(List<int> prefix) {
+    for (final c in contacts) {
+      var match = true;
+      for (var i = 0; i < prefix.length; i++) {
+        if (c.publicKey[i] != prefix[i]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return c;
+    }
+    return null;
+  }
+
+  static bool _sameKey(List<int> a, List<int> b) {
+    for (var i = 0; i < fwPubKeySize; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// Text from [offset] up to the first NUL (firmware NUL-terminates at len).
+  static String _cString(Uint8List b, int offset) {
+    var end = b.indexOf(0, offset);
+    if (end < 0) end = b.length;
+    return utf8.decode(b.sublist(offset, end), allowMalformed: true);
   }
 
   /// `writeOKFrame` (MyMesh.cpp:258).
@@ -387,4 +639,46 @@ class FakeRadio {
     out.setRange(0, n, bytes);
     return out;
   }
+}
+
+/// A direct send the client asked for (CMD_SEND_TXT_MSG).
+class FakeSentDirect {
+  FakeSentDirect({
+    required this.to,
+    required this.txtType,
+    required this.attempt,
+    required this.timestamp,
+    required this.text,
+    required this.expectedAck,
+  });
+
+  final FakeContact to;
+  final int txtType;
+  final int attempt;
+  final int timestamp;
+  final String text;
+
+  /// 0 for a CLI command, which expects no ACK.
+  final int expectedAck;
+}
+
+/// A channel send the client asked for (CMD_SEND_CHANNEL_TXT_MSG).
+class FakeSentChannel {
+  FakeSentChannel({
+    required this.index,
+    required this.timestamp,
+    required this.text,
+  });
+
+  final int index;
+  final int timestamp;
+  final String text;
+}
+
+class _SentPktHash {
+  _SentPktHash(this.timestamp, this.index, this.hash);
+
+  final int timestamp;
+  final int index;
+  final Uint8List hash;
 }

@@ -39,6 +39,10 @@ const int fwRespContact = 3;
 const int fwRespEndOfContacts = 4;
 const int fwRespSelfInfo = 5;
 const int fwRespSent = 6;
+const int fwRespContactMsgRecv = 7;
+const int fwRespChannelMsgRecv = 8;
+const int fwRespContactMsgRecvV3 = 16;
+const int fwRespChannelMsgRecvV3 = 17;
 const int fwRespCurrTime = 9;
 const int fwRespNoMoreMessages = 10;
 const int fwRespBattAndStorage = 12;
@@ -46,6 +50,16 @@ const int fwRespDeviceInfo = 13;
 const int fwRespChannelInfo = 18;
 const int fwRespCustomVars = 21;
 const int fwRespAutoAddConfig = 25;
+
+const int fwPushSendConfirmed = 0x82;
+const int fwPushMsgWaiting = 0x83;
+const int fwPushLoginSuccess = 0x85;
+const int fwPushLoginFail = 0x86;
+
+/// `TXT_TYPE_*` (src/helpers/TxtDataHelpers.h:6-8).
+const int fwTxtTypePlain = 0;
+const int fwTxtTypeCliData = 1;
+const int fwTxtTypeSignedPlain = 2;
 
 const int fwErrUnsupportedCmd = 1;
 const int fwErrNotFound = 2;
