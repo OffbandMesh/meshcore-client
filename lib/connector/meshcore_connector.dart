@@ -593,6 +593,33 @@ class MeshCoreConnector extends ChangeNotifier {
     mtuNow: _device?.mtuNow ?? 0,
   );
 
+  /// Writes the composer's actual byte budget to the app log.
+  ///
+  /// #592 was about this number, and until #793 it was the one thing the log
+  /// never recorded. We had Windows BLE logs back to August proving MTU 247,
+  /// and hundreds of Android sessions, and not one of them could evidence
+  /// whether the composer was usable: the log showed what was sent, never the
+  /// limit the field applied. A log reading `channel=0` beside a user saying
+  /// the keyboard is dead is a diagnosis; without it that is a guess.
+  ///
+  /// Derived from the same functions the composers call, never reimplemented,
+  /// so the log cannot drift away from the behaviour it is describing.
+  ///
+  /// Called on connect and on MTU change only. Not per keystroke or per send:
+  /// diagnostics must not become the outage (SAFELANE 11 rule 10).
+  void _logComposerBudget() {
+    final frame = effectiveMaxFrameSize;
+    final name = selfName;
+    final dm = maxContactMessageBytes(maxFrameBytes: frame);
+    final channel = maxChannelMessageBytes(name, maxFrameBytes: frame);
+    _appDebugLogService?.info(
+      'composer budget: frame=$frame dm=$dm channel=$channel '
+      'transport=${_activeTransport.name} name="${name ?? ''}"'
+      '${isComposerBudgetUsable(channel) ? '' : '  <-- CHANNEL COMPOSER UNUSABLE'}',
+      tag: 'BLE Connect',
+    );
+  }
+
   /// The frame-budget decision, as a pure function of its three inputs.
   ///
   /// Extracted from [effectiveMaxFrameSize] so every branch is reachable from a
@@ -2718,6 +2745,7 @@ class MeshCoreConnector extends ChangeNotifier {
       await _mtuSubscription?.cancel();
       _mtuSubscription = device.mtu.listen((mtu) {
         _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
+        _logComposerBudget();
         notifyListeners();
       });
 
