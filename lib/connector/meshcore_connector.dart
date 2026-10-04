@@ -605,16 +605,31 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Derived from the same functions the composers call, never reimplemented,
   /// so the log cannot drift away from the behaviour it is describing.
   ///
-  /// Called on connect and on MTU change only. Not per keystroke or per send:
-  /// diagnostics must not become the outage (SAFELANE 11 rule 10).
-  void _logComposerBudget() {
+  /// Logs the name's LENGTH, never the name. The length is the whole of what
+  /// the budget depends on (the channel budget subtracts a `"<name>: "`
+  /// prefix), and these logs get attached to public issues. A radio name is
+  /// usually an amateur callsign, which is publicly resolvable to a real name
+  /// and address, so it has no business in a file we ask users to upload
+  /// (CLAUDE-BASE, redaction discipline).
+  ///
+  /// Called whenever an INPUT to the budget changes: the MTU, and the self
+  /// name. Both matter and they arrive at different times, the name only in
+  /// SELF_INFO well after the first MTU event, so logging on the MTU alone
+  /// would report a budget computed from a null name. That is not a harmless
+  /// gap: `_senderNameBytes(null)` returns the 31-byte maximum, so the early
+  /// line would understate the real channel budget.
+  ///
+  /// Not per keystroke or per send: diagnostics must not become the outage
+  /// (SAFELANE 11 rule 10).
+  void _logComposerBudget(String reason) {
     final frame = effectiveMaxFrameSize;
     final name = selfName;
     final dm = maxContactMessageBytes(maxFrameBytes: frame);
     final channel = maxChannelMessageBytes(name, maxFrameBytes: frame);
     _appDebugLogService?.info(
-      'composer budget: frame=$frame dm=$dm channel=$channel '
-      'transport=${_activeTransport.name} name="${name ?? ''}"'
+      'composer budget ($reason): frame=$frame dm=$dm channel=$channel '
+      'transport=${_activeTransport.name} '
+      'nameLen=${name?.length ?? -1}'
       '${isComposerBudgetUsable(channel) ? '' : '  <-- CHANNEL COMPOSER UNUSABLE'}',
       tag: 'BLE Connect',
     );
@@ -2745,7 +2760,7 @@ class MeshCoreConnector extends ChangeNotifier {
       await _mtuSubscription?.cancel();
       _mtuSubscription = device.mtu.listen((mtu) {
         _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
-        _logComposerBudget();
+        _logComposerBudget('mtu');
         notifyListeners();
       });
 
@@ -6391,6 +6406,12 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Connector',
       );
     }
+    // The name is the other input to the channel composer's byte budget, and
+    // it only lands here, well after the first MTU event. Re-log so the entry
+    // reflects the real name length rather than the null-name worst case
+    // (#793).
+    _logComposerBudget('self-info');
+
     final selfName = _selfName?.trim();
     if (_activeTransport == MeshCoreTransportType.usb &&
         selfName != null &&
