@@ -140,6 +140,52 @@ void main() {
   });
 
   test(
+    'capture_trace.py records the runner, and the capture replays',
+    () async {
+      final python = Platform.isWindows ? 'python' : 'python3';
+      try {
+        await Process.run(python, ['--version']);
+      } on ProcessException {
+        markTestSkipped('$python not available');
+        return;
+      }
+      final runner = await FakeRadioRunner.start(
+        radio: parseFakeRadioSeedFile(
+          _readmeSeed(),
+          profile: FakeRadioProfile.offband(),
+        )..blockedKeys.add(Uint8List.fromList(List<int>.filled(32, 0x77))),
+        address: InternetAddress.loopbackIPv4,
+        port: 0,
+      );
+      addTearDown(runner.close);
+      final out = '${Directory.systemTemp.createTempSync('cap').path}/c.json';
+      final result = await Process.run(python, [
+        'tool/fake_radio/capture_trace.py',
+        '--tcp',
+        '127.0.0.1:${runner.server.port}',
+        '--label',
+        'runner self-check',
+        '--out',
+        out,
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+
+      final trace = FakeRadioTrace.load(out);
+      // Every request got its replies, the Offband ones included.
+      expect(trace.steps.every((s) => s.replies.isNotEmpty), isTrue);
+      expect(trace.blockedKeys().single, List<int>.filled(32, 0x77));
+      expect(trace.seed().contacts.map((c) => c.name), [
+        'Alpha',
+        'Routed',
+        'Hilltop',
+      ]);
+      // A fake seeded from the capture reproduces it.
+      expect(trace.replay(trace.radio()), isEmpty);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
     '`dart run tool/fake_radio.dart` serves a client and quits',
     () async {
       final root = Platform.environment['FLUTTER_ROOT'];
