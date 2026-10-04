@@ -8,6 +8,7 @@ import 'fake_clock.dart';
 import 'fake_radio_codes.dart';
 import 'fake_radio_profile.dart';
 import 'fake_radio_seed.dart';
+import 'fake_remote_node.dart';
 
 /// A MeshCore companion radio in software, for tests (#755).
 ///
@@ -101,6 +102,28 @@ class FakeRadio {
 
   final List<_SentPktHash> _pktHashRing = [];
 
+  /// Repeaters, room servers and sensors reachable over the mesh (#774).
+  final List<FakeRemoteNode> remoteNodes = [];
+
+  /// Nodes this companion is logged in to as admin; only these run CLI.
+  final Set<FakeRemoteNode> _adminSessions = {};
+
+  /// Adds [node], and its contact if the companion doesn't know it yet.
+  FakeRemoteNode addRemoteNode(FakeRemoteNode node) {
+    remoteNodes.add(node);
+    if (!contacts.any((c) => _sameKey(c.publicKey, node.contact.publicKey))) {
+      contacts.add(node.contact);
+    }
+    return node;
+  }
+
+  FakeRemoteNode? _nodeFor(FakeContact c) {
+    for (final n in remoteNodes) {
+      if (_sameKey(n.contact.publicKey, c.publicKey)) return n;
+    }
+    return null;
+  }
+
   final StreamController<Uint8List> _pushes =
       StreamController<Uint8List>.broadcast(sync: true);
 
@@ -127,6 +150,8 @@ class FakeRadio {
         return [_sendDirect(cmd)];
       case fwCmdSendChannelTxtMsg when len >= 7:
         return [_sendChannel(cmd)];
+      case fwCmdSendLogin when len >= 1 + fwPubKeySize:
+        return [_sendLogin(cmd)];
       case fwCmdAppStart when len >= 8:
         return [selfInfoFrame()];
       case fwCmdGetContacts:
@@ -352,6 +377,7 @@ class FakeRadio {
     );
     sentDirect.add(sent);
     if (ack != 0) _scheduleAck(sent);
+    if (txtType == fwTxtTypeCliData) _deliverCli(to, text);
     onDirectSent?.call(sent);
     return Uint8List.fromList([
       fwRespSent,
@@ -361,9 +387,68 @@ class FakeRadio {
     ]);
   }
 
-  /// Called for every direct send, after it is recorded; B3's remote nodes
-  /// answer CLI commands from here.
+  /// Called for every direct send, after it is recorded.
   void Function(FakeSentDirect sent)? onDirectSent;
+
+  /// CMD_SEND_LOGIN (MyMesh.cpp:3059-3080): RESP_CODE_SENT tagged with the
+  /// recipient's first 4 key bytes, then the node's answer after its
+  /// [FakeRemoteNode.replyDelay]. A wrong password gets no answer at all
+  /// (simple_repeater `handleLoginReq` returns 0), so the client times out.
+  Uint8List _sendLogin(Uint8List cmd) {
+    final key = cmd.sublist(1, 1 + fwPubKeySize);
+    final to = contactByPrefix(key);
+    if (to == null) return errFrame(fwErrNotFound);
+    final password = _cString(cmd, 1 + fwPubKeySize);
+    final node = _nodeFor(to);
+    if (node != null) {
+      final result = node.login(password);
+      clock.schedule(node.replyDelay, () {
+        if (result == null) return;
+        if (result == FakeLoginResult.admin) {
+          _adminSessions.add(node);
+        } else {
+          _adminSessions.remove(node);
+        }
+        // `onContactResponse` new-format success (MyMesh.cpp:1148-1160).
+        final admin = result == FakeLoginResult.admin;
+        push(
+          Uint8List.fromList([
+            fwPushLoginSuccess,
+            admin ? 1 : 0, // is_admin
+            ...to.publicKey.sublist(0, 6),
+            ..._u32(clock.epochSeconds), // server timestamp tag
+            admin ? 3 : 0, // PERM_ACL_ADMIN / PERM_ACL_GUEST
+            2, // simple_repeater FIRMWARE_VER_LEVEL
+          ]),
+        );
+      });
+    }
+    return Uint8List.fromList([
+      fwRespSent,
+      to.outPathLength < 0 ? 1 : 0,
+      ...key.sublist(0, 4), // pending_login
+      ..._u32(estTimeoutMs),
+    ]);
+  }
+
+  /// A CLI command reaches its node; an admin session gets the reply as a
+  /// TXT_TYPE_CLI_DATA message (`onCommandDataRecv`, MyMesh.cpp:907). A
+  /// `tempradio` applies 2 s after the reply and reverts after its minutes
+  /// (simple_repeater MyMesh.cpp:1027-1033).
+  void _deliverCli(FakeContact to, String text) {
+    final node = _nodeFor(to);
+    if (node == null || !_adminSessions.contains(node)) return;
+    clock.schedule(node.replyDelay, () {
+      final reply = node.command(text);
+      receiveDirect(node.contact, reply, txtType: fwTxtTypeCliData);
+      final temp = node.takePendingTempRadio();
+      if (temp == null) return;
+      clock.schedule(const Duration(seconds: 2), () => node.tempRadio = temp);
+      clock.schedule(Duration(milliseconds: 2000 + temp.minutes * 60000), () {
+        if (identical(node.tempRadio, temp)) node.tempRadio = null;
+      });
+    });
+  }
 
   /// Number of upcoming ACKs to lose, as if they never came back (B4).
   int acksToDrop = 0;
