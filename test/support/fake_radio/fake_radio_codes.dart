@@ -53,6 +53,28 @@ const int fwErrTableFull = 3;
 const int fwErrBadState = 4;
 const int fwErrIllegalArg = 6;
 
+// Offband commands (MyMesh.cpp:110,117; OffbandConfigProtocol.h). Request and
+// response share the code.
+const int fwOffbandConfig = 0xC0;
+const int fwOffbandGps = 0xC1;
+const int fwOffbandBlock = 0xC2;
+const int fwOffbandFemLna = 0xC3;
+const int fwOffbandCaplog = 0xC4;
+const int fwOffbandDeviceUi = 0xC5;
+const int fwOffbandPktHash = 0xC6;
+
+/// 0xC2 sub-commands (OffbandConfigProtocol.h:312-315).
+const int fwBlockAdd = 0x01;
+const int fwBlockRemove = 0x02;
+const int fwBlockList = 0x03;
+const int fwBlockClear = 0x04;
+
+/// 0xC6 sub-commands and errors (OffbandConfigProtocol.h:158-161).
+const int fwPktHashGet = 0x01;
+const int fwPktHashErr = 0x7F;
+const int fwPktHashErrUnknownKey = 1;
+const int fwPktHashErrMalformed = 2;
+
 /// `ADV_TYPE_*` (src/helpers/AdvertDataHelpers.h).
 const int fwAdvTypeChat = 1;
 const int fwAdvTypeRepeater = 2;

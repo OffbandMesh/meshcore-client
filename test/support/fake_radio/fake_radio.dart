@@ -15,12 +15,10 @@ import 'fake_radio_seed.dart';
 /// the named firmware function builds it, in
 /// OffbandMesh/meshcore-firmware `examples/companion_radio/MyMesh.cpp`.
 class FakeRadio {
-  FakeRadio({
-    FakeRadioSeed? seed,
-    this.profile = FakeRadioProfile.offbandDefault,
-    FakeClock? clock,
-  }) : seed = seed ?? FakeRadioSeed(),
-       clock = clock ?? FakeClock() {
+  FakeRadio({FakeRadioSeed? seed, FakeRadioProfile? profile, FakeClock? clock})
+    : seed = seed ?? FakeRadioSeed(),
+      profile = profile ?? FakeRadioProfile.offband(),
+      clock = clock ?? FakeClock() {
     final s = this.seed;
     name = s.name;
     txPowerDbm = s.txPowerDbm;
@@ -71,6 +69,12 @@ class FakeRadio {
   final List<FakeContact> contacts = [];
   final Map<int, FakeChannel> channels = {};
 
+  /// The Offband user-block list (0xC2), as public keys.
+  final List<Uint8List> blockedKeys = [];
+
+  /// `MAX_BLOCKED_KEYS` (src/helpers/BlockStore.h:20).
+  static const int maxBlockedKeys = 32;
+
   /// Frames waiting for CMD_SYNC_NEXT_MESSAGE (the firmware's offline queue).
   final List<Uint8List> offlineQueue = [];
 
@@ -92,6 +96,9 @@ class FakeRadio {
     received.add(Uint8List.fromList(cmd));
     if (cmd.isEmpty) return [];
     final len = cmd.length;
+    if (profile.offband && cmd[0] >= fwOffbandConfig && cmd[0] <= 0xCF) {
+      return _offband(cmd);
+    }
     switch (cmd[0]) {
       case fwCmdDeviceQuery when len >= 2:
         return [deviceInfoFrame()];
@@ -157,6 +164,85 @@ class FakeRadio {
         // that doesn't answer them, is an unsupported command.
         return [errFrame(fwErrUnsupportedCmd)];
     }
+  }
+
+  /// Offband commands. The fake answers the ones a default companion's client
+  /// sends: GPS status, the block list and the packet-hash query. Config,
+  /// FEM LNA, caplog and device-UI need capability bits the default profile
+  /// doesn't advertise, so a client honoring the bits never sends them; the
+  /// fake rejects them as unsupported rather than invent a reply.
+  List<Uint8List> _offband(Uint8List cmd) {
+    final len = cmd.length;
+    switch (cmd[0]) {
+      case fwOffbandGps:
+        // MyMesh.cpp:1975-1983: "enabled=N " + board status, NUL-terminated.
+        final enabled = customVars['gps'] == '1' ? 1 : 0;
+        return [
+          Uint8List.fromList([
+            fwOffbandGps,
+            ...utf8.encode('enabled=$enabled ${profile.gpsStatusText}'),
+            0,
+          ]),
+        ];
+      case fwOffbandBlock when len >= 2:
+        return _block(cmd);
+      case fwOffbandPktHash when len >= 2 && cmd[1] == fwPktHashGet:
+        // MyMesh.cpp:2114-2133: exactly 7 bytes; the fake keeps no send ring,
+        // so every well-formed query is an unknown key.
+        return [
+          Uint8List.fromList([
+            fwOffbandPktHash,
+            fwPktHashErr,
+            len != 7 ? fwPktHashErrMalformed : fwPktHashErrUnknownKey,
+          ]),
+        ];
+      default:
+        return [errFrame(fwErrUnsupportedCmd)];
+    }
+  }
+
+  /// 0xC2 (MyMesh.cpp:2074-2100) and its list drain (`blockListDrain`).
+  List<Uint8List> _block(Uint8List cmd) {
+    final sub = cmd[1];
+    Uint8List ack(bool ok) =>
+        Uint8List.fromList([fwOffbandBlock, sub, ok ? 1 : 0]);
+    bool same(Uint8List a, List<int> b) {
+      for (var i = 0; i < fwPubKeySize; i++) {
+        if (a[i] != b[i]) return false;
+      }
+      return true;
+    }
+
+    if ((sub == fwBlockAdd || sub == fwBlockRemove) &&
+        cmd.length >= 2 + fwPubKeySize) {
+      // BlockStore (src/helpers/BlockStore.h:48-70): add dedups (a repeat is
+      // true), fails only when full; remove swaps the last entry into the gap.
+      final key = cmd.sublist(2, 2 + fwPubKeySize);
+      final at = blockedKeys.indexWhere((k) => same(k, key));
+      if (sub == fwBlockAdd) {
+        if (at >= 0) return [ack(true)];
+        if (blockedKeys.length >= maxBlockedKeys) return [ack(false)];
+        blockedKeys.add(Uint8List.fromList(key));
+        return [ack(true)];
+      }
+      if (at < 0) return [ack(false)];
+      final last = blockedKeys.removeLast();
+      if (at < blockedKeys.length) blockedKeys[at] = last;
+      return [ack(true)];
+    }
+    if (sub == fwBlockClear) {
+      blockedKeys.clear();
+      return [ack(true)];
+    }
+    if (sub == fwBlockList) {
+      return [
+        Uint8List.fromList([fwOffbandBlock, sub, 0xFF, blockedKeys.length]),
+        for (var i = 0; i < blockedKeys.length; i++)
+          Uint8List.fromList([fwOffbandBlock, sub, i, ...blockedKeys[i]]),
+        Uint8List.fromList([fwOffbandBlock, sub, 0xFE]),
+      ];
+    }
+    return [errFrame(fwErrIllegalArg)];
   }
 
   /// `writeOKFrame` (MyMesh.cpp:258).

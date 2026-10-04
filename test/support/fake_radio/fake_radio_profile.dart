@@ -1,24 +1,54 @@
-/// Which firmware the fake radio plays. The difference is what DEVICE_INFO
-/// reports and whether Offband (0xC0-0xCF) commands are answered.
-///
-/// A4 (#769) builds these from the firmware's protocol manifests; until then
-/// [offband] and [stock] carry the values read from firmware source:
-/// - Offband: `examples/companion_radio/MyMesh.h:22` (FIRMWARE_VER_CODE 22) and
-///   the DEVICE_INFO tail at MyMesh.cpp:2437-2504.
-/// - Stock: upstream meshcore-dev/MeshCore `a366955c` (v1.17.1,
-///   FIRMWARE_VER_CODE 13), whose DEVICE_INFO ends after path_hash_mode.
+import 'fake_radio_manifest.dart';
+
+/// Which firmware the fake radio plays (#769). The difference is what
+/// DEVICE_INFO reports and whether Offband commands are answered. Built from a
+/// firmware protocol manifest, so codes, bits and versions follow the firmware.
 class FakeRadioProfile {
   const FakeRadioProfile({
     required this.name,
     required this.firmwareVerCode,
     required this.versionString,
     required this.offband,
+    this.manifest,
     this.offbandCaps = 0,
     this.femLnaEnabled = false,
     this.offbandCaps2 = 0,
     this.ledEnabled = 0,
     this.displayMode = 0,
+    this.gpsStatusText = 'detected=0',
   });
+
+  /// A companion build of [manifest]'s firmware.
+  ///
+  /// Offband capability bits default to the ones every companion sets
+  /// unconditionally: OFFBAND_CAP_BLOCK and OFFBAND_CAP_CAPLOG
+  /// (MyMesh.cpp:2448,2453) and OFFBAND_CAP2_PKT_HASH (MyMesh.cpp:2499).
+  /// Board-dependent bits (observer, FEM LNA, buzzer, button, indicators) are
+  /// off unless named.
+  factory FakeRadioProfile.fromManifest(
+    FakeRadioManifest manifest, {
+    Iterable<String> caps = const ['OFFBAND_CAP_BLOCK', 'OFFBAND_CAP_CAPLOG'],
+    Iterable<String> caps2 = const ['OFFBAND_CAP2_PKT_HASH'],
+  }) {
+    final offband = manifest.isOffband;
+    return FakeRadioProfile(
+      name: manifest.flavor,
+      firmwareVerCode: manifest.firmwareVerCode,
+      versionString: manifest.deviceInfoVersion,
+      offband: offband,
+      manifest: manifest,
+      offbandCaps: offband ? manifest.capsOf(caps) : 0,
+      offbandCaps2: offband ? manifest.capsOf(caps2, second: true) : 0,
+    );
+  }
+
+  /// The pinned Offband release (`offband-v1.5.0-beta7`).
+  factory FakeRadioProfile.offband() =>
+      FakeRadioProfile.fromManifest(FakeRadioManifest.pinnedOffband());
+
+  /// The pinned upstream MeshCore release (`companion-v1.17.1`).
+  factory FakeRadioProfile.stock() =>
+      FakeRadioProfile.fromManifest(FakeRadioManifest.pinnedStock());
 
   final String name;
   final int firmwareVerCode;
@@ -29,29 +59,14 @@ class FakeRadioProfile {
   /// True for Offband firmware: the extended DEVICE_INFO tail is sent and
   /// Offband commands are answered. Stock rejects them as unknown commands.
   final bool offband;
+  final FakeRadioManifest? manifest;
   final int offbandCaps;
   final bool femLnaEnabled;
   final int offbandCaps2;
   final int ledEnabled;
   final int displayMode;
 
-  static const FakeRadioProfile offbandDefault = FakeRadioProfile(
-    name: 'offband',
-    firmwareVerCode: 22,
-    versionString: '1.5.0-1.17.1',
-    offband: true,
-    // OFFBAND_CAP_BLOCK (0x02) | OFFBAND_CAP_CAPLOG (0x20), always set on the
-    // companion (MyMesh.cpp:2448,2453; OffbandConfigProtocol.h:301,305); no
-    // observer, no FEM LNA.
-    offbandCaps: 0x02 | 0x20,
-    // OFFBAND_CAP2_PKT_HASH, advertised unconditionally (MyMesh.cpp:2499).
-    offbandCaps2: 0x08,
-  );
-
-  static const FakeRadioProfile stockDefault = FakeRadioProfile(
-    name: 'stock',
-    firmwareVerCode: 13,
-    versionString: 'v1.17.1',
-    offband: false,
-  );
+  /// What `sensors.getGpsStatusText` adds after `enabled=N ` in the 0xC1
+  /// reply. Board-specific in firmware; a seed value here.
+  final String gpsStatusText;
 }

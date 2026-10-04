@@ -33,7 +33,8 @@ void main() {
       expect(f[3], 8);
       expect(_cstr(f, 8, 12), '1 Oct 2026');
       expect(_cstr(f, 20, 40), 'Fake Radio Board');
-      expect(_cstr(f, 60, 20), '1.5.0-1.17.1');
+      // offband-v1.5.0-beta7 is built on MeshCore v1.17.0.
+      expect(_cstr(f, 60, 20), '1.5.0-1.17.0');
       expect(f.length, 87);
       expect(f[82], 0x22); // BLOCK | CAPLOG
       expect(f[84], 0x08); // PKT_HASH
@@ -41,7 +42,7 @@ void main() {
 
     test('stock: ends after path hash mode (82 bytes), no Offband tail', () {
       final f = FakeRadio(
-        profile: FakeRadioProfile.stockDefault,
+        profile: FakeRadioProfile.stock(),
       ).handle(_cmd([fwCmdDeviceQuery, 4])).single;
       expect(f[1], 13);
       expect(_cstr(f, 60, 20), 'v1.17.1');
@@ -127,7 +128,7 @@ void main() {
     });
 
     test('stock refuses a time earlier than its clock', () {
-      final radio = FakeRadio(profile: FakeRadioProfile.stockDefault);
+      final radio = FakeRadio(profile: FakeRadioProfile.stock());
       expect(radio.handle(_cmd([fwCmdSetDeviceTime, ..._le32(1000)])).single, [
         fwRespErr,
         fwErrIllegalArg,
