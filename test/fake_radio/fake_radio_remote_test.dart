@@ -174,6 +174,14 @@ void main() {
       },
     );
 
+    test('an "XX|" prefix from the companion is reflected in the reply', () {
+      final (radio, node, _) = setUpNode();
+      login(radio, 'password');
+      expect(cli(radio, '0A|get tx'), '0A|> 20');
+      expect(cli(radio, '  1F|ver'), '1F|v1.17.0 (Build: 1 Oct 2026)');
+      expect(node.commands.last, 'ver');
+    });
+
     test('anything else is an unknown command', () {
       final (radio, _, _) = setUpNode();
       login(radio, 'password');

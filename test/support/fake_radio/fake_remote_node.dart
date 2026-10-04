@@ -59,6 +59,19 @@ class FakeRemoteNode {
   /// One CLI command, its reply text. A `tempradio` leaves its settings in
   /// [takePendingTempRadio] for the radio to schedule.
   String command(String text) {
+    // simple_repeater MyMesh.cpp:1249-1255 (also room server and sensor):
+    // leading spaces skipped, and an optional "XX|" prefix from the companion
+    // is reflected at the start of the reply.
+    var body = text.trimLeft();
+    var prefix = '';
+    if (body.length > 4 && body[2] == '|') {
+      prefix = body.substring(0, 3);
+      body = body.substring(3);
+    }
+    return '$prefix${_command(body)}';
+  }
+
+  String _command(String text) {
     commands.add(text);
     if (offband && _word(text, 'version')) {
       // CommonCLI.cpp:650-657 (Offband identity, FF3 / #180).
