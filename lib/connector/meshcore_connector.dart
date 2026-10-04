@@ -3960,10 +3960,13 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
 
+    final syncCount = _contactFullStreams <= contactSyncMaxFullStreams
+        ? 'full sync $_contactFullStreams of $contactSyncMaxFullStreams'
+        : 'full sync $_contactFullStreams, past the $contactSyncMaxFullStreams '
+              'automatic syncs; checking by key';
     _appDebugLogService?.warn(
       'Contact sync short: radio declared ${declared ?? 'no total'}, sent '
-      '$received (full sync $_contactFullStreams of '
-      '$contactSyncMaxFullStreams). Nothing removed.',
+      '$received ($syncCount). Nothing removed.',
       tag: 'ContactSync',
     );
     // A user refresh during the by-key checks only adds what it delivered;
