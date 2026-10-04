@@ -132,12 +132,67 @@ class FakeRadio {
 
   void push(Uint8List frame) => _pushes.add(frame);
 
-  Future<void> close() => _pushes.close();
+  Future<void> close() async {
+    await _pushes.close();
+    await _drops.close();
+  }
 
   /// Replies to one command frame, in the order the firmware writes them.
   List<Uint8List> handle(Uint8List cmd) {
     received.add(Uint8List.fromList(cmd));
     if (cmd.isEmpty) return [];
+    final fault = _takeFault(cmd[0]);
+    if (fault != null && fault.error != null) {
+      return [errFrame(fault.error!)];
+    }
+    final replies = _dispatch(cmd);
+    if (fault != null && fault.delay != null) {
+      clock.schedule(fault.delay!, () => replies.forEach(push));
+      return [];
+    }
+    return replies;
+  }
+
+  // Scripted faults (#775) -------------------------------------------------
+
+  final Map<int, List<_Fault>> _faults = {};
+
+  /// The next [count] commands with code [command] get ERR [error] instead of
+  /// their normal reply, and do nothing.
+  void failNext(int command, {int error = fwErrBadState, int count = 1}) {
+    for (var i = 0; i < count; i++) {
+      (_faults[command] ??= []).add(_Fault(error: error));
+    }
+  }
+
+  /// The next [count] replies to [command] arrive [delay] late, on [clock].
+  void delayNext(int command, Duration delay, {int count = 1}) {
+    for (var i = 0; i < count; i++) {
+      (_faults[command] ??= []).add(_Fault(delay: delay));
+    }
+  }
+
+  _Fault? _takeFault(int command) {
+    final queue = _faults[command];
+    if (queue == null || queue.isEmpty) return null;
+    return queue.removeAt(0);
+  }
+
+  /// When set, the next contact sync sends START and this many contacts,
+  /// then the link drops: no END_OF_CONTACTS.
+  int? cutContactsAfter;
+
+  final StreamController<void> _drops = StreamController<void>.broadcast(
+    sync: true,
+  );
+
+  /// Fires when the radio drops the link; adapters close their transport.
+  Stream<void> get drops => _drops.stream;
+
+  /// Drops the link now, as a radio that reboots or loses power would.
+  void dropConnection() => _drops.add(null);
+
+  List<Uint8List> _dispatch(Uint8List cmd) {
     final len = cmd.length;
     if (profile.offband && cmd[0] >= fwOffbandConfig && cmd[0] <= 0xCF) {
       return _offband(cmd);
@@ -711,6 +766,14 @@ class FakeRadio {
     var mostRecent = 0;
     for (final c in contacts) {
       if (c.lastmod > since) {
+        final cut = cutContactsAfter;
+        if (cut != null && out.length - 1 >= cut) {
+          cutContactsAfter = null;
+          // An event-loop turn later, so the adapters deliver the partial
+          // stream first (they deliver replies on microtasks).
+          Timer.run(dropConnection);
+          return out;
+        }
         out.add(contactFrame(fwRespContact, c));
         if (c.lastmod > mostRecent) mostRecent = c.lastmod;
       }
@@ -821,6 +884,13 @@ class FakeSentChannel {
   final int index;
   final int timestamp;
   final String text;
+}
+
+class _Fault {
+  _Fault({this.error, this.delay});
+
+  final int? error;
+  final Duration? delay;
 }
 
 class _SentPktHash {
