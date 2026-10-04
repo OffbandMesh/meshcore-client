@@ -721,12 +721,16 @@ class FakeRadio {
       ..addByte(clientRepeat ? 1 : 0)
       ..addByte(pathHashMode);
     if (profile.offband) {
-      b
-        ..addByte(profile.offbandCaps)
-        ..addByte(profile.femLnaEnabled ? 1 : 0)
-        ..addByte(profile.offbandCaps2)
-        ..addByte(profile.ledEnabled)
-        ..addByte(profile.displayMode);
+      // Older Offband builds send a shorter tail: v14 caps, v16 FEM state,
+      // v18 caps2, v21 led/display (MyMesh.cpp:2454-2504).
+      final tail = [
+        profile.offbandCaps,
+        profile.femLnaEnabled ? 1 : 0,
+        profile.offbandCaps2,
+        profile.ledEnabled,
+        profile.displayMode,
+      ];
+      b.add(tail.take(profile.deviceInfoTailBytes).toList());
     }
     return b.toBytes();
   }
