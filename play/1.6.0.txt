@@ -1,0 +1,3 @@
+Offband Meshcore 1.6.0
+
+Our biggest update yet. Contacts are reworked: tap a contact shared on a channel to add it, share your own contact into a channel, add by public key or QR, and swap contacts with stock MeshCore. Move a radio's setup with stock-compatible config export and import, and your identity too. New region radio presets. And a short contact sync now recovers itself automatically and tells you what came back. Plus an About screen and top-of-screen notifications.
