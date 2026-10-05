@@ -22,11 +22,6 @@ import json
 import sys
 import time
 
-try:
-    import serial
-except ImportError:
-    sys.exit("needs pyserial: pip install pyserial")
-
 APP_TO_RADIO = 0x3C  # '<'
 RADIO_TO_APP = 0x3E  # '>'
 
@@ -44,12 +39,40 @@ RESP_DEVICE_INFO = 13
 RESP_NO_MORE_MESSAGES = 10
 
 
+class TcpLink:
+    """The same framing over TCP: for checking this script against
+    `dart run tool/fake_radio.dart`, or a radio with a TCP companion."""
+
+    def __init__(self, address):
+        import socket
+        host, _, port = address.rpartition(":")
+        self.sock = socket.create_connection((host or "127.0.0.1", int(port)), timeout=5)
+        self.sock.settimeout(0.05)
+        self.buf = bytearray()
+
+    def send(self, payload):
+        self.sock.sendall(bytes([APP_TO_RADIO, len(payload) & 0xFF, len(payload) >> 8]) + payload)
+
+    def read(self, n):
+        import socket
+        try:
+            return self.sock.recv(n)
+        except socket.timeout:
+            return b""
+
+    frames = None  # bound below, shared with Link
+
+
 class Link:
     def __init__(self, port, baud, dtr):
         # Set the lines before opening so pyserial doesn't pulse them. RTS stays
         # low always; DTR high suits nRF52 boards (USB-CDC writes wait for it),
         # while ESP32 USB-Serial/JTAG boards can reset into download mode on a
         # DTR change, so use --no-dtr for those (the app's #244 VID gate).
+        try:
+            import serial
+        except ImportError:
+            sys.exit("needs pyserial: pip install pyserial")
         self.port = serial.Serial()
         self.port.port = port
         self.port.baudrate = baud
@@ -65,12 +88,15 @@ class Link:
         self.port.write(bytes([APP_TO_RADIO, len(payload) & 0xFF, len(payload) >> 8]) + payload)
         self.port.flush()
 
+    def read(self, n):
+        return self.port.read(n)
+
     def frames(self, quiet=0.4, until=None, limit=5.0):
         """Reply frames until [quiet] s without a frame, [until] says stop, or [limit] s."""
         out = []
         start = last = time.time()
         while time.time() - start < limit:
-            self.buf += self.port.read(512)
+            self.buf += self.read(512)
             got = False
             while True:
                 at = self.buf.find(bytes([RADIO_TO_APP]))
@@ -96,16 +122,27 @@ class Link:
         return out
 
 
+TcpLink.frames = Link.frames
+
+
+def is_push(frame):
+    """PUSH_CODE_* are 0x80-0x9x (MyMesh.cpp:186-202). Offband replies use
+    0xC0-0xCF, so they are replies, not pushes."""
+    return 0x80 <= frame[0] < 0xC0
+
+
 def split(frames):
-    """Pushes (code >= 0x80) arrive whenever the radio likes; keep them apart."""
-    replies = [f for f in frames if f and f[0] < 0x80]
-    pushes = [f for f in frames if f and f[0] >= 0x80]
+    """Pushes arrive whenever the radio likes; keep them apart."""
+    replies = [f for f in frames if f and not is_push(f)]
+    pushes = [f for f in frames if f and is_push(f)]
     return replies, pushes
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", required=True)
+    where = ap.add_mutually_exclusive_group(required=True)
+    where.add_argument("--port", help="serial port, e.g. COM12 or /dev/ttyACM0")
+    where.add_argument("--tcp", help="host:port, e.g. 127.0.0.1:5000 (the fake runner)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--label", required=True, help="radio and firmware, e.g. 'RAK4631 offband-v1.5.0-beta7'")
     ap.add_argument("--out", required=True)
@@ -115,7 +152,7 @@ def main():
                     help="keep DTR low: for ESP32 USB-Serial/JTAG boards (VID 303A)")
     args = ap.parse_args()
 
-    link = Link(args.port, args.baud, dtr=not args.no_dtr)
+    link = TcpLink(args.tcp) if args.tcp else Link(args.port, args.baud, dtr=not args.no_dtr)
     steps = []
 
     def step(payload, **kw):
@@ -154,7 +191,7 @@ def main():
         "format_version": 1,
         "label": args.label,
         "captured": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "port": args.port,
+        "port": args.port or f"tcp:{args.tcp}",
         "steps": steps,
     }
     with open(args.out, "w", encoding="utf-8") as f:
