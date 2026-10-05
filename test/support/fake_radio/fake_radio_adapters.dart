@@ -23,7 +23,16 @@ class FakeRadioTcpServer {
         s.add(_wrap(frame));
       }
     });
+    _dropSub = radio.drops.listen((_) async {
+      for (final s in List<Socket>.of(_sockets)) {
+        await s.flush();
+        s.destroy();
+      }
+      _sockets.clear();
+    });
   }
+
+  late final StreamSubscription<void> _dropSub;
 
   static Future<FakeRadioTcpServer> start(
     FakeRadio radio, {
@@ -84,6 +93,7 @@ class FakeRadioTcpServer {
 
   Future<void> close() async {
     await _pushSub.cancel();
+    await _dropSub.cancel();
     for (final s in List<Socket>.of(_sockets)) {
       s.destroy();
     }
@@ -104,7 +114,14 @@ class FakeRadioInProcess {
     _pushSub = radio.pushes.listen(
       (frame) => scheduleMicrotask(() => connector.handleFrameForTest(frame)),
     );
+    // A dropped link ends the transport, as TCP's onDone does in connectTcp.
+    _dropSub = radio.drops.listen((_) {
+      connector.sendFrameOverrideForTest = null;
+      unawaited(connector.disconnect(manual: false));
+    });
   }
+
+  late final StreamSubscription<void> _dropSub;
 
   /// Attaches [radio] and runs the connector's real handshake against it.
   static Future<FakeRadioInProcess> connect(
@@ -122,6 +139,7 @@ class FakeRadioInProcess {
 
   Future<void> close() async {
     await _pushSub.cancel();
+    await _dropSub.cancel();
     connector.sendFrameOverrideForTest = null;
   }
 }

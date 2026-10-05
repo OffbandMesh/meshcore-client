@@ -127,6 +127,7 @@ void main() {
         if (n.startsWith('fwCmd')) return 'cmd${n.substring(5)}';
         if (n.startsWith('fwResp')) return 'respCode${n.substring(6)}';
         if (n.startsWith('fwErr')) return 'errCode${n.substring(5)}';
+        if (n.startsWith('fwPush')) return 'pushCode${n.substring(6)}';
         if (RegExp(r'^fwOffband[A-Z]').hasMatch(n)) {
           return 'cmdOffband${n.substring(9)}';
         }
