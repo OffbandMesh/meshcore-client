@@ -34,10 +34,14 @@ import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
+import '../widgets/add_contact_by_key_dialog.dart';
+import '../widgets/contact_verification_badge.dart';
+import '../widgets/my_contact_qr_dialog.dart';
 import '../widgets/unread_badge.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
 import 'chat_screen.dart';
+import 'contact_qr_scanner_screen.dart';
 import 'discovery_screen.dart';
 import 'map_screen.dart';
 import 'repeater_hub_screen.dart';
@@ -410,6 +414,43 @@ class _ContactsScreenState extends State<ContactsScreen>
                     builder: (context) => const DiscoveryScreen(),
                   ),
                 ),
+              ),
+              // Provisional home so key entry is reachable. The proper
+              // add-contact surface, split away from the advert affordance,
+              // is #632 under epic #623.
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.key_outlined),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_addByKey),
+                  ],
+                ),
+                onTap: () => showAddContactByKeyDialog(context),
+              ),
+              // Scanning is a first-class way in, not just a button buried in
+              // the key field, so it gets its own entry here and routes
+              // straight into the add flow already filled in. (#629)
+              if (contactQrScanAvailable)
+                PopupMenuItem(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.qr_code_scanner),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.contacts_scanContactQr),
+                    ],
+                  ),
+                  onTap: () => _scanContactQr(context),
+                ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_2),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_myContactQr),
+                  ],
+                ),
+                onTap: () => showMyContactQrDialog(context),
               ),
             ],
             icon: const Icon(Icons.more_vert),
@@ -914,6 +955,20 @@ class _ContactsScreenState extends State<ContactsScreen>
       case ContactTypeFilter.sensors:
         return contact.type == advTypeSensor;
     }
+  }
+
+  /// Scan a contact QR from the contacts menu, then hand the result to the add
+  /// dialog already populated. (#629)
+  ///
+  /// Same scanner and same parser as the key-field button; only the entry point
+  /// differs. Scanning is how most people will actually add someone, so it
+  /// should not be reachable only from inside a field they have to open first.
+  Future<void> _scanContactQr(BuildContext context) async {
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const ContactQrScannerScreen()),
+    );
+    if (!context.mounted || scanned == null) return;
+    await showAddContactByKeyDialog(context, initialKeyText: scanned);
   }
 
   DateTime _resolveLastSeen(Contact contact) {
@@ -1454,6 +1509,20 @@ class _ContactsScreenState extends State<ContactsScreen>
                 },
               ),
             ] else ...[
+              // Sensors run the same admin login and CLI as repeaters
+              // (stock SensorMesh), so they share the repeater admin hub (#745).
+              if (contact.type == advTypeSensor)
+                ListTile(
+                  leading: const Icon(
+                    Icons.sensors_outlined,
+                    color: Colors.orange,
+                  ),
+                  title: Text(context.l10n.contacts_manageSensor),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showRepeaterLogin(context, contact);
+                  },
+                ),
               if (contact.pathLength > 0)
                 ListTile(
                   leading: const Icon(Icons.radar, color: Colors.green),
@@ -1616,7 +1685,22 @@ class _ContactTile extends StatelessWidget {
                   ),
                 ],
               )
-            : Text(contact.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            : Row(
+                children: [
+                  // Reads as a column of state down the list. Calm by design:
+                  // a key-added contact is not a problem, just less confirmed
+                  // (#630).
+                  ContactVerificationBadge(contact: contact),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      contact.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1722,6 +1806,14 @@ class _ContactTile extends StatelessWidget {
   }
 
   String _formatLastSeen(BuildContext context, DateTime lastSeen) {
+    // A contact added from a bare key carries the epoch deliberately, so the
+    // firmware advert replay guard cannot mute it (#627). Rendering that
+    // through the relative formatter would claim it was last seen tens of
+    // thousands of days ago, which is worse than saying nothing. (#630)
+    if (lastSeen.millisecondsSinceEpoch == 0) {
+      return context.l10n.contacts_lastSeenNever;
+    }
+
     final now = DateTime.now();
     final diff = now.difference(lastSeen);
 

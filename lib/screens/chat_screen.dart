@@ -32,6 +32,7 @@ import '../services/chat_text_scale_service.dart';
 import '../services/path_history_service.dart';
 import '../services/translation_service.dart';
 import '../widgets/chat_zoom_wrapper.dart';
+import '../widgets/composer_budget_notice.dart';
 import '../widgets/contact_settings_dialog.dart';
 import '../widgets/elements_ui.dart';
 import '../widgets/mention_autocomplete.dart';
@@ -600,6 +601,28 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     final colorScheme = Theme.of(context).colorScheme;
     final settings = context.watch<AppSettingsService>().settings;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Says so out loud when the link leaves no room for text, instead of
+        // presenting a field that silently rejects every keystroke (#684).
+        ComposerBudgetNotice(
+          maxBytes: maxBytes,
+          transport: connector.activeTransport,
+          isConnected: connector.isConnected,
+        ),
+        _buildComposerBar(context, colorScheme, settings, maxBytes, connector),
+      ],
+    );
+  }
+
+  Widget _buildComposerBar(
+    BuildContext context,
+    ColorScheme colorScheme,
+    AppSettings settings,
+    int maxBytes,
+    MeshCoreConnector connector,
+  ) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(

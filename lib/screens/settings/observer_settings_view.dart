@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../connector/meshcore_connector.dart';
 import '../../models/observer_config.dart';
+import '../../helpers/snack_bar_builder.dart';
 import '../../services/observer_config_service.dart';
 import 'config_profile_import_screen.dart';
 import 'mqtt_brokers_screen.dart';
@@ -163,18 +164,16 @@ class _ObserverSettingsViewState extends State<ObserverSettingsView> {
     _seedFromConfig(svc.config);
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          invalidInterval
-              ? 'Status interval must be 10–3600 seconds'
-              : ok
-              ? 'Observer settings saved'
-              : (svc.lastError ??
-                    'Some changes failed. Re-read from the device'),
-        ),
-        backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
+    showDismissibleSnackBar(
+      context,
+      content: Text(
+        invalidInterval
+            ? 'Status interval must be 10–3600 seconds'
+            : ok
+            ? 'Observer settings saved'
+            : (svc.lastError ?? 'Some changes failed. Re-read from the device'),
       ),
+      backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
     );
   }
 

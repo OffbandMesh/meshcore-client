@@ -1,8 +1,66 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/contact.dart';
 import '../models/path_selection.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
+import '../utils/app_logger.dart';
+
+/// A repeater reply that arrived with no command waiting to receive it.
+///
+/// [command] carries the original request when the reply could be traced back
+/// to one that already timed out, and is null when the reply cannot be
+/// attributed to anything this service sent.
+class UnmatchedRepeaterResponse {
+  final String repeaterKeyHex;
+  final String response;
+  final String? command;
+  final Duration? sinceTimeout;
+
+  const UnmatchedRepeaterResponse({
+    required this.repeaterKeyHex,
+    required this.response,
+    this.command,
+    this.sinceTimeout,
+  });
+
+  /// True when this answers a request that timed out rather than arriving
+  /// unsolicited.
+  bool get isLateReply => command != null;
+}
+
+/// Thrown when a CLI command's window closes with no reply.
+///
+/// Carries the window that was actually armed, so callers can report the real
+/// figure. The previous message printed `(timeoutMs / 1000).ceil()`, so a
+/// 4074 ms window announced "timeout after 5 seconds": every window in
+/// (4000, 5000] reported the same 5, and the number shown was never the number
+/// used (#531).
+class RepeaterCommandTimeout implements Exception {
+  final String command;
+  final int timeoutMs;
+
+  const RepeaterCommandTimeout({
+    required this.command,
+    required this.timeoutMs,
+  });
+
+  /// The armed window in seconds to one decimal, e.g. `28.7`.
+  String get secondsText => (timeoutMs / 1000).toStringAsFixed(1);
+
+  /// Non-localized fallback for logs and for callers without a
+  /// [BuildContext]. UI paths should prefer [secondsText] with their own
+  /// localized string.
+  @override
+  String toString() => 'Command timed out after $secondsText seconds';
+}
+
+class _ExpiredCommand {
+  final String command;
+  final DateTime expiredAt;
+
+  const _ExpiredCommand({required this.command, required this.expiredAt});
+}
 
 class RepeaterCommandService {
   final MeshCoreConnector _connector;
@@ -10,9 +68,26 @@ class RepeaterCommandService {
   final Map<String, Timer> _commandTimeouts = {};
   final Map<String, String> _commandPrefixes = {};
   final Map<String, String> _pendingByPrefix = {};
+  final Map<String, _ExpiredCommand> _expiredCommands = {};
   int _prefixCounter = 0;
 
   static const int maxRetries = 5;
+
+  /// How long a timed-out command stays remembered so a reply arriving after
+  /// its window can still be presented with the request it answers.
+  static const Duration lateReplyRetention = Duration(minutes: 2);
+
+  /// Invoked when a reply cannot be handed to a waiting command.
+  ///
+  /// Every such reply is already written to the app log by
+  /// [_surfaceUnmatchedResponse], which is the diagnostics channel and is what
+  /// keeps this from being a silent drop (#528).
+  ///
+  /// This sink exists for tests and for any future diagnostics view. **No
+  /// screen wires it.** Late arrivals became ordinary noise once #529 widened
+  /// the window, and the owner asked for them off the UI: log them, do not put
+  /// them in front of users (#589).
+  void Function(UnmatchedRepeaterResponse)? onUnmatchedResponse;
 
   RepeaterCommandService(this._connector);
 
@@ -27,6 +102,7 @@ class RepeaterCommandService {
   }) async {
     final attemptCount = retries < 1 ? 1 : retries;
     final selection = await _connector.preparePathForContactSend(repeater);
+    final attemptPrefixes = <String>[];
 
     for (int attempt = 0; attempt < attemptCount; attempt++) {
       onAttempt?.call(attempt + 1);
@@ -36,7 +112,13 @@ class RepeaterCommandService {
           command,
           selection,
           attempt,
+          attemptPrefixes,
         );
+        // The caller has its answer, so a straggler from an earlier attempt of
+        // this same command is noise rather than a lost response.
+        for (final prefix in attemptPrefixes) {
+          _expiredCommands.remove(prefix);
+        }
         onResponse?.call(response);
         return response;
       } catch (e) {
@@ -52,14 +134,13 @@ class RepeaterCommandService {
     String command,
     PathSelection selection,
     int attempt,
+    List<String> attemptPrefixes,
   ) async {
     final repeaterKey = repeater.publicKeyHex;
     final prefix = _nextPrefixToken();
     final commandId = '${repeaterKey}_$prefix';
-    final completer = Completer<String>();
-    _pendingCommands[commandId] = completer;
-    _commandPrefixes[commandId] = prefix;
-    _pendingByPrefix[prefix] = commandId;
+    final completer = _registerPending(commandId, prefix);
+    attemptPrefixes.add(prefix);
 
     try {
       final framedCommand = '$prefix$command';
@@ -81,11 +162,10 @@ class RepeaterCommandService {
       final responseBytes = frame.length > maxFrameSize
           ? frame.length
           : maxFrameSize;
-      final timeoutMs = _connector.calculateTimeout(
+      final timeoutMs = _connector.calculateCliTimeout(
         pathLength: pathLengthValue,
         messageBytes: responseBytes,
       );
-      final timeoutSeconds = (timeoutMs / 1000).ceil();
       await _connector.sendFrame(frame);
       _commandTimeouts[commandId]?.cancel();
       _commandTimeouts[commandId] = Timer(
@@ -93,8 +173,19 @@ class RepeaterCommandService {
         () {
           final completer = _pendingCommands[commandId];
           if (completer != null && !completer.isCompleted) {
+            // Prune here as well as on receive. A run of commands that all
+            // time out with no traffic coming back would otherwise accumulate
+            // records until disposal, since handleResponse is the only other
+            // place that prunes and it never runs (Gemini review).
+            _pruneExpiredCommands();
+            // Remember what this prefix asked so a reply arriving after the
+            // window can still reach the user with its question attached.
+            _expiredCommands[prefix] = _ExpiredCommand(
+              command: command,
+              expiredAt: DateTime.now(),
+            );
             completer.completeError(
-              'Command timeout after $timeoutSeconds seconds',
+              RepeaterCommandTimeout(command: command, timeoutMs: timeoutMs),
             );
             _cleanup(commandId);
           }
@@ -114,29 +205,129 @@ class RepeaterCommandService {
 
   /// Call this when a text message response is received from a repeater
   void handleResponse(Contact repeater, String responseText) {
-    // Find pending command for this repeater and complete it
     final repeaterKey = repeater.publicKeyHex;
+    _pruneExpiredCommands();
 
-    String? commandId;
+    String? prefix;
     String responsePayload = responseText;
     if (responseText.length >= 3 && responseText[2] == '|') {
-      final prefix = responseText.substring(0, 3);
-      commandId = _pendingByPrefix[prefix];
+      prefix = responseText.substring(0, 3);
       responsePayload = responseText.substring(3).trimLeft();
     }
 
-    commandId ??= _pendingCommands.keys.firstWhere(
-      (id) => id.startsWith(repeaterKey),
-      orElse: () => '',
-    );
+    // A reply that carries a prefix is self-identifying. If that prefix matches
+    // nothing pending, the answer belongs to a command that already completed
+    // or expired, and forcing it onto whatever else is in flight would report
+    // one command's output as another command's result (#532). Only a reply
+    // with no prefix at all, which carries no correlation token, may fall back
+    // to matching by repeater.
+    final matchedId = prefix != null ? _pendingByPrefix[prefix] : null;
+    final commandId =
+        matchedId ?? (prefix != null ? '' : _solePendingFor(repeaterKey));
 
-    if (commandId.isEmpty) return;
-
-    final completer = _pendingCommands[commandId];
-    if (completer != null && !completer.isCompleted) {
-      completer.complete(responsePayload);
-      _cleanup(commandId);
+    if (commandId.isNotEmpty) {
+      final completer = _pendingCommands[commandId];
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(responsePayload);
+        _cleanup(commandId);
+        return;
+      }
     }
+
+    // Nothing is waiting for this reply. It is still a real answer from the
+    // repeater, so it gets surfaced and logged rather than dropped (#528).
+    _surfaceUnmatchedResponse(repeaterKey, prefix, responsePayload);
+  }
+
+  void _surfaceUnmatchedResponse(
+    String repeaterKey,
+    String? prefix,
+    String responsePayload,
+  ) {
+    final expired = prefix != null ? _expiredCommands.remove(prefix) : null;
+    final sinceTimeout = expired == null
+        ? null
+        : DateTime.now().difference(expired.expiredAt);
+
+    if (expired != null) {
+      appLogger.warn(
+        'Late reply to "${expired.command}" from $repeaterKey arrived '
+        '${sinceTimeout!.inMilliseconds}ms after its window closed: '
+        '$responsePayload',
+        tag: 'RepeaterCommand',
+      );
+    } else {
+      appLogger.warn(
+        'Reply from $repeaterKey matched no pending or recently expired '
+        'command (prefix: ${prefix ?? 'none'}): $responsePayload',
+        tag: 'RepeaterCommand',
+      );
+    }
+
+    onUnmatchedResponse?.call(
+      UnmatchedRepeaterResponse(
+        repeaterKeyHex: repeaterKey,
+        response: responsePayload,
+        command: expired?.command,
+        sinceTimeout: sinceTimeout,
+      ),
+    );
+  }
+
+  /// The one command awaiting a reply from [repeaterKey], or `''` when that is
+  /// ambiguous.
+  ///
+  /// An unprefixed reply carries no correlation token, so position is all that
+  /// is left to match on. Firmware only echoes the prefix when the command is
+  /// longer than four characters including it (`simple_repeater/MyMesh.cpp`
+  /// `strlen(command) > 4 && command[2] == '|'`), so a very short command can
+  /// legitimately answer without one and the fallback has to stay.
+  ///
+  /// It is only sound with exactly one candidate though. With two or more,
+  /// "first" is map-iteration order, and choosing one would hand a caller
+  /// another command's output. Ambiguity is surfaced instead of guessed.
+  String _solePendingFor(String repeaterKey) {
+    String? only;
+    for (final id in _pendingCommands.keys) {
+      if (!id.startsWith(repeaterKey)) continue;
+      if (only != null) return '';
+      only = id;
+    }
+    return only ?? '';
+  }
+
+  Completer<String> _registerPending(String commandId, String prefix) {
+    final completer = Completer<String>();
+    _pendingCommands[commandId] = completer;
+    _commandPrefixes[commandId] = prefix;
+    _pendingByPrefix[prefix] = commandId;
+    return completer;
+  }
+
+  /// Puts a command in flight without performing the send, so a test can set up
+  /// two concurrent commands to one repeater. Deliberately routes through the
+  /// same [_registerPending] the real send path uses, so the two cannot drift.
+  @visibleForTesting
+  Future<String> registerPendingForTest(String repeaterKeyHex, String prefix) =>
+      _registerPending('${repeaterKeyHex}_$prefix', prefix).future;
+
+  /// Records a timed-out command so a reply arriving later can still be
+  /// attributed to it. Exposed because a test cannot drive a real
+  /// send-then-time-out cycle without a connected transport.
+  @visibleForTesting
+  void recordExpiredCommandForTest(String prefix, String command) {
+    _expiredCommands[prefix] = _ExpiredCommand(
+      command: command,
+      expiredAt: DateTime.now(),
+    );
+  }
+
+  void _pruneExpiredCommands() {
+    if (_expiredCommands.isEmpty) return;
+    final cutoff = DateTime.now().subtract(lateReplyRetention);
+    _expiredCommands.removeWhere(
+      (_, entry) => entry.expiredAt.isBefore(cutoff),
+    );
   }
 
   void _cleanup(String commandId) {
@@ -157,6 +348,8 @@ class RepeaterCommandService {
     _pendingCommands.clear();
     _commandPrefixes.clear();
     _pendingByPrefix.clear();
+    _expiredCommands.clear();
+    onUnmatchedResponse = null;
   }
 
   String _nextPrefixToken() {

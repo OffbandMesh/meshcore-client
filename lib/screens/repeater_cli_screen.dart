@@ -103,11 +103,10 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     if (parsed == null) return;
     if (!_matchesRepeaterPrefix(parsed.senderPrefix)) return;
 
-    // Notify command service of response (for retry handling)
+    // Goes to the waiting command's future, which _sendCommand appends to the
+    // transcript. A reply whose window already closed is logged by the service
+    // to the app log and deliberately not shown here (#589).
     _commandService?.handleResponse(widget.repeater, parsed.text);
-
-    // Note: The command service will handle the response via the Future
-    // We don't need to add it to history here anymore as _sendCommand will do it
   }
 
   bool _matchesRepeaterPrefix(Uint8List prefix) {
@@ -170,10 +169,15 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // A timeout knows the exact window that was armed, so it reports that
+        // rather than a rounded-up guess (#531).
+        final text = e is RepeaterCommandTimeout
+            ? context.l10n.repeater_cliCommandTimeout(e.secondsText)
+            : context.l10n.repeater_cliCommandError(e.toString());
         setState(() {
           _commandHistory.add({
             'type': 'response',
-            'text': context.l10n.repeater_cliCommandError(e.toString()),
+            'text': text,
             'timestamp': DateTime.now().toString(),
           });
         });
@@ -184,7 +188,10 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
     _historyIndex = -1;
     _commandFocusNode.requestFocus();
 
-    // Auto-scroll to bottom
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -450,6 +457,15 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
       itemBuilder: (context, index) {
         final entry = _commandHistory[index];
         final isCommand = entry['type'] == 'command';
+        final scheme = Theme.of(context).colorScheme;
+
+        final badgeColor = isCommand
+            ? scheme.primaryContainer
+            : scheme.secondaryContainer;
+        final badgeIconColor = isCommand
+            ? scheme.onPrimaryContainer
+            : scheme.onSecondaryContainer;
+        final badgeIcon = isCommand ? Icons.chevron_right : Icons.arrow_back;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -459,18 +475,10 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isCommand
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : Theme.of(context).colorScheme.secondaryContainer,
+                  color: badgeColor,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Icon(
-                  isCommand ? Icons.chevron_right : Icons.arrow_back,
-                  size: 16,
-                  color: isCommand
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
+                child: Icon(badgeIcon, size: 16, color: badgeIconColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -482,9 +490,7 @@ class _RepeaterCliScreenState extends State<RepeaterCliScreen> {
                       style: TextStyle(
                         fontFamily: 'monospace',
                         fontSize: 13,
-                        color: isCommand
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurface,
+                        color: isCommand ? scheme.primary : scheme.onSurface,
                       ),
                     ),
                   ],

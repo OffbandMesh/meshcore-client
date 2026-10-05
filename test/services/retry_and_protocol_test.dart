@@ -709,4 +709,238 @@ void main() {
       },
     );
   });
+
+  group('RESP_CODE_SENT correlation uses the radio hash (#449/#581)', () {
+    // The radio is authoritative for the expected-ACK hash. Firmware forks
+    // (Wadamesh on the HV4 TFT, in the #449 capture) build the payload
+    // differently, so the client's locally recomputed hash can disagree while
+    // delivery works perfectly. Correlation must not depend on that guess.
+    const int radioHash = 0xDEADBEEF; // deliberately not the client's value
+
+    test('a RESP_CODE_SENT hash the client did not predict still marks the '
+        'message sent, and its ACK still marks it delivered', () async {
+      final retryService = MessageRetryService();
+      final contact = _makeContact(
+        publicKey: recipientKey,
+        pathLength: 2,
+        path: const [0x10, 0x20],
+      );
+      final updates = <Message>[];
+
+      retryService.initialize(
+        RetryServiceConfig(
+          sendMessage: (_, _, _, _) async {},
+          addMessage: (_, _) {},
+          updateMessage: updates.add,
+          getSelfPublicKey: () => fixedKey,
+        ),
+      );
+
+      await retryService.sendMessageWithRetry(
+        contact: contact,
+        text: 'Weird that I am getting errors though.',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final matched = retryService.updateMessageFromSent(radioHash, 4884);
+
+      expect(
+        matched,
+        isTrue,
+        reason:
+            'the radio replied to our own CMD_SEND_TXT_MSG, so it must be '
+            'correlated even though the hash is not the one we predicted',
+      );
+      expect(
+        updates.last.status,
+        equals(MessageStatus.sent),
+        reason:
+            'an unpredicted hash must not leave the message pending, '
+            'because the 8s watchdog would then mark a delivered DM failed',
+      );
+
+      // The real ACK carries the radio's hash, not ours.
+      retryService.handleAckReceived(radioHash, 7354);
+
+      expect(
+        updates.last.status,
+        equals(MessageStatus.delivered),
+        reason: 'the ACK must resolve against the radio-supplied hash',
+      );
+
+      retryService.dispose();
+    });
+
+    test('an unpredicted hash is not adopted while two sends are awaiting '
+        'confirmation, because the correlation would be a guess', () async {
+      final retryService = MessageRetryService();
+      final contactA = _makeContact(publicKey: recipientKey, pathLength: 2);
+      final contactB = _makeContact(publicKey: _makeKey(0x55), pathLength: 2);
+      final updates = <Message>[];
+
+      retryService.initialize(
+        RetryServiceConfig(
+          sendMessage: (_, _, _, _) async {},
+          addMessage: (_, _) {},
+          updateMessage: updates.add,
+          getSelfPublicKey: () => fixedKey,
+        ),
+      );
+
+      // Per-contact queues, so two contacts means two in flight at once.
+      await retryService.sendMessageWithRetry(contact: contactA, text: 'a');
+      await retryService.sendMessageWithRetry(contact: contactB, text: 'b');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        retryService.updateMessageFromSent(radioHash, 4884),
+        isFalse,
+        reason:
+            'with two candidates the owner would rather keep the old '
+            'behaviour than attach the confirmation to the wrong message',
+      );
+
+      retryService.dispose();
+    });
+
+    test('an unpredicted hash is not adopted while a channel send is also '
+        'awaiting confirmation, because that frame could be either', () async {
+      final retryService = MessageRetryService();
+      final contact = _makeContact(publicKey: recipientKey, pathLength: 2);
+      final updates = <Message>[];
+
+      retryService.initialize(
+        RetryServiceConfig(
+          sendMessage: (_, _, _, _) async {},
+          addMessage: (_, _) {},
+          updateMessage: updates.add,
+          getSelfPublicKey: () => fixedKey,
+        ),
+      );
+
+      await retryService.sendMessageWithRetry(contact: contact, text: 'dm');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      // The connector passes false while _pendingChannelSentQueue is not
+      // empty. Adopting here would attach a channel message's confirmation
+      // to this DM and lose both.
+      expect(
+        retryService.updateMessageFromSent(
+          radioHash,
+          4884,
+          allowUnpredictedAdoption: false,
+        ),
+        isFalse,
+      );
+      expect(
+        updates.every((m) => m.status != MessageStatus.sent),
+        isTrue,
+        reason: 'the DM must not be marked sent off an ambiguous frame',
+      );
+
+      retryService.dispose();
+    });
+
+    test(
+      'an unpredicted hash with nothing awaiting confirmation is ignored',
+      () {
+        final retryService = MessageRetryService();
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            getSelfPublicKey: () => fixedKey,
+          ),
+        );
+
+        expect(
+          retryService.updateMessageFromSent(radioHash, 4884),
+          isFalse,
+          reason:
+              'with no send in flight the frame must fall through to the '
+              'channel handler, not be swallowed',
+        );
+
+        retryService.dispose();
+      },
+    );
+
+    test(
+      'a late stray frame is not adopted once the message has resolved',
+      () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(publicKey: recipientKey, pathLength: 2);
+        final updates = <Message>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: updates.add,
+            getSelfPublicKey: () => fixedKey,
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'one');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(retryService.updateMessageFromSent(radioHash, 4884), isTrue);
+        retryService.handleAckReceived(radioHash, 5000);
+        expect(updates.last.status, equals(MessageStatus.delivered));
+
+        // A second, unrelated unpredicted frame arrives afterwards. Nothing is
+        // awaiting confirmation now, so it must not be attached to anything.
+        expect(
+          retryService.updateMessageFromSent(0xFEEDFACE, 4884),
+          isFalse,
+          reason: 'a stray frame must not be adopted by a resolved message',
+        );
+
+        retryService.dispose();
+      },
+    );
+
+    test(
+      'a hash the client did predict still matches on the fast path',
+      () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(publicKey: recipientKey, pathLength: 2);
+        final updates = <Message>[];
+        int? sentTs;
+        int? sentAttempt;
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, attempt, ts) async {
+              sentAttempt = attempt;
+              sentTs = ts;
+            },
+            addMessage: (_, _) {},
+            updateMessage: updates.add,
+            getSelfPublicKey: () => fixedKey,
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'Yep.');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final predicted = _manualAckHash(
+          sentTs!,
+          sentAttempt! & 0x03,
+          'Yep.',
+          fixedKey,
+        );
+
+        expect(retryService.updateMessageFromSent(predicted, 3252), isTrue);
+        expect(updates.last.status, equals(MessageStatus.sent));
+
+        retryService.handleAckReceived(predicted, 1200);
+        expect(updates.last.status, equals(MessageStatus.delivered));
+
+        retryService.dispose();
+      },
+    );
+  });
 }

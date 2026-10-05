@@ -17,7 +17,9 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
+import '../services/corescope_service.dart';
 import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../helpers/time_anomaly.dart';
@@ -179,6 +181,38 @@ enum MeshCoreConnectionState {
 
 enum MeshCoreTransportType { bluetooth, usb, tcp }
 
+/// Outcome of a node-identity read or write. (#578)
+///
+/// [unsupported] is deliberately distinct from [rejected]: the firmware can be
+/// built without identity transfer at all (`ENABLE_PRIVATE_KEY_EXPORT` /
+/// `ENABLE_PRIVATE_KEY_IMPORT`), and a UI must say "this radio cannot do it"
+/// rather than "that failed, try again".
+enum IdentityTransfer {
+  /// The device returned its identity, or accepted the one we sent.
+  ok,
+
+  /// The firmware was compiled without the feature.
+  unsupported,
+
+  /// The device understood the request and refused it, e.g. an invalid key.
+  rejected,
+
+  /// Not connected, or no reply before the timeout.
+  noReply,
+}
+
+/// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
+/// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
+class IdentityExportResult {
+  const IdentityExportResult(this.outcome, [this.identity]);
+
+  final IdentityTransfer outcome;
+
+  /// The 64-byte node identity. Secret material: never log it, never persist
+  /// it outside a user-initiated export file.
+  final Uint8List? identity;
+}
+
 class RepeaterBatterySnapshot {
   final int millivolts;
   final DateTime updatedAt;
@@ -207,6 +241,36 @@ class MeshCoreRadioStateSnapshot {
   });
 }
 
+/// A full contact sync that delivered fewer contacts than the radio declared.
+/// [declared] is null when the radio sent no total (older firmware).
+class ContactSyncShortfall {
+  final int? declared;
+  final int received;
+  final int keptLocally;
+
+  /// Saved contacts the radio answered "not found" for (#764).
+  final int confirmedGone;
+
+  const ContactSyncShortfall({
+    required this.declared,
+    required this.received,
+    required this.keptLocally,
+    this.confirmedGone = 0,
+  });
+}
+
+/// What the radio said when asked for one contact by key. (#762)
+enum ContactKeyCheckResult { onRadio, notFound, unresolved }
+
+class _PendingKeyCheck {
+  final String keyHex;
+  final DateTime startedAt;
+  final Completer<ContactKeyCheckResult> done = Completer();
+  Timer? timer;
+
+  _PendingKeyCheck({required this.keyHex, required this.startedAt});
+}
+
 class MeshCoreConnector extends ChangeNotifier {
   // Message windowing to limit memory usage
   static const int _messageWindowSize = 200;
@@ -221,6 +285,18 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _lastDeviceId;
   String? _lastDeviceDisplayName;
   bool _manualDisconnect = false;
+
+  // Set when a manual BLE disconnect was never confirmed by the platform, so
+  // the OS may still hold the radio and it stops advertising (#689/#697).
+  // Cleared on the next connect, the next disconnect attempt, or UI dismiss.
+  bool _bleReleaseUnconfirmed = false;
+  bool get bleReleaseUnconfirmed => _bleReleaseUnconfirmed;
+  void clearBleReleaseWarning() {
+    if (!_bleReleaseUnconfirmed) return;
+    _bleReleaseUnconfirmed = false;
+    notifyListeners();
+  }
+
   final MeshCoreUsbManager _usbManager = MeshCoreUsbManager();
   final LinuxBlePairingService _linuxBlePairingService =
       LinuxBlePairingService();
@@ -235,6 +311,10 @@ class MeshCoreConnector extends ChangeNotifier {
   final List<Channel> _channels = [];
   final Map<String, List<Message>> _conversations = {};
   final Map<int, List<ChannelMessage>> _channelMessages = {};
+
+  /// Last send timestamp (seconds) used per channel, to keep every channel
+  /// send's `(ts, channel_idx)` key unique for 0xC6 correlation (#524).
+  final Map<int, int> _lastChannelSendTsSecs = {};
   final List<String> _pendingChannelSentQueue = [];
   final List<_PendingCommandAck> _pendingGenericAckQueue = [];
   static const String _reactionSendQueuePrefix = '__reaction_send__';
@@ -249,6 +329,7 @@ class MeshCoreConnector extends ChangeNotifier {
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _notifySubscription;
+  StreamSubscription<int>? _mtuSubscription;
   Timer? _notifyListenersTimer;
   Timer? _selfInfoRetryTimer;
   int _appStartRetryAttempt = 0;
@@ -286,11 +367,19 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _blockDumpInFlight = false;
   final Set<String> _blockKeysTouchedDuringDump = {};
   // Caplog serial-capture download (0xC4) streamed reassembly (#430).
-  Completer<Uint8List>? _caplogCompleter;
+  Completer<CaplogDownload>? _caplogCompleter;
   CaplogReassembler? _caplogReassembler;
   bool _caplogAwaitingStart = false;
   Completer<CaplogAck>? _caplogAckCompleter;
   Completer<CaplogDeviceStatus>? _caplogStatusCompleter;
+  // Node identity transfer (#578). Only one of each may be in flight.
+  Completer<IdentityExportResult>? _identityExportCompleter;
+  Completer<IdentityTransfer>? _identityImportCompleter;
+
+  /// Outstanding 0xC6 packet-hash queries, keyed "ts_chan" so a reply matches
+  /// its request without relying on ordering (#524).
+  final Map<String, Completer<OffbandPktHash?>> _pendingPktHashCompleters = {};
+  final CoreScopeService _coreScopeService = CoreScopeService();
   int _caplogChunks = 0; // CHUNK frames in the active download (diagnostic)
   String? _firmwareVersion;
   String? _deviceModel;
@@ -298,6 +387,7 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _offbandCaps2;
   bool? _femLnaEnabled;
   ButtonMatrix? _buttonMatrix;
+  String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
   String? _deviceUiError;
   int _pathHashByteWidth = 1;
@@ -339,7 +429,8 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _pendingInitialQueuedMessageSync = false;
   bool _bleInitialSyncStarted = false;
   bool _webInitialHandshakeRequestSent = false;
-  bool _preserveContactsOnRefresh = false;
+  int _autoAddMaxHops = 0;
+  int _manualAddContactsRaw = 0;
   bool _autoAddUsers = false;
   bool _autoAddRepeaters = false;
   bool _autoAddRoomServers = false;
@@ -359,6 +450,61 @@ class MeshCoreConnector extends ChangeNotifier {
   int? _contactSyncTotal;
   int _contactSyncReceived = 0;
   bool _contactSyncUsesSinceFilter = false;
+  // A full sync never clears the local list. It records which contacts the
+  // radio delivered, and only a complete sync (received == declared) may drop
+  // the ones it did not. A short sync once replaced the owner's 350 saved
+  // contacts with the 106 the radio sent (#660, #668).
+  bool _contactSyncIsFull = false;
+  int? _contactSyncDeclaredTotal;
+  final Set<String> _contactSyncDeliveredKeys = {};
+  bool _contactSyncDecisionPending = false;
+  // Forced resync (#703): after a short full sync the app waits for the link to
+  // settle, syncs again (at most [contactSyncMaxFullStreams] full syncs per
+  // connection, owner decision), then asks the radio by key for each saved
+  // contact still missing. Only a contact the radio answers "not found" for is
+  // ever removed by it. All of this is per connection: a disconnect or radio
+  // switch bumps [_recoveryRun] and drops it.
+  static const int contactSyncMaxFullStreams = 3;
+  static const Duration defaultContactRecoverySettle = Duration(seconds: 10);
+  static const Duration defaultContactKeyCheckGap = Duration(milliseconds: 250);
+  @visibleForTesting
+  Duration contactRecoverySettle = defaultContactRecoverySettle;
+  @visibleForTesting
+  Duration contactKeyCheckGap = defaultContactKeyCheckGap;
+  int _contactFullStreams = 0;
+  int _recoveryRun = 0;
+  String? _recoveryRadioKey;
+  final Set<String> _recoveryDelivered = {};
+  final Set<String> _recoveryGone = {};
+  int? _recoveryDeclared;
+  DateTime? _recoveryWaitingSince;
+  bool _recoveryCheckingKeys = false;
+  static const Duration contactRecoveryMaxWait = Duration(minutes: 2);
+  Timer? _recoverySettleTimer;
+  DateTime _lastRadioFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
+  ContactSyncShortfall? _contactSyncShortfall;
+  // One contact request at a time: the firmware refuses a second
+  // CMD_GET_CONTACTS mid-stream with ERR_CODE_BAD_STATE. A request made while
+  // one runs is queued and sent after END. A request with no contact frames
+  // for [contactRequestStaleAfter] is treated as lost so a missing END cannot
+  // block every later refresh (#672, owner decision on the 30 s value).
+  static const Duration contactRequestStaleAfter = Duration(seconds: 30);
+  bool _contactRequestInFlight = false;
+  bool _contactStreamStarted = false;
+  DateTime _contactRequestLastActivity = DateTime.fromMillisecondsSinceEpoch(0);
+  ({int? since, bool preserveExisting})? _queuedContactRequest;
+  Timer? _contactRequestWatchdog;
+  // One CMD_GET_CONTACT_BY_KEY check at a time. Its NOT_FOUND reply carries no
+  // key, so the check only trusts one that nothing else could own: see
+  // [_notFoundIsForKeyCheck]. (#762)
+  _PendingKeyCheck? _pendingKeyCheck;
+  DateTime? _untrackedByKeyAt;
+
+  @visibleForTesting
+  Duration contactKeyCheckTimeout = const Duration(seconds: 5);
+
+  @visibleForTesting
+  DateTime Function() contactSyncClock = DateTime.now;
   bool _isSyncingQueuedMessages = false;
   bool _deferQueuedContactMessagesUntilContacts = false;
   bool _isProcessingDeferredQueuedContactMessages = false;
@@ -441,18 +587,93 @@ class MeshCoreConnector extends ChangeNotifier {
   /// handle); a device that negotiates a smaller MTU than [maxFrameSize] assumes
   /// would otherwise reject a max-length message and wedge the send path (#395).
   /// USB/TCP have no such per-write cap, so they take the full [maxFrameSize].
-  int get effectiveMaxFrameSize {
-    if (_activeTransport != MeshCoreTransportType.bluetooth) {
+  int get effectiveMaxFrameSize => resolveFrameBudget(
+    transport: _activeTransport,
+    isWeb: PlatformInfo.isWeb,
+    mtuNow: _device?.mtuNow ?? 0,
+  );
+
+  /// Writes the composer's actual byte budget to the app log.
+  ///
+  /// #592 was about this number, and until #793 it was the one thing the log
+  /// never recorded. We had Windows BLE logs back to August proving MTU 247,
+  /// and hundreds of Android sessions, and not one of them could evidence
+  /// whether the composer was usable: the log showed what was sent, never the
+  /// limit the field applied. A log reading `channel=0` beside a user saying
+  /// the keyboard is dead is a diagnosis; without it that is a guess.
+  ///
+  /// Derived from the same functions the composers call, never reimplemented,
+  /// so the log cannot drift away from the behaviour it is describing.
+  ///
+  /// Logs the name's LENGTH, never the name. The length is the whole of what
+  /// the budget depends on (the channel budget subtracts a `"<name>: "`
+  /// prefix), and these logs get attached to public issues. A radio name is
+  /// usually an amateur callsign, which is publicly resolvable to a real name
+  /// and address, so it has no business in a file we ask users to upload
+  /// (CLAUDE-BASE, redaction discipline).
+  ///
+  /// Called whenever an INPUT to the budget changes: the MTU, and the self
+  /// name. Both matter and they arrive at different times, the name only in
+  /// SELF_INFO well after the first MTU event, so logging on the MTU alone
+  /// would report a budget computed from a null name. That is not a harmless
+  /// gap: `_senderNameBytes(null)` returns the 31-byte maximum, so the early
+  /// line would understate the real channel budget.
+  ///
+  /// Not per keystroke or per send: diagnostics must not become the outage
+  /// (SAFELANE 11 rule 10).
+  void _logComposerBudget(String reason) {
+    final frame = effectiveMaxFrameSize;
+    final name = selfName;
+    final dm = maxContactMessageBytes(maxFrameBytes: frame);
+    final channel = maxChannelMessageBytes(name, maxFrameBytes: frame);
+    _appDebugLogService?.info(
+      'composer budget ($reason): frame=$frame dm=$dm channel=$channel '
+      'transport=${_activeTransport.name} '
+      'nameLen=${name?.length ?? -1}'
+      '${isComposerBudgetUsable(channel) ? '' : '  <-- CHANNEL COMPOSER UNUSABLE'}',
+      tag: 'BLE Connect',
+    );
+  }
+
+  /// The frame-budget decision, as a pure function of its three inputs.
+  ///
+  /// Extracted from [effectiveMaxFrameSize] so every branch is reachable from a
+  /// VM test. In particular the web branch is not otherwise testable at all:
+  /// `kIsWeb` is a compile-time constant, so a VM test can never enter it, and
+  /// CI runs the suite on the VM only. This getter decides the composer's byte
+  /// budget on every platform and had collapsed it to zero on three of them
+  /// (#592, #686, #717, #718), so it is pinned by test rather than by comment.
+  ///
+  /// [mtuNow] is 0 when no device is attached.
+  @visibleForTesting
+  static int resolveFrameBudget({
+    required MeshCoreTransportType transport,
+    required bool isWeb,
+    required int mtuNow,
+  }) {
+    if (transport != MeshCoreTransportType.bluetooth) {
       return maxFrameSize;
     }
-    final mtu = _device?.mtuNow ?? 0;
+    // Web Bluetooth exposes no ATT MTU to page script: there is no API for it,
+    // so mtuNow can only ever be the 23-byte default and the floor below would
+    // cap every composer at 0-4 bytes forever (#718, the #592 symptom).
+    //
+    // The floor exists because a raw single characteristic write larger than
+    // the PDU is rejected and wedges the send path (#395). That failure mode is
+    // not reachable here: the browser owns fragmentation, and the Web Bluetooth
+    // spec caps one write at 512 bytes, rejecting anything larger with
+    // InvalidModificationError. maxFrameSize (172) is well inside that, so the
+    // write cannot be oversized no matter what the link negotiated.
+    if (isWeb) {
+      return maxFrameSize;
+    }
     // ATT_MTU 23 is the BLE minimum; a single write then carries 23 - 3 = 20
     // bytes. An unknown MTU must fall back to that floor, never [maxFrameSize],
     // defaulting an unknown link to the largest size would authorize an
     // oversized write (#395 review).
     const minWritable = 20;
-    if (mtu <= 0) return minWritable;
-    final writable = mtu - 3;
+    if (mtuNow <= 0) return minWritable;
+    final writable = mtuNow - 3;
     if (writable >= maxFrameSize) return maxFrameSize;
     return writable < minWritable ? minWritable : writable;
   }
@@ -582,10 +803,20 @@ class MeshCoreConnector extends ChangeNotifier {
   bool? get autoAddRoomServers => _autoAddRoomServers;
   bool? get autoAddSensors => _autoAddSensors;
   bool? get autoAddOverwriteOldest => _overwriteOldest;
+
+  /// `autoadd_max_hops`; 0 means no limit. Stays 0 on firmware old enough to
+  /// answer [respCodeAutoAddConfig] with only two bytes. (#578)
+  int get autoAddMaxHops => _autoAddMaxHops;
   int get telemetryModeBase => _telemetryModeBase;
   int get telemetryModeLoc => _telemetryModeLoc;
   int get telemetryModeEnv => _telemetryModeEnv;
   int get advertLocationPolicy => _advertLocPolicy;
+
+  /// The device's `manual_add_contacts` pref exactly as reported, for callers
+  /// that must reproduce it rather than interpret it (stock config export,
+  /// #573). [_manualAddContacts] is a derived, inverted view of bit 0 and is
+  /// not what belongs in an export file.
+  int get manualAddContactsRaw => _manualAddContactsRaw;
   int get multiAcks => _multiAcks;
   bool? get clientRepeat => _clientRepeat;
 
@@ -626,6 +857,16 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Whether this radio exposes a settable device notification scope (#475).
   bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
 
+  /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
+  bool get supportsPktHash =>
+      firmwareSupportsPktHash(_offbandCaps2, _firmwareVerCode);
+
+  /// Whether to fetch CoreScope observer counts for outgoing channel messages:
+  /// firmware supports the hash query AND the owner enabled the feature.
+  bool get _coreScopeQueryActive =>
+      supportsPktHash &&
+      (_appSettingsService?.settings.coreScopeObserverCountEnabled ?? false);
+
   /// Whether the radio can actually be QUERIED, as opposed to merely reporting
   /// that it has the feature. False until firmware lands the get/set command,
   /// so no frame is emitted that nothing will answer. The distinction is real
@@ -655,8 +896,51 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Ask the radio for its button matrix. No-op unless the capability bit is
   /// set, so an unsupported radio never sees `0xC5`.
+  /// True when a `0xC5` request for [what] may be sent, logging the reason when
+  /// it may not.
+  ///
+  /// A suppressed request is the case that cost a whole diagnosis on
+  /// 2026-08-02: the scope appeared not to refresh, and nothing in either the
+  /// app log or a firmware serial capture could distinguish "the client never
+  /// asked" from "the client asked and got an unchanged value". Silence is
+  /// ambiguous, so the suppression says which gate closed and why. (#501)
+  bool _deviceUiGateOpen(String what, {required bool advertised}) {
+    if (!deviceUiCommandLanded) {
+      _logDeviceUiSuppression(what, '0xC5 command support is compiled off');
+      return false;
+    }
+    if (!advertised) {
+      _logDeviceUiSuppression(
+        what,
+        'radio does not advertise it '
+        '(caps2=${_offbandCaps2 == null ? 'absent' : '0x${_offbandCaps2!.toRadixString(16).padLeft(2, '0')}'})',
+      );
+      return false;
+    }
+    // A gate that opens clears the memo, so the next genuine suppression is
+    // reported rather than swallowed as a repeat.
+    _lastDeviceUiSuppression = null;
+    return true;
+  }
+
+  /// Log a suppressed request ONCE per distinct reason.
+  ///
+  /// Device-info arrives on every connect, so a flapping radio would otherwise
+  /// emit the same suppression line on every reconnect. Diagnostics must not
+  /// become the outage (SAFELANE §11 rule 10), and a repeated identical line
+  /// carries no information the first one did not.
+  void _logDeviceUiSuppression(String what, String reason) {
+    final memo = '$what|$reason';
+    if (_lastDeviceUiSuppression == memo) return;
+    _lastDeviceUiSuppression = memo;
+    _appDebugLogService?.info('$what suppressed: $reason', tag: 'DeviceUI');
+  }
+
   Future<void> requestButtonMatrix() async {
-    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    if (!_deviceUiGateOpen('matrix GET', advertised: supportsButtonMatrix)) {
+      return;
+    }
+    _appDebugLogService?.info('matrix GET -> [0xC5][0x03]', tag: 'DeviceUI');
     await sendFrame(buildButtonMatrixGetFrame());
   }
 
@@ -668,22 +952,40 @@ class MeshCoreConnector extends ChangeNotifier {
     ButtonSequence sequence,
     ButtonAction action,
   ) async {
-    if (!supportsDeviceUiCommand || !supportsButtonMatrix) return;
+    if (!_deviceUiGateOpen('matrix SET', advertised: supportsButtonMatrix)) {
+      return;
+    }
     _deviceUiError = null;
+    _appDebugLogService?.info(
+      'matrix SET -> ${sequence.label} = ${action.label} '
+      '[0xC5][0x04][0x${sequence.code.toRadixString(16).padLeft(2, '0')}]'
+      '[0x${action.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
     await sendFrame(buildButtonMatrixSetFrame(sequence, action));
   }
 
   /// Ask the radio for its current notification scope.
   Future<void> requestNotifyScope() async {
-    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    if (!_deviceUiGateOpen('scope GET', advertised: supportsNotifyScope)) {
+      return;
+    }
+    _appDebugLogService?.info('scope GET -> [0xC5][0x01]', tag: 'DeviceUI');
     await sendFrame(buildNotifyScopeGetFrame());
   }
 
   /// Set the device notification scope. As with the matrix, local state follows
   /// the device's reply rather than the request.
   Future<void> setNotifyScope(DeviceNotifyScope scope) async {
-    if (!supportsDeviceUiCommand || !supportsNotifyScope) return;
+    if (!_deviceUiGateOpen('scope SET', advertised: supportsNotifyScope)) {
+      return;
+    }
     _deviceUiError = null;
+    _appDebugLogService?.info(
+      'scope SET -> ${scope.label} '
+      '[0xC5][0x02][0x${scope.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
     await sendFrame(buildNotifyScopeSetFrame(scope));
   }
 
@@ -697,6 +999,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reconnect can show one radio's notification scope as another's.
   void _clearDeviceUiState() {
     _buttonMatrix = null;
+    _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
     _deviceUiError = null;
   }
@@ -733,8 +1036,20 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     if (reply.matrix != null) {
-      _buttonMatrix = reply.matrix;
+      final m = reply.matrix!;
+      _appDebugLogService?.info(
+        'matrix GET reply: mask=0x${m.supportedActions.toRadixString(16).padLeft(2, '0')} '
+        'rows=${m.assignments.length} '
+        '[${m.assignments.entries.map((e) => '${e.key.label}=${e.value.label}').join(', ')}]',
+        tag: 'DeviceUI',
+      );
+      _buttonMatrix = m;
     } else if (reply.setSequence != null && reply.setAction != null) {
+      _appDebugLogService?.info(
+        'matrix SET confirmed: ${reply.setSequence!.label} = '
+        '${reply.setAction!.label}',
+        tag: 'DeviceUI',
+      );
       final held = _buttonMatrix;
       if (held == null) {
         // A device-confirmed write with nothing to fold it into. Never drop it
@@ -758,7 +1073,26 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'DeviceUI',
       );
     } else {
-      _deviceNotifyScope = reply.scope;
+      final scope = reply.scope;
+      if (scope == null) {
+        // Not reachable today: parseNotifyScopeReply returns an error reply
+        // when the scope code is unknown, so a non-error reply always carries
+        // one. That invariant lives in another file, so it is checked here
+        // rather than asserted with a bang across the boundary.
+        _appDebugLogService?.warn(
+          'scope reply with no scope (sub=0x'
+          '${reply.sub.toRadixString(16).padLeft(2, '0')})',
+          tag: 'DeviceUI',
+        );
+      } else {
+        _appDebugLogService?.info(
+          'scope reply: ${scope.label} '
+          '(sub=0x${reply.sub.toRadixString(16).padLeft(2, '0')}, '
+          '${reply.sub == offbandUiScopeSet ? 'write confirmed' : 'read'})',
+          tag: 'DeviceUI',
+        );
+        _deviceNotifyScope = scope;
+      }
     }
     notifyListeners();
   }
@@ -828,6 +1162,15 @@ class MeshCoreConnector extends ChangeNotifier {
   int get maxContacts => _maxContacts;
   int get maxChannels => _maxChannels;
   Set<String> get knownContactKeys => Set.unmodifiable(_knownContactKeys);
+
+  /// O(1) membership test for a contact by public key hex.
+  ///
+  /// Use this from a widget `build`, never [knownContactKeys], which copies the
+  /// whole set on every call, nor a scan of [contacts]. A received contact card
+  /// asks this question once per rendered chip on every connector
+  /// notification. (#610)
+  bool isKnownContact(String publicKeyHex) =>
+      _knownContactKeys.contains(publicKeyHex);
   double? get contactSyncProgress {
     final total = _contactSyncTotal;
     if (!_isLoadingContacts || total == null || total <= 0) return null;
@@ -1003,18 +1346,24 @@ class MeshCoreConnector extends ChangeNotifier {
   /// display name matches [name] (case-insensitive). Resolves an anonymous
   /// channel sender (name-only, no pubkey) back to identities for block
   /// matching. Multiple keys => several devices/people share the name.
-  List<String> resolveContactKeysByName(String name) {
+  /// Resolve a claimed name to the identities behind it, known contacts first.
+  ///
+  /// Channel messages carry no key (#468), so a claimed name is all a channel
+  /// sender gives us. A name several nodes share resolves to every one of them:
+  /// callers surface the ambiguity, they never pick a winner.
+  List<Contact> resolveContactsByName(String name) {
     final target = name.trim().toLowerCase();
     if (target.isEmpty) return const [];
-    final keys = <String>{};
-    for (final c in contacts) {
-      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
+    final byKey = <String, Contact>{};
+    for (final c in [...contacts, ...discoveredContacts]) {
+      if (c.name.trim().toLowerCase() != target) continue;
+      byKey.putIfAbsent(c.publicKeyHex, () => c);
     }
-    for (final c in discoveredContacts) {
-      if (c.name.trim().toLowerCase() == target) keys.add(c.publicKeyHex);
-    }
-    return keys.toList();
+    return byKey.values.toList();
   }
+
+  List<String> resolveContactKeysByName(String name) =>
+      resolveContactsByName(name).map((c) => c.publicKeyHex).toList();
 
   Future<void> deleteChannelMessage(ChannelMessage message) async {
     final channelIndex = message.channelIndex;
@@ -2196,6 +2545,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceId = _deviceId;
     _lastDeviceDisplayName = _deviceDisplayName;
     _manualDisconnect = false;
+    _bleReleaseUnconfirmed = false;
     _cancelReconnectTimer();
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
@@ -2214,6 +2564,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _connectionSubscription = null;
       await _notifySubscription?.cancel();
       _notifySubscription = null;
+      await _mtuSubscription?.cancel();
+      _mtuSubscription = null;
       _connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected && isConnected) {
           _handleDisconnection();
@@ -2339,18 +2691,42 @@ class MeshCoreConnector extends ChangeNotifier {
           }
         }
       } else {
-        try {
-          await device.connect(
-            timeout: connectTimeout,
-            mtu: null,
-            license: License.free,
-          );
-        } catch (error) {
-          _appDebugLogService?.error(
-            'device.connect() failure: $error',
-            tag: 'BLE Connect',
-          );
-          rethrow;
+        var attempt = 0;
+        while (true) {
+          attempt++;
+          try {
+            await device.connect(
+              timeout: connectTimeout,
+              mtu: null,
+              license: License.free,
+            );
+            break;
+          } catch (error) {
+            // Android GATT status 133 (ANDROID_SPECIFIC_ERROR) is the
+            // notorious, frequently transient connect failure. Standard
+            // mitigation (#522/#698): clean close, short delay, one bounded
+            // retry before surfacing anything to the user.
+            final isTransient133 =
+                error is FlutterBluePlusException && error.code == 133;
+            _appDebugLogService?.error(
+              'device.connect() failure (attempt $attempt): $error',
+              tag: 'BLE Connect',
+            );
+            if (!isTransient133 || attempt >= 2) rethrow;
+            try {
+              await device.disconnect(queue: false, timeout: 5);
+            } catch (cleanupError) {
+              _appDebugLogService?.warn(
+                'cleanup disconnect before 133 retry failed: $cleanupError',
+                tag: 'BLE Connect',
+              );
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 800));
+            _appDebugLogService?.info(
+              'retrying connect after GATT 133',
+              tag: 'BLE Connect',
+            );
+          }
         }
       }
 
@@ -2361,8 +2737,11 @@ class MeshCoreConnector extends ChangeNotifier {
         );
       }
 
-      // Request larger MTU only where the platform path supports it.
-      if (!PlatformInfo.isWeb && !PlatformInfo.isLinux) {
+      // Requesting an MTU is Android-only: flutter_blue_plus throws
+      // "android-only" on every other platform before the platform code runs
+      // (#683). Elsewhere the platform reports the negotiated value on its own
+      // and we pick it up from the mtu stream below.
+      if (PlatformInfo.isAndroid) {
         try {
           final mtu = await device.requestMtu(185);
           _appDebugLogService?.info('MTU set to: $mtu', tag: 'BLE Connect');
@@ -2372,12 +2751,18 @@ class MeshCoreConnector extends ChangeNotifier {
             tag: 'BLE Connect',
           );
         }
-      } else if (PlatformInfo.isLinux) {
-        _appDebugLogService?.info(
-          'Skipping MTU request on Linux; flutter_blue_plus only supports requestMtu on Android',
-          tag: 'BLE Connect',
-        );
       }
+
+      // The MTU can arrive or change after connect. effectiveMaxFrameSize is
+      // read on every composer rebuild, so notifying here is what lets the
+      // message byte budget recover from the 20-byte floor once the real value
+      // is known (#592).
+      await _mtuSubscription?.cancel();
+      _mtuSubscription = device.mtu.listen((mtu) {
+        _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
+        _logComposerBudget('mtu');
+        notifyListeners();
+      });
 
       late final List<BluetoothService> services;
       try {
@@ -2812,8 +3197,26 @@ class MeshCoreConnector extends ChangeNotifier {
   void resetConnectionHandshakeStateForTest() =>
       _resetConnectionHandshakeState();
 
+  /// Feeds a device frame through the normal dispatch, so parse paths can be
+  /// exercised without a radio. (#578)
+  @visibleForTesting
+  void handleFrameForTest(List<int> frame) => _handleFrameInner(frame);
+
+  /// When set, [sendFrame] hands frames here instead of a transport.
+  @visibleForTesting
+  void Function(Uint8List data)? sendFrameOverrideForTest;
+
+  @visibleForTesting
+  void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
+
   @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
+
+  @visibleForTesting
+  List<Contact> get contactsForTest => _contacts;
+
+  @visibleForTesting
+  List<Contact> get discoveredContactsForTest => _discoveredContacts;
 
   @visibleForTesting
   Map<String, List<Message>> get conversationsForTest => _conversations;
@@ -2828,6 +3231,30 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
     _contactSyncUsesSinceFilter = false;
+    _contactSyncIsFull = false;
+    _contactSyncDeclaredTotal = null;
+    _contactSyncDeliveredKeys.clear();
+    _contactFullStreams = 0;
+    _recoveryRun++;
+    _recoveryRadioKey = null;
+    _recoveryDelivered.clear();
+    _recoveryGone.clear();
+    _recoveryDeclared = null;
+    _recoveryWaitingSince = null;
+    _recoveryCheckingKeys = false;
+    _recoverySettleTimer?.cancel();
+    _recoverySettleTimer = null;
+    _contactSyncDecisionPending = false;
+    _contactRequestWatchdog?.cancel();
+    _contactRequestWatchdog = null;
+    _contactRequestInFlight = false;
+    _contactStreamStarted = false;
+    _queuedContactRequest = null;
+    final keyCheck = _pendingKeyCheck;
+    if (keyCheck != null) {
+      _finishKeyCheck(keyCheck, ContactKeyCheckResult.unresolved);
+    }
+    _untrackedByKeyAt = null;
     _isLoadingContacts = false;
     _hasLoadedContacts = false;
     _isLoadingChannels = false;
@@ -2938,6 +3365,9 @@ class MeshCoreConnector extends ChangeNotifier {
     await _notifySubscription?.cancel();
     _notifySubscription = null;
 
+    await _mtuSubscription?.cancel();
+    _mtuSubscription = null;
+
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
     _selfInfoRetryTimer?.cancel();
@@ -2951,11 +3381,32 @@ class MeshCoreConnector extends ChangeNotifier {
     await _translationService?.releaseModel();
 
     if (!skipBleDeviceDisconnect) {
-      try {
-        // Skip queued BLE operations so disconnect doesn't get stuck behind them.
-        await _device?.disconnect(queue: false);
-      } catch (e) {
-        _appDebugLogService?.warn('Disconnect error: $e', tag: 'BLE Connect');
+      _bleReleaseUnconfirmed = false;
+      var released = _device == null;
+      for (var attempt = 1; attempt <= 2 && !released; attempt++) {
+        try {
+          // Skip queued BLE operations so disconnect doesn't get stuck behind
+          // them. Cap the platform-confirm wait well below FBP's 35 s default;
+          // the vendored Android plugin force-closes and confirms within ~5 s
+          // when the OS never reports the disconnect (#696).
+          await _device?.disconnect(queue: false, timeout: 10);
+          released = true;
+        } catch (e) {
+          _appDebugLogService?.warn(
+            'Disconnect attempt $attempt failed: $e',
+            tag: 'BLE Connect',
+          );
+          if (attempt == 1) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        }
+      }
+      if (!released &&
+          transportAtDisconnect == MeshCoreTransportType.bluetooth) {
+        // Both attempts failed: the OS never confirmed the release, so this
+        // device may still hold the radio and keep it from advertising
+        // (#689). Surfaced as a persistent warning, never swallowed.
+        _bleReleaseUnconfirmed = true;
       }
     } else {
       _appDebugLogService?.info(
@@ -3018,6 +3469,11 @@ class MeshCoreConnector extends ChangeNotifier {
   }) async {
     if (!isConnected) {
       throw Exception("Not connected to a MeshCore device");
+    }
+    final override = sendFrameOverrideForTest;
+    if (override != null) {
+      override(data);
+      return;
     }
     _bleDebugLogService?.logFrame(data, outgoing: true);
 
@@ -3360,18 +3816,120 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> getContacts({int? since, bool preserveExisting = false}) async {
     if (!isConnected) return;
 
+    if (_contactRequestInFlight) {
+      final idle = contactSyncClock().difference(_contactRequestLastActivity);
+      if (idle < contactRequestStaleAfter) {
+        _queueContactRequest(since: since, preserveExisting: preserveExisting);
+        return;
+      }
+      _appDebugLogService?.warn(
+        'Contact request had no reply for ${idle.inSeconds}s; treating it as '
+        'lost and sending a new one',
+        tag: 'ContactSync',
+      );
+    }
+    _contactRequestInFlight = true;
+    _contactStreamStarted = false;
+    _contactRequestLastActivity = contactSyncClock();
+    _armContactRequestWatchdog();
+
     _isLoadingContacts = true;
-    _preserveContactsOnRefresh = preserveExisting;
     _contactSyncTotal = null;
     _contactSyncReceived = 0;
     _contactSyncUsesSinceFilter = since != null;
+    if (since == null) _recoverySettleTimer?.cancel();
+    _beginContactSync(full: since == null);
     if (!preserveExisting) {
       _hasLoadedContacts = false;
-      _contacts.clear();
     }
     notifyListeners();
 
-    await sendFrame(buildGetContactsFrame(since: since));
+    try {
+      await sendFrame(buildGetContactsFrame(since: since));
+    } catch (e) {
+      _endContactRequest();
+      _appDebugLogService?.error(
+        'Contact request could not be sent: $e',
+        tag: 'ContactSync',
+      );
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Keeps at most one request waiting. A full request wins over an
+  /// incremental one, since it covers it.
+  void _queueContactRequest({int? since, required bool preserveExisting}) {
+    final queued = _queuedContactRequest;
+    final full = since == null || (queued != null && queued.since == null);
+    _queuedContactRequest = (
+      since: full ? null : since,
+      preserveExisting: preserveExisting && (queued?.preserveExisting ?? true),
+    );
+    _appDebugLogService?.info(
+      'Contact request queued behind the one in flight '
+      '(${full ? 'full' : 'incremental'})',
+      tag: 'ContactSync',
+    );
+  }
+
+  void _endContactRequest() {
+    _contactRequestWatchdog?.cancel();
+    _contactRequestWatchdog = null;
+    _contactRequestInFlight = false;
+    _contactStreamStarted = false;
+    _isLoadingContacts = false;
+    _contactSyncIsFull = false;
+  }
+
+  void _armContactRequestWatchdog() {
+    _contactRequestWatchdog?.cancel();
+    final idle = contactSyncClock().difference(_contactRequestLastActivity);
+    final wait = contactRequestStaleAfter - idle;
+    _contactRequestWatchdog = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      checkStaleContactRequest,
+    );
+  }
+
+  /// Ends a request whose stream went silent for [contactRequestStaleAfter]
+  /// without END, so it cannot hold the queue or the loading state until some
+  /// later refresh happens to run. Nothing is pruned: an unfinished stream is
+  /// never a complete sync.
+  @visibleForTesting
+  void checkStaleContactRequest() {
+    if (!_contactRequestInFlight) return;
+    final idle = contactSyncClock().difference(_contactRequestLastActivity);
+    if (idle < contactRequestStaleAfter) {
+      _armContactRequestWatchdog();
+      return;
+    }
+    _appDebugLogService?.warn(
+      'Contact request had no reply for ${idle.inSeconds}s; ending it, saved '
+      'contacts kept',
+      tag: 'ContactSync',
+    );
+    _endContactRequest();
+    _hasLoadedContacts = true;
+    notifyListeners();
+    _runQueuedContactRequest();
+  }
+
+  void _runQueuedContactRequest() {
+    final queued = _queuedContactRequest;
+    if (queued == null || _contactRequestInFlight) return;
+    _queuedContactRequest = null;
+    unawaited(
+      getContacts(
+        since: queued.since,
+        preserveExisting: queued.preserveExisting,
+      ).catchError((Object e) {
+        _appDebugLogService?.error(
+          'Queued contact request failed to send: $e',
+          tag: 'ContactSync',
+        );
+      }),
+    );
   }
 
   Future<void> refreshContacts() async {
@@ -3382,9 +3940,311 @@ class MeshCoreConnector extends ChangeNotifier {
     await getContacts(since: _latestContactLastmod(), preserveExisting: true);
   }
 
+  /// The latest short full sync, kept until dismissed or a complete sync.
+  ContactSyncShortfall? get contactSyncShortfall => _contactSyncShortfall;
+
+  /// True after the automatic retry was also short: the owner chooses between
+  /// keeping the local list and accepting the radio's.
+  bool get contactSyncDecisionPending => _contactSyncDecisionPending;
+
+  /// Contacts the app holds that the last full sync did not deliver, i.e. what
+  /// "use the radio's list" would remove.
+  int get contactSyncUndeliveredCount => _contacts
+      .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
+      .length;
+
+  /// Saved contacts the radio answered "not found" for during recovery.
+  int get contactSyncConfirmedGoneCount => _recoveryGone.length;
+
+  /// A full sync is complete only when the radio declared a total and at
+  /// least that many contacts arrived. No declared total (older firmware) is
+  /// unverifiable, so it is never treated as complete.
+  @visibleForTesting
+  static bool isContactSyncComplete({
+    required int? declared,
+    required int received,
+  }) => declared != null && received >= declared;
+
+  void _beginContactSync({required bool full}) {
+    _contactSyncIsFull = full;
+    _contactSyncDeclaredTotal = null;
+    _contactSyncDeliveredKeys.clear();
+    if (full) _contactSyncDecisionPending = false;
+  }
+
+  void _finishFullContactSync() {
+    final declared = _contactSyncDeclaredTotal;
+    final received = _contactSyncReceived;
+    _contactFullStreams++;
+    if (_recoveryRadioKey != selfPublicKeyHex) {
+      _recoveryRadioKey = selfPublicKeyHex;
+      _recoveryDelivered.clear();
+      _recoveryGone.clear();
+    }
+    _recoveryDelivered.addAll(_contactSyncDeliveredKeys);
+    if (declared != null) _recoveryDeclared = declared;
+    if (isContactSyncComplete(declared: declared, received: received)) {
+      final before = _contacts.length;
+      _contacts.removeWhere(
+        (c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex),
+      );
+      final removed = before - _contacts.length;
+      if (removed > 0) {
+        _appDebugLogService?.info(
+          'Contact sync complete ($received of $declared): removed $removed '
+          'contact(s) the radio no longer holds',
+          tag: 'ContactSync',
+        );
+      }
+      _contactSyncShortfall = null;
+      _contactSyncDecisionPending = false;
+      _recoveryDelivered.clear();
+      _recoveryGone.clear();
+      // A complete sync ends any recovery still running, so a leftover by-key
+      // loop cannot report a shortfall against the cleared union. (Gemini)
+      _recoveryRun++;
+      _recoveryCheckingKeys = false;
+      _recoverySettleTimer?.cancel();
+      return;
+    }
+
+    final syncCount = _contactFullStreams <= contactSyncMaxFullStreams
+        ? 'full sync $_contactFullStreams of $contactSyncMaxFullStreams'
+        : 'full sync $_contactFullStreams, past the $contactSyncMaxFullStreams '
+              'automatic syncs; checking by key';
+    _appDebugLogService?.warn(
+      'Contact sync short: radio declared ${declared ?? 'no total'}, sent '
+      '$received ($syncCount). Nothing removed.',
+      tag: 'ContactSync',
+    );
+    // A user refresh during the by-key checks only adds what it delivered;
+    // the checks finish the run.
+    if (_recoveryCheckingKeys) return;
+
+    final unionComplete =
+        declared != null && _recoveryDelivered.length >= declared;
+    if (!unionComplete && _contactFullStreams < contactSyncMaxFullStreams) {
+      _scheduleRecoveryStream(_recoveryRun);
+      return;
+    }
+    unawaited(_checkMissingContactsByKey(_recoveryRun));
+  }
+
+  void _scheduleRecoveryStream(int run) {
+    _recoverySettleTimer?.cancel();
+    _recoveryWaitingSince = contactSyncClock();
+    _recoverySettleTimer = Timer(
+      contactRecoverySettle,
+      () => _runRecoveryStreamWhenSettled(run),
+    );
+  }
+
+  /// Waits until the radio has been quiet for [contactRecoverySettle] and no
+  /// other startup sync is running, so recovery never hammers the link.
+  void _runRecoveryStreamWhenSettled(int run) {
+    if (run != _recoveryRun || !isConnected) return;
+    final busy =
+        _contactRequestInFlight ||
+        _isSyncingChannels ||
+        _channelSyncInFlight ||
+        isSyncingQueuedMessages;
+    final quietFor = contactSyncClock().difference(_lastRadioFrameAt);
+    if (busy || quietFor < contactRecoverySettle) {
+      final waited = contactSyncClock().difference(
+        _recoveryWaitingSince ?? contactSyncClock(),
+      );
+      if (waited >= contactRecoveryMaxWait) {
+        // Never let a busy link hide a short sync: stop waiting and let the
+        // owner decide, without sending anything more. (Gemini review)
+        _appDebugLogService?.warn(
+          'Contact recovery gave up waiting for a quiet link after '
+          '${waited.inSeconds}s',
+          tag: 'ContactSync',
+        );
+        unawaited(_checkMissingContactsByKey(run, checkKeys: false));
+        return;
+      }
+      final wait = busy
+          ? contactRecoverySettle
+          : contactRecoverySettle - quietFor;
+      _recoverySettleTimer = Timer(
+        wait < const Duration(seconds: 1) ? const Duration(seconds: 1) : wait,
+        () => _runRecoveryStreamWhenSettled(run),
+      );
+      return;
+    }
+    _appDebugLogService?.info(
+      'Contact recovery: full sync ${_contactFullStreams + 1} of '
+      '$contactSyncMaxFullStreams',
+      tag: 'ContactSync',
+    );
+    unawaited(
+      getContacts().catchError((Object e) {
+        _appDebugLogService?.error(
+          'Contact recovery sync failed to send: $e',
+          tag: 'ContactSync',
+        );
+      }),
+    );
+  }
+
+  /// After the last full sync: asks the radio, one key at a time and spaced
+  /// apart, about each saved contact no sync delivered. Removes only the ones
+  /// it answers "not found" for, and only when every declared contact has
+  /// been accounted for; otherwise the owner decides.
+  Future<void> _checkMissingContactsByKey(
+    int run, {
+    bool checkKeys = true,
+  }) async {
+    final missing = !checkKeys
+        ? const <Uint8List>[]
+        : _contacts
+              .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
+              .map((c) => c.publicKey)
+              .toList();
+    _recoveryCheckingKeys = true;
+    for (final key in missing) {
+      await Future<void>.delayed(contactKeyCheckGap);
+      if (run != _recoveryRun || !isConnected) return;
+      final result = await checkContactOnRadio(key);
+      if (run != _recoveryRun) return;
+      final hex = pubKeyToHex(key);
+      if (result == ContactKeyCheckResult.onRadio) {
+        _recoveryDelivered.add(hex);
+      } else if (result == ContactKeyCheckResult.notFound) {
+        _recoveryGone.add(hex);
+      }
+    }
+    _recoveryCheckingKeys = false;
+
+    // The latest total: a refresh during the checks may have changed it.
+    final declared = _recoveryDeclared;
+    final accounted = _recoveryDelivered.length;
+    if (declared != null && accounted >= declared) {
+      final gone = Set<String>.of(_recoveryGone);
+      _contacts.removeWhere((c) => gone.contains(c.publicKeyHex));
+      _appDebugLogService?.info(
+        'Contact recovery complete ($accounted of $declared): removed '
+        '${gone.length} contact(s) the radio no longer holds',
+        tag: 'ContactSync',
+      );
+      _contactSyncShortfall = null;
+      _contactSyncDecisionPending = false;
+      notifyListeners();
+      await _persistContacts();
+      return;
+    }
+
+    final kept = contactSyncUndeliveredCount;
+    _contactSyncShortfall = ContactSyncShortfall(
+      declared: declared,
+      received: accounted,
+      keptLocally: kept,
+      confirmedGone: _recoveryGone.length,
+    );
+    _contactSyncDecisionPending = true;
+    final message =
+        'Contact sync incomplete after $_contactFullStreams full sync(s): '
+        'radio declared ${declared ?? 'no total'}, app has $accounted. Kept '
+        '$kept saved contact(s) it did not send (${_recoveryGone.length} '
+        'confirmed gone); nothing removed.';
+    debugPrint(message);
+    _appDebugLogService?.error(message, tag: 'ContactSync');
+    notifyListeners();
+  }
+
+  /// The owner chose to keep the local list after a short sync.
+  void resolveContactSyncKeepLocal() {
+    _contactSyncDecisionPending = false;
+    _appDebugLogService?.info(
+      'Owner kept the local contact list after a short sync',
+      tag: 'ContactSync',
+    );
+    notifyListeners();
+  }
+
+  /// The owner chose the radio's list after a short sync: drop what no sync on
+  /// this connection delivered (confirmed gone, or never sent by the radio).
+  Future<void> resolveContactSyncUseRadio() async {
+    final removed = contactSyncUndeliveredCount;
+    _contacts.removeWhere((c) => !_recoveryDelivered.contains(c.publicKeyHex));
+    _contactSyncDecisionPending = false;
+    _contactSyncShortfall = null;
+    _appDebugLogService?.warn(
+      'Owner accepted the radio\'s contact list: removed $removed contact(s)',
+      tag: 'ContactSync',
+    );
+    notifyListeners();
+    await _persistContacts();
+  }
+
+  void dismissContactSyncShortfall() {
+    if (_contactSyncDecisionPending) return;
+    _contactSyncShortfall = null;
+    notifyListeners();
+  }
+
   Future<void> getContactByKey(Uint8List pubKey) async {
     if (!isConnected) return;
+    _untrackedByKeyAt = contactSyncClock();
     await sendFrame(buildGetContactByKeyFrame(pubKey));
+  }
+
+  /// Asks the radio whether it still holds [pubKey]. Only one check runs at a
+  /// time; a second call while one is pending returns
+  /// [ContactKeyCheckResult.unresolved] without sending. A timeout, a send
+  /// failure, a disconnect, or a NOT_FOUND that something else may own are all
+  /// unresolved, never [ContactKeyCheckResult.notFound]. (#762)
+  Future<ContactKeyCheckResult> checkContactOnRadio(Uint8List pubKey) async {
+    if (!isConnected || _pendingKeyCheck != null) {
+      return ContactKeyCheckResult.unresolved;
+    }
+    final check = _PendingKeyCheck(
+      keyHex: pubKeyToHex(pubKey),
+      startedAt: contactSyncClock(),
+    );
+    _pendingKeyCheck = check;
+    check.timer = Timer(
+      contactKeyCheckTimeout,
+      () => _finishKeyCheck(check, ContactKeyCheckResult.unresolved),
+    );
+    try {
+      await sendFrame(buildGetContactByKeyFrame(pubKey));
+    } catch (e) {
+      _appDebugLogService?.warn(
+        'Contact check could not be sent: $e',
+        tag: 'ContactSync',
+      );
+      _finishKeyCheck(check, ContactKeyCheckResult.unresolved);
+    }
+    return check.done.future;
+  }
+
+  void _finishKeyCheck(_PendingKeyCheck check, ContactKeyCheckResult result) {
+    check.timer?.cancel();
+    if (identical(_pendingKeyCheck, check)) _pendingKeyCheck = null;
+    if (!check.done.isCompleted) check.done.complete(result);
+  }
+
+  void _resolveKeyCheckOnContact(Uint8List frame) {
+    final check = _pendingKeyCheck;
+    if (check == null || frame.length < 1 + pubKeySize) return;
+    if (pubKeyToHex(frame.sublist(1, 1 + pubKeySize)) == check.keyHex) {
+      _finishKeyCheck(check, ContactKeyCheckResult.onRadio);
+    }
+  }
+
+  /// A NOT_FOUND belongs to the pending check only when no other request that
+  /// can draw an ERR is in flight, and no untracked by-key request was sent
+  /// since the check started.
+  bool _notFoundIsForKeyCheck(int errCode, _PendingKeyCheck check) {
+    final untracked = _untrackedByKeyAt;
+    return errCode == errCodeNotFound &&
+        !_contactRequestInFlight &&
+        !_isSyncingChannels &&
+        !_channelSyncInFlight &&
+        _pendingGenericAckQueue.isEmpty &&
+        (untracked == null || untracked.isBefore(check.startedAt));
   }
 
   Future<void> sendMessage(
@@ -3771,6 +4631,19 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// A strictly-increasing per-channel send timestamp (seconds), so no two
+  /// channel sends share a `(ts, channel_idx)` key. Required for 0xC6 hash
+  /// correlation (#524); harmless otherwise.
+  int _nextChannelSendTimestampSecs(int channelIndex) {
+    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final ts = monotonicChannelSendTs(
+      nowSecs,
+      _lastChannelSendTsSecs[channelIndex],
+    );
+    _lastChannelSendTsSecs[channelIndex] = ts;
+    return ts;
+  }
+
   Future<void> sendChannelMessage(
     Channel channel,
     String text, {
@@ -3815,7 +4688,11 @@ class MeshCoreConnector extends ChangeNotifier {
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
       try {
         await sendFrame(
-          buildSendChannelTextMsgFrame(channel.index, text),
+          buildSendChannelTextMsgFrame(
+            channel.index,
+            text,
+            timestamp: _nextChannelSendTimestampSecs(channel.index),
+          ),
           channelSendQueueId: reactionQueueId,
           expectsGenericAck: true,
         );
@@ -3832,10 +4709,15 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
 
+    // One monotonic timestamp shared by the outgoing message and the frame, so
+    // the (ts, channel) key is unique and the client can correlate it to the
+    // firmware packet hash via 0xC6 (#524).
+    final sendTsSecs = _nextChannelSendTimestampSecs(channel.index);
     final message = ChannelMessage.outgoing(
       text,
       _selfName ?? 'Me',
       channel.index,
+      timestampSecs: sendTsSecs,
       originalText: originalText,
       translatedLanguageCode: translatedLanguageCode,
       translationModelId: translationModelId,
@@ -3848,10 +4730,25 @@ class MeshCoreConnector extends ChangeNotifier {
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
     try {
       await sendFrame(
-        buildSendChannelTextMsgFrame(channel.index, outboundText),
+        buildSendChannelTextMsgFrame(
+          channel.index,
+          outboundText,
+          timestamp: sendTsSecs,
+        ),
         channelSendQueueId: message.messageId,
         expectsGenericAck: true,
       );
+      // Owner-only CoreScope observer count (#524): background, gated, and
+      // best-effort. Never blocks or fails the send.
+      if (_coreScopeQueryActive) {
+        unawaited(
+          _fetchAndStoreCoreScopeCount(
+            channel.index,
+            sendTsSecs,
+            message.messageId,
+          ),
+        );
+      }
     } catch (e) {
       // Clear the stuck queue id and surface the failure in the chat bubble
       // instead of leaving the message pending and blocking the queue (#395).
@@ -3907,6 +4804,48 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     unawaited(_persistDiscoveredContacts());
     notifyListeners();
+  }
+
+  /// Adds a contact from an identity alone: a public key, a name and a type,
+  /// with no advert behind it. (#627)
+  ///
+  /// This is the path behind manual key entry, a scanned QR, and a pasted
+  /// `meshcore://contact/add` card. It uses the stock `CMD_ADD_UPDATE_CONTACT`
+  /// (command 9), whose handler creates the contact outright when the key is
+  /// unknown, so it needs no capability gate and works on stock firmware, not
+  /// just Offband builds.
+  ///
+  /// Returns false when not connected. The radio answers with a generic OK, or
+  /// an error when its contact table is full.
+  Future<bool> addContactByKey(Contact stub) async {
+    if (!isConnected) return false;
+
+    await sendFrame(
+      buildUpdateContactPathFrame(
+        stub.publicKey,
+        // No path is known, so send an empty one and let the flood sentinel
+        // below carry the meaning. The builder pads this to the full width.
+        Uint8List(0),
+        // Negative maps to the firmware's OUT_PATH_UNKNOWN (0xFF): flood until
+        // the mesh teaches us a route back.
+        -1,
+        type: stub.type,
+        flags: 0,
+        name: stub.name,
+        // The whole point of this path. Anything else here would trip the
+        // firmware advert replay guard and leave the contact permanently deaf
+        // to its own adverts. See buildUpdateContactPathFrame. (#620)
+        lastAdvert: DateTime.fromMillisecondsSinceEpoch(0),
+      ),
+      expectsGenericAck: true,
+    );
+
+    // Mirror the device write into local state, keeping lastSeen at the epoch
+    // so the contact continues to read as unverified until a real advert
+    // arrives and upgrades it. (#630)
+    _handleContactAdvert(stub);
+    notifyListeners();
+    return true;
   }
 
   Future<void> importDiscoveredContact(Contact contact) async {
@@ -4429,6 +5368,129 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  /// Reads the node's 64-byte identity.
+  ///
+  /// Firmware can be built without this (`ENABLE_PRIVATE_KEY_EXPORT`), in which
+  /// case the device answers [respCodeDisabled] and the result is
+  /// [IdentityTransfer.unsupported] rather than a failure. Callers must handle
+  /// that case: it means this radio can never do it, so retrying is pointless
+  /// and an export must proceed without the identity section. (#578)
+  Future<IdentityExportResult> exportPrivateKey({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (!isConnected) {
+      return const IdentityExportResult(IdentityTransfer.noReply);
+    }
+    final existing = _identityExportCompleter;
+    if (existing != null && !existing.isCompleted) {
+      return existing.future.timeout(
+        timeout,
+        onTimeout: () => const IdentityExportResult(IdentityTransfer.noReply),
+      );
+    }
+    final completer = Completer<IdentityExportResult>();
+    _identityExportCompleter = completer;
+    await sendFrame(buildExportPrivateKeyFrame());
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      return const IdentityExportResult(IdentityTransfer.noReply);
+    } finally {
+      if (identical(_identityExportCompleter, completer)) {
+        _identityExportCompleter = null;
+      }
+    }
+  }
+
+  /// Overwrites the node's identity with [identity], which must be
+  /// [privateKeySize] bytes.
+  ///
+  /// **This is destructive.** The node's existing identity is replaced, every
+  /// contact's view of this node becomes stale, and there is no undo short of
+  /// importing the previous key back. Callers must confirm with the user first.
+  /// Availability is firmware-dependent exactly as in [exportPrivateKey]. (#578)
+  Future<IdentityTransfer> importPrivateKey(
+    Uint8List identity, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (identity.length != privateKeySize) {
+      throw ArgumentError.value(
+        identity.length,
+        'identity',
+        'a node identity is exactly $privateKeySize bytes',
+      );
+    }
+    if (!isConnected) return IdentityTransfer.noReply;
+    final completer = Completer<IdentityTransfer>();
+    _identityImportCompleter = completer;
+    await sendFrame(buildImportPrivateKeyFrame(identity));
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      return IdentityTransfer.noReply;
+    } finally {
+      if (identical(_identityImportCompleter, completer)) {
+        _identityImportCompleter = null;
+      }
+    }
+  }
+
+  void _handlePrivateKey(Uint8List frame) {
+    final completer = _identityExportCompleter;
+    _identityExportCompleter = null;
+    if (completer == null || completer.isCompleted) return;
+    if (frame.length < 1 + privateKeySize) {
+      // A short frame is not a usable identity; report it as a refusal rather
+      // than handing a caller a truncated key it might write to a file.
+      appLogger.error(
+        'RESP_CODE_PRIVATE_KEY frame too short: ${frame.length} bytes',
+        tag: 'Connector',
+      );
+      completer.complete(const IdentityExportResult(IdentityTransfer.rejected));
+      return;
+    }
+    // Never log the key itself.
+    completer.complete(
+      IdentityExportResult(
+        IdentityTransfer.ok,
+        Uint8List.sublistView(frame, 1, 1 + privateKeySize),
+      ),
+    );
+  }
+
+  /// RESP_CODE_DISABLED is generic: it means "that feature is not in this
+  /// build". Only an identity request is currently able to provoke it from us,
+  /// so it resolves whichever identity transfer is in flight and is otherwise
+  /// logged rather than silently dropped. (#578)
+  void _handleDisabledFrame() {
+    final export = _identityExportCompleter;
+    _identityExportCompleter = null;
+    if (export != null && !export.isCompleted) {
+      export.complete(const IdentityExportResult(IdentityTransfer.unsupported));
+      return;
+    }
+    final import = _identityImportCompleter;
+    _identityImportCompleter = null;
+    if (import != null && !import.isCompleted) {
+      import.complete(IdentityTransfer.unsupported);
+      return;
+    }
+    appLogger.warn(
+      'Device reported a disabled feature with no request in flight',
+      tag: 'Connector',
+    );
+  }
+
+  /// Lets an in-flight identity import claim a generic OK or ERR frame.
+  /// Returns true when it did, so the shared handlers can stop. (#578)
+  bool _completeIdentityImport(IdentityTransfer outcome) {
+    final completer = _identityImportCompleter;
+    if (completer == null || completer.isCompleted) return false;
+    _identityImportCompleter = null;
+    completer.complete(outcome);
+    return true;
+  }
+
   void _handleOffbandGps(Uint8List frame) {
     if (frame.length < 2) return;
     final text = utf8.decode(frame.sublist(1), allowMalformed: true);
@@ -4486,18 +5548,19 @@ class MeshCoreConnector extends ChangeNotifier {
   /// (0xC4). Sends the request and reassembles the START/CHUNK*/END stream into
   /// the raw captured bytes.
   ///
-  /// Throws [StateError] if a download is already in flight,
+  /// Returns a [CaplogDownload] carrying the reassembled bytes. A short transfer
+  /// is NOT an error: the result's [CaplogDownload.truncated] is set and the
+  /// partial [CaplogDownload.bytes] are kept so the caller can still save/share
+  /// them (#580). Throws [StateError] if a download is already in flight,
   /// [CaplogBusyException] if the device rejects because another stream is
-  /// already in flight, [CaplogTruncatedException] if the byte count doesn't
-  /// match the announced length, or [TimeoutException] if it never finishes.
-  /// (#430)
-  Future<Uint8List> downloadCaplog({
+  /// already in flight, or [TimeoutException] if it never finishes. (#430)
+  Future<CaplogDownload> downloadCaplog({
     Duration timeout = const Duration(seconds: 30),
   }) async {
     if (_caplogCompleter != null) {
       throw StateError('A caplog download is already in progress');
     }
-    final completer = Completer<Uint8List>();
+    final completer = Completer<CaplogDownload>();
     _caplogCompleter = completer;
     _caplogReassembler = CaplogReassembler();
     _caplogAwaitingStart = true;
@@ -4560,7 +5623,14 @@ class MeshCoreConnector extends ChangeNotifier {
           '$_caplogChunks chunks',
           tag: 'Caplog',
         );
-        completer.complete(event.bytes);
+        completer.complete(
+          CaplogDownload(
+            bytes: event.bytes!,
+            received: event.bytes!.length,
+            expected: event.bytes!.length,
+            chunks: _caplogChunks,
+          ),
+        );
         break;
       case CaplogStatus.truncated:
         _appDebugLogService?.warn(
@@ -4568,8 +5638,11 @@ class MeshCoreConnector extends ChangeNotifier {
           '${event.expected} bytes in $_caplogChunks chunks',
           tag: 'Caplog',
         );
-        completer.completeError(
-          CaplogTruncatedException(
+        // Not an error: hand back the partial bytes so the caller can still
+        // save/share them (#580).
+        completer.complete(
+          CaplogDownload(
+            bytes: event.bytes!,
             received: event.bytes!.length,
             expected: event.expected!,
             chunks: _caplogChunks,
@@ -4645,6 +5718,164 @@ class MeshCoreConnector extends ChangeNotifier {
     } finally {
       timer.cancel();
       _caplogStatusCompleter = null;
+    }
+  }
+
+  /// Ask firmware for the on-air packet hash of a channel message we sent,
+  /// keyed by (ts, chan) (0xC6, #524). Returns null on timeout / error frame.
+  Future<OffbandPktHash?> _queryPacketHash(
+    int ts,
+    int chan, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final key = '${ts}_$chan';
+    final completer = Completer<OffbandPktHash?>();
+    _pendingPktHashCompleters[key] = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    try {
+      await sendFrame(buildOffbandPktHashGetFrame(ts, chan));
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn('0xC6 query failed for $key: $e', tag: 'CoreScope');
+      return null;
+    } finally {
+      timer.cancel();
+      _pendingPktHashCompleters.remove(key);
+    }
+  }
+
+  /// Routes a 0xC6 reply to its waiting query. Success replies echo the key;
+  /// error/malformed frames are logged and left for the query to time out (the
+  /// error frame carries no key, so it cannot be correlated).
+  void _handleOffbandPktHashFrame(Uint8List frame) {
+    final parsed = parseOffbandPktHashReply(frame);
+    if (parsed == null) {
+      appLogger.warn('0xC6 error or malformed reply', tag: 'CoreScope');
+      return;
+    }
+    final key = '${parsed.timestamp}_${parsed.channelIdx}';
+    final completer = _pendingPktHashCompleters[key];
+    appLogger.info(
+      '0xC6 reply hash=${parsed.hashHex} key=$key matched=${completer != null}',
+      tag: 'CoreScope',
+    );
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(parsed);
+    }
+  }
+
+  /// After sending a channel message, fetch its firmware hash then CoreScope's
+  /// observer count and stamp both on the message. Best-effort and gated; any
+  /// failure leaves the message showing radio-only.
+  /// Poll intervals (seconds) after a send: quick at first, then settle. The
+  /// list also caps the total window (sum ~5 min). Observer counts accrue over
+  /// time (the packet must propagate and be reported), so a single instant
+  /// query misses it. The loop also stops early once the count stabilises, no
+  /// increase across [_coreScopeStableChecks] consecutive polls. There is no
+  /// true "final" count (it only ever grows), so this is a pragmatic stop, the
+  /// tappable badge covers re-checking later.
+  static const List<int> _coreScopePollSecs = [10, 20, 30, 60, 60, 60, 90, 90];
+  static const int _coreScopeStableChecks = 3;
+
+  Future<void> _fetchAndStoreCoreScopeCount(
+    int channelIndex,
+    int ts,
+    String messageId,
+  ) async {
+    try {
+      appLogger.info(
+        'start ts=$ts chan=$channelIndex msg=$messageId',
+        tag: 'CoreScope',
+      );
+      final pkt = await _queryPacketHash(ts, channelIndex);
+      if (pkt == null) {
+        appLogger.info('no hash (0xC6 null/timeout)', tag: 'CoreScope');
+        return;
+      }
+      _updateChannelMessageById(
+        channelIndex,
+        messageId,
+        (m) => m.copyWith(onAirHash: pkt.hashHex),
+      );
+      var best = 0;
+      var flat = 0;
+      for (final secs in _coreScopePollSecs) {
+        await Future<void>.delayed(Duration(seconds: secs));
+        if (!isConnected) return;
+        final counts = (await _coreScopeService.fetchCounts(
+          pkt.hashHex,
+        )).counts;
+        if (counts == null) continue;
+        if (counts.observers > best) {
+          best = counts.observers;
+          flat = 0;
+          _updateChannelMessageById(
+            channelIndex,
+            messageId,
+            (m) => m.copyWith(
+              coreScopeObserverCount: counts.observers,
+              coreScopeObservationCount: counts.observations,
+            ),
+          );
+          appLogger.info(
+            'observers=${counts.observers} observations=${counts.observations}',
+            tag: 'CoreScope',
+          );
+          notifyListeners();
+        } else if (++flat >= _coreScopeStableChecks) {
+          return; // stabilised
+        }
+      }
+    } catch (e) {
+      appLogger.warn(
+        'CoreScope observer-count fetch failed: $e',
+        tag: 'CoreScope',
+      );
+    }
+  }
+
+  /// Tap-to-refresh: re-query CoreScope for a message's stored on-air hash and
+  /// bump the counts if they grew (they only ever climb). Returns the full
+  /// result so the UI can distinguish found / notFound / unreachable (#571).
+  Future<CoreScopeResult> refreshCoreScopeCounts(
+    int channelIndex,
+    String messageId,
+    String hashHex,
+  ) async {
+    final result = await _coreScopeService.fetchCounts(hashHex);
+    final counts = result.counts;
+    if (counts != null) {
+      _updateChannelMessageById(channelIndex, messageId, (m) {
+        final current = m.coreScopeObserverCount ?? 0;
+        return counts.observers >= current
+            ? m.copyWith(
+                coreScopeObserverCount: counts.observers,
+                coreScopeObservationCount: counts.observations,
+              )
+            : m;
+      });
+      notifyListeners();
+    }
+    return result;
+  }
+
+  void _updateChannelMessageById(
+    int channelIndex,
+    String messageId,
+    ChannelMessage Function(ChannelMessage) transform,
+  ) {
+    final messages = _channelMessages[channelIndex];
+    if (messages == null) return;
+    final i = messages.indexWhere((m) => m.messageId == messageId);
+    if (i >= 0) {
+      messages[i] = transform(messages[i]);
+    } else {
+      appLogger.warn(
+        'message $messageId not found on chan $channelIndex; count dropped',
+        tag: 'CoreScope',
+      );
     }
   }
 
@@ -4813,6 +6044,7 @@ class MeshCoreConnector extends ChangeNotifier {
   void _handleFrameInner(List<int> data) {
     if (data.isEmpty) return;
     _lastRxTime = DateTime.now();
+    _lastRadioFrameAt = contactSyncClock();
 
     final frame = Uint8List.fromList(data);
     _receivedFramesController.add(frame);
@@ -4823,7 +6055,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
     switch (code) {
       case respCodeOk:
+        // An identity import is confirmed by a generic OK, so it claims the
+        // frame before the shared handler runs. (#578)
+        if (_completeIdentityImport(IdentityTransfer.ok)) break;
         _handleOk();
+        break;
+      case respCodePrivateKey:
+        _handlePrivateKey(frame);
+        break;
+      case respCodeDisabled:
+        _handleDisabledFrame();
         break;
       case respCodeDeviceInfo:
         _handleDeviceInfo(frame);
@@ -4840,6 +6081,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case respCodeOffbandCaplog:
         _handleOffbandCaplogFrame(frame);
         break;
+      case cmdOffbandPktHash:
+        _handleOffbandPktHashFrame(frame);
+        break;
       case respCodeOffbandDeviceUi:
         _handleDeviceUiReply(frame);
         break;
@@ -4849,17 +6093,19 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case respCodeContactsStart:
         debugPrint('Got CONTACTS_START');
-        if (!_preserveContactsOnRefresh) {
-          _contacts.clear();
-        }
+        _contactStreamStarted = true;
+        _contactRequestLastActivity = contactSyncClock();
         _isLoadingContacts = true;
         _contactSyncReceived = 0;
+        _contactSyncDeliveredKeys.clear();
+        _contactSyncDeclaredTotal = null;
         // Firmware v3+ includes total contacts after CONTACTS_START.
         // Incremental sync reports total contacts, not filtered result count.
         if (frame.length >= 5 && !_contactSyncUsesSinceFilter) {
           final reader = BufferReader(frame);
           reader.skipBytes(1);
           _contactSyncTotal = reader.readUInt32LE();
+          _contactSyncDeclaredTotal = _contactSyncTotal;
         } else if (!_contactSyncUsesSinceFilter) {
           // Older firmwares may omit the count; use the nRF node capacity as
           // a conservative progress fallback instead of hiding the progress.
@@ -4880,13 +6126,16 @@ class MeshCoreConnector extends ChangeNotifier {
       case respCodeContact:
         debugPrint('Got CONTACT');
         _handleContact(frame);
+        _resolveKeyCheckOnContact(frame);
         break;
       case respCodeEndOfContacts:
         debugPrint('Got END_OF_CONTACTS');
-        _isLoadingContacts = false;
+        final wasFullSync = _contactSyncIsFull && _isLoadingContacts;
+        _endContactRequest();
         _hasLoadedContacts = true;
-        _preserveContactsOnRefresh = false;
         _contactSyncUsesSinceFilter = false;
+        if (wasFullSync) _finishFullContactSync();
+        _runQueuedContactRequest();
         unawaited(updateKnownDiscovered());
         notifyListeners();
         unawaited(_persistContacts());
@@ -4995,6 +6244,10 @@ class MeshCoreConnector extends ChangeNotifier {
   }) => isSyncingChannels && channelSyncInFlight && !hasPendingGenericAck;
 
   void _handleErrorFrame(Uint8List frame) {
+    // An identity import is refused with a generic ERR (illegal argument for a
+    // malformed key), so it claims the frame first. (#578)
+    if (_completeIdentityImport(IdentityTransfer.rejected)) return;
+    final caplogWasAwaitingStart = _caplogAwaitingStart;
     // A caplog download awaiting its START frame: the firmware answers the
     // generic RESP_CODE_ERR when another stream (block-list / contacts /
     // observer config) is already in flight. Fail the download fast with a
@@ -5026,6 +6279,14 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'Protocol',
     );
 
+    final keyCheck = _pendingKeyCheck;
+    if (keyCheck != null &&
+        !caplogWasAwaitingStart &&
+        _notFoundIsForKeyCheck(errCode, keyCheck)) {
+      _finishKeyCheck(keyCheck, ContactKeyCheckResult.notFound);
+      return;
+    }
+
     // An in-flight channel GET that draws an ERR means that slot is empty,
     // advance to the next index the instant the ERR lands instead of waiting
     // out the timeout + retry budget (mirrors the CHANNEL_INFO success path
@@ -5040,6 +6301,25 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelSyncRetries = 0;
       _nextChannelIndexToRequest++;
       unawaited(_requestNextChannel());
+      return;
+    }
+
+    // A contact request the radio refused before streaming (e.g. BAD_STATE
+    // while another stream runs). Only claimed when nothing else could own
+    // the ERR. The saved list is untouched; the request just ends. (#672)
+    if (_contactRequestInFlight &&
+        !_contactStreamStarted &&
+        !caplogWasAwaitingStart &&
+        _pendingGenericAckQueue.isEmpty) {
+      _endContactRequest();
+      _hasLoadedContacts = true;
+      _appDebugLogService?.error(
+        'Radio refused the contact request (error $errCode); saved contacts '
+        'kept',
+        tag: 'ContactSync',
+      );
+      notifyListeners();
+      _runQueuedContactRequest();
       return;
     }
 
@@ -5067,8 +6347,6 @@ class MeshCoreConnector extends ChangeNotifier {
       if (contact != null) {
         _pathHistoryService!.handlePathUpdated(contact);
         // Refresh just this specific contact instead of all contacts.
-        // This avoids race conditions with _preserveContactsOnRefresh flag
-        // that can occur when using refreshContactsSinceLastmod().
         getContactByKey(pubKey);
       }
     }
@@ -5109,7 +6387,12 @@ class MeshCoreConnector extends ChangeNotifier {
       _telemetryModeEnv = telemetryFlag >> 2 & 0x03;
       _telemetryModeLoc = telemetryFlag >> 4 & 0x03;
 
-      _manualAddContacts = reader.readByte() & 0x01 == 0x00;
+      _manualAddContactsRaw = reader.readByte();
+      // Firmware treats bit 0 as "manual add", so auto-add is on when it is
+      // clear (`isAutoAddEnabled()` in MyMesh.cpp). This flag therefore means
+      // "device is in auto-add mode", despite its name, and drives the one-shot
+      // default-applying pass in _checkManualAddContacts.
+      _manualAddContacts = _manualAddContactsRaw & 0x01 == 0x00;
 
       _currentFreqHz = reader.readUInt32LE();
       _currentBwHz = reader.readUInt32LE();
@@ -5123,6 +6406,12 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Connector',
       );
     }
+    // The name is the other input to the channel composer's byte budget, and
+    // it only lands here, well after the first MTU event. Re-log so the entry
+    // reflects the real name length rather than the null-name worst case
+    // (#793).
+    _logComposerBudget('self-info');
+
     final selfName = _selfName?.trim();
     if (_activeTransport == MeshCoreTransportType.usb &&
         selfName != null &&
@@ -5536,17 +6825,81 @@ class MeshCoreConnector extends ChangeNotifier {
       secondsSinceLastRx: secSinceRx,
     );
     if (mlTimeout != null) {
-      if (pathLength < 0) {
-        // Flood: trust ML, only enforce firmware formula as floor
-        if (mlTimeout < physicsMin) {
-          return physicsMin;
-        }
-      }
+      // Flood is a single firmware value, not a range: _physicsMinTimeout and
+      // _physicsMaxTimeout both return `500 + (16 * airtime)` for
+      // pathLength < 0, mirroring the firmware's calcFloodTimeoutMillisFor.
+      // A clamp between two equal bounds cannot preserve a prediction, so the
+      // model has never influenced a flood timeout in either direction.
+      //
+      // Previously written as an early return guarded by `mlTimeout <
+      // physicsMin`, above the comment "Flood: trust ML, only enforce firmware
+      // formula as floor". That described behaviour the code did not have, and
+      // read as though the model were consulted here. Stating the constraint
+      // is honest; the branch was not. Behaviour is unchanged (#533).
+      //
+      // Whether flood *should* trust a prediction is unanswered and is not
+      // decided here. Every round trip measured to date was 0-hop direct, so
+      // there is no flood data to decide it from.
+      if (pathLength < 0) return physicsMax;
       return mlTimeout.clamp(physicsMin, physicsMax);
     }
 
     // No ML data, use firmware formula
     return physicsMax;
+  }
+
+  /// Worst case the app allows *itself* to take fetching one message once the
+  /// radio already holds it: every `CMD_SYNC_NEXT_MESSAGE` attempt plus its
+  /// retries. Replies are pull-based, so this sits inside every CLI round trip.
+  ///
+  /// Derived from the retrieval constants rather than restated, so a command
+  /// timeout built on it cannot drift below the layer it depends on (#530).
+  int get messageRetrievalBudgetMs =>
+      _queueSyncTimeoutMs * (_maxQueueSyncRetries + 1);
+
+  /// Timeout for a repeater CLI command.
+  ///
+  /// [calculateTimeout] models **one-way delivery**: it mirrors the firmware's
+  /// `calcDirectTimeoutMillisFor`, whose job is to estimate when an outbound
+  /// packet should have been acknowledged. A CLI command is not that. It is a
+  /// request, an execution, and a reply, and the budget has to name all of it:
+  ///
+  /// 1. the outbound leg, which is what [calculateTimeout] is actually for;
+  /// 2. [cliReplyDelayMs], the fixed hold the repeater applies before it even
+  ///    queues the reply;
+  /// 3. the reply's own transmission, a second packet the ACK formula never
+  ///    modelled;
+  /// 4. [messageRetrievalBudgetMs], because the reply is not pushed to us. The
+  ///    radio raises `MSG_WAITING` and we must ask for it.
+  ///
+  /// The tail is transmit scheduling, not command execution, and neither end
+  /// exposes it. Measured round trips to one repeater ranged from 1.65 s to
+  /// 20.33 s, and the *same* verb returned in both 2.31 s and 20.33 s. On the
+  /// 20.33 s case the repeater stamped its reply about 5 s in and the packet
+  /// did not reach us for another ~15 s, so the time went into queueing on
+  /// both radios, not into running the command: `wifi on N` only sets a
+  /// deadline and returns immediately (firmware `CommonCLI.cpp` "wifi on").
+  /// Nothing here is a per-verb constant that could be tabulated, so the
+  /// retrieval term is what absorbs it.
+  ///
+  /// The reply leg uses physics only. The predictor is trained on direct-message
+  /// ACK latency, not on command round trips, so asking it about a reply leg
+  /// would be extrapolation (#534, #535).
+  int calculateCliTimeout({
+    required int pathLength,
+    int messageBytes = maxFrameSize,
+    String? contactKey,
+  }) {
+    final outboundMs = calculateTimeout(
+      pathLength: pathLength,
+      messageBytes: messageBytes,
+      contactKey: contactKey,
+    );
+    final replyLegMs = _physicsMaxTimeout(
+      pathLength,
+      _estimateAirtimeMs(messageBytes),
+    );
+    return outboundMs + cliReplyDelayMs + replyLegMs + messageRetrievalBudgetMs;
   }
 
   /// Coalesces notifications during a bulk contact pull.
@@ -5576,6 +6929,19 @@ class MeshCoreConnector extends ChangeNotifier {
     if (contactTmp != null) {
       if (isContact && _isLoadingContacts) {
         _contactSyncReceived++;
+      }
+      // Adverts heard mid-sync count as delivered too: the radio holds them,
+      // so a complete sync must not drop them just because they arrived as a
+      // push rather than in the contact stream.
+      if (_isLoadingContacts) {
+        _contactSyncDeliveredKeys.add(contactTmp.publicKeyHex);
+        _contactRequestLastActivity = contactSyncClock();
+      }
+      // Any frame for a key proves the radio holds it now, so recovery must
+      // not remove it even if an earlier check said "not found".
+      if (_recoveryRadioKey != null) {
+        _recoveryGone.remove(contactTmp.publicKeyHex);
+        _recoveryDelivered.add(contactTmp.publicKeyHex);
       }
       if (listEquals(contactTmp.publicKey, _selfPublicKey)) {
         appLogger.info(
@@ -6672,8 +8038,15 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       final retryService = _retryService;
+      // Channel sends draw this same frame. While one is awaiting its own
+      // RESP_CODE_SENT the frame is ambiguous, so the retry service must not
+      // adopt an unpredicted hash into a direct message (#581).
       if (retryService != null &&
-          retryService.updateMessageFromSent(ackHash, timeoutMs)) {
+          retryService.updateMessageFromSent(
+            ackHash,
+            timeoutMs,
+            allowUnpredictedAdoption: _pendingChannelSentQueue.isEmpty,
+          )) {
         return;
       }
 
@@ -7783,6 +9156,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
     _channelsChangedDebounce?.cancel();
+    _contactRequestWatchdog?.cancel();
+    _pendingKeyCheck?.timer?.cancel();
+    _recoverySettleTimer?.cancel();
     radioStatsNotifier.dispose();
     _receivedFramesController.close();
     _usbManager.dispose();
@@ -8128,6 +9504,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _autoAddRoomServers = (flags & autoAddRoomServerFlag) != 0;
       _autoAddSensors = (flags & autoAddSensorFlag) != 0;
       _overwriteOldest = (flags & autoAddOverwriteOldestFlag) != 0;
+      // The hop limit is the third byte. Older firmware sends a 2-byte frame,
+      // so its absence is normal and leaves the previous value alone. (#578)
+      if (frame.length > 2) {
+        _autoAddMaxHops = reader.readByte();
+      }
     } catch (e) {
       appLogger.error('Failed to parse auto-add config: $e', tag: 'Connector');
     }

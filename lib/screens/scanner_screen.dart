@@ -133,6 +133,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   if (_bluetoothState == BluetoothAdapterState.off)
                     _bluetoothOffWarning(context),
 
+                  // Unconfirmed BLE release: the OS never confirmed the last
+                  // disconnect, so this device may still hold the radio and
+                  // keep it from advertising (#689). Persistent until
+                  // dismissed, per the error-visibility standard.
+                  if (connector.bleReleaseUnconfirmed)
+                    _bleReleaseWarning(context, connector),
+
                   // Status bar
                   _buildStatusBar(context, connector),
 
@@ -339,14 +346,33 @@ class _ScannerScreenState extends State<ScannerScreen> {
         );
         return;
       }
+      // Never show a raw exception to the user (#522/#698): the full detail
+      // goes to the log, the snackbar gets a plain-language message and
+      // persists until dismissed.
+      appLogger.error('Connect failed: $e', tag: 'ScannerScreen');
       if (context.mounted) {
         showDismissibleSnackBar(
           context,
-          content: Text(context.l10n.scanner_connectionFailed(e.toString())),
+          content: Text(
+            context.l10n.scanner_connectionFailed(_describeConnectError(e)),
+          ),
           backgroundColor: Colors.red,
+          persist: true,
         );
       }
     }
+  }
+
+  String _describeConnectError(Object e) {
+    final l10n = context.l10n;
+    if (e is FlutterBluePlusException && e.code == 133) {
+      return l10n.scanner_connectFailedTransient;
+    }
+    if (e is TimeoutException ||
+        (e is FlutterBluePlusException && e.function == 'connect')) {
+      return l10n.scanner_connectFailedTimeout;
+    }
+    return l10n.scanner_connectFailedGeneric;
   }
 
   Future<String?> _promptLinuxPairingPin(
@@ -433,6 +459,48 @@ class _ScannerScreenState extends State<ScannerScreen> {
       tag: 'ScannerScreen',
     );
     return pin;
+  }
+
+  Widget _bleReleaseWarning(BuildContext context, MeshCoreConnector connector) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      color: errorColor.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          Icon(Icons.bluetooth_connected, size: 24, color: errorColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.scanner_bleReleaseWarning,
+                  style: TextStyle(
+                    color: errorColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.scanner_bleReleaseWarningMessage,
+                  style: TextStyle(
+                    color: errorColor.withValues(alpha: 0.85),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: connector.clearBleReleaseWarning,
+            child: Text(context.l10n.common_ok),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _bluetoothOffWarning(BuildContext context) {

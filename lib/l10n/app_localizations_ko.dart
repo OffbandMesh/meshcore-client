@@ -280,6 +280,26 @@ class AppLocalizationsKo extends AppLocalizations {
   String get scanner_bluetoothOffMessage => '블루투스를 켜서 장치를 검색해주세요.';
 
   @override
+  String get scanner_connectFailedTransient =>
+      'The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.';
+
+  @override
+  String get scanner_connectFailedTimeout =>
+      'The connection timed out. Check that the radio is powered, in range, and not already connected to another device.';
+
+  @override
+  String get scanner_connectFailedGeneric =>
+      'Could not connect to the radio. Details are in the App Debug Log.';
+
+  @override
+  String get scanner_bleReleaseWarning =>
+      'Radio may still be held by this device';
+
+  @override
+  String get scanner_bleReleaseWarningMessage =>
+      'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.';
+
+  @override
   String get scanner_chromeRequired => '크롬 브라우저 필요';
 
   @override
@@ -515,6 +535,47 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settings_debug => '디버깅';
 
   @override
+  String get settings_experimental => 'Experimental';
+
+  @override
+  String get settings_experimentalSubtitle =>
+      'Advanced and in-development features';
+
+  @override
+  String get settings_experimentalDescription =>
+      'These features are experimental and may change or be removed at any time. They default to off.';
+
+  @override
+  String get settings_coreScopeObserverCount => 'CoreScope observer counts';
+
+  @override
+  String get settings_coreScopeObserverCountSubtitle =>
+      'On outgoing channel messages, show how many CoreScope observers heard the packet, alongside radio-heard repeats. Needs internet.';
+
+  @override
+  String get settings_coreScopeObserverCountUnsupported =>
+      'Requires a firmware build with packet-hash support (v22+).';
+
+  @override
+  String get settings_experimentalDisable => 'Disable experimental features';
+
+  @override
+  String get settings_experimentalDisableSubtitle =>
+      'Turns off all experimental features and hides this section. Unlock again with 7 taps on the Build row.';
+
+  @override
+  String get settings_experimentalUnlocked => 'Experimental features unlocked';
+
+  @override
+  String get settings_experimentalAlreadyUnlocked =>
+      'Experimental features are already unlocked';
+
+  @override
+  String settings_experimentalCountdown(int count) {
+    return '$count more taps to unlock experimental features';
+  }
+
+  @override
   String get settings_companionDebugLog => '동반 디버깅 로그';
 
   @override
@@ -543,8 +604,27 @@ class AppLocalizationsKo extends AppLocalizations {
       'MeshCore LoRa 메시 네트워크 장치를 위한 오픈 소스 Flutter 클라이언트.';
 
   @override
+  String get settings_aboutLicenses => 'View licenses';
+
+  @override
+  String get settings_aboutWebsite => 'Offband website';
+
+  @override
+  String get settings_aboutPlayStore => 'Google Play';
+
+  @override
+  String get settings_aboutDonate => 'Donate or sponsor';
+
+  @override
+  String get settings_aboutLinkFailed => 'Could not open the link';
+
+  @override
   String get settings_aboutOpenMeteoAttribution =>
       'LOS 고도 데이터: Open-Meteo (CC BY 4.0)';
+
+  @override
+  String get settings_aboutPresetsAttribution =>
+      'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.';
 
   @override
   String get settings_infoName => '이름';
@@ -591,6 +671,31 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settings_presets => '기본 설정';
+
+  @override
+  String get settings_presetSourceMeshCore => 'MeshCore';
+
+  @override
+  String get settings_presetSourceOffband => 'Offband';
+
+  @override
+  String get settings_presetsRefresh => 'Update presets';
+
+  @override
+  String get settings_presetsUpdating => 'Updating presets...';
+
+  @override
+  String get settings_presetsUpdateFailed =>
+      'Couldn\'t update presets. Showing the saved list.';
+
+  @override
+  String settings_presetsUpdatedAt(String date) {
+    return 'Presets updated $date';
+  }
+
+  @override
+  String get settings_presetsBundled =>
+      'Presets included with this version of the app';
 
   @override
   String get settings_frequency => '주파수 (MHz)';
@@ -1015,6 +1120,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get contacts_manageRepeater => '리피터 관리';
 
   @override
+  String get contacts_manageSensor => 'Manage Sensor';
+
+  @override
   String get contacts_manageRoom => '방 서버 관리';
 
   @override
@@ -1374,6 +1482,23 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get composerBudgetBlockedTitle =>
+      'Can\'t send messages on this connection';
+
+  @override
+  String composerBudgetLimitedTitle(int maxBytes) {
+    return 'Only $maxBytes characters will fit';
+  }
+
+  @override
+  String get composerBudgetBluetoothCause =>
+      'The Bluetooth link negotiated a very small packet size, which leaves no room for message text. Try reconnecting, or connect by USB or Wi-Fi instead.';
+
+  @override
+  String get composerBudgetGenericCause =>
+      'The connection to the radio left no room for message text. Try reconnecting.';
+
+  @override
   String get chat_messageCopied => '메시지가 복사되었습니다';
 
   @override
@@ -1587,6 +1712,66 @@ class AppLocalizationsKo extends AppLocalizations {
       one: '1 repeat',
     );
     return 'Heard $_temp0';
+  }
+
+  @override
+  String channel_coreScopeTooltip(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count CoreScope observers',
+      one: '1 CoreScope observer',
+    );
+    return 'Seen by $_temp0';
+  }
+
+  @override
+  String get channel_coreScopeRefresh => 'Refresh CoreScope observers';
+
+  @override
+  String get channel_coreScopeRefreshFailed => 'CoreScope unreachable';
+
+  @override
+  String get channel_coreScopeNotFound => 'Not seen by CoreScope yet';
+
+  @override
+  String channel_coreScopeCounts(int observers, int observations) {
+    String _temp0 = intl.Intl.pluralLogic(
+      observers,
+      locale: localeName,
+      other: '$observers observers',
+      one: '1 observer',
+    );
+    return '$_temp0 · $observations observations';
+  }
+
+  @override
+  String get channel_senderNameUnknown => 'No node known by that name';
+
+  @override
+  String get channel_senderNameUnknownHint =>
+      'Adding needs an advert from this node';
+
+  @override
+  String get channel_senderAlreadyContact => 'Already in contacts';
+
+  @override
+  String channel_senderMultipleMatches(int count) {
+    return '$count nodes use this name';
+  }
+
+  @override
+  String get channel_senderAddNotConnected =>
+      'Not connected to a radio, so this sender can\'t be added yet';
+
+  @override
+  String channel_senderAddFailed(String error) {
+    return 'Couldn\'t add this sender: $error';
+  }
+
+  @override
+  String channel_senderCandidate(String keyPrefix, String type) {
+    return '$keyPrefix · $type';
   }
 
   @override
@@ -2372,6 +2557,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get repeater_codingRate => '코딩 속도';
 
   @override
+  String get repeater_tempRadio => 'Apply temporarily';
+
+  @override
+  String get repeater_tempRadioSubtitle =>
+      'Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.';
+
+  @override
+  String get repeater_tempRadioMinutes => 'Duration (minutes)';
+
+  @override
+  String get repeater_tempRadioPathHashNote =>
+      'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.';
+
+  @override
+  String repeater_tempRadioMinutesInvalid(int max) {
+    return '1 to $max minutes';
+  }
+
+  @override
   String get repeater_locationSettings => '위치 설정';
 
   @override
@@ -2697,6 +2901,11 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String repeater_cliCommandError(String error) {
     return '오류: $error';
+  }
+
+  @override
+  String repeater_cliCommandTimeout(String seconds) {
+    return 'Command timed out after $seconds seconds';
   }
 
   @override
@@ -4020,6 +4229,112 @@ class AppLocalizationsKo extends AppLocalizations {
   String get contacts_addContactFromClipboard => '복사본에서 연락처 추가';
 
   @override
+  String get contacts_addByKey => 'Add by public key';
+
+  @override
+  String get contacts_addByKeyDescription =>
+      'Add someone using the public key they gave you. Works even if you have never heard their advert.';
+
+  @override
+  String get contacts_publicKeyLabel => 'Public key';
+
+  @override
+  String get contacts_publicKeyHelper =>
+      '64 hex characters, or paste a meshcore:// contact link';
+
+  @override
+  String get contacts_publicKeyInvalid =>
+      'Enter 64 hex characters, or a meshcore:// contact link';
+
+  @override
+  String get contacts_nameLabel => 'Name';
+
+  @override
+  String get contacts_typeLabel => 'Type';
+
+  @override
+  String get contacts_addByKeyUnverifiedNote =>
+      'Not confirmed on air yet. The name is whatever you type here until this node sends an advert.';
+
+  @override
+  String contacts_addByKeyAdded(String name) {
+    return 'Added $name';
+  }
+
+  @override
+  String get contacts_addByKeyFailed =>
+      'Could not add the contact. Check the radio connection.';
+
+  @override
+  String get contacts_myContactQr => 'My contact QR';
+
+  @override
+  String get contacts_myContactQrInstructions =>
+      'Have them scan this, or send them the link below. It works even if they have never heard your advert.';
+
+  @override
+  String get contacts_contactLinkCopied => 'Contact link copied';
+
+  @override
+  String get contacts_qrNeedsConnection =>
+      'Connect to a radio first, so the app knows your public key.';
+
+  @override
+  String get contacts_scanContactQr => 'Scan contact QR';
+
+  @override
+  String get contacts_scanContactQrInstructions =>
+      'Point the camera at a MeshCore contact QR';
+
+  @override
+  String get contacts_invalidContactQr => 'That QR is not a MeshCore contact';
+
+  @override
+  String get contacts_verifiedByAdvert =>
+      'Confirmed on air. This node sent a signed advert.';
+
+  @override
+  String get contacts_verifiedByMessage =>
+      'Key confirmed. A message with this contact went through, which only works with the matching key.';
+
+  @override
+  String get contacts_verifiedKeyOnly =>
+      'Added from a key. Nothing has confirmed it on air yet.';
+
+  @override
+  String get contacts_lastSeenNever => 'Not heard yet';
+
+  @override
+  String contacts_cardAddContact(String name) {
+    return 'Add $name';
+  }
+
+  @override
+  String contacts_cardAlreadyAdded(String name) {
+    return '$name';
+  }
+
+  @override
+  String get contacts_cardAlreadyAddedTooltip => 'Already in your contacts';
+
+  @override
+  String get chat_attachTooltip => 'Add to message';
+
+  @override
+  String get chat_attachGif => 'GIF';
+
+  @override
+  String get chat_attachMyContact => 'My contact card';
+
+  @override
+  String get chat_attachMyContactSubtitle =>
+      'Puts your public key in the message so anyone here can add you';
+
+  @override
+  String get chat_contactCardNeedsConnection =>
+      'Connect to a radio first, so the app knows your public key.';
+
+  @override
   String get contacts_ShareContact => '연락처를 복사';
 
   @override
@@ -4512,4 +4827,254 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get batteryOptimizationOpenFailed => 'Couldn\'t open battery settings';
+
+  @override
+  String get stockConfig_selectAll => 'Select All';
+
+  @override
+  String get stockConfig_deselectAll => 'Deselect All';
+
+  @override
+  String get stockConfig_sectionName => 'Name';
+
+  @override
+  String get stockConfig_sectionIdentity => 'Private Identity Key';
+
+  @override
+  String get stockConfig_sectionRadio => 'Radio Settings';
+
+  @override
+  String get stockConfig_sectionPosition => 'Position Settings';
+
+  @override
+  String get stockConfig_sectionOther => 'Other Settings';
+
+  @override
+  String get stockConfig_sectionAutoAdd => 'Auto Add Settings';
+
+  @override
+  String stockConfig_sectionChannels(int count) {
+    return 'Channels ($count)';
+  }
+
+  @override
+  String stockConfig_sectionContacts(int count) {
+    return 'Contacts ($count)';
+  }
+
+  @override
+  String get stockConfig_identityWarning =>
+      'Your private key must be kept secret. It should only be exported as a backup.';
+
+  @override
+  String stockConfig_publicKeyLabel(String key) {
+    return 'Public Key: $key';
+  }
+
+  @override
+  String get stockConfig_privateKeyHidden => 'Private Key: hidden';
+
+  @override
+  String get exportConfig_title => 'Export Config';
+
+  @override
+  String get exportConfig_instruction => 'Please select data to export.';
+
+  @override
+  String get exportConfig_allChannels => 'All channels will be exported.';
+
+  @override
+  String get exportConfig_allContacts => 'All contacts will be exported.';
+
+  @override
+  String get exportConfig_nothingSelected =>
+      'Select at least one section to export.';
+
+  @override
+  String get exportConfig_lossyNotice =>
+      'This is the MeshCore stock format, so it cannot carry Offband-only data such as path overrides. Importing this file back into Offband will not restore that data.';
+
+  @override
+  String get exportConfig_omittedTitle => 'Some sections could not be exported';
+
+  @override
+  String exportConfig_omittedUnsupported(String section) {
+    return '$section: this radio\'s firmware was built without it.';
+  }
+
+  @override
+  String exportConfig_omittedNoReply(String section) {
+    return '$section: the device did not respond.';
+  }
+
+  @override
+  String exportConfig_omittedRejected(String section) {
+    return '$section: the device refused the request.';
+  }
+
+  @override
+  String exportConfig_omittedUnavailable(String section) {
+    return '$section: the device has not reported this yet.';
+  }
+
+  @override
+  String get exportConfig_exportAnyway => 'Export anyway';
+
+  @override
+  String get exportConfig_cancel => 'Cancel';
+
+  @override
+  String get exportConfig_shareSubject => 'MeshCore config';
+
+  @override
+  String exportConfig_failed(String message) {
+    return 'Export failed: $message';
+  }
+
+  @override
+  String get exportConfig_notConnected =>
+      'Connect to a device before exporting.';
+
+  @override
+  String get importConfig_title => 'Import Config';
+
+  @override
+  String get importConfig_instruction => 'Please select data to import.';
+
+  @override
+  String get importConfig_chooseFile => 'Choose a config file';
+
+  @override
+  String get importConfig_identityWarning =>
+      'Importing this private key will overwrite your current identity.';
+
+  @override
+  String get importConfig_channelsNote =>
+      'New channels will be added. Existing channels will not change.';
+
+  @override
+  String get importConfig_contactsNote =>
+      'New contacts will be added. Existing contacts will be updated.';
+
+  @override
+  String get importConfig_nothingSelected =>
+      'Select at least one section to import.';
+
+  @override
+  String get importConfig_notConnected =>
+      'Connect to a device before importing.';
+
+  @override
+  String importConfig_parseFailed(String message) {
+    return 'That file is not a MeshCore config. $message';
+  }
+
+  @override
+  String get importConfig_confirmIdentityTitle =>
+      'Overwrite this node\'s identity?';
+
+  @override
+  String get importConfig_confirmIdentityBody =>
+      'The node\'s current identity will be replaced with the one in this file, and every contact\'s record of this node becomes stale. This cannot be undone except by importing the previous key.';
+
+  @override
+  String get importConfig_confirmIdentityAccept => 'Overwrite identity';
+
+  @override
+  String get importConfig_cancel => 'Cancel';
+
+  @override
+  String get importConfig_resultTitle => 'Import finished';
+
+  @override
+  String importConfig_resultCounts(int contacts, int channels) {
+    return 'Sent $contacts contacts and $channels channels to the device.';
+  }
+
+  @override
+  String get importConfig_resultSkippedHeading => 'Channels not imported';
+
+  @override
+  String get importConfig_resultFailedHeading => 'Sections not applied';
+
+  @override
+  String get importConfig_reasonAlreadyPresent =>
+      'already on this device, so it was left unchanged';
+
+  @override
+  String get importConfig_reasonNoFreeSlot =>
+      'no free channel slot on the device';
+
+  @override
+  String get importConfig_reasonAbsentFromFile => 'not present in this file';
+
+  @override
+  String get importConfig_reasonNoReply => 'the device did not respond';
+
+  @override
+  String get importConfig_reasonUnsupported =>
+      'this radio\'s firmware was built without it';
+
+  @override
+  String get importConfig_reasonRejected => 'the device refused it';
+
+  @override
+  String get importConfig_reasonNotWritable =>
+      'this app cannot write every value in it';
+
+  @override
+  String importConfig_entryLine(String item, String reason) {
+    return '$item: $reason';
+  }
+
+  @override
+  String get importConfig_close => 'Close';
+
+  @override
+  String get settings_exportConfig => 'Export Config';
+
+  @override
+  String get settings_importConfig => 'Import Config';
+
+  @override
+  String get settings_configBackupSubtitle =>
+      'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.';
+
+  @override
+  String get contactSyncShortfallTitle => 'Contact sync incomplete';
+
+  @override
+  String contactSyncShortfallBody(int declared, int received) {
+    return 'The radio reported $declared contacts; after checking again the app has $received. Your saved contacts were kept.';
+  }
+
+  @override
+  String contactSyncShortfallBodyNoTotal(int received) {
+    return 'The radio did not report how many contacts it holds; after checking again the app has $received. Your saved contacts were kept.';
+  }
+
+  @override
+  String get contactSyncDecisionTitle => 'Contact sync still incomplete';
+
+  @override
+  String contactSyncDecisionBody(int received, int removed) {
+    return 'After checking again the app still has only $received of the radio\'s contacts. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes $removed contacts from this app.';
+  }
+
+  @override
+  String get contactSyncKeep => 'Keep my contacts';
+
+  @override
+  String get contactSyncUseRadio => 'Use the radio\'s list';
+
+  @override
+  String contactSyncConfirmedGone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count saved contacts are no longer on the radio.',
+      one: '1 saved contact is no longer on the radio.',
+    );
+    return '$_temp0';
+  }
 }

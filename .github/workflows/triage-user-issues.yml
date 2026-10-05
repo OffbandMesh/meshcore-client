@@ -6,7 +6,14 @@ name: Triage User-Submitted Issues
 # (label -> board) fires and sets Status=Backlog / Priority=Medium on board #2.
 # `type:` is intentionally left for manual triage (type is the judgment call).
 #
-# Maintainer-opened issues (author_association OWNER/MEMBER/COLLABORATOR) are untouched.
+# Only MISSING labels are applied. An issue that already carries a `priority:` or
+# `board:` label keeps it — see #663, where defaulting on top of deliberate labels
+# left issues holding two priorities and two board states at once.
+#
+# Untouched: issues opened by a maintainer (author_association OWNER/MEMBER/
+# COLLABORATOR) and issues opened by an account in INTERNAL_ACTORS. The actor
+# allowlist exists because author_association alone is not trustworthy — a private
+# org membership reports as NONE in the webhook payload (#663).
 #
 # Requires repo secret PROJECT_PAT (classic PAT, project+repo scope) — the same
 # secret sync-labels-to-board.yml uses. The PAT is also what lets the added labels
@@ -37,9 +44,15 @@ jobs:
           github-token: ${{ secrets.PROJECT_PAT }}
           script: |
             const INTERNAL = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            // author_association is not reliable on its own: the webhook payload reports
+            // NONE for an org member whose membership is private, even while REST reports
+            // MEMBER. That demoted every agent-filed issue from 2026-09-17 on (#663).
+            // Name the internal automation accounts outright so the gate stops depending
+            // on a visibility setting anyone can flip back.
+            const INTERNAL_ACTORS = new Set(['diffwireauto']);
             const isDispatch = context.eventName === 'workflow_dispatch';
 
-            let issueNumber, association;
+            let issueNumber, association, author;
 
             if (isDispatch) {
               issueNumber = parseInt(context.payload.inputs.issue_number, 10);
@@ -53,23 +66,45 @@ jobs:
                 issue_number: issueNumber,
               });
               association = issue.author_association;
-              core.info(`Manual dispatch for #${issueNumber} (author_association=${association}) — bypassing author gate for test`);
+              author = issue.user?.login ?? '';
+              core.info(`Manual dispatch for #${issueNumber} (author ${author}, author_association=${association}) — bypassing author gate for test`);
             } else {
               issueNumber = context.payload.issue.number;
               association = context.payload.issue.author_association;
-              if (INTERNAL.has(association)) {
-                core.info(`#${issueNumber} opened by ${association} (maintainer) — skipping triage`);
+              author = context.payload.issue.user?.login ?? '';
+              if (INTERNAL.has(association) || INTERNAL_ACTORS.has(author)) {
+                core.info(`#${issueNumber} opened by ${author} (${association}) — internal, skipping triage`);
                 return;
               }
-              core.info(`#${issueNumber} opened by external author (${association}) — triaging`);
+              core.info(`#${issueNumber} opened by external author ${author} (${association}) — triaging`);
             }
 
-            const labels = ['user-submitted', 'priority:P2', 'board:backlog'];
+            // addLabels only adds. Defaulting a priority or board state onto an issue that
+            // already carries one leaves it holding two of each and lets the downstream
+            // label -> board sync pick a winner, so only fill in what is actually missing.
+            const { data: current } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+            const existing = current.map((l) => l.name);
+            const hasPrefix = (prefix) => existing.some((n) => n.startsWith(prefix));
+
+            const labels = [];
+            if (!existing.includes('user-submitted')) labels.push('user-submitted');
+            if (!hasPrefix('priority:')) labels.push('priority:P2');
+            if (!hasPrefix('board:')) labels.push('board:backlog');
+
+            if (labels.length === 0) {
+              core.info(`#${issueNumber} is already flagged and triaged [${existing.join(', ')}] — nothing to apply.`);
+              return;
+            }
+
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
               labels,
             });
-            core.info(`Applied [${labels.join(', ')}] to #${issueNumber}.`);
-            core.info('sync-labels-to-board.yml will set Status=Backlog / Priority=Medium on board #2.');
+            core.info(`Applied [${labels.join(', ')}] to #${issueNumber} (already had [${existing.join(', ') || 'none'}]).`);
+            core.info('sync-labels-to-board.yml will set Status/Priority on board #2 for any board:/priority: label added here.');

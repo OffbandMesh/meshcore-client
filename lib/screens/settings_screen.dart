@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,14 +7,17 @@ import 'package:meshcore_open/utils/gpx_export.dart';
 import 'package:meshcore_open/widgets/elements_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
 import '../models/offband_gps_status.dart';
+import '../models/radio_preset.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/app_settings_service.dart';
+import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
@@ -24,9 +29,12 @@ import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'export_config_screen.dart';
+import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
 import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
+import '../widgets/radio_preset_picker.dart';
 import '../widgets/sync_progress_overlay.dart';
 
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
@@ -55,10 +63,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBatteryVoltage = false;
   String _appVersion = '';
 
+  // #509 hidden unlock: 7 taps on the version row within a rolling window
+  // reveals the Experimental settings section.
+  static const int _experimentalUnlockTaps = 7;
+  static const Duration _experimentalTapWindow = Duration(seconds: 3);
+  int _versionTapCount = 0;
+  DateTime? _lastVersionTap;
+  // Inline feedback shown in the version row itself (no snackbar: a bottom
+  // snackbar overlaps the very row being tapped and blocks the next tap).
+  String? _versionHint;
+  Timer? _versionHintTimer;
+
   @override
   void initState() {
     super.initState();
     _loadVersionInfo();
+  }
+
+  @override
+  void dispose() {
+    _versionHintTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadVersionInfo() async {
@@ -66,6 +91,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+    });
+  }
+
+  void _handleUnlockTap() {
+    final l10n = context.l10n;
+    final settingsService = context.read<AppSettingsService>();
+
+    if (settingsService.settings.experimentalUnlocked) {
+      _versionTapCount = 0;
+      _setVersionHint(l10n.settings_experimentalAlreadyUnlocked);
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_lastVersionTap == null ||
+        now.difference(_lastVersionTap!) > _experimentalTapWindow) {
+      _versionTapCount = 0;
+    }
+    _lastVersionTap = now;
+    _versionTapCount++;
+
+    final remaining = _experimentalUnlockTaps - _versionTapCount;
+    if (remaining <= 0) {
+      _versionTapCount = 0;
+      settingsService.setExperimentalUnlocked(true);
+      _setVersionHint(l10n.settings_experimentalUnlocked);
+    } else if (remaining <= 3) {
+      _setVersionHint(l10n.settings_experimentalCountdown(remaining));
+    }
+  }
+
+  void _setVersionHint(String hint) {
+    _versionHintTimer?.cancel();
+    setState(() => _versionHint = hint);
+    _versionHintTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _versionHint = null);
     });
   }
 
@@ -89,6 +150,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         firmwareVerCode: c.firmwareVerCode ?? 0,
         offbandCaps: c.offbandCaps ?? 0,
       ),
+    );
+    // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
+    // the About version row. Selects narrowly so the category list only rebuilds
+    // when the flag flips, not on every connector update (same reason as above).
+    final experimentalUnlocked = context.select<AppSettingsService, bool>(
+      (s) => s.settings.experimentalUnlocked,
     );
     return [
       SettingsCategory(
@@ -155,12 +222,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_actions,
         builder: _actionsPane,
       ),
+      if (experimentalUnlocked)
+        SettingsCategory(
+          icon: Icons.science_outlined,
+          title: l10n.settings_experimental,
+          subtitle: l10n.settings_experimentalSubtitle,
+          builder: _experimentalPane,
+        ),
       SettingsCategory(
         icon: Icons.build_outlined,
         title: l10n.settings_debug,
         builder: _diagnosticsPane,
       ),
+      SettingsCategory(
+        icon: Icons.info_outline,
+        title: l10n.settings_about,
+        builder: _aboutPane,
+      ),
     ];
+  }
+
+  Widget _experimentalPane(BuildContext context) {
+    final l10n = context.l10n;
+    final settingsService = context.watch<AppSettingsService>();
+    final supportsPktHash = context.select<MeshCoreConnector, bool>(
+      (c) => c.supportsPktHash,
+    );
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(l10n.settings_experimentalDescription),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // CoreScope observer counts (#524). Disabled until the connected radio
+        // advertises the 0xC6 packet-hash capability.
+        Card(
+          child: SwitchListTile(
+            secondary: const Icon(Icons.cloud_outlined),
+            title: Text(l10n.settings_coreScopeObserverCount),
+            subtitle: Text(
+              supportsPktHash
+                  ? l10n.settings_coreScopeObserverCountSubtitle
+                  : l10n.settings_coreScopeObserverCountUnsupported,
+            ),
+            value: settingsService.settings.coreScopeObserverCountEnabled,
+            onChanged: supportsPktHash
+                ? (value) =>
+                      settingsService.setCoreScopeObserverCountEnabled(value)
+                : null,
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Disable, not just hide: turns off every experimental toggle and
+        // re-locks the section, so nothing keeps running invisibly (#553).
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.block),
+            title: Text(l10n.settings_experimentalDisable),
+            subtitle: Text(l10n.settings_experimentalDisableSubtitle),
+            onTap: () => settingsService.disableExperimental(),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _observerPane(BuildContext context) => const ObserverSettingsView();
@@ -409,8 +537,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildDebugCard(context),
         const SizedBox(height: 16),
         _buildExportCard(connector),
-        const SizedBox(height: 16),
-        _buildAboutCard(context),
       ],
     );
   }
@@ -504,11 +630,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // #397: identity of the running binary, injected at build time and
             // independent of the marketing version. Its own line so "which build
             // am I on" is answerable at a glance; copyable for bug reports.
+            // Also the hidden 7-tap Experimental unlock anchor (#509/#553),
+            // mirroring Android's Software-info build-number gesture.
             _buildInfoRow(
               l10n.settings_infoBuild,
               BuildInfo.stamp,
               copyValue: BuildInfo.stamp,
+              onTap: _handleUnlockTap,
             ),
+            if (_versionHint != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 6),
+                child: Text(
+                  _versionHint!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -631,20 +771,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAboutCard(BuildContext context) {
+  // About is its own top-level Settings category (#525/#526), no longer a card
+  // in the Debug pane. Outbound links (offband.org / Play / donate) added by
+  // #527 between the info block and the licenses row.
+  Widget _aboutPane(BuildContext context) {
     final l10n = context.l10n;
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.info_outline),
-        title: Text(l10n.settings_about),
-        subtitle: Text(
-          l10n.settings_aboutVersion(
-            _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(l10n.appTitle),
+                subtitle: Text(
+                  l10n.settings_aboutVersion(
+                    _appVersion.isEmpty ? l10n.common_loading : _appVersion,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.settings_aboutDescription),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.settings_aboutLegalese,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.settings_aboutPresetsAttribution,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: Text(l10n.settings_aboutWebsite),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl('https://offband.org'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.shop_outlined),
+                title: Text(l10n.settings_aboutPlayStore),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl(
+                  'https://play.google.com/store/apps/details?id=app.offband.meshcore',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.favorite_outline),
+                title: Text(l10n.settings_aboutDonate),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () => _openExternalUrl('https://offband.org/donate'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(l10n.settings_aboutLicenses),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: l10n.appTitle,
+                  applicationVersion: _appVersion.isEmpty ? null : _appVersion,
+                  applicationLegalese: l10n.settings_aboutLegalese,
+                ),
+              ),
+            ],
           ),
         ),
-        onTap: () => _showAbout(context),
-      ),
+      ],
     );
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      if (await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      // fall through to the failure message
+    }
+    if (mounted) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.settings_aboutLinkFailed),
+      );
+    }
   }
 
   Widget _buildDebugCard(BuildContext context) {
@@ -823,13 +1046,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: SelectableText(
-                    value,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: valueColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  // When the row is tappable, use a plain Text so the value is
+                  // part of the InkWell tap target (a SelectableText would eat
+                  // the tap for selection). Copy is still available via the
+                  // button. (#553)
+                  child: onTap != null
+                      ? Text(
+                          value,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: valueColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      : SelectableText(
+                          value,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: valueColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 18),
@@ -838,10 +1073,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: copyValue));
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.l10n.settings_publicKeyCopied),
-                      ),
+                    showDismissibleSnackBar(
+                      context,
+                      content: Text(context.l10n.settings_publicKeyCopied),
                     );
                   },
                 ),
@@ -1279,22 +1513,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showAbout(BuildContext context) {
-    final l10n = context.l10n;
-    showAboutDialog(
-      context: context,
-      applicationName: l10n.appTitle,
-      applicationVersion: _appVersion.isEmpty
-          ? l10n.common_loading
-          : _appVersion,
-      applicationLegalese: l10n.settings_aboutLegalese,
-      children: [
-        const SizedBox(height: 16),
-        Text(l10n.settings_aboutDescription),
-      ],
-    );
-  }
-
   Future<void> _gpxExport(
     GpxExport exporter,
     String name,
@@ -1344,6 +1562,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Card(
       child: Column(
         children: [
+          // Stock-compatible whole-device backup and restore (#568), distinct
+          // from the GPX exports below, which are map data only.
+          ListTile(
+            leading: const Icon(Icons.save_alt),
+            title: Text(l10n.settings_exportConfig),
+            subtitle: Text(l10n.settings_configBackupSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ExportConfigScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_file),
+            title: Text(l10n.settings_importConfig),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ImportConfigScreen(),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.download_outlined),
             title: Text(l10n.settings_gpxExportRepeaters),
@@ -1795,15 +2037,19 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
   LoRaCodingRate _codingRate = LoRaCodingRate.cr4_5;
   final _txPowerController = TextEditingController(text: '20');
   bool _clientRepeat = false;
-  int? _selectedPresetIndex;
+  String? _selectedPresetId;
   _RadioSettingsSnapshot? _lastNonRepeatSnapshot;
+  late final RadioPresetService _presetService;
 
   AppDebugLogService get _appLog =>
       Provider.of<AppDebugLogService>(context, listen: false);
 
+  List<RadioPreset> get _presets => _presetService.presets;
+
   @override
   void initState() {
     super.initState();
+    _presetService = Provider.of<RadioPresetService>(context, listen: false);
 
     // Populate with current settings if available
     if (widget.connector.currentFreqHz != null) {
@@ -1851,64 +2097,95 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     }
 
     _clientRepeat = widget.connector.clientRepeat ?? false;
-    _selectedPresetIndex = _findMatchingPresetIndex();
+    _selectedPresetId = _findMatchingPresetId();
     if (_clientRepeat) {
       _lastNonRepeatSnapshot =
           _sessionRememberedNonRepeatSnapshot() ??
           _inferNonRepeatSnapshotForRepeatEnabled();
-      _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+      _selectedPresetId = _findMatchingPresetIdForSnapshot(
         _lastNonRepeatSnapshot!,
       );
     } else {
       _lastNonRepeatSnapshot = _nonRepeatSnapshotForCurrentSelection();
     }
+    _presetService.addListener(_onPresetsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _logRadioSettingsState('Dialog initialized');
+      _presetService.refreshIfStale();
     });
   }
 
   @override
   void dispose() {
+    _presetService.removeListener(_onPresetsChanged);
     _frequencyController.dispose();
     _txPowerController.dispose();
     super.dispose();
   }
 
-  void _applyPreset(int index) {
+  /// A refresh can change the list under an open form; re-match the selection.
+  void _onPresetsChanged() {
+    if (!mounted) return;
+    setState(_syncPresetSelection);
+  }
+
+  RadioPreset? _presetById(String? id) {
+    if (id == null) return null;
+    return _presets.where((p) => p.id == id).firstOrNull;
+  }
+
+  void _applyPreset(RadioPreset preset) {
     setState(() {
-      _applyPresetState(index);
+      _applyPresetState(preset);
     });
-    _logRadioSettingsState(
-      'Applied preset ${RadioSettings.presets[index].$1} (#$index)',
-    );
+    _logRadioSettingsState('Applied preset ${preset.title} (${preset.id})');
   }
 
-  int? _findMatchingPresetIndex() {
-    return _findMatchingPresetIndexForSnapshot(_currentSnapshot());
+  String? _findMatchingPresetId() {
+    return _findMatchingPresetIdForSnapshot(_currentSnapshot());
   }
 
-  int? _findMatchingPresetIndexForSnapshot(_RadioSettingsSnapshot snapshot) {
-    for (final i in _visiblePresetIndexes()) {
-      final preset = RadioSettings.presets[i].$2;
-      if (preset.frequencyHz == snapshot.frequencyHz &&
-          preset.bandwidth == snapshot.bandwidth &&
-          preset.spreadingFactor == snapshot.spreadingFactor &&
-          preset.codingRate == snapshot.codingRate &&
-          preset.txPowerDbm == snapshot.txPowerDbm) {
-        return i;
+  /// A preset without TX power (every upstream one) matches any power.
+  bool _presetMatches(
+    RadioPreset preset,
+    _RadioSettingsSnapshot snapshot, {
+    int? frequencyHz,
+  }) {
+    // _RadioSettingsSnapshot.frequencyHz is also kHz, despite its name.
+    return (frequencyHz ?? preset.frequencyKHz) == snapshot.frequencyHz &&
+        preset.bandwidth == snapshot.bandwidth &&
+        preset.spreadingFactor == snapshot.spreadingFactor &&
+        preset.codingRate == snapshot.codingRate &&
+        (preset.txPowerDbm == null ||
+            preset.txPowerDbm == snapshot.txPowerDbm) &&
+        presetPathHashMatches(preset, widget.connector.pathHashByteWidth);
+  }
+
+  String? _findMatchingPresetIdForSnapshot(_RadioSettingsSnapshot snapshot) {
+    for (final preset in _visiblePresets()) {
+      if (_presetMatches(preset, snapshot)) {
+        return preset.id;
       }
     }
     return null;
   }
 
-  Iterable<int> _visiblePresetIndexes() sync* {
-    for (var i = 0; i < RadioSettings.presets.length; i++) {
-      if (_isOffGridPresetIndex(i)) {
-        continue;
-      }
-      yield i;
-    }
+  Iterable<RadioPreset> _visiblePresets() => _presets.where((p) => !p.offGrid);
+
+  /// The snapshot a preset sets; TX power stays as it is when the preset has
+  /// none.
+  _RadioSettingsSnapshot _snapshotForPreset(
+    RadioPreset preset,
+    int currentTxPowerDbm,
+  ) {
+    return _RadioSettingsSnapshot(
+      frequencyMHz: preset.frequencyMHz,
+      bandwidth: preset.bandwidth,
+      spreadingFactor: preset.spreadingFactor,
+      codingRate: preset.codingRate,
+      txPowerDbm: preset.txPowerDbm ?? currentTxPowerDbm,
+    );
   }
 
   _RadioSettingsSnapshot _currentSnapshot() {
@@ -1923,10 +2200,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     );
   }
 
-  bool _isOffGridPresetIndex(int? index) {
-    if (index == null) return false;
-    return RadioSettings.presets[index].$1.startsWith('Off-Grid ');
-  }
+  bool _isOffGridPreset(String? id) => _presetById(id)?.offGrid ?? false;
 
   double _offGridFrequencyForBaseFrequency(double baseFrequencyMHz) {
     if (baseFrequencyMHz < 500) return 433.0;
@@ -1954,7 +2228,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
 
   _RadioSettingsSnapshot _nonRepeatSnapshotForCurrentSelection() {
     final current = _currentSnapshot();
-    if (!_isOffGridPresetIndex(_selectedPresetIndex)) {
+    if (!_isOffGridPreset(_selectedPresetId)) {
       return current;
     }
     return _fallbackNonRepeatSnapshot(current.frequencyMHz);
@@ -1968,23 +2242,12 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
 
   _RadioSettingsSnapshot _inferNonRepeatSnapshotForRepeatEnabled() {
     final current = _currentSnapshot();
-    for (final i in _visiblePresetIndexes()) {
-      final preset = RadioSettings.presets[i].$2;
+    for (final preset in _visiblePresets()) {
       final offGridFreqHz =
           (_offGridFrequencyForBaseFrequency(preset.frequencyMHz) * 1000)
               .round();
-      if (offGridFreqHz == current.frequencyHz &&
-          preset.bandwidth == current.bandwidth &&
-          preset.spreadingFactor == current.spreadingFactor &&
-          preset.codingRate == current.codingRate &&
-          preset.txPowerDbm == current.txPowerDbm) {
-        return _RadioSettingsSnapshot(
-          frequencyMHz: preset.frequencyMHz,
-          bandwidth: preset.bandwidth,
-          spreadingFactor: preset.spreadingFactor,
-          codingRate: preset.codingRate,
-          txPowerDbm: preset.txPowerDbm,
-        );
+      if (_presetMatches(preset, current, frequencyHz: offGridFreqHz)) {
+        return _snapshotForPreset(preset, current.txPowerDbm);
       }
     }
     return _fallbackNonRepeatSnapshot(current.frequencyMHz);
@@ -1998,14 +2261,10 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     _txPowerController.text = snapshot.txPowerDbm.toString();
   }
 
-  void _applyPresetState(int index) {
-    final preset = RadioSettings.presets[index].$2;
-    final baseSnapshot = _RadioSettingsSnapshot(
-      frequencyMHz: preset.frequencyMHz,
-      bandwidth: preset.bandwidth,
-      spreadingFactor: preset.spreadingFactor,
-      codingRate: preset.codingRate,
-      txPowerDbm: preset.txPowerDbm,
+  void _applyPresetState(RadioPreset preset) {
+    final baseSnapshot = _snapshotForPreset(
+      preset,
+      int.tryParse(_txPowerController.text) ?? 20,
     );
     final frequencyMHz = _clientRepeat
         ? _offGridFrequencyForBaseFrequency(baseSnapshot.frequencyMHz)
@@ -2014,13 +2273,13 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     _bandwidth = preset.bandwidth;
     _spreadingFactor = preset.spreadingFactor;
     _codingRate = preset.codingRate;
-    _txPowerController.text = preset.txPowerDbm.toString();
-    _selectedPresetIndex = index;
+    _txPowerController.text = baseSnapshot.txPowerDbm.toString();
+    _selectedPresetId = preset.id;
     _lastNonRepeatSnapshot = baseSnapshot;
   }
 
   void _syncPresetSelection() {
-    final previousPresetIndex = _selectedPresetIndex;
+    final previousPresetId = _selectedPresetId;
     final previousLastNonRepeat = _lastNonRepeatSnapshot;
     if (_clientRepeat) {
       final baseSnapshot =
@@ -2038,25 +2297,25 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
           txPowerDbm: int.tryParse(_txPowerController.text) ?? 20,
         );
       }
-      _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+      _selectedPresetId = _findMatchingPresetIdForSnapshot(
         _lastNonRepeatSnapshot ?? baseSnapshot,
       );
-      if (previousPresetIndex != _selectedPresetIndex ||
+      if (previousPresetId != _selectedPresetId ||
           previousLastNonRepeat != _lastNonRepeatSnapshot) {
         _logRadioSettingsState(
-          'Preset match updated while repeat enabled: ${_presetLabel(previousPresetIndex)} -> ${_presetLabel(_selectedPresetIndex)}',
+          'Preset match updated while repeat enabled: ${_presetLabel(previousPresetId)} -> ${_presetLabel(_selectedPresetId)}',
         );
       }
       return;
     }
     _lastNonRepeatSnapshot = _nonRepeatSnapshotForCurrentSelection();
-    _selectedPresetIndex = _findMatchingPresetIndexForSnapshot(
+    _selectedPresetId = _findMatchingPresetIdForSnapshot(
       _lastNonRepeatSnapshot!,
     );
-    if (previousPresetIndex != _selectedPresetIndex ||
+    if (previousPresetId != _selectedPresetId ||
         previousLastNonRepeat != _lastNonRepeatSnapshot) {
       _logRadioSettingsState(
-        'Preset sync updated state from ${_presetLabel(previousPresetIndex)} to ${_presetLabel(_selectedPresetIndex)}',
+        'Preset sync updated state from ${_presetLabel(previousPresetId)} to ${_presetLabel(_selectedPresetId)}',
       );
     }
   }
@@ -2151,6 +2410,15 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
         ),
       );
       await widget.connector.sendFrame(buildSetRadioTxPowerFrame(txPower));
+      // A preset that carries a path hash size sets it too (stock
+      // CMD_SET_PATH_HASH_MODE, #730). Sent whenever the preset has one,
+      // rather than compared against the reported width, which reads as 1
+      // when device info is short (#240). Setting the same mode is harmless.
+      final pathHashMode = _presetById(_selectedPresetId)?.pathHashMode;
+      if (pathHashMode != null) {
+        _logRadioSettingsState('Setting preset path hash mode $pathHashMode');
+        await widget.connector.setPathHashMode(pathHashMode);
+      }
       await widget.connector.refreshDeviceInfo();
       final rememberedSnapshot = _clientRepeat
           ? _lastNonRepeatSnapshot
@@ -2177,11 +2445,12 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
     }
   }
 
-  String _presetLabel(int? index) {
-    if (index == null) {
+  String _presetLabel(String? id) {
+    if (id == null) {
       return 'custom';
     }
-    return '${RadioSettings.presets[index].$1} (#$index)';
+    final preset = _presetById(id);
+    return preset == null ? id : '${preset.title} ($id)';
   }
 
   String _formatSnapshot(_RadioSettingsSnapshot? snapshot) {
@@ -2205,7 +2474,7 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
       'cr=${_codingRate.label} '
       'tx=${_txPowerController.text}dBm '
       'repeat=$_clientRepeat '
-      'preset=${_presetLabel(_selectedPresetIndex)} '
+      'preset=${_presetLabel(_selectedPresetId)} '
       'lastNonRepeat=${_formatSnapshot(_lastNonRepeatSnapshot)}',
       tag: 'RadioSettings',
     );
@@ -2214,31 +2483,18 @@ class _RadioSettingsFormState extends State<_RadioSettingsForm> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final presetService = context.watch<RadioPresetService>();
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<int>(
-          key: ValueKey<int?>(_selectedPresetIndex),
-          initialValue: _selectedPresetIndex,
-          decoration: InputDecoration(
-            labelText: l10n.settings_presets,
-            border: const OutlineInputBorder(),
-          ),
-          items: [
-            for (final i in _visiblePresetIndexes())
-              DropdownMenuItem(
-                value: i,
-                child: Text(RadioSettings.presets[i].$1),
-              ),
-          ],
-          onChanged: (index) {
-            if (index != null) {
-              _applyPreset(index);
-            }
-          },
+        RadioPresetPicker(
+          service: presetService,
+          presets: _visiblePresets().toList(),
+          selectedId: _selectedPresetId,
+          onSelected: _applyPreset,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         TextField(
           controller: _frequencyController,
           onChanged: (_) => _handleManualSettingsChanged('frequency'),

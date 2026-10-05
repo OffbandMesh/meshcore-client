@@ -1,0 +1,3 @@
+Offband Meshcore 1.5.0-beta.1 (closed test)
+
+A testing build of the 1.5.0 line. New: an Experimental section unlocked by a 7-tap on the Build row, with OKIMesh CoreScope (per-packet observer counts from OKIMesh's service) inside it. Note it needs a forthcoming Offband firmware and stays inert until then. Also a new About screen with website, Play, and donate links, plus repeater CLI and broker import fixes. Bug reports welcome.

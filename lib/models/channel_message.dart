@@ -46,6 +46,20 @@ class ChannelMessage {
   final int? channelIndex;
   final String messageId;
   final String? packetHash;
+
+  /// Firmware-reported on-air packet hash for an outgoing channel message
+  /// (from the 0xC6 query, #524/#611). Distinct from [packetHash], which for
+  /// received messages is the content hash used for repeat dedup. Used only to
+  /// query CoreScope for observer counts. Transient (not persisted).
+  final String? onAirHash;
+
+  /// Unique observers CoreScope reports for this message's on-air packet
+  /// (#524). Null until queried / when the feature is off. Transient.
+  final int? coreScopeObserverCount;
+
+  /// Total observations (sightings) CoreScope reports for the same packet, the
+  /// "Observations (N)" number in its UI. Transient. See [coreScopeObserverCount].
+  final int? coreScopeObservationCount;
   final String? replyToMessageId;
   final String? replyToSenderName;
   final String? replyToText;
@@ -84,6 +98,9 @@ class ChannelMessage {
     this.channelIndex,
     String? messageId,
     this.packetHash,
+    this.onAirHash,
+    this.coreScopeObserverCount,
+    this.coreScopeObservationCount,
     this.replyToMessageId,
     this.replyToSenderName,
     this.replyToText,
@@ -130,6 +147,9 @@ class ChannelMessage {
     Uint8List? pathBytes,
     List<Uint8List>? pathVariants,
     String? packetHash,
+    String? onAirHash,
+    int? coreScopeObserverCount,
+    int? coreScopeObservationCount,
     String? replyToMessageId,
     String? replyToSenderName,
     String? replyToText,
@@ -170,6 +190,11 @@ class ChannelMessage {
       channelIndex: channelIndex,
       messageId: messageId,
       packetHash: packetHash ?? this.packetHash,
+      onAirHash: onAirHash ?? this.onAirHash,
+      coreScopeObserverCount:
+          coreScopeObserverCount ?? this.coreScopeObserverCount,
+      coreScopeObservationCount:
+          coreScopeObservationCount ?? this.coreScopeObservationCount,
       replyToMessageId: replyToMessageId ?? this.replyToMessageId,
       replyToSenderName: replyToSenderName ?? this.replyToSenderName,
       replyToText: replyToText ?? this.replyToText,
@@ -261,6 +286,7 @@ class ChannelMessage {
     String text,
     String senderName,
     int channelIndex, {
+    int? timestampSecs,
     String? originalText,
     String? translatedLanguageCode,
     String? translationModelId,
@@ -272,7 +298,11 @@ class ChannelMessage {
       originalText: originalText,
       translatedLanguageCode: translatedLanguageCode,
       translationModelId: translationModelId,
-      timestamp: DateTime.now(),
+      // When supplied, match the exact seconds put in the send frame so the
+      // 0xC6 (ts, channel) key correlates (#524); else fall back to now.
+      timestamp: timestampSecs != null
+          ? DateTime.fromMillisecondsSinceEpoch(timestampSecs * 1000)
+          : DateTime.now(),
       isOutgoing: true,
       status: ChannelMessageStatus.pending,
       pathLength: null,

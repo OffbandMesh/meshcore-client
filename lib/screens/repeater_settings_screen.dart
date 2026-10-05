@@ -6,9 +6,13 @@ import '../l10n/l10n.dart';
 import '../models/contact.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
+import '../models/radio_preset.dart';
+import '../services/radio_preset_service.dart';
 import '../services/repeater_command_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/path_management_dialog.dart';
+import '../widgets/radio_preset_picker.dart';
+import '../helpers/remote_radio_commands.dart';
 import '../helpers/snack_bar_builder.dart';
 
 class RepeaterSettingsScreen extends StatefulWidget {
@@ -123,6 +127,12 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
   int? _spreadingFactor;
   int? _codingRate;
 
+  /// Apply the radio params with `tempradio` (reverting after the duration)
+  /// instead of persisting them with `set radio` (#662).
+  bool _tempRadio = false;
+  final TextEditingController _tempRadioMinutesController =
+      TextEditingController(text: '$kTempRadioDefaultMinutes');
+
   // Location settings
   final TextEditingController _latController = TextEditingController();
   final TextEditingController _lonController = TextEditingController();
@@ -150,6 +160,9 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
 
   // Advanced
   int _pathHashMode = 0; // 0-2
+
+  /// The pending path hash came from a preset rather than the user (#735).
+  bool _pathHashFromPreset = false;
   final TextEditingController _txDelayController = TextEditingController();
   final TextEditingController _directTxDelayController =
       TextEditingController();
@@ -185,7 +198,46 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     _commandService = RepeaterCommandService(connector);
     _setupMessageListener();
     _loadSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Provider.of<RadioPresetService>(context, listen: false).refreshIfStale();
+    });
   }
+
+  /// Fill the radio fields from a preset (#734). TX power is not part of a
+  /// remote preset: it is a separate command on these nodes.
+  void _applyPreset(RadioPreset preset) {
+    setState(() {
+      _freqController.text = preset.frequencyMHz.toStringAsFixed(3);
+      final bw = preset.bandwidth.hz;
+      if (!_bandwidthOptions.contains(bw)) {
+        _bandwidthOptions
+          ..add(bw)
+          ..sort();
+      }
+      _bandwidth = bw;
+      _spreadingFactor = preset.spreadingFactor.value;
+      _codingRate = preset.codingRate.value;
+      final hashMode = preset.pathHashMode;
+      if (hashMode != null) {
+        _pathHashMode = hashMode;
+        _pathHashFromPreset = true;
+      }
+    });
+    _markChanged(_SettingField.radio);
+    if (preset.pathHashMode != null) {
+      _markChanged(_SettingField.pathHashMode);
+    }
+  }
+
+  String? _selectedPresetId(List<RadioPreset> presets) => matchRemotePresetId(
+    presets,
+    frequencyText: _freqController.text,
+    bandwidthHz: _bandwidth,
+    spreadingFactor: _spreadingFactor,
+    codingRate: _codingRate,
+    pathHashMode: _pathHashMode,
+  );
 
   @override
   void dispose() {
@@ -196,6 +248,7 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     _guestPasswordController.dispose();
     _freqController.dispose();
     _txPowerController.dispose();
+    _tempRadioMinutesController.dispose();
     _latController.dispose();
     _lonController.dispose();
     _ownerInfoController.dispose();
@@ -709,6 +762,22 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
     final repeater = _resolveRepeater(connector);
 
+    final tempRadioMinutes = parseTempRadioMinutes(
+      _tempRadioMinutesController.text,
+    );
+    if (_tempRadio &&
+        _dirtyFields.contains(_SettingField.radio) &&
+        tempRadioMinutes == null) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(
+          context.l10n.repeater_tempRadioMinutesInvalid(kTempRadioMaxMinutes),
+        ),
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -750,11 +819,22 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           _codingRate != null) {
         final freqText = _freqController.text.trim();
         if (double.tryParse(freqText) != null) {
-          final bwKHz = _bandwidth! / 1000;
           pending.add((
             field: _SettingField.radio,
-            command:
-                'set radio $freqText,$bwKHz,$_spreadingFactor,$_codingRate',
+            command: _tempRadio
+                ? tempRadioCommand(
+                    freqText,
+                    _bandwidth!,
+                    _spreadingFactor!,
+                    _codingRate!,
+                    tempRadioMinutes!,
+                  )
+                : setRadioCommand(
+                    freqText,
+                    _bandwidth!,
+                    _spreadingFactor!,
+                    _codingRate!,
+                  ),
           ));
         }
       }
@@ -846,10 +926,15 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           command: 'set owner.info $encoded',
         ));
       }
-      if (_dirtyFields.contains(_SettingField.pathHashMode)) {
+      final holdPresetPathHash = !sendsPresetPathHash(
+        temporaryRadio: _tempRadio,
+        pathHashFromPreset: _pathHashFromPreset,
+      );
+      if (_dirtyFields.contains(_SettingField.pathHashMode) &&
+          !holdPresetPathHash) {
         pending.add((
           field: _SettingField.pathHashMode,
-          command: 'set path.hash.mode $_pathHashMode',
+          command: setPathHashModeCommand(_pathHashMode),
         ));
       }
       if (_dirtyFields.contains(_SettingField.txDelay) &&
@@ -893,7 +978,10 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
       final retainDirty = <_SettingField>{};
       var passwordsFailed = false;
       var rebootNeeded = false;
-      for (final entry in pending) {
+      for (final entry in withRetuneLast(
+        pending,
+        (e) => isRetuneCommand(e.command),
+      )) {
         var failed = false;
         try {
           final response = await _commandService!.sendCommand(
@@ -922,6 +1010,15 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
           }
         }
         await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      // A preset path hash held back from a temporary save stays pending,
+      // so a later normal save can still apply it.
+      if (holdPresetPathHash &&
+          _dirtyFields.contains(_SettingField.pathHashMode)) {
+        retainDirty.add(_SettingField.pathHashMode);
+      } else if (!retainDirty.contains(_SettingField.pathHashMode)) {
+        _pathHashFromPreset = false;
       }
 
       // Only clear password fields if every password command succeeded,
@@ -1249,6 +1346,20 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
               onRefresh: _refreshRadioSettings,
             ),
             const Divider(),
+            Consumer<RadioPresetService>(
+              builder: (context, service, _) {
+                final presets = service.presets
+                    .where((p) => !p.offGrid)
+                    .toList();
+                return RadioPresetPicker(
+                  service: service,
+                  presets: presets,
+                  selectedId: _selectedPresetId(presets),
+                  onSelected: _applyPreset,
+                );
+              },
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _freqController,
               decoration: InputDecoration(
@@ -1347,6 +1458,43 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                 }
               },
             ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(l10n.repeater_tempRadio),
+              subtitle: Text(l10n.repeater_tempRadioSubtitle),
+              value: _tempRadio,
+              onChanged: (value) {
+                setState(() => _tempRadio = value ?? false);
+                _markChanged(_SettingField.radio);
+              },
+            ),
+            if (_tempRadio)
+              TextField(
+                controller: _tempRadioMinutesController,
+                decoration: InputDecoration(
+                  labelText: l10n.repeater_tempRadioMinutes,
+                  helperText: l10n.repeater_tempRadioMinutesInvalid(
+                    kTempRadioMaxMinutes,
+                  ),
+                  border: const OutlineInputBorder(),
+                  suffixText: 'min',
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => _markChanged(_SettingField.radio),
+              ),
+            if (_tempRadio &&
+                _pathHashFromPreset &&
+                _dirtyFields.contains(_SettingField.pathHashMode))
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  l10n.repeater_tempRadioPathHashNote,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             const SizedBox(height: 8),
             _buildFeatureToggleRow(
               title: l10n.repeater_rxGain,
@@ -1976,7 +2124,10 @@ class _RepeaterSettingsScreenState extends State<RepeaterSettingsScreen> {
                   ],
                   onChanged: (v) {
                     if (v != null) {
-                      setState(() => _pathHashMode = v);
+                      setState(() {
+                        _pathHashMode = v;
+                        _pathHashFromPreset = false;
+                      });
                       _markChanged(_SettingField.pathHashMode);
                     }
                   },

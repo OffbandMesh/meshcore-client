@@ -30,7 +30,9 @@ import 'services/block_service.dart';
 import 'services/window_geometry_service.dart';
 import 'services/store_consolidation_service.dart';
 import 'services/storage_health_service.dart';
+import 'services/radio_preset_service.dart';
 import 'storage/drift/blob_store.dart';
+import 'widgets/contact_sync_shortfall_banner.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
@@ -118,6 +120,11 @@ void main() async {
   await timeoutPredictionService.initialize();
   await blockService.load();
 
+  // Regional radio presets (#728): the last good copy, or the one bundled with
+  // the app. The picker refreshes it from config-profiles when opened.
+  final radioPresetService = RadioPresetService();
+  await radioPresetService.load();
+
   // Wire up connector with services
   connector.initialize(
     retryService: retryService,
@@ -157,6 +164,7 @@ void main() async {
       uiViewStateService: uiViewStateService,
       timeoutPredictionService: timeoutPredictionService,
       blockService: blockService,
+      radioPresetService: radioPresetService,
     ),
   );
 }
@@ -179,6 +187,18 @@ Creative Commons Attribution 4.0 International (CC BY 4.0)
 https://creativecommons.org/licenses/by/4.0/
 ''',
     );
+    yield const LicenseEntryWithLineBreaks(
+      <String>['MeshCore suggested radio presets'],
+      '''
+Regional radio presets are MeshCore's suggested settings, maintained by Liam
+Cottle for MeshCore and published at https://api.meshcore.nz/api/v1/config.
+Offband mirrors them unmodified in OffbandMesh/config-profiles and adds its
+own regional presets alongside.
+
+MeshCore: https://github.com/meshcore-dev/MeshCore
+Mirror and credit: https://github.com/OffbandMesh/config-profiles#credit
+''',
+    );
   });
 }
 
@@ -198,6 +218,7 @@ class MeshCoreApp extends StatelessWidget {
   final UiViewStateService uiViewStateService;
   final TimeoutPredictionService timeoutPredictionService;
   final BlockService blockService;
+  final RadioPresetService radioPresetService;
 
   const MeshCoreApp({
     super.key,
@@ -216,6 +237,7 @@ class MeshCoreApp extends StatelessWidget {
     required this.uiViewStateService,
     required this.timeoutPredictionService,
     required this.blockService,
+    required this.radioPresetService,
   });
 
   @override
@@ -237,6 +259,7 @@ class MeshCoreApp extends StatelessWidget {
         Provider.value(value: mapTileCacheService),
         ChangeNotifierProvider.value(value: timeoutPredictionService),
         ChangeNotifierProvider.value(value: blockService),
+        ChangeNotifierProvider.value(value: radioPresetService),
         ChangeNotifierProvider(create: (_) => ObserverConfigService(connector)),
       ],
       child: Consumer<AppSettingsService>(
@@ -284,7 +307,20 @@ class MeshCoreApp extends StatelessWidget {
                   child: Consumer<StorageHealthService>(
                     builder: (context, health, _) => StorageUnavailableBanner(
                       show: !health.available,
-                      child: child ?? const SizedBox.shrink(),
+                      child: Consumer<MeshCoreConnector>(
+                        builder: (context, connector, _) =>
+                            ContactSyncShortfallBanner(
+                              shortfall: connector.contactSyncShortfall,
+                              decisionPending:
+                                  connector.contactSyncDecisionPending,
+                              undeliveredCount:
+                                  connector.contactSyncUndeliveredCount,
+                              onDismiss: connector.dismissContactSyncShortfall,
+                              onKeep: connector.resolveContactSyncKeepLocal,
+                              onUseRadio: connector.resolveContactSyncUseRadio,
+                              child: child ?? const SizedBox.shrink(),
+                            ),
+                      ),
                     ),
                   ),
                 ),

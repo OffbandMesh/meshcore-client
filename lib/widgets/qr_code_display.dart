@@ -96,9 +96,18 @@ class QrCodeDisplay extends StatelessWidget {
                       ),
                     ],
             ),
-            child: embeddedImage != null
-                ? _buildQrWithEmbeddedImage(fgColor, bgColor)
-                : _buildSimpleQr(fgColor, bgColor),
+            // Bound the QR to a fixed square. QrImageView builds through a
+            // LayoutBuilder, which cannot answer intrinsic dimension queries,
+            // so an intrinsic-measuring parent (AlertDialog measures its
+            // content's max intrinsic height) throws without this. A tight
+            // SizedBox answers the intrinsic itself and never asks the child.
+            // (#629, first real use of this widget.)
+            child: SizedBox.square(
+              dimension: size,
+              child: embeddedImage != null
+                  ? _buildQrWithEmbeddedImage(fgColor, bgColor)
+                  : _buildSimpleQr(fgColor, bgColor),
+            ),
           ),
 
           if (instructions != null) ...[

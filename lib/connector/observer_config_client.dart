@@ -241,12 +241,17 @@ class ObserverConfigClient {
     }
   }
 
-  /// Extract the value from a scalar reply ("key = value\n" → "value").
-  /// Falls back to the trimmed whole string if there's no " = ".
+  /// Extract the value from a scalar reply (`key = value` -> `value`).
+  ///
+  /// Splits on the FIRST `=` (config keys never contain `=`; values may). A
+  /// blank field replies `key =` with nothing after the `=`, so the old
+  /// ` = ` (space-equals-space) match failed and leaked the whole `key =` line
+  /// as the value (#469). Splitting on `=` and trimming handles blank values
+  /// (-> empty) and values containing `=` correctly.
   static String extractScalarValue(String reply) {
-    final trimmed = reply.replaceAll('\n', '').trimRight();
-    final i = trimmed.indexOf(' = ');
-    return i < 0 ? trimmed : trimmed.substring(i + 3);
+    final line = reply.replaceAll('\n', '');
+    final i = line.indexOf('=');
+    return i < 0 ? line.trim() : line.substring(i + 1).trim();
   }
 
   /// Read a NUL-terminated UTF-8 string from [f] starting at [start].

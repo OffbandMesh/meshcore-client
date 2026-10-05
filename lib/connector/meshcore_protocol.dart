@@ -2,7 +2,36 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+// `flutter/widgets.dart` re-exports package:characters, which supplies the
+// grapheme-cluster iteration used by utf8TruncateToBytes below.
 import 'package:flutter/widgets.dart';
+
+/// Encodes [s] as UTF-8, truncated to at most [maxBytes], never splitting a
+/// character. (#636)
+///
+/// Truncation stops on a **grapheme cluster** boundary, not a byte boundary and
+/// not merely a codepoint boundary. Cutting on bytes puts invalid UTF-8 on the
+/// wire, which every reader then renders as replacement characters. Cutting
+/// between codepoints is valid UTF-8 but still wrong: a ZWJ emoji sequence is
+/// several codepoints joined by U+200D plus a variation selector, so a
+/// codepoint-safe cut can still leave a bare glyph, a dangling joiner, or an
+/// orphaned selector.
+///
+/// The on-wire name field is 32 bytes including a null terminator, so callers
+/// pass 31. That holds roughly 10 CJK characters, or two ZWJ emoji.
+Uint8List utf8TruncateToBytes(String s, int maxBytes) {
+  if (maxBytes <= 0) return Uint8List(0);
+  final whole = utf8.encode(s);
+  if (whole.length <= maxBytes) return Uint8List.fromList(whole);
+
+  final out = <int>[];
+  for (final cluster in s.characters) {
+    final encoded = utf8.encode(cluster);
+    if (out.length + encoded.length > maxBytes) break;
+    out.addAll(encoded);
+  }
+  return Uint8List.fromList(out);
+}
 
 // Buffer Reader - sequential binary data reader with pointer tracking
 class BufferReader {
@@ -132,8 +161,10 @@ class BufferWriter {
 
   void writeCString(String string, int maxLength) {
     final bytes = Uint8List(maxLength);
-    final encoded = utf8.encode(string);
-    for (var i = 0; i < maxLength - 1 && i < encoded.length; i++) {
+    // Grapheme-safe: a raw byte copy would cut a multi-byte character in half
+    // and put invalid UTF-8 on the wire. (#636)
+    final encoded = utf8TruncateToBytes(string, maxLength - 1);
+    for (var i = 0; i < encoded.length; i++) {
       bytes[i] = encoded[i];
     }
     writeBytes(bytes);
@@ -213,6 +244,17 @@ const int cmdSetAutoAddConfig = 58;
 const int cmdGetAutoAddConfig = 59;
 const int cmdSetPathHashMode = 61;
 
+/// Read the node's 64-byte identity. Compiled out of some firmware builds
+/// (`ENABLE_PRIVATE_KEY_EXPORT`), in which case the device answers
+/// [respCodeDisabled] rather than [respCodePrivateKey]. (#578)
+const int cmdExportPrivateKey = 23;
+
+/// Overwrite the node's identity with a 64-byte key. Like the export command
+/// this can be compiled out (`ENABLE_PRIVATE_KEY_IMPORT`). Firmware validates
+/// the key and answers [respCodeErr] with [errCodeIllegalArg] if it is
+/// malformed. (#578)
+const int cmdImportPrivateKey = 24;
+
 // Text message types
 const int txtTypePlain = 0;
 const int txtTypeCliData = 1;
@@ -256,6 +298,18 @@ const int respCodeCustomVars = 21;
 const int respCodeAutoAddConfig = 25;
 const int respCodeStats = 24;
 
+/// Reply to [cmdExportPrivateKey]: this byte followed by
+/// [privateKeySize] bytes. (#578)
+const int respCodePrivateKey = 14;
+
+/// One-byte reply meaning the firmware was built without the requested
+/// feature. Distinct from [respCodeErr], which reports a runtime failure of a
+/// command the firmware does support. (#578)
+const int respCodeDisabled = 15;
+
+/// A node identity is 64 bytes: the Ed25519 secret followed by its public key.
+const int privateKeySize = 64;
+
 /// Offband fork-only extension space (0xC0+), never collides with upstream,
 /// never submitted upstream. Request and reply share the code. (#135)
 const int cmdOffbandGps = 0xC1;
@@ -278,6 +332,13 @@ const int offbandFemLnaGet = 0x02;
 /// `0` = FEM LNA bypassed, `1` = enabled. Firmware default is enabled.
 const int femLnaBypass = 0x00;
 const int femLnaEnabled = 0x01;
+
+/// Fixed delay a repeater applies before queueing a CLI reply for transmit.
+///
+/// Firmware `CLI_REPLY_DELAY_MILLIS` in `examples/simple_repeater/MyMesh.cpp`,
+/// applied on both the direct and the flood reply path. It is unconditional, so
+/// every CLI round trip pays it and any budget for one must include it.
+const int cliReplyDelayMs = 600;
 
 Uint8List buildOffbandFemLnaSetFrame(bool enabled) => Uint8List.fromList([
   cmdOffbandFemLna,
@@ -432,6 +493,10 @@ const int errCodeIllegalArg = 6;
 /// it defensively against a stale or mis-gated client. (#304)
 const int errCodeUnsupportedCmd = 1;
 
+/// `ERR_CODE_NOT_FOUND`: e.g. `CMD_GET_CONTACT_BY_KEY` for a key the radio does
+/// not hold. (#762)
+const int errCodeNotFound = 2;
+
 Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
     Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
 Uint8List buildOffbandBlockRemoveFrame(Uint8List pubKey) =>
@@ -533,6 +598,75 @@ bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
     (offbandCaps & offbandCapCaplog) != 0 &&
     (firmwareVerCode ?? 0) >= 17;
 
+/// Packet-hash query capability (firmware #611, cap byte 2 bit 3). Lets the
+/// client ask firmware for the authoritative on-air hash of a channel message
+/// it sent, keyed by (msg_timestamp, channel_idx), to correlate against
+/// CoreScope observer counts (#524). Allocation provisional until the firmware
+/// PR merges; confirm against it before release.
+const int offbandCap2PktHash = 0x08;
+
+/// True iff this radio supports the 0xC6 packet-hash query. Requires both the
+/// cap-byte-2 bit AND FIRMWARE_VER_CODE >= 22. The client must never emit 0xC6
+/// unless this is true.
+bool firmwareSupportsPktHash(int? offbandCaps2, int? firmwareVerCode) =>
+    offbandCaps2 != null &&
+    (offbandCaps2 & offbandCap2PktHash) != 0 &&
+    (firmwareVerCode ?? 0) >= 22;
+
+/// 0xC6 CMD_OFFBAND_PKT_HASH (firmware #611). Client-issued query, never a push;
+/// the stock channel-send OK reply is untouched.
+const int cmdOffbandPktHash = 0xC6;
+const int pktHashReqGet = 0x01;
+const int pktHashRespGet = 0x01;
+const int pktHashRespErr = 0x7F;
+
+/// Build a 0xC6 GET request for the hash of a sent channel message, keyed by
+/// the (msg_timestamp, channel_idx) the client used in CMD_SEND_CHANNEL_TXT_MSG.
+/// Wire: [0xC6][0x01][ts:4 LE][chan:1] = 7 bytes.
+Uint8List buildOffbandPktHashGetFrame(int msgTimestamp, int channelIdx) {
+  final frame = Uint8List(7);
+  frame[0] = cmdOffbandPktHash;
+  frame[1] = pktHashReqGet;
+  ByteData.sublistView(frame, 2, 6).setUint32(0, msgTimestamp, Endian.little);
+  frame[6] = channelIdx & 0xFF;
+  return frame;
+}
+
+/// A parsed 0xC6 success reply: the on-air packet hash plus the echoed key,
+/// so a reply can be matched to its request without relying on ordering.
+class OffbandPktHash {
+  const OffbandPktHash({
+    required this.timestamp,
+    required this.channelIdx,
+    required this.hashHex,
+  });
+
+  /// msg_timestamp echoed from the request.
+  final int timestamp;
+
+  /// channel_idx echoed from the request.
+  final int channelIdx;
+
+  /// 16 lowercase hex chars, matching CoreScope's hash and the client's own
+  /// [_computePacketHash] format.
+  final String hashHex;
+}
+
+/// Parse a 0xC6 reply. Returns the hash on a success reply
+/// ([0xC6][0x01][ts:4][chan:1][hash:8], 15 bytes), or null on the error reply
+/// ([0xC6][0x7F][reason]) or any malformed frame.
+OffbandPktHash? parseOffbandPktHashReply(Uint8List frame) {
+  if (frame.length < 15) return null;
+  if (frame[0] != cmdOffbandPktHash || frame[1] != pktHashRespGet) return null;
+  final ts = ByteData.sublistView(frame, 2, 6).getUint32(0, Endian.little);
+  final chan = frame[6];
+  final hashHex = frame
+      .sublist(7, 15)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return OffbandPktHash(timestamp: ts, channelIdx: chan, hashHex: hashHex);
+}
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;
@@ -588,6 +722,9 @@ const int payloadTypeRawCustom =
     0x0F; // custom packet as raw bytes, for applications with custom encryption, payloads, etc
 
 //auto-add flags
+/// Firmware clamps `autoadd_max_hops` to this value. 0 means no limit. (#578)
+const int autoAddMaxHopsLimit = 64;
+
 const int autoAddOverwriteOldestFlag =
     1 << 0; // 0x01 - overwrite oldest non-favourite when full
 const int autoAddChatFlag =
@@ -636,6 +773,23 @@ int maxChannelMessageBytes(String? senderName, {int? maxFrameBytes}) {
   final byFrame = frameBudget - _sendChannelTextMsgOverheadBytes - prefixBytes;
   return _minPositive(byPayload, byFrame);
 }
+
+/// Fewest bytes a composer needs before it is worth calling usable.
+///
+/// Judgement call, not a protocol constant: below this a user cannot say
+/// anything meaningful, so an apparently-normal text field is misleading and
+/// the guard in #684 explains itself instead. Deliberately larger than the
+/// degenerate values #592 produced (DM 4, channel 1 or 0) so the guard also
+/// catches the near-miss cases, not only the literal zero.
+const int minUsableComposerBytes = 16;
+
+/// Whether [maxBytes] leaves a composer able to carry a real message.
+///
+/// A budget of 0 rejects every keystroke, which is the #592 symptom that read
+/// as a dead keyboard. A budget of 1-15 accepts input but cannot carry a
+/// sentence. Both are cases the user must be told about rather than left to
+/// discover by typing into a field that ignores them (SAFELANE 6).
+bool isComposerBudgetUsable(int maxBytes) => maxBytes >= minUsableComposerBytes;
 
 int _senderNameBytes(String? senderName) {
   if (senderName == null || senderName.isEmpty) return maxNameSize - 1;
@@ -889,13 +1043,19 @@ Uint8List buildSendTextMsgFrame(
 
 // Build CMD_SEND_CHANNEL_TXT_MSG frame
 // Format: [cmd][txt_type][channel_idx][timestamp x4][text...]
-Uint8List buildSendChannelTextMsgFrame(int channelIndex, String text) {
-  final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+// [timestamp] (seconds) may be supplied by the caller so it can correlate the
+// send to the firmware packet hash (0xC6, #524); defaults to now.
+Uint8List buildSendChannelTextMsgFrame(
+  int channelIndex,
+  String text, {
+  int? timestamp,
+}) {
+  final ts = timestamp ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
   final writer = BufferWriter();
   writer.writeByte(cmdSendChannelTxtMsg);
   writer.writeByte(txtTypePlain);
   writer.writeByte(channelIndex);
-  writer.writeUInt32LE(timestamp);
+  writer.writeUInt32LE(ts);
   writer.writeString(text);
   writer.writeByte(0);
   return writer.toBytes();
@@ -983,13 +1143,14 @@ Uint8List buildSendSelfAdvertFrame({bool flood = false}) {
 // Build CMD_SET_ADVERT_NAME frame
 // Format: [cmd][name...]
 Uint8List buildSetAdvertNameFrame(String name) {
-  final nameBytes = utf8.encode(name);
-  final nameLen = nameBytes.length < maxNameSize
-      ? nameBytes.length
-      : maxNameSize - 1;
+  // Grapheme-safe. This one matters most of the three: it sets THIS device's
+  // own advert name, which is what every other node on the mesh sees, what is
+  // embedded in the contact cards this device emits, and what other clients
+  // match against. Corrupt it once and the corruption propagates outward.
+  // (#636)
   final writer = BufferWriter();
   writer.writeByte(cmdSetAdvertName);
-  writer.writeBytes(Uint8List.fromList(nameBytes.sublist(0, nameLen)));
+  writer.writeBytes(utf8TruncateToBytes(name, maxNameSize - 1));
   return writer.toBytes();
 }
 
@@ -1046,7 +1207,8 @@ Uint8List buildSetChannelFrame(int channelIndex, String name, Uint8List psk) {
 // Build CMD_SET_RADIO_PARAMS frame
 // Format: [cmd][freq x4][bw x4][sf][cr] (pre-v9)
 //         [cmd][freq x4][bw x4][sf][cr][repeat] (firmware v9+)
-// freq: frequency in Hz (300000-2500000)
+// freq: frequency in kHz despite the parameter name (stock firmware stores
+//       freq / 1000.0 as MHz and accepts 150000-2500000)
 // bw: bandwidth in Hz (7000-500000)
 // sf: spreading factor (5-12)
 // cr: coding rate (5-8)
@@ -1106,6 +1268,7 @@ Uint8List buildUpdateContactPathFrame(
   double? lat,
   double? lon,
   DateTime? lastModified,
+  DateTime? lastAdvert,
 }) {
   final writer = BufferWriter();
   writer.writeByte(cmdAddUpdateContact);
@@ -1120,9 +1283,20 @@ Uint8List buildUpdateContactPathFrame(
   // Name (32 bytes, null-padded)
   writer.writeCString(name, maxNameSize);
 
-  // Timestamp
-  final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-  writer.writeUInt32LE(timestamp);
+  // Mandatory last_advert_timestamp. Defaults to now, which is right for the
+  // path-update callers: they refresh a contact the radio already learned from
+  // a real advert.
+  //
+  // A key-only add MUST pass the epoch instead (#627). The firmware compares
+  // this field against every incoming advert with
+  // `timestamp <= last_advert_timestamp` and silently discards the non-greater
+  // ones as replay attacks (`BaseChatMesh.cpp:142-145`). Advert timestamps come
+  // from the SENDER's clock, and clocks in the field run years behind, so
+  // stamping "now" on a contact that has never adverted would leave it
+  // permanently deaf to its own adverts. Zero lets any genuine advert win.
+  final advertSeconds =
+      (lastAdvert ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  writer.writeUInt32LE(advertSeconds < 0 ? 0 : advertSeconds);
 
   // Optional [Lat x4, Lon x4][timestamp x4] tail per the doc comment above.
   // Emit 8 bytes of position (zero-filled when only lastModified is provided)
@@ -1326,6 +1500,7 @@ Uint8List buildSetAutoAddConfigFrame({
   required bool autoAddRoomServer,
   required bool autoAddSensor,
   required bool overwriteOldest,
+  int? maxHops,
 }) {
   final writer = BufferWriter();
   writer.writeByte(cmdSetAutoAddConfig);
@@ -1336,6 +1511,32 @@ Uint8List buildSetAutoAddConfigFrame({
   if (autoAddSensor) flags |= autoAddSensorFlag;
   if (overwriteOldest) flags |= autoAddOverwriteOldestFlag;
   writer.writeByte(flags);
+  // Firmware applies the hop limit only when the frame carries a third byte,
+  // so omitting [maxHops] leaves the device's current limit untouched. It
+  // clamps to [autoAddMaxHopsLimit] on its side; we clamp here too so the
+  // value we believe we sent is the value that lands. (#578)
+  if (maxHops != null) {
+    writer.writeByte(maxHops.clamp(0, autoAddMaxHopsLimit));
+  }
+  return writer.toBytes();
+}
+
+/// Request the node's identity. See [cmdExportPrivateKey] for availability.
+Uint8List buildExportPrivateKeyFrame() =>
+    Uint8List.fromList([cmdExportPrivateKey]);
+
+/// Overwrite the node's identity. [identity] must be [privateKeySize] bytes.
+Uint8List buildImportPrivateKeyFrame(Uint8List identity) {
+  if (identity.length != privateKeySize) {
+    throw ArgumentError.value(
+      identity.length,
+      'identity',
+      'a node identity is exactly $privateKeySize bytes',
+    );
+  }
+  final writer = BufferWriter();
+  writer.writeByte(cmdImportPrivateKey);
+  writer.writeBytes(identity);
   return writer.toBytes();
 }
 

@@ -139,6 +139,16 @@ class AppSettings {
   final String themeMode;
   final String? languageOverride; // null = system default
   final bool appDebugLogEnabled;
+
+  /// Owner-only Experimental settings section, revealed by a 7-tap gesture on
+  /// the version row (#509). Not a security boundary, just keeps advanced/
+  /// me-centric toggles out of the default UI. Persists across restarts.
+  final bool experimentalUnlocked;
+
+  /// Owner-only: show CoreScope-observed repeat counts on outgoing channel
+  /// messages (#524). Lives under the Experimental section, default off, and
+  /// only takes effect when the firmware supports the 0xC6 packet-hash query.
+  final bool coreScopeObserverCountEnabled;
   final Map<String, String> batteryChemistryByDeviceId;
   final Map<String, String> batteryChemistryByRepeaterId;
   final UnitSystem unitSystem;
@@ -217,6 +227,8 @@ class AppSettings {
     this.themeMode = 'system',
     this.languageOverride,
     this.appDebugLogEnabled = false,
+    this.experimentalUnlocked = false,
+    this.coreScopeObserverCountEnabled = false,
     Map<String, String>? batteryChemistryByDeviceId,
     Map<String, String>? batteryChemistryByRepeaterId,
     this.unitSystem = UnitSystem.metric,
@@ -283,6 +295,8 @@ class AppSettings {
       'theme_mode': themeMode,
       'language_override': languageOverride,
       'app_debug_log_enabled': appDebugLogEnabled,
+      'experimental_unlocked': experimentalUnlocked,
+      'corescope_observer_count_enabled': coreScopeObserverCountEnabled,
       'battery_chemistry_by_device_id': batteryChemistryByDeviceId,
       'battery_chemistry_by_repeater_id': batteryChemistryByRepeaterId,
       'unit_system': unitSystem.value,
@@ -380,6 +394,9 @@ class AppSettings {
       themeMode: json['theme_mode'] as String? ?? 'system',
       languageOverride: json['language_override'] as String?,
       appDebugLogEnabled: json['app_debug_log_enabled'] as bool? ?? false,
+      experimentalUnlocked: json['experimental_unlocked'] as bool? ?? false,
+      coreScopeObserverCountEnabled:
+          json['corescope_observer_count_enabled'] as bool? ?? false,
       batteryChemistryByDeviceId:
           (json['battery_chemistry_by_device_id'] as Map?)?.map(
             (key, value) => MapEntry(key.toString(), value.toString()),
@@ -497,6 +514,8 @@ class AppSettings {
     String? themeMode,
     Object? languageOverride = _unset,
     bool? appDebugLogEnabled,
+    bool? experimentalUnlocked,
+    bool? coreScopeObserverCountEnabled,
     Map<String, String>? batteryChemistryByDeviceId,
     Map<String, String>? batteryChemistryByRepeaterId,
     UnitSystem? unitSystem,
@@ -556,6 +575,9 @@ class AppSettings {
           ? this.languageOverride
           : languageOverride as String?,
       appDebugLogEnabled: appDebugLogEnabled ?? this.appDebugLogEnabled,
+      experimentalUnlocked: experimentalUnlocked ?? this.experimentalUnlocked,
+      coreScopeObserverCountEnabled:
+          coreScopeObserverCountEnabled ?? this.coreScopeObserverCountEnabled,
       batteryChemistryByDeviceId:
           batteryChemistryByDeviceId ?? this.batteryChemistryByDeviceId,
       batteryChemistryByRepeaterId:

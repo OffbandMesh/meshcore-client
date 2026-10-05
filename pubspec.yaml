@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.4.0+65
+version: 1.6.0+67
 
 environment:
   sdk: ^3.9.2
@@ -38,11 +38,11 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   flutter_blue_plus: ^2.1.0
-  # TODO: Switch to official flserial repo once changes are upstreamed
+  # Vendored from MeshEnvy/flserial 48216310061efc8d5d217cc18014fc2cb501646e
+  # (MIT) so its native serial buffering can be fixed: the 8 KB input ring
+  # overwrote bytes during a contact sync burst (#702, #704).
   flserial:
-    git:
-      url: https://github.com/MeshEnvy/flserial.git
-      ref: 48216310061efc8d5d217cc18014fc2cb501646e
+    path: packages/flserial
   provider: ^6.1.5+1
   shared_preferences: ^2.2.2
   uuid: ^4.3.3
@@ -98,6 +98,25 @@ hooks:
           android-x64:
             backends: [cpu]
 
+# Both BLE platform implementations are vendored, each a pristine import first
+# with its patch as a separate commit for reviewability.
+#
+# android: patched to close leaked BluetoothGatt handles (#694).
+# winrt:   patched to create the GattSession on connect, so Windows reports the
+#          negotiated MTU. No published version does, which left the Dart cache
+#          at the 23-byte default and capped the composer at 0-4 bytes, reading
+#          as a dead keyboard (#592, fix tracked in #686).
+# linux:   patched to report the negotiated MTU from BlueZ. Upstream returns an
+#          empty stream, so the MTU never reached Dart and the composer was
+#          capped at 0 bytes, the same end state as Windows (#717).
+dependency_overrides:
+  flutter_blue_plus_android:
+    path: packages/flutter_blue_plus_android
+  flutter_blue_plus_linux:
+    path: packages/flutter_blue_plus_linux
+  flutter_blue_plus_winrt:
+    path: packages/flutter_blue_plus_winrt
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -127,6 +146,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/radio_presets/
 
 flutter_launcher_icons:
   android: true

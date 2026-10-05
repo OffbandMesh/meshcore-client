@@ -640,6 +640,36 @@ abstract class AppLocalizations {
   /// **'Please turn on Bluetooth to scan for devices'**
   String get scanner_bluetoothOffMessage;
 
+  /// Human-readable text for an Android GATT 133 connect failure after the bounded retry also failed (#698).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.'**
+  String get scanner_connectFailedTransient;
+
+  /// Human-readable text for a connect timeout (#698).
+  ///
+  /// In en, this message translates to:
+  /// **'The connection timed out. Check that the radio is powered, in range, and not already connected to another device.'**
+  String get scanner_connectFailedTimeout;
+
+  /// Human-readable fallback for any other connect failure; the raw exception goes to the log only (#522/#698).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the radio. Details are in the App Debug Log.'**
+  String get scanner_connectFailedGeneric;
+
+  /// Persistent banner title when a BLE disconnect was never confirmed by the OS, so the radio may stay latched and stop advertising (#697).
+  ///
+  /// In en, this message translates to:
+  /// **'Radio may still be held by this device'**
+  String get scanner_bleReleaseWarning;
+
+  /// Persistent banner body naming the recovery for an unconfirmed BLE release (#697).
+  ///
+  /// In en, this message translates to:
+  /// **'The disconnect was not confirmed. If the radio does not reappear, toggle Bluetooth off and on, or force-stop the app.'**
+  String get scanner_bleReleaseWarningMessage;
+
   /// No description provided for @scanner_chromeRequired.
   ///
   /// In en, this message translates to:
@@ -1090,6 +1120,72 @@ abstract class AppLocalizations {
   /// **'Debug'**
   String get settings_debug;
 
+  /// No description provided for @settings_experimental.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental'**
+  String get settings_experimental;
+
+  /// No description provided for @settings_experimentalSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced and in-development features'**
+  String get settings_experimentalSubtitle;
+
+  /// No description provided for @settings_experimentalDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'These features are experimental and may change or be removed at any time. They default to off.'**
+  String get settings_experimentalDescription;
+
+  /// No description provided for @settings_coreScopeObserverCount.
+  ///
+  /// In en, this message translates to:
+  /// **'CoreScope observer counts'**
+  String get settings_coreScopeObserverCount;
+
+  /// No description provided for @settings_coreScopeObserverCountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On outgoing channel messages, show how many CoreScope observers heard the packet, alongside radio-heard repeats. Needs internet.'**
+  String get settings_coreScopeObserverCountSubtitle;
+
+  /// No description provided for @settings_coreScopeObserverCountUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires a firmware build with packet-hash support (v22+).'**
+  String get settings_coreScopeObserverCountUnsupported;
+
+  /// No description provided for @settings_experimentalDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable experimental features'**
+  String get settings_experimentalDisable;
+
+  /// No description provided for @settings_experimentalDisableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turns off all experimental features and hides this section. Unlock again with 7 taps on the Build row.'**
+  String get settings_experimentalDisableSubtitle;
+
+  /// No description provided for @settings_experimentalUnlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental features unlocked'**
+  String get settings_experimentalUnlocked;
+
+  /// No description provided for @settings_experimentalAlreadyUnlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental features are already unlocked'**
+  String get settings_experimentalAlreadyUnlocked;
+
+  /// No description provided for @settings_experimentalCountdown.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more taps to unlock experimental features'**
+  String settings_experimentalCountdown(int count);
+
   /// No description provided for @settings_companionDebugLog.
   ///
   /// In en, this message translates to:
@@ -1129,20 +1225,56 @@ abstract class AppLocalizations {
   /// No description provided for @settings_aboutLegalese.
   ///
   /// In en, this message translates to:
-  /// **'2026 MeshCore Open Source Project'**
+  /// **'© 2026 Offband. Based on MeshCore Open by zjs81, MIT licensed.'**
   String get settings_aboutLegalese;
 
   /// No description provided for @settings_aboutDescription.
   ///
   /// In en, this message translates to:
-  /// **'An open-source Flutter client for MeshCore LoRa mesh networking devices.'**
+  /// **'Offband Meshcore is an open-source client for MeshCore LoRa mesh networking devices.'**
   String get settings_aboutDescription;
+
+  /// No description provided for @settings_aboutLicenses.
+  ///
+  /// In en, this message translates to:
+  /// **'View licenses'**
+  String get settings_aboutLicenses;
+
+  /// No description provided for @settings_aboutWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband website'**
+  String get settings_aboutWebsite;
+
+  /// No description provided for @settings_aboutPlayStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Play'**
+  String get settings_aboutPlayStore;
+
+  /// No description provided for @settings_aboutDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Donate or sponsor'**
+  String get settings_aboutDonate;
+
+  /// No description provided for @settings_aboutLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the link'**
+  String get settings_aboutLinkFailed;
 
   /// No description provided for @settings_aboutOpenMeteoAttribution.
   ///
   /// In en, this message translates to:
   /// **'LOS elevation data: Open-Meteo (CC BY 4.0)'**
   String get settings_aboutOpenMeteoAttribution;
+
+  /// No description provided for @settings_aboutPresetsAttribution.
+  ///
+  /// In en, this message translates to:
+  /// **'Regional radio presets: MeshCore\'s suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.'**
+  String get settings_aboutPresetsAttribution;
 
   /// No description provided for @settings_infoName.
   ///
@@ -1233,6 +1365,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Presets'**
   String get settings_presets;
+
+  /// No description provided for @settings_presetSourceMeshCore.
+  ///
+  /// In en, this message translates to:
+  /// **'MeshCore'**
+  String get settings_presetSourceMeshCore;
+
+  /// No description provided for @settings_presetSourceOffband.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband'**
+  String get settings_presetSourceOffband;
+
+  /// No description provided for @settings_presetsRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Update presets'**
+  String get settings_presetsRefresh;
+
+  /// No description provided for @settings_presetsUpdating.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating presets...'**
+  String get settings_presetsUpdating;
+
+  /// No description provided for @settings_presetsUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update presets. Showing the saved list.'**
+  String get settings_presetsUpdateFailed;
+
+  /// No description provided for @settings_presetsUpdatedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Presets updated {date}'**
+  String settings_presetsUpdatedAt(String date);
+
+  /// No description provided for @settings_presetsBundled.
+  ///
+  /// In en, this message translates to:
+  /// **'Presets included with this version of the app'**
+  String get settings_presetsBundled;
 
   /// No description provided for @settings_frequency.
   ///
@@ -2008,6 +2182,12 @@ abstract class AppLocalizations {
   /// **'Manage Repeater'**
   String get contacts_manageRepeater;
 
+  /// No description provided for @contacts_manageSensor.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Sensor'**
+  String get contacts_manageSensor;
+
   /// No description provided for @contacts_manageRoom.
   ///
   /// In en, this message translates to:
@@ -2650,6 +2830,30 @@ abstract class AppLocalizations {
   /// **'Message too long (max {maxBytes} bytes).'**
   String chat_messageTooLong(int maxBytes);
 
+  /// No description provided for @composerBudgetBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t send messages on this connection'**
+  String get composerBudgetBlockedTitle;
+
+  /// No description provided for @composerBudgetLimitedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {maxBytes} characters will fit'**
+  String composerBudgetLimitedTitle(int maxBytes);
+
+  /// No description provided for @composerBudgetBluetoothCause.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth link negotiated a very small packet size, which leaves no room for message text. Try reconnecting, or connect by USB or Wi-Fi instead.'**
+  String get composerBudgetBluetoothCause;
+
+  /// No description provided for @composerBudgetGenericCause.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection to the radio left no room for message text. Try reconnecting.'**
+  String get composerBudgetGenericCause;
+
   /// No description provided for @chat_messageCopied.
   ///
   /// In en, this message translates to:
@@ -3015,6 +3219,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Heard {count, plural, =1{1 repeat} other{{count} repeats}}'**
   String channel_heardTooltip(int count);
+
+  /// No description provided for @channel_coreScopeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Seen by {count, plural, =1{1 CoreScope observer} other{{count} CoreScope observers}}'**
+  String channel_coreScopeTooltip(int count);
+
+  /// No description provided for @channel_coreScopeRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh CoreScope observers'**
+  String get channel_coreScopeRefresh;
+
+  /// No description provided for @channel_coreScopeRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'CoreScope unreachable'**
+  String get channel_coreScopeRefreshFailed;
+
+  /// No description provided for @channel_coreScopeNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not seen by CoreScope yet'**
+  String get channel_coreScopeNotFound;
+
+  /// No description provided for @channel_coreScopeCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'{observers, plural, =1{1 observer} other{{observers} observers}} · {observations} observations'**
+  String channel_coreScopeCounts(int observers, int observations);
+
+  /// No description provided for @channel_senderNameUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'No node known by that name'**
+  String get channel_senderNameUnknown;
+
+  /// No description provided for @channel_senderNameUnknownHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding needs an advert from this node'**
+  String get channel_senderNameUnknownHint;
+
+  /// No description provided for @channel_senderAlreadyContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in contacts'**
+  String get channel_senderAlreadyContact;
+
+  /// No description provided for @channel_senderMultipleMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} nodes use this name'**
+  String channel_senderMultipleMatches(int count);
+
+  /// No description provided for @channel_senderAddNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected to a radio, so this sender can\'t be added yet'**
+  String get channel_senderAddNotConnected;
+
+  /// No description provided for @channel_senderAddFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t add this sender: {error}'**
+  String channel_senderAddFailed(String error);
+
+  /// No description provided for @channel_senderCandidate.
+  ///
+  /// In en, this message translates to:
+  /// **'{keyPrefix} · {type}'**
+  String channel_senderCandidate(String keyPrefix, String type);
 
   /// No description provided for @chat_successes.
   ///
@@ -4418,6 +4694,36 @@ abstract class AppLocalizations {
   /// **'Coding Rate'**
   String get repeater_codingRate;
 
+  /// No description provided for @repeater_tempRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply temporarily'**
+  String get repeater_tempRadio;
+
+  /// No description provided for @repeater_tempRadioSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses tempradio: the node switches now and goes back to its saved radio settings after the duration. Nothing is saved on the node.'**
+  String get repeater_tempRadioSubtitle;
+
+  /// No description provided for @repeater_tempRadioMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration (minutes)'**
+  String get repeater_tempRadioMinutes;
+
+  /// No description provided for @repeater_tempRadioPathHashNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This preset\'s path hash size isn\'t applied with a temporary change: the node can\'t revert it on its own. It stays pending for a normal save.'**
+  String get repeater_tempRadioPathHashNote;
+
+  /// No description provided for @repeater_tempRadioMinutesInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'1 to {max} minutes'**
+  String repeater_tempRadioMinutesInvalid(int max);
+
   /// No description provided for @repeater_locationSettings.
   ///
   /// In en, this message translates to:
@@ -5005,6 +5311,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error: {error}'**
   String repeater_cliCommandError(String error);
+
+  /// No description provided for @repeater_cliCommandTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Command timed out after {seconds} seconds'**
+  String repeater_cliCommandTimeout(String seconds);
 
   /// No description provided for @repeater_cliQuickGetName.
   ///
@@ -7258,6 +7570,180 @@ abstract class AppLocalizations {
   /// **'Add Contact from Clipboard'**
   String get contacts_addContactFromClipboard;
 
+  /// No description provided for @contacts_addByKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Add by public key'**
+  String get contacts_addByKey;
+
+  /// No description provided for @contacts_addByKeyDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Add someone using the public key they gave you. Works even if you have never heard their advert.'**
+  String get contacts_addByKeyDescription;
+
+  /// No description provided for @contacts_publicKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Public key'**
+  String get contacts_publicKeyLabel;
+
+  /// No description provided for @contacts_publicKeyHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'64 hex characters, or paste a meshcore:// contact link'**
+  String get contacts_publicKeyHelper;
+
+  /// No description provided for @contacts_publicKeyInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter 64 hex characters, or a meshcore:// contact link'**
+  String get contacts_publicKeyInvalid;
+
+  /// No description provided for @contacts_nameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get contacts_nameLabel;
+
+  /// No description provided for @contacts_typeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get contacts_typeLabel;
+
+  /// No description provided for @contacts_addByKeyUnverifiedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed on air yet. The name is whatever you type here until this node sends an advert.'**
+  String get contacts_addByKeyUnverifiedNote;
+
+  /// No description provided for @contacts_addByKeyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {name}'**
+  String contacts_addByKeyAdded(String name);
+
+  /// No description provided for @contacts_addByKeyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add the contact. Check the radio connection.'**
+  String get contacts_addByKeyFailed;
+
+  /// No description provided for @contacts_myContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'My contact QR'**
+  String get contacts_myContactQr;
+
+  /// No description provided for @contacts_myContactQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Have them scan this, or send them the link below. It works even if they have never heard your advert.'**
+  String get contacts_myContactQrInstructions;
+
+  /// No description provided for @contacts_contactLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact link copied'**
+  String get contacts_contactLinkCopied;
+
+  /// No description provided for @contacts_qrNeedsConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a radio first, so the app knows your public key.'**
+  String get contacts_qrNeedsConnection;
+
+  /// No description provided for @contacts_scanContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan contact QR'**
+  String get contacts_scanContactQr;
+
+  /// No description provided for @contacts_scanContactQrInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Point the camera at a MeshCore contact QR'**
+  String get contacts_scanContactQrInstructions;
+
+  /// No description provided for @contacts_invalidContactQr.
+  ///
+  /// In en, this message translates to:
+  /// **'That QR is not a MeshCore contact'**
+  String get contacts_invalidContactQr;
+
+  /// No description provided for @contacts_verifiedByAdvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed on air. This node sent a signed advert.'**
+  String get contacts_verifiedByAdvert;
+
+  /// No description provided for @contacts_verifiedByMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Key confirmed. A message with this contact went through, which only works with the matching key.'**
+  String get contacts_verifiedByMessage;
+
+  /// No description provided for @contacts_verifiedKeyOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Added from a key. Nothing has confirmed it on air yet.'**
+  String get contacts_verifiedKeyOnly;
+
+  /// No description provided for @contacts_lastSeenNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not heard yet'**
+  String get contacts_lastSeenNever;
+
+  /// No description provided for @contacts_cardAddContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Add {name}'**
+  String contacts_cardAddContact(String name);
+
+  /// No description provided for @contacts_cardAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}'**
+  String contacts_cardAlreadyAdded(String name);
+
+  /// No description provided for @contacts_cardAlreadyAddedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in your contacts'**
+  String get contacts_cardAlreadyAddedTooltip;
+
+  /// No description provided for @chat_attachTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to message'**
+  String get chat_attachTooltip;
+
+  /// No description provided for @chat_attachGif.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF'**
+  String get chat_attachGif;
+
+  /// No description provided for @chat_attachMyContact.
+  ///
+  /// In en, this message translates to:
+  /// **'My contact card'**
+  String get chat_attachMyContact;
+
+  /// No description provided for @chat_attachMyContactSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Puts your public key in the message so anyone here can add you'**
+  String get chat_attachMyContactSubtitle;
+
+  /// No description provided for @chat_contactCardNeedsConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a radio first, so the app knows your public key.'**
+  String get chat_contactCardNeedsConnection;
+
   /// No description provided for @contacts_ShareContact.
   ///
   /// In en, this message translates to:
@@ -8097,6 +8583,402 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t open battery settings'**
   String get batteryOptimizationOpenFailed;
+
+  /// Button selecting every section on the stock config export/import screens (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get stockConfig_selectAll;
+
+  /// Button clearing every section on the stock config export/import screens (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get stockConfig_deselectAll;
+
+  /// Config section holding the device's display name (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get stockConfig_sectionName;
+
+  /// Config section holding the node's key pair (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Private Identity Key'**
+  String get stockConfig_sectionIdentity;
+
+  /// Config section holding LoRa radio parameters (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Radio Settings'**
+  String get stockConfig_sectionRadio;
+
+  /// Config section holding the device's advertised position (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Position Settings'**
+  String get stockConfig_sectionPosition;
+
+  /// Config section holding miscellaneous device preferences (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Other Settings'**
+  String get stockConfig_sectionOther;
+
+  /// Config section holding automatic contact-add preferences (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Add Settings'**
+  String get stockConfig_sectionAutoAdd;
+
+  /// Config section holding channels, with how many there are (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Channels ({count})'**
+  String stockConfig_sectionChannels(int count);
+
+  /// Config section holding contacts, with how many there are (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts ({count})'**
+  String stockConfig_sectionContacts(int count);
+
+  /// Warning shown beside the identity section when exporting (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Your private key must be kept secret. It should only be exported as a backup.'**
+  String get stockConfig_identityWarning;
+
+  /// Abbreviated public key shown under the identity section (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Public Key: {key}'**
+  String stockConfig_publicKeyLabel(String key);
+
+  /// Placeholder shown instead of the private key, which is never displayed (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Private Key: hidden'**
+  String get stockConfig_privateKeyHidden;
+
+  /// Title of the stock config export screen (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export Config'**
+  String get exportConfig_title;
+
+  /// Banner instructing the user to pick sections to export (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Please select data to export.'**
+  String get exportConfig_instruction;
+
+  /// Note that channels export as a whole, with no per-channel choice (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'All channels will be exported.'**
+  String get exportConfig_allChannels;
+
+  /// Note that contacts export as a whole, with no per-contact choice (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'All contacts will be exported.'**
+  String get exportConfig_allContacts;
+
+  /// Shown when the user tries to export with every section unchecked (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one section to export.'**
+  String get exportConfig_nothingSelected;
+
+  /// Explains that an export drops Offband-only contact fields (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'This is the MeshCore stock format, so it cannot carry Offband-only data such as path overrides. Importing this file back into Offband will not restore that data.'**
+  String get exportConfig_lossyNotice;
+
+  /// Title of the dialog listing sections that could not be gathered (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Some sections could not be exported'**
+  String get exportConfig_omittedTitle;
+
+  /// Reason line when firmware lacks the feature entirely, so retrying cannot help (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: this radio\'s firmware was built without it.'**
+  String exportConfig_omittedUnsupported(String section);
+
+  /// Reason line when the device did not answer in time (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device did not respond.'**
+  String exportConfig_omittedNoReply(String section);
+
+  /// Reason line when the device refused the request (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device refused the request.'**
+  String exportConfig_omittedRejected(String section);
+
+  /// Reason line when the value is not known to the app yet (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'{section}: the device has not reported this yet.'**
+  String exportConfig_omittedUnavailable(String section);
+
+  /// Confirms writing the file even though some sections are missing (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export anyway'**
+  String get exportConfig_exportAnyway;
+
+  /// Dismisses the export without writing a file (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get exportConfig_cancel;
+
+  /// Subject line used when sharing an exported config file (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'MeshCore config'**
+  String get exportConfig_shareSubject;
+
+  /// Snackbar shown when writing the export file failed (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {message}'**
+  String exportConfig_failed(String message);
+
+  /// Shown when the export screen has no connected radio to read from (#574).
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a device before exporting.'**
+  String get exportConfig_notConnected;
+
+  /// Title of the stock config import screen (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Import Config'**
+  String get importConfig_title;
+
+  /// Banner instructing the user to pick which sections to import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Please select data to import.'**
+  String get importConfig_instruction;
+
+  /// Button that opens the file picker to load a config file (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a config file'**
+  String get importConfig_chooseFile;
+
+  /// Warning under the identity section, matching the wording stock uses (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Importing this private key will overwrite your current identity.'**
+  String get importConfig_identityWarning;
+
+  /// Explains the additive channel rule, matching stock's wording (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'New channels will be added. Existing channels will not change.'**
+  String get importConfig_channelsNote;
+
+  /// Explains the contact upsert rule, matching stock's wording (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'New contacts will be added. Existing contacts will be updated.'**
+  String get importConfig_contactsNote;
+
+  /// Shown when the user confirms with nothing checked (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Select at least one section to import.'**
+  String get importConfig_nothingSelected;
+
+  /// Shown when there is no connected radio to import into (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a device before importing.'**
+  String get importConfig_notConnected;
+
+  /// Shown when the chosen file could not be parsed (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a MeshCore config. {message}'**
+  String importConfig_parseFailed(String message);
+
+  /// Title of the confirmation shown before a destructive identity import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite this node\'s identity?'**
+  String get importConfig_confirmIdentityTitle;
+
+  /// Body of the destructive identity import confirmation (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'The node\'s current identity will be replaced with the one in this file, and every contact\'s record of this node becomes stale. This cannot be undone except by importing the previous key.'**
+  String get importConfig_confirmIdentityBody;
+
+  /// Confirms the destructive identity import (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Overwrite identity'**
+  String get importConfig_confirmIdentityAccept;
+
+  /// Dismisses a config import confirmation (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get importConfig_cancel;
+
+  /// Title of the dialog summarising what an import did (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Import finished'**
+  String get importConfig_resultTitle;
+
+  /// Summary counts after an import. Deliberately says sent, not applied: apart from identity these commands are not confirmed by the device yet (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Sent {contacts} contacts and {channels} channels to the device.'**
+  String importConfig_resultCounts(int contacts, int channels);
+
+  /// Heading above the list of channels that were skipped (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Channels not imported'**
+  String get importConfig_resultSkippedHeading;
+
+  /// Heading above the list of sections that could not be applied (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Sections not applied'**
+  String get importConfig_resultFailedHeading;
+
+  /// Skip reason: stock never overwrites an existing channel (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'already on this device, so it was left unchanged'**
+  String get importConfig_reasonAlreadyPresent;
+
+  /// Skip reason: every channel slot is occupied (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'no free channel slot on the device'**
+  String get importConfig_reasonNoFreeSlot;
+
+  /// Failure reason: the file did not contain the section (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'not present in this file'**
+  String get importConfig_reasonAbsentFromFile;
+
+  /// Failure reason: no answer from the device (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'the device did not respond'**
+  String get importConfig_reasonNoReply;
+
+  /// Failure reason: firmware lacks the feature entirely (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'this radio\'s firmware was built without it'**
+  String get importConfig_reasonUnsupported;
+
+  /// Failure reason: the device refused the request (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'the device refused it'**
+  String get importConfig_reasonRejected;
+
+  /// Failure reason: no supported way to write the value (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'this app cannot write every value in it'**
+  String get importConfig_reasonNotWritable;
+
+  /// One line pairing a channel or section with why it was skipped (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'{item}: {reason}'**
+  String importConfig_entryLine(String item, String reason);
+
+  /// Dismisses the import result dialog (#576).
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get importConfig_close;
+
+  /// Settings entry opening the config export screen (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Export Config'**
+  String get settings_exportConfig;
+
+  /// Settings entry opening the config import screen (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Import Config'**
+  String get settings_importConfig;
+
+  /// Explains what the config export and import entries do (#568).
+  ///
+  /// In en, this message translates to:
+  /// **'Back up or restore contacts, channels, radio settings and identity, in the MeshCore stock format.'**
+  String get settings_configBackupSubtitle;
+
+  /// Persistent banner title when the radio sent fewer contacts than it reported (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Contact sync incomplete'**
+  String get contactSyncShortfallTitle;
+
+  /// Persistent banner body for a short contact sync (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio reported {declared} contacts; after checking again the app has {received}. Your saved contacts were kept.'**
+  String contactSyncShortfallBody(int declared, int received);
+
+  /// Persistent banner body for a contact sync whose total the radio did not report (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not report how many contacts it holds; after checking again the app has {received}. Your saved contacts were kept.'**
+  String contactSyncShortfallBodyNoTotal(int received);
+
+  /// Dialog title after the automatic retry of a short contact sync was also short (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Contact sync still incomplete'**
+  String get contactSyncDecisionTitle;
+
+  /// Dialog body asking whether to keep saved contacts or accept the radio's shorter list (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'After checking again the app still has only {received} of the radio\'s contacts. Keep your saved contacts, or use the radio\'s list? Using the radio\'s list removes {removed} contacts from this app.'**
+  String contactSyncDecisionBody(int received, int removed);
+
+  /// Default dialog action: keep the saved contact list after a short sync (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my contacts'**
+  String get contactSyncKeep;
+
+  /// Dialog action: replace the saved contacts with the radio's shorter list (#668).
+  ///
+  /// In en, this message translates to:
+  /// **'Use the radio\'s list'**
+  String get contactSyncUseRadio;
+
+  /// Extra sentence on the short-sync banner and dialog: saved contacts the radio answered 'not found' for (#764).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 saved contact is no longer on the radio.} other{{count} saved contacts are no longer on the radio.}}'**
+  String contactSyncConfirmedGone(int count);
 }
 
 class _AppLocalizationsDelegate

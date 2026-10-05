@@ -260,6 +260,213 @@ class Contact {
     }
   }
 
+  /// True once this contact has been confirmed on air by a signed advert.
+  ///
+  /// [lastSeen] maps to the firmware `last_advert_timestamp`, which a contact
+  /// created from a bare key deliberately carries as the epoch so the advert
+  /// replay guard cannot mute it (#627). That same sentinel doubles as the
+  /// verification signal, for free, and it clears itself the moment a genuine
+  /// advert arrives and the radio rewrites the field. (#630)
+  bool get isAdvertVerified => lastSeen.millisecondsSinceEpoch != 0;
+
+  /// Reference-app contact share URI for this contact, the inverse of
+  /// [fromShareUri]. This is what the stock app accepts, so emitting it is
+  /// what makes Offband cards and QRs importable by non-Offband users. (#626)
+  ///
+  /// Note this shares only the identity. It carries no path and no advert, so
+  /// the receiving side gets an unverified stub exactly as we do.
+  String toShareUri() =>
+      buildShareUri(publicKeyHex: publicKeyHex, name: name, type: type);
+
+  /// Builds the reference-app contact share URI from raw parts.
+  ///
+  /// Separate from [toShareUri] so the local device can share its OWN identity,
+  /// which is a public key and a node name rather than a [Contact]. (#626)
+  ///
+  /// Spaces are percent-encoded rather than emitted as `+`. Both decode to a
+  /// space, and this matches [Channel.toShareUri], which is already documented
+  /// as round-tripping with the reference app's QR. (#161)
+  static String buildShareUri({
+    required String publicKeyHex,
+    required String name,
+    int type = advTypeChat,
+  }) =>
+      'meshcore://contact/add'
+      '?name=${Uri.encodeComponent(name)}'
+      '&public_key=$publicKeyHex'
+      '&type=$type';
+
+  /// The body of one compact channel share, `<key:type:name>`, captured
+  /// without its delimiters. `[^>]*` cannot cross a closing bracket, so each
+  /// card matches individually even when several sit in one message.
+  static final RegExp _channelShareBody = RegExp(
+    r'<([0-9a-fA-F]{64}:\d+:[^>]*)>',
+  );
+
+  /// Compact contact share for a CHANNEL message, `<key:type:name>`. (#611)
+  ///
+  /// This is a second, different format from [toShareUri], and deliberately so.
+  /// It is what real clients put on the air, observed live in `#test` and
+  /// `#hamradio`, and it is far cheaper: about 75 bytes against 117 for the
+  /// equivalent URI. Channel text shares a 160-byte payload with the
+  /// `Sender: ` prefix, so that difference is airtime, not neatness.
+  ///
+  /// Use the URI form for a QR, a DM, or an out-of-band paste. Use this for a
+  /// channel.
+  String toChannelShare() =>
+      buildChannelShare(publicKeyHex: publicKeyHex, name: name, type: type);
+
+  /// Builds the compact channel share from raw parts, so this device can share
+  /// its OWN identity without constructing a [Contact]. (#611)
+  ///
+  /// Angle brackets are the delimiters, so any in [name] are dropped: a name
+  /// carrying one would truncate the payload for every parser reading it. A
+  /// colon is left alone, because the name is the final field and a correct
+  /// parser splits on the first two colons only.
+  static String buildChannelShare({
+    required String publicKeyHex,
+    required String name,
+    int type = advTypeChat,
+  }) {
+    final safeName = name.replaceAll('<', '').replaceAll('>', '');
+    return '<$publicKeyHex:$type:$safeName>';
+  }
+
+  /// Parses the compact channel share `<key:type:name>`, or null. (#611)
+  ///
+  /// The counterpart to [toChannelShare]. Without this the app would emit a
+  /// format it could not itself accept, and a user copying a card out of a
+  /// channel and pasting it into the add dialog would be rejected.
+  ///
+  /// Splits on the FIRST TWO colons only. The name is the final field and may
+  /// contain colons, spaces, emoji and CJK, so splitting on the last colon or
+  /// on every colon corrupts real names.
+  ///
+  /// Rendering a received card as a tappable Add Contact affordance is #610 and
+  /// is separate; this only handles text pasted or scanned into the add flow.
+  static Contact? fromChannelShare(String text) {
+    // Tolerate a card embedded in a longer message, which is how it arrives,
+    // and take the FIRST well-formed one.
+    //
+    // Deliberately not a scan from the first `<` to the last `>`: a message
+    // carrying two cards would then be read as a single span running from the
+    // first key to the last name and parse as garbage. That is reachable,
+    // because the add dialog passes raw pasted text straight to here.
+    // (Gemini review, #610)
+    final match = _channelShareBody.firstMatch(text);
+    if (match == null) return null;
+    final body = match.group(1)!;
+
+    final firstColon = body.indexOf(':');
+    if (firstColon < 0) return null;
+    final secondColon = body.indexOf(':', firstColon + 1);
+    if (secondColon < 0) return null;
+
+    final keyHex = body.substring(0, firstColon).toLowerCase();
+    if (keyHex.length != pubKeySize * 2) return null;
+    final Uint8List publicKey;
+    try {
+      publicKey = hex2Uint8List(keyHex);
+    } on FormatException {
+      return null;
+    }
+
+    final type = int.tryParse(body.substring(firstColon + 1, secondColon));
+    if (type == null || type < advTypeChat || type > advTypeSensor) return null;
+
+    final name = body.substring(secondColon + 1);
+
+    return Contact(
+      publicKey: publicKey,
+      name: name.isEmpty ? 'Unknown' : name,
+      type: type,
+      flags: 0,
+      pathLength: -1,
+      path: Uint8List(0),
+      // Same unverified stub as the URI path, and for the same reason: the
+      // epoch keeps the firmware advert replay guard from muting it. (#620)
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+      rawPacket: null,
+    );
+  }
+
+  /// Parses a contact from the reference-app share URI, or null if malformed.
+  ///
+  /// `meshcore://contact/add?name=<url-encoded>&public_key=<64 hex>&type=<1-4>`
+  ///
+  /// Spec: MeshCore firmware `docs/qr_codes.md`, the format the stock mobile
+  /// app emits for both its contact QR and its share link. The payload is a
+  /// BARE public key, not a signed advert, so the result is an identity stub:
+  /// no path, no position, nothing the mesh has confirmed. A QR is this same
+  /// URI rendered visually, so scanning shares this parser. (#625)
+  ///
+  /// Returns null for the fork's older `meshcore://<raw advert hex>` form,
+  /// whose host is the leading hex rather than `contact`. Callers keep handling
+  /// that separately: it carries a full signed advert and is strictly richer.
+  static Contact? fromShareUri(String uri) {
+    final parsed = Uri.tryParse(uri.trim());
+    if (parsed == null || parsed.scheme != 'meshcore') return null;
+    if (parsed.host != 'contact') return null;
+    if (parsed.path.replaceAll('/', '') != 'add') return null;
+
+    final keyHex = parsed.queryParameters['public_key'];
+    if (keyHex == null || keyHex.length != pubKeySize * 2) return null;
+
+    final Uint8List publicKey;
+    try {
+      publicKey = hex2Uint8List(keyHex);
+    } on FormatException {
+      return null;
+    }
+
+    // `type` is optional; stock always emits it, but a key alone is still a
+    // usable identity. Out-of-range values are rejected rather than clamped:
+    // in a three-parameter URI an impossible type signals corruption, and
+    // silently mis-typing a contact is a user-visible defect. Widen this
+    // deliberately if the spec ever adds a type.
+    final typeRaw = parsed.queryParameters['type'];
+    int type = advTypeChat;
+    if (typeRaw != null && typeRaw.isNotEmpty) {
+      final parsedType = int.tryParse(typeRaw);
+      if (parsedType == null ||
+          parsedType < advTypeChat ||
+          parsedType > advTypeSensor) {
+        return null;
+      }
+      type = parsedType;
+    }
+
+    final name = parsed.queryParameters['name'];
+
+    return Contact(
+      publicKey: publicKey,
+      // Matches fromFrame's convention for a nameless contact.
+      name: (name == null || name.isEmpty) ? 'Unknown' : name,
+      type: type,
+      flags: 0,
+      // Flood until the mesh teaches us a path. Mirrors the firmware's
+      // OUT_PATH_UNKNOWN for a contact that has never been routed to.
+      pathLength: -1,
+      path: Uint8List(0),
+      // Deliberately the epoch, NOT DateTime.now().
+      //
+      // This maps to the firmware's `last_advert_timestamp`, which the advert
+      // handler compares with `timestamp <= last_advert_timestamp` and treats
+      // a non-greater value as a replay attack (`BaseChatMesh.cpp:142-145`).
+      // Stamping "now" would leave this contact permanently deaf to its own
+      // adverts, because advert timestamps come from the SENDER's clock and
+      // clocks in the field run years behind. Zero lets any genuine advert win
+      // and upgrade the stub in place. (#620)
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+      // No advert packet, so this contact cannot be re-shared until one
+      // arrives. The share path already gates on rawPacket.
+      rawPacket: null,
+    );
+  }
+
+  /// True if [uri] is a valid reference-app contact share URI. (#625)
+  static bool isValidShareUri(String uri) => fromShareUri(uri) != null;
+
   @override
   bool operator ==(Object other) =>
       other is Contact && publicKeyHex == other.publicKeyHex;

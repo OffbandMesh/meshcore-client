@@ -167,6 +167,8 @@ class BleDebugLogService extends ChangeNotifier {
         return 'CMD_RESET_PATH';
       case cmdRemoveContact:
         return 'CMD_REMOVE_CONTACT';
+      case cmdGetContactByKey:
+        return 'CMD_GET_CONTACT_BY_KEY';
       case cmdReboot:
         return 'CMD_REBOOT';
       case cmdGetBattAndStorage:

@@ -2,6 +2,117 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.6.0] - 2026-10-05
+
+First stable release of the 1.5.0 line and the production successor to 1.4.0. A large
+feature release: a full contacts overhaul, stock-compatible config and identity
+export/import, region radio presets, and contact-sync recovery, on top of the
+1.5.0-beta.1 groundwork (Experimental section, CoreScope, About).
+
+### Contacts
+
+- A received contact-share on a channel renders an **Add Contact** card/chip (#610).
+- **Share your contact into a channel** from a + picker (#611).
+- **Contact QR**: show your contact as a QR and scan one to add (#629).
+- **Add a contact by public key**, typed or pasted, or from a key alone with no
+  advert (#627, #628).
+- Parse and emit the **stock contact-share URI**, so contacts cross between Offband
+  and stock MeshCore (#625, #626).
+- A contact shows **how far its identity is confirmed** (#630).
+- Add, view, or block a **channel sender** from an avatar tap or long-press
+  (#565, #468).
+
+### Config and identity portability
+
+- **Stock-compatible config export and import** screens and services
+  (#572, #573, #574, #575, #576).
+- **Connector identity export/import**, with an auto-add hop limit (#578).
+
+### Radio presets
+
+- A **region-grouped preset picker** labeled by source, crediting Liam Cottle /
+  MeshCore for the upstream presets (#727, #728, #729, #731).
+- Apply a preset's path hash to a companion, observer, repeater, or room server
+  (#730, #735, #649), with the picker in repeater and room-server settings (#734).
+
+### Sync and reliability
+
+- Detect a **short contact sync** and recover it with paced, capped re-syncs and
+  by-key checks, with a banner reporting the recovered count and contacts confirmed
+  gone (#762, #763, #764, #674).
+- **Apply a remote radio setting temporarily** (tempradio) (#662).
+- Manage a **sensor like a repeater** (#745).
+- Composer byte-budget logging so a debug log can evidence the BLE composer issue
+  anywhere (#793).
+
+### Experimental and UX (from the 1.5.0-beta.1 groundwork)
+
+- An **Experimental section** unlocked by a 7-tap on the Build row; disabling it
+  clears every experimental toggle (#509, #553).
+- **OKIMesh CoreScope** (Experimental): per-packet observer counts from OKIMesh's
+  CoreScope service. Requires forthcoming Offband firmware and stays inert until
+  then (#549, #550).
+- An **About screen** in its own Settings category (#526, #527).
+- Notifications moved from a bottom SnackBar to a **top toast** (#638).
+
+### Bluetooth reliability
+
+- The composer is no longer locked by an unreported BLE MTU: the negotiated MTU is now
+  reported on Linux (#717) and Windows (via a vendored BLE plugin with live MTU
+  updates) (#686), and the floor that locked it on web is lifted (#718). A link that
+  truly cannot carry a message explains why instead of showing a dead field (#684).
+- Bounded GATT-133 connect retry with human-readable errors (#698); an unconfirmed
+  disconnect retries and warns instead of being swallowed (#697); leaked GATT handles
+  are closed (#696).
+- USB serial no longer drops bytes: mutexes initialize before the reader runs, and each
+  callback drains fully (#710, #711).
+
+### Fixes
+
+- Delivered direct messages are no longer marked failed: send correlation adopts the
+  radio's RESP_CODE_SENT ACK hash (#581).
+- A short or unreadable contact sync never overwrites saved contacts, and a silent
+  stream ends on its own (#671, #673, #672).
+- Names are no longer truncated mid-codepoint on the wire (#636).
+- Late repeater replies go to the app log, not the user's screen (#589).
+- Add-contact failures and unknown channel-sender names surface instead of a dead tap
+  (#565).
+- CoreScope distinguishes not-found from unreachable (#678); web identity rebranded
+  (#608).
+
+### Known issues
+
+- Windows BLE Disconnect can leave the radio held by the OS until replug (#688).
+
+## [1.5.0-beta.1] - 2026-08-04
+
+First beta of the 1.5.0 line, for the closed test track. Introduces an Experimental
+section (with CoreScope), an About screen, and repeater CLI and broker fixes.
+
+### Added
+
+- **Experimental section**, unlocked by a hidden 7-tap on the Build row in settings.
+  Disabling it clears all experimental toggles (#509, #553).
+- **OKIMesh CoreScope integration (Experimental).** Query how many OKIMesh CoreScope
+  observers heard each packet, over the 0xC6 protocol, with an observer/observations
+  badge, adaptive polling with backoff, and tap / long-press to refresh (#549, #550).
+  This is tied specifically to the OKIMesh CoreScope service, not a generic or
+  self-hosted backend. Requires forthcoming Offband firmware (0xC6, cap2 bit and
+  firmware ver code >= 22, tracked in #611); it stays inert on current firmware.
+- **About screen** in its own top-level Settings category, with outbound links to
+  the website, Play listing, and donate page (#526, #527).
+
+### Fixed
+
+- Repeater CLI: late replies are surfaced instead of discarded, commands get their
+  own timeout budget, the armed timeout window is reported accurately, and a
+  prefixed reply only completes the command that owns the prefix (#528, #529, #531,
+  #532, #533).
+- Broker: import never changes the broker enabled state, and a blank-field GET no
+  longer leaks the echoed key line (#469, #470).
+- Channel "Send Again" is gated on `repeatCount == 0` rather than sent status
+  (#555).
+
 ## [1.4.0] - 2026-07-30
 
 A follow-up to the 1.3.0 production launch: settings for headless devices, a
