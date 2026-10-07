@@ -5721,6 +5721,154 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  // --- Region flood-scoping + regions discovery (Feature #812, Epic #813).
+  // Frames and parsers live in meshcore_protocol.dart; this is the connector
+  // wiring, modeled on the 0xC6 pkt-hash request/reply correlation above.
+
+  /// Pending regions-discovery requests, keyed by the tag the firmware echoes
+  /// (the anon request's timestamp, returned as RESP_CODE_SENT.tag and again in
+  /// the 0x8C reply). Mirrors [_pendingPktHashCompleters].
+  final Map<int, Completer<RegionsReply?>> _pendingRegionsCompleters = {};
+  Completer<DefaultFloodScope?>? _defaultFloodScopeCompleter;
+  int _regionsTagSeq = 0;
+
+  /// Unique 32-bit tag for a regions request. The firmware treats the anon
+  /// request's timestamp purely as an echo tag, so a monotonic value avoids
+  /// collisions between back-to-back discoveries.
+  int _nextRegionsTag() {
+    final base = DateTime.now().millisecondsSinceEpoch & 0xFFFFFF;
+    return (base << 8) | (_regionsTagSeq++ & 0xFF);
+  }
+
+  /// True iff the connected firmware supports region flood-scoping + discovery.
+  bool get supportsRegionScope => firmwareSupportsRegionScope(_firmwareVerCode);
+
+  @visibleForTesting
+  void setFirmwareVerCodeForTest(int? value) => _firmwareVerCode = value;
+
+  void _guardRegionScope() {
+    if (!supportsRegionScope) {
+      throw StateError('firmware does not support region scoping');
+    }
+  }
+
+  /// Discover the flood regions a reachable repeater advertises. Sends an anon
+  /// regions request to [repeaterPubKey] (32 bytes) and awaits the 0x8C reply,
+  /// correlated by the echoed tag. Returns null on timeout. Throws [StateError]
+  /// when the firmware does not support region scoping (fail-closed; callers
+  /// gate the UI on [supportsRegionScope]).
+  Future<RegionsReply?> discoverRegions({
+    required Uint8List repeaterPubKey,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    _guardRegionScope();
+    final tag = _nextRegionsTag();
+    final completer = Completer<RegionsReply?>();
+    _pendingRegionsCompleters[tag] = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    try {
+      await sendFrame(
+        buildAnonRegionsRequestFrame(repeaterPubKey, timestamp: tag),
+      );
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn(
+        'regions discovery failed for tag $tag: $e',
+        tag: 'Region',
+      );
+      return null;
+    } finally {
+      timer.cancel();
+      _pendingRegionsCompleters.remove(tag);
+    }
+  }
+
+  /// Routes a 0x8C binary response to a waiting regions request, matched by tag.
+  /// 0x8C is a generic envelope, so a frame whose tag matches no pending regions
+  /// request is left alone (a timeout, or another handler, owns it).
+  void _handleRegionsReply(Uint8List frame) {
+    final parsed = parseRegionsReply(frame);
+    if (parsed == null) return;
+    final completer = _pendingRegionsCompleters[parsed.tag];
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(parsed);
+    }
+  }
+
+  /// Override the companion's flood send-scope with [key] (16 bytes) for
+  /// subsequent sends. (CMD 54 sub-0)
+  Future<void> setChannelSendScope(Uint8List key) async {
+    _guardRegionScope();
+    await sendFrame(buildSetFloodScopeKeyFrame(key));
+  }
+
+  /// Clear the send-scope override, reverting to the node default. (CMD 54 sub-0)
+  Future<void> clearSendScope() async {
+    _guardRegionScope();
+    await sendFrame(buildClearFloodScopeFrame());
+  }
+
+  /// Force subsequent sends unscoped. (CMD 54 sub-1)
+  Future<void> setSendUnscoped() async {
+    _guardRegionScope();
+    await sendFrame(buildFloodScopeUnscopedFrame());
+  }
+
+  /// Set the node default flood scope to ([name],[key]). (CMD 63)
+  Future<void> setDefaultFloodScope(String name, Uint8List key) async {
+    _guardRegionScope();
+    await sendFrame(buildSetDefaultFloodScopeFrame(name, key));
+  }
+
+  /// Clear the node default flood scope. (CMD 63, bare)
+  Future<void> clearDefaultFloodScope() async {
+    _guardRegionScope();
+    await sendFrame(buildClearDefaultFloodScopeFrame());
+  }
+
+  /// Query the node default flood scope. Returns null on timeout, or a
+  /// [DefaultFloodScope] whose name is empty when the node has none. (CMD 64)
+  Future<DefaultFloodScope?> getDefaultFloodScope({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    _guardRegionScope();
+    // RESP 28 carries no correlation tag, so only one query can be outstanding.
+    // Coalesce a concurrent caller onto the in-flight request (the default scope
+    // is a single global value, so they want the same answer); otherwise the
+    // second call would orphan the first's completer to a spurious timeout.
+    final inFlight = _defaultFloodScopeCompleter;
+    if (inFlight != null) return inFlight.future;
+    final completer = Completer<DefaultFloodScope?>();
+    _defaultFloodScopeCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    try {
+      await sendFrame(buildGetDefaultFloodScopeFrame());
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn('get default flood scope failed: $e', tag: 'Region');
+      return null;
+    } finally {
+      timer.cancel();
+      if (identical(_defaultFloodScopeCompleter, completer)) {
+        _defaultFloodScopeCompleter = null;
+      }
+    }
+  }
+
+  /// Routes a RESP_CODE_DEFAULT_FLOOD_SCOPE (28) reply to a waiting query.
+  void _handleDefaultFloodScopeReply(Uint8List frame) {
+    final parsed = parseDefaultFloodScopeReply(frame);
+    if (parsed == null) return;
+    final completer = _defaultFloodScopeCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(parsed);
+    }
+  }
+
   /// Ask firmware for the on-air packet hash of a channel message we sent,
   /// keyed by (ts, chan) (0xC6, #524). Returns null on timeout / error frame.
   Future<OffbandPktHash?> _queryPacketHash(
@@ -6083,6 +6231,12 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case cmdOffbandPktHash:
         _handleOffbandPktHashFrame(frame);
+        break;
+      case pushCodeBinaryResponse:
+        _handleRegionsReply(frame);
+        break;
+      case respCodeDefaultFloodScope:
+        _handleDefaultFloodScopeReply(frame);
         break;
       case respCodeOffbandDeviceUi:
         _handleDeviceUiReply(frame);
