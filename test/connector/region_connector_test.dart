@@ -167,5 +167,24 @@ void main() {
       expect(sent![0], cmdSetDefaultFloodScope);
       expect(sent!.length, 1 + 31 + 16);
     });
+
+    test('coalesces concurrent calls onto one in-flight query', () async {
+      var sends = 0;
+      connector.sendFrameOverrideForTest = (_) {
+        sends++;
+        final b = BytesBuilder()
+          ..addByte(respCodeDefaultFloodScope)
+          ..add(_padName('oki', 31))
+          ..add(Uint8List(16));
+        connector.handleFrameForTest(b.toBytes());
+      };
+      final f1 = connector.getDefaultFloodScope();
+      final f2 = connector.getDefaultFloodScope();
+      final r1 = await f1;
+      final r2 = await f2;
+      expect(sends, 1); // second caller did not emit a second frame
+      expect(r1!.name, 'oki');
+      expect(r2!.name, 'oki');
+    });
   });
 }

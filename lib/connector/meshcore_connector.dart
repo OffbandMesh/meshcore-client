@@ -5834,6 +5834,12 @@ class MeshCoreConnector extends ChangeNotifier {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     _guardRegionScope();
+    // RESP 28 carries no correlation tag, so only one query can be outstanding.
+    // Coalesce a concurrent caller onto the in-flight request (the default scope
+    // is a single global value, so they want the same answer); otherwise the
+    // second call would orphan the first's completer to a spurious timeout.
+    final inFlight = _defaultFloodScopeCompleter;
+    if (inFlight != null) return inFlight.future;
     final completer = Completer<DefaultFloodScope?>();
     _defaultFloodScopeCompleter = completer;
     final timer = Timer(timeout, () {
