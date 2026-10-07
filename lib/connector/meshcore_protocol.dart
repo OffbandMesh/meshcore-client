@@ -667,6 +667,166 @@ OffbandPktHash? parseOffbandPktHashReply(Uint8List frame) {
   return OffbandPktHash(timestamp: ts, channelIdx: chan, hashHex: hashHex);
 }
 
+// --- Region flood-scoping + regions discovery (Feature #812, Epic #813).
+//
+// Stock MeshCore companion frames, verified against firmware source:
+//  - CMD_SET_FLOOD_SCOPE_KEY 54 (companion MyMesh.cpp:3512): sub-0 sets a 16-byte
+//    send-scope override ([54,0,key16]) or clears it to the node default ([54,0]);
+//    sub-1 ([54,1]) forces unscoped sends (FIRMWARE_VER_CODE 12+).
+//  - CMD_SET_DEFAULT_FLOOD_SCOPE 63 (MyMesh.cpp:3523): [63,name:31,key:16] sets
+//    the node default, bare [63] clears it.
+//  - CMD_GET_DEFAULT_FLOOD_SCOPE 64 (MyMesh.cpp:3540) -> RESP_CODE_DEFAULT_FLOOD_SCOPE
+//    28: bare [28] = none, or [28,name:31,key:16].
+//  - Discovery is an ANON request: CMD_SEND_ANON_REQ 57 carrying
+//    [timestamp:4][ANON_REQ_TYPE_REGIONS 0x01][reply_path_len] (companion
+//    MyMesh.cpp:3114; repeater simple_repeater MyMesh.cpp:586-607,150-163). The
+//    repeater replies region names as a CSV; the companion forwards it to the app
+//    as PUSH_CODE_BINARY_RESPONSE 0x8C: [0x8C,0,tag:4,clock:4,CSV]. The tag is the
+//    request timestamp the firmware echoes in RESP_CODE_SENT.
+const int cmdSetFloodScopeKey = 54;
+const int cmdSetDefaultFloodScope = 63;
+const int cmdGetDefaultFloodScope = 64;
+const int respCodeDefaultFloodScope = 28;
+const int anonReqTypeRegions = 0x01;
+const int floodScopeSubSetKey = 0x00;
+const int floodScopeSubUnscoped = 0x01;
+
+/// Byte length of the on-wire region transport key and the default-scope name
+/// field (firmware `TransportKey::key` and `default_scope_name`).
+const int regionKeyLength = 16;
+const int defaultScopeNameField = 31;
+
+/// True iff the connected firmware supports region flood-scoping and regions
+/// discovery. Floor is `FIRMWARE_VER_CODE` 13: `CMD_SEND_ANON_REQ` accepts a
+/// non-contact repeater recipient at 13+ (companion `MyMesh.cpp:3118`), the path
+/// regions discovery relies on; `CMD_SET_FLOOD_SCOPE_KEY` sub-0 is older (8+) and
+/// sub-1 unscoped is 12+, both covered by 13. Fail-closed: the client must never
+/// emit a region frame when this is false. (#813)
+bool firmwareSupportsRegionScope(int? firmwareVerCode) =>
+    (firmwareVerCode ?? 0) >= 13;
+
+/// Regions-discovery ANON request to [repeaterPubKey] (32 bytes). Wire:
+/// `[57][pubkey32][timestamp:4 LE][0x01][reply_path_len=0]`. The firmware echoes
+/// [timestamp] as the `RESP_CODE_SENT` tag, so the caller correlates the `0x8C`
+/// reply by that tag. A zero reply-path means zero-hop direct, which the repeater
+/// requires (`isRouteDirect`) to answer a regions request.
+Uint8List buildAnonRegionsRequestFrame(
+  Uint8List repeaterPubKey, {
+  int? timestamp,
+}) {
+  final ts = timestamp ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final writer = BufferWriter();
+  writer.writeByte(cmdSendAnonReq);
+  writer.writeBytes(repeaterPubKey);
+  writer.writeUInt32LE(ts);
+  writer.writeByte(anonReqTypeRegions);
+  writer.writeByte(0); // reply_path_len = 0 (zero-hop direct)
+  return writer.toBytes();
+}
+
+/// Set the companion's flood send-scope override to [key], applied to subsequent
+/// sends until cleared. Wire: `[54][0][key16]`. (FIRMWARE_VER_CODE 8+)
+Uint8List buildSetFloodScopeKeyFrame(Uint8List key) {
+  final padded = Uint8List(regionKeyLength);
+  padded.setRange(0, min(key.length, regionKeyLength), key);
+  final writer = BufferWriter();
+  writer.writeByte(cmdSetFloodScopeKey);
+  writer.writeByte(floodScopeSubSetKey);
+  writer.writeBytes(padded);
+  return writer.toBytes();
+}
+
+/// Clear the flood send-scope override, reverting to the node default scope.
+/// Wire: `[54][0]`. (FIRMWARE_VER_CODE 8+)
+Uint8List buildClearFloodScopeFrame() =>
+    Uint8List.fromList([cmdSetFloodScopeKey, floodScopeSubSetKey]);
+
+/// Force subsequent sends unscoped (no flood scope). Wire: `[54][1]`.
+/// (FIRMWARE_VER_CODE 12+)
+Uint8List buildFloodScopeUnscopedFrame() =>
+    Uint8List.fromList([cmdSetFloodScopeKey, floodScopeSubUnscoped]);
+
+/// Set the node default flood scope to ([name],[key]). Wire:
+/// `[63][name:31 NUL-padded][key:16]`. Firmware requires a name of 1..30 bytes.
+Uint8List buildSetDefaultFloodScopeFrame(String name, Uint8List key) {
+  final padded = Uint8List(regionKeyLength);
+  padded.setRange(0, min(key.length, regionKeyLength), key);
+  final writer = BufferWriter();
+  writer.writeByte(cmdSetDefaultFloodScope);
+  writer.writeCString(name, defaultScopeNameField);
+  writer.writeBytes(padded);
+  return writer.toBytes();
+}
+
+/// Clear the node default flood scope. Wire: `[63]`.
+Uint8List buildClearDefaultFloodScopeFrame() =>
+    Uint8List.fromList([cmdSetDefaultFloodScope]);
+
+/// Query the node default flood scope. Wire: `[64]` -> RESP 28.
+Uint8List buildGetDefaultFloodScopeFrame() =>
+    Uint8List.fromList([cmdGetDefaultFloodScope]);
+
+/// A node's default flood scope, from a `RESP_CODE_DEFAULT_FLOOD_SCOPE` (28)
+/// reply. [name] is empty when the node has no default scope set.
+class DefaultFloodScope {
+  const DefaultFloodScope({required this.name, required this.key});
+  final String name;
+  final Uint8List key;
+
+  bool get isSet => name.isNotEmpty;
+}
+
+/// Parse a `RESP_CODE_DEFAULT_FLOOD_SCOPE` (28) reply. Returns null when [frame]
+/// is not a RESP 28; otherwise a [DefaultFloodScope] whose [name] is empty when
+/// the node reports no default (bare `[28]`).
+DefaultFloodScope? parseDefaultFloodScopeReply(Uint8List frame) {
+  if (frame.isEmpty || frame[0] != respCodeDefaultFloodScope) return null;
+  if (frame.length < 1 + defaultScopeNameField + regionKeyLength) {
+    return DefaultFloodScope(name: '', key: Uint8List(0));
+  }
+  final reader = BufferReader(frame);
+  reader.readByte(); // resp code
+  final name = reader.readCStringGreedy(defaultScopeNameField);
+  final key = reader.readBytes(regionKeyLength);
+  return DefaultFloodScope(name: name, key: key);
+}
+
+/// A regions-discovery reply parsed from a `PUSH_CODE_BINARY_RESPONSE` (0x8C)
+/// envelope: `[0x8C][0][tag:4][clock:4][CSV names]`. [tag] matches the
+/// `RESP_CODE_SENT` tag from [buildAnonRegionsRequestFrame]; names are
+/// `#`-stripped and comma-separated, with `*` marking a wildcard.
+class RegionsReply {
+  const RegionsReply({
+    required this.tag,
+    required this.clock,
+    required this.regionNames,
+  });
+  final int tag;
+  final int clock;
+  final List<String> regionNames;
+}
+
+/// Parse a `0x8C` frame as a regions reply. Returns null for a short or non-0x8C
+/// frame. An empty name list is a valid reply (a repeater flooding no regions),
+/// never a parse error. Callers match [RegionsReply.tag] to a request they sent;
+/// `0x8C` is a generic binary-response envelope, so only interpret it as regions
+/// for a tag that was a regions request.
+RegionsReply? parseRegionsReply(Uint8List frame) {
+  if (frame.length < 10 || frame[0] != pushCodeBinaryResponse) return null;
+  final reader = BufferReader(frame);
+  reader.readByte(); // 0x8C
+  reader.readByte(); // reserved
+  final tag = reader.readUInt32LE();
+  final clock = reader.readUInt32LE();
+  final csv = reader.readCString();
+  final names = csv
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  return RegionsReply(tag: tag, clock: clock, regionNames: names);
+}
+
 const int statsTypeCore = 0;
 const int statsTypeRadio = 1;
 const int statsTypePackets = 2;
