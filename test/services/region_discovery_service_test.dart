@@ -2,6 +2,7 @@
 // Uses an injected discoverer function as the seam, so no live connector or
 // drift codegen is needed to exercise every state.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -80,5 +81,14 @@ void main() {
     svc.reset();
     expect(svc.status, RegionDiscoveryStatus.idle);
     expect(svc.regions, isEmpty);
+  });
+
+  test('does not notify after dispose (screen popped mid-discovery)', () async {
+    final gate = Completer<RegionsReply?>();
+    final svc = RegionDiscoveryService((_, _) => gate.future);
+    final future = svc.discover(pub);
+    svc.dispose();
+    gate.complete(reply(['a']));
+    await future; // must complete without notifying the disposed notifier
   });
 }
