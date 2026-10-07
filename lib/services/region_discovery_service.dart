@@ -25,6 +25,7 @@ class RegionDiscoveryService extends ChangeNotifier {
   List<Region> _regions = const [];
   int? _clock;
   String? _errorMessage;
+  bool _disposed = false;
 
   RegionDiscoveryStatus get status => _status;
   List<Region> get regions => _regions;
@@ -47,7 +48,7 @@ class RegionDiscoveryService extends ChangeNotifier {
     _status = RegionDiscoveryStatus.loading;
     _regions = const [];
     _errorMessage = null;
-    notifyListeners();
+    _safeNotify();
 
     try {
       final reply = await _discover(repeaterPubKey, timeout);
@@ -67,7 +68,10 @@ class RegionDiscoveryService extends ChangeNotifier {
       _status = RegionDiscoveryStatus.error;
       _errorMessage = e.toString();
     }
-    notifyListeners();
+    // The screen may have been popped (and this service disposed) while the
+    // discovery future was in flight; notifying a disposed ChangeNotifier
+    // throws, so guard it.
+    _safeNotify();
   }
 
   /// Return to the idle state, clearing any prior result.
@@ -76,7 +80,17 @@ class RegionDiscoveryService extends ChangeNotifier {
     _regions = const [];
     _clock = null;
     _errorMessage = null;
-    notifyListeners();
+    _safeNotify();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
   }
 
   /// Dedupe by [Region] value-equality, preserving first-seen order.
