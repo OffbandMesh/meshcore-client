@@ -3189,5 +3189,41 @@
         "type": "int"
       }
     }
-  }
+  },
+  "discoverRegions_title": "Discover Regions",
+  "discoverRegions_subtitle": "Find the flood regions this repeater carries.",
+  "discoverRegions_loading": "Discovering regions from {name}...",
+  "@discoverRegions_loading": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_source": "Regions carried by {name}",
+  "@discoverRegions_source": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_empty": "{name} advertises no flood regions.",
+  "@discoverRegions_empty": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_timeout": "No response from {name}. The repeater may be out of range.",
+  "@discoverRegions_timeout": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_error": "Could not discover regions.",
+  "discoverRegions_retry": "Retry"
 }

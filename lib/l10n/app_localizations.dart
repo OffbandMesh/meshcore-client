@@ -8979,6 +8979,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 saved contact is no longer on the radio.} other{{count} saved contacts are no longer on the radio.}}'**
   String contactSyncConfirmedGone(int count);
+
+  /// No description provided for @discoverRegions_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover Regions'**
+  String get discoverRegions_title;
+
+  /// No description provided for @discoverRegions_subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the flood regions this repeater carries.'**
+  String get discoverRegions_subtitle;
+
+  /// No description provided for @discoverRegions_loading.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovering regions from {name}...'**
+  String discoverRegions_loading(String name);
+
+  /// No description provided for @discoverRegions_source.
+  ///
+  /// In en, this message translates to:
+  /// **'Regions carried by {name}'**
+  String discoverRegions_source(String name);
+
+  /// No description provided for @discoverRegions_empty.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} advertises no flood regions.'**
+  String discoverRegions_empty(String name);
+
+  /// No description provided for @discoverRegions_timeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No response from {name}. The repeater may be out of range.'**
+  String discoverRegions_timeout(String name);
+
+  /// No description provided for @discoverRegions_error.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not discover regions.'**
+  String get discoverRegions_error;
+
+  /// No description provided for @discoverRegions_retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get discoverRegions_retry;
 }
 
 class _AppLocalizationsDelegate
