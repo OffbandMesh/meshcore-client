@@ -5285,4 +5285,37 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get discoverRegions_title => 'Discover Regions';
+
+  @override
+  String get discoverRegions_subtitle =>
+      'Find the flood regions this repeater carries.';
+
+  @override
+  String discoverRegions_loading(String name) {
+    return 'Discovering regions from $name...';
+  }
+
+  @override
+  String discoverRegions_source(String name) {
+    return 'Regions carried by $name';
+  }
+
+  @override
+  String discoverRegions_empty(String name) {
+    return '$name advertises no flood regions.';
+  }
+
+  @override
+  String discoverRegions_timeout(String name) {
+    return 'No response from $name. The repeater may be out of range.';
+  }
+
+  @override
+  String get discoverRegions_error => 'Could not discover regions.';
+
+  @override
+  String get discoverRegions_retry => 'Retry';
 }

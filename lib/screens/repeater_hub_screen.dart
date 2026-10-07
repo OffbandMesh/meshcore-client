@@ -10,6 +10,8 @@ import 'repeater_cli_screen.dart';
 import 'repeater_settings_screen.dart';
 import 'telemetry_screen.dart';
 import 'neighbors_screen.dart';
+import 'discover_regions_screen.dart';
+import '../connector/meshcore_connector.dart';
 
 class RepeaterHubScreen extends StatelessWidget {
   final Contact repeater;
@@ -27,6 +29,7 @@ class RepeaterHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final settingsService = context.watch<AppSettingsService>();
+    final connector = context.watch<MeshCoreConnector>();
     final chemistry = settingsService.batteryChemistryForRepeater(
       repeater.publicKeyHex,
     );
@@ -262,6 +265,25 @@ class RepeaterHubScreen extends StatelessWidget {
                 );
               },
             ),
+            if (connector.supportsRegionScope) const SizedBox(height: 12),
+            // Discover Regions (firmware-gated)
+            if (connector.supportsRegionScope)
+              _buildManagementCard(
+                context,
+                icon: Icons.travel_explore,
+                title: l10n.discoverRegions_title,
+                subtitle: l10n.discoverRegions_subtitle,
+                color: Colors.teal,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          DiscoverRegionsScreen(repeater: repeater),
+                    ),
+                  );
+                },
+              ),
             if (isAdmin) const SizedBox(height: 12),
             // Settings button
             if (isAdmin)
