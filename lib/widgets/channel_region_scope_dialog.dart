@@ -39,9 +39,15 @@ class ChannelRegionScopeDialog extends StatefulWidget {
 }
 
 class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
-  late RepeaterChoice? _repeater = widget.repeaters.isEmpty
+  // Alpha-sorted once (case-insensitive), so the picker is predictable even
+  // with many repeater contacts (D1 finding: an unsorted list was unusable).
+  late final List<RepeaterChoice> _sortedRepeaters = [...widget.repeaters]
+    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+  late RepeaterChoice? _repeater = _sortedRepeaters.isEmpty
       ? null
-      : widget.repeaters.first;
+      : _sortedRepeaters.first;
+  String _repeaterFilter = '';
   late String? _selected = widget.currentScope;
 
   void _discover() {
@@ -82,16 +88,41 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
     final repeaterName = _repeater?.name ?? '';
     final children = <Widget>[];
 
-    if (widget.repeaters.isNotEmpty) {
+    if (_sortedRepeaters.isNotEmpty) {
+      final filter = _repeaterFilter.toLowerCase();
+      final filtered = _sortedRepeaters
+          .where((r) => r.name.toLowerCase().contains(filter))
+          .toList();
       children.add(
-        DropdownButton<RepeaterChoice>(
-          isExpanded: true,
-          value: _repeater,
-          items: [
-            for (final r in widget.repeaters)
-              DropdownMenuItem(value: r, child: Text(r.name)),
-          ],
-          onChanged: (v) => setState(() => _repeater = v),
+        TextField(
+          key: const Key('regionScopeRepeaterSearch'),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search),
+            hintText: l10n.setRegionScope_searchRepeaters,
+          ),
+          onChanged: (v) => setState(() => _repeaterFilter = v),
+        ),
+      );
+      children.add(
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 180),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final r in filtered)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.cell_tower),
+                  title: Text(r.name),
+                  trailing: identical(r, _repeater)
+                      ? const Icon(Icons.check)
+                      : null,
+                  selected: identical(r, _repeater),
+                  onTap: () => setState(() => _repeater = r),
+                ),
+            ],
+          ),
         ),
       );
       children.add(
@@ -101,10 +132,13 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
             key: const Key('regionScopeDiscover'),
             icon: const Icon(Icons.travel_explore),
             label: Text(l10n.setRegionScope_discover),
-            onPressed: widget.service.isLoading ? null : _discover,
+            onPressed: (widget.service.isLoading || _repeater == null)
+                ? null
+                : _discover,
           ),
         ),
       );
+      children.add(const Divider(height: 1));
     }
 
     switch (widget.service.status) {
@@ -139,10 +173,12 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
     );
 
     // Current scope first (so it stays visible even before a re-discovery),
-    // then the freshly discovered regions, deduped by name.
+    // then the discovered regions, alpha-sorted, deduped by name.
     final names = <String>{};
     if (widget.currentScope != null) names.add(widget.currentScope!);
-    names.addAll(widget.service.regions.map((r) => r.name));
+    final discovered = widget.service.regions.map((r) => r.name).toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    names.addAll(discovered);
     for (final name in names) {
       children.add(
         ListTile(
