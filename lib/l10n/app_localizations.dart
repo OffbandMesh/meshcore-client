@@ -9027,6 +9027,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get discoverRegions_retry;
+
+  /// No description provided for @setRegionScope_menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Region Scope'**
+  String get setRegionScope_menu;
+
+  /// No description provided for @setRegionScope_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Region scope for {channel}'**
+  String setRegionScope_title(String channel);
+
+  /// No description provided for @setRegionScope_discover.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover from repeater'**
+  String get setRegionScope_discover;
+
+  /// No description provided for @setRegionScope_none.
+  ///
+  /// In en, this message translates to:
+  /// **'None (unscoped)'**
+  String get setRegionScope_none;
+
+  /// No description provided for @setRegionScope_save.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get setRegionScope_save;
 }
 
 class _AppLocalizationsDelegate

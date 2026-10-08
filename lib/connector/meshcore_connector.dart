@@ -60,6 +60,8 @@ import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
 import 'meshcore_protocol.dart';
+import '../helpers/region_key.dart';
+import '../storage/channel_region_scope_store.dart';
 import 'offband_device_ui.dart';
 import 'caplog_reassembler.dart';
 
@@ -552,6 +554,8 @@ class MeshCoreConnector extends ChangeNotifier {
   final MessageStore _messageStore = MessageStore();
   final ChannelOrderStore _channelOrderStore = ChannelOrderStore();
   final ChannelSettingsStore _channelSettingsStore = ChannelSettingsStore();
+  final ChannelRegionScopeStore _channelRegionScopeStore =
+      ChannelRegionScopeStore();
   final ContactSettingsStore _contactSettingsStore = ContactSettingsStore();
   final ContactStore _contactStore = ContactStore();
   final ContactDiscoveryStore _discoveryContactStore = ContactDiscoveryStore();
@@ -4687,7 +4691,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _pendingChannelSentQueue.add(reactionQueueId);
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
       try {
-        await sendFrame(
+        await _sendChannelFrameScoped(
+          channel.index,
           buildSendChannelTextMsgFrame(
             channel.index,
             text,
@@ -4729,7 +4734,8 @@ class MeshCoreConnector extends ChangeNotifier {
     final outboundText = prepareChannelOutboundText(channel.index, text);
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
     try {
-      await sendFrame(
+      await _sendChannelFrameScoped(
+        channel.index,
         buildSendChannelTextMsgFrame(
           channel.index,
           outboundText,
@@ -4756,6 +4762,86 @@ class MeshCoreConnector extends ChangeNotifier {
       _markChannelMessageFailed(channel.index, message.messageId);
       appLogger.error('Failed to send channel message: $e', tag: 'Connector');
     }
+  }
+
+  /// Send a channel frame, applying the channel's region scope on the wire if
+  /// one is configured (Feature #812, Epic #815). Fail-closed: a scoped channel
+  /// on firmware that cannot scope is blocked, never sent unscoped; the scope is
+  /// set before the send and cleared to the node default after.
+  Future<void> _sendChannelFrameScoped(
+    int channelIndex,
+    Uint8List frame, {
+    String? channelSendQueueId,
+    bool expectsGenericAck = false,
+  }) async {
+    final regionName = await _channelRegionScopeStore.scopeFor(channelIndex);
+    if (regionName == null) {
+      await sendFrame(
+        frame,
+        channelSendQueueId: channelSendQueueId,
+        expectsGenericAck: expectsGenericAck,
+      );
+      return;
+    }
+    if (!supportsRegionScope) {
+      throw StateError(
+        'channel $channelIndex is region-scoped to "$regionName" but the '
+        'firmware does not support region scoping',
+      );
+    }
+    final key = transportKeyForName(regionName);
+    if (key == null) {
+      throw StateError(
+        'cannot derive a transport key for region "$regionName"',
+      );
+    }
+    try {
+      // Inside the try so a lost ack on the set (the firmware may already have
+      // applied the scope) still runs the clear below, rather than leaking the
+      // scope onto the next unscoped send.
+      await setChannelSendScope(key);
+      await sendFrame(
+        frame,
+        channelSendQueueId: channelSendQueueId,
+        expectsGenericAck: expectsGenericAck,
+      );
+    } finally {
+      try {
+        await clearSendScope();
+      } catch (e) {
+        appLogger.warn(
+          'failed to clear region send-scope after a channel send: $e',
+          tag: 'Region',
+        );
+      }
+    }
+  }
+
+  @visibleForTesting
+  ChannelRegionScopeStore get channelRegionScopeStoreForTest =>
+      _channelRegionScopeStore;
+
+  @visibleForTesting
+  Future<void> sendChannelFrameScopedForTest(
+    int channelIndex,
+    Uint8List frame,
+  ) => _sendChannelFrameScoped(channelIndex, frame);
+
+  /// The region name scoping [channelIndex], or null when unscoped (#815).
+  Future<String?> channelRegionScope(int channelIndex) =>
+      _channelRegionScopeStore.scopeFor(channelIndex);
+
+  /// Set (or, with null, clear) the region scope for [channelIndex] (#815).
+  Future<void> setChannelRegionScope(
+    int channelIndex,
+    String? regionName,
+  ) async {
+    if (regionName == null) {
+      await _channelRegionScopeStore.clearScope(channelIndex);
+    } else {
+      await _channelRegionScopeStore.setScope(channelIndex, regionName);
+    }
+    notifyListeners();
   }
 
   Future<void> removeContact(Contact contact) async {
@@ -6590,6 +6676,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelOrderStore.setPublicKeyHex = selfPublicKeyHex;
     _channelSettingsStore.setPublicKeyHex = selfPublicKeyHex;
+    _channelRegionScopeStore.setPublicKeyHex = selfPublicKeyHex;
     _contactSettingsStore.setPublicKeyHex = selfPublicKeyHex;
     _contactStore.setPublicKeyHex = selfPublicKeyHex;
     _channelStore.setPublicKeyHex = selfPublicKeyHex;

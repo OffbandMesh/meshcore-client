@@ -28,6 +28,8 @@ import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
 import '../services/corescope_service.dart';
+import '../services/region_discovery_service.dart';
+import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
@@ -320,6 +322,37 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// Open the Set Region Scope picker for the current channel (#815).
+  Future<void> _openRegionScopeDialog() async {
+    final connector = context.read<MeshCoreConnector>();
+    final channelIndex = _currentChannel.index;
+    final current = await connector.channelRegionScope(channelIndex);
+    final repeaters = connector.contacts
+        .where((c) => c.type == advTypeRepeater)
+        .map((c) => RepeaterChoice(name: c.name, pubKey: c.publicKey))
+        .toList();
+    final service = RegionDiscoveryService(
+      (pub, timeout) =>
+          connector.discoverRegions(repeaterPubKey: pub, timeout: timeout),
+    );
+    if (!mounted) {
+      service.dispose();
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => ChannelRegionScopeDialog(
+        channelName: _currentChannel.name,
+        currentScope: current,
+        repeaters: repeaters,
+        service: service,
+        onSave: (region) =>
+            connector.setChannelRegionScope(channelIndex, region),
+      ),
+    );
+    service.dispose();
+  }
+
   /// Switch to another channel picked from the nav panel.
   ///
   /// Swaps the conversation in place rather than pushing a route, so a pinned
@@ -435,6 +468,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
                   _currentChannel.index,
                 );
+              } else if (value == 'setRegionScope') {
+                _openRegionScopeDialog();
               }
             },
             itemBuilder: (context) => [
@@ -456,6 +491,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   ],
                 ),
               ),
+              if (context.read<MeshCoreConnector>().supportsRegionScope)
+                PopupMenuItem(
+                  value: 'setRegionScope',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.travel_explore, size: 20),
+                      const SizedBox(width: 12),
+                      Text(context.l10n.setRegionScope_menu),
+                    ],
+                  ),
+                ),
               PopupMenuItem(
                 value: 'clearChat',
                 child: Row(
