@@ -5330,4 +5330,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get setRegionScope_save => 'Save';
+
+  @override
+  String get setRegionScope_searchRepeaters => 'Search repeaters';
 }

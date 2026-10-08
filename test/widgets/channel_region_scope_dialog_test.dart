@@ -75,4 +75,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isNull);
   });
+
+  testWidgets('repeaters are alpha-sorted and searchable', (tester) async {
+    final many = [
+      RepeaterChoice(name: 'Zephyr', pubKey: Uint8List(32)),
+      RepeaterChoice(name: 'alpha-rptr', pubKey: Uint8List(32)),
+      RepeaterChoice(name: 'Mike', pubKey: Uint8List(32)),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ChannelRegionScopeDialog(
+            channelName: 'general',
+            currentScope: null,
+            repeaters: many,
+            service: RegionDiscoveryService((_, _) async => reply([])),
+            onSave: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Case-insensitive alpha order: alpha-rptr, Mike, Zephyr.
+    final yAlpha = tester.getTopLeft(find.text('alpha-rptr')).dy;
+    final yMike = tester.getTopLeft(find.text('Mike')).dy;
+    final yZephyr = tester.getTopLeft(find.text('Zephyr')).dy;
+    expect(yAlpha < yMike && yMike < yZephyr, isTrue);
+    // The search box filters the list.
+    await tester.enterText(
+      find.byKey(const Key('regionScopeRepeaterSearch')),
+      'mik',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Mike'), findsOneWidget);
+    expect(find.text('Zephyr'), findsNothing);
+    expect(find.text('alpha-rptr'), findsNothing);
+  });
 }

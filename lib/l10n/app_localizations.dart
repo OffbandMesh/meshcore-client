@@ -9057,6 +9057,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save'**
   String get setRegionScope_save;
+
+  /// No description provided for @setRegionScope_searchRepeaters.
+  ///
+  /// In en, this message translates to:
+  /// **'Search repeaters'**
+  String get setRegionScope_searchRepeaters;
 }
 
 class _AppLocalizationsDelegate
