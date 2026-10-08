@@ -705,22 +705,24 @@ const int defaultScopeNameField = 31;
 bool firmwareSupportsRegionScope(int? firmwareVerCode) =>
     (firmwareVerCode ?? 0) >= 13;
 
-/// Regions-discovery ANON request to [repeaterPubKey] (32 bytes). Wire:
-/// `[57][pubkey32][timestamp:4 LE][0x01][reply_path_len=0]`. The firmware echoes
-/// [timestamp] as the `RESP_CODE_SENT` tag, so the caller correlates the `0x8C`
-/// reply by that tag. A zero reply-path means zero-hop direct, which the repeater
-/// requires (`isRouteDirect`) to answer a regions request.
-Uint8List buildAnonRegionsRequestFrame(
-  Uint8List repeaterPubKey, {
-  int? timestamp,
-}) {
-  final ts = timestamp ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+/// Regions-discovery ANON request to [repeaterPubKey] (32 bytes). Wire after
+/// the pubkey: `[ANON_REQ_TYPE_REGIONS 0x01][reply_path_len]`.
+///
+/// The firmware's `sendAnonReq` (BaseChatMesh) prepends its OWN 4-byte tag to
+/// this payload before transmit, and returns that tag in `RESP_CODE_SENT`; the
+/// repeater echoes it in the `0x8C` reply. So the client must NOT add a
+/// timestamp/tag here: doing so shifts the request-type byte and the repeater
+/// reads it as a login request, never regions (D1 bug, #836). Correlate the
+/// reply by the `RESP_CODE_SENT` tag, not a client value.
+///
+/// `reply_path_len = 0` asks the repeater to reply zero-hop, which fits a
+/// directly reachable repeater; a multi-hop return path is not yet supported.
+Uint8List buildAnonRegionsRequestFrame(Uint8List repeaterPubKey) {
   final writer = BufferWriter();
   writer.writeByte(cmdSendAnonReq);
   writer.writeBytes(repeaterPubKey);
-  writer.writeUInt32LE(ts);
   writer.writeByte(anonReqTypeRegions);
-  writer.writeByte(0); // reply_path_len = 0 (zero-hop direct)
+  writer.writeByte(0); // reply_path_len = 0 (zero-hop reply)
   return writer.toBytes();
 }
 
@@ -793,7 +795,7 @@ DefaultFloodScope? parseDefaultFloodScopeReply(Uint8List frame) {
 
 /// A regions-discovery reply parsed from a `PUSH_CODE_BINARY_RESPONSE` (0x8C)
 /// envelope: `[0x8C][0][tag:4][clock:4][CSV names]`. [tag] matches the
-/// `RESP_CODE_SENT` tag from [buildAnonRegionsRequestFrame]; names are
+/// firmware-chosen tag returned in `RESP_CODE_SENT` for the request; names are
 /// `#`-stripped and comma-separated, with `*` marking a wildcard.
 class RegionsReply {
   const RegionsReply({
