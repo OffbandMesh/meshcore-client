@@ -9063,6 +9063,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search repeaters'**
   String get setRegionScope_searchRepeaters;
+
+  /// No description provided for @setRegionScope_pathNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You can only discover regions from a repeater you have a stored path to.'**
+  String get setRegionScope_pathNote;
+
+  /// No description provided for @setRegionScope_noPath.
+  ///
+  /// In en, this message translates to:
+  /// **'No stored path'**
+  String get setRegionScope_noPath;
 }
 
 class _AppLocalizationsDelegate

@@ -329,7 +329,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     final current = await connector.channelRegionScope(channelIndex);
     final repeaters = connector.contacts
         .where((c) => c.type == advTypeRepeater)
-        .map((c) => RepeaterChoice(name: c.name, pubKey: c.publicKey))
+        .map(
+          (c) => RepeaterChoice(
+            name: c.name,
+            pubKey: c.publicKey,
+            hasPath: c.pathLength >= 0 && c.path.isNotEmpty,
+          ),
+        )
         .toList();
     final service = RegionDiscoveryService(
       (pub, timeout) =>
