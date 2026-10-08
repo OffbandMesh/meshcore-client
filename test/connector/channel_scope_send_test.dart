@@ -69,4 +69,19 @@ void main() {
       expect(sent, isEmpty);
     },
   );
+
+  test('a failed set-scope still attempts a clear (no scope leak)', () async {
+    await connector.channelRegionScopeStoreForTest.setScope(0, 'oki');
+    var calls = 0;
+    connector.sendFrameOverrideForTest = (_) {
+      calls++;
+      if (calls == 1) throw Exception('lost ack on set-scope');
+    };
+    await expectLater(
+      connector.sendChannelFrameScopedForTest(0, frame),
+      throwsA(isA<Exception>()),
+    );
+    // call 1 = set-scope (threw); call 2 = clear-scope run from the finally.
+    expect(calls, 2);
+  });
 }

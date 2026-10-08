@@ -4795,8 +4795,11 @@ class MeshCoreConnector extends ChangeNotifier {
         'cannot derive a transport key for region "$regionName"',
       );
     }
-    await setChannelSendScope(key);
     try {
+      // Inside the try so a lost ack on the set (the firmware may already have
+      // applied the scope) still runs the clear below, rather than leaking the
+      // scope onto the next unscoped send.
+      await setChannelSendScope(key);
       await sendFrame(
         frame,
         channelSendQueueId: channelSendQueueId,
