@@ -4824,6 +4824,23 @@ class MeshCoreConnector extends ChangeNotifier {
     Uint8List frame,
   ) => _sendChannelFrameScoped(channelIndex, frame);
 
+  /// The region name scoping [channelIndex], or null when unscoped (#815).
+  Future<String?> channelRegionScope(int channelIndex) =>
+      _channelRegionScopeStore.scopeFor(channelIndex);
+
+  /// Set (or, with null, clear) the region scope for [channelIndex] (#815).
+  Future<void> setChannelRegionScope(
+    int channelIndex,
+    String? regionName,
+  ) async {
+    if (regionName == null) {
+      await _channelRegionScopeStore.clearScope(channelIndex);
+    } else {
+      await _channelRegionScopeStore.setScope(channelIndex, regionName);
+    }
+    notifyListeners();
+  }
+
   Future<void> removeContact(Contact contact) async {
     if (!isConnected) return;
 

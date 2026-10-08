@@ -5338,4 +5338,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get discoverRegions_retry => 'Retry';
+
+  @override
+  String get setRegionScope_menu => 'Set Region Scope';
+
+  @override
+  String setRegionScope_title(String channel) {
+    return 'Region scope for $channel';
+  }
+
+  @override
+  String get setRegionScope_discover => 'Discover from repeater';
+
+  @override
+  String get setRegionScope_none => 'None (unscoped)';
+
+  @override
+  String get setRegionScope_save => 'Save';
 }
