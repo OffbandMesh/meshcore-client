@@ -3225,5 +3225,17 @@
     }
   },
   "discoverRegions_error": "Could not discover regions.",
-  "discoverRegions_retry": "Retry"
+  "discoverRegions_retry": "Retry",
+  "setRegionScope_menu": "Set Region Scope",
+  "setRegionScope_title": "Region scope for {channel}",
+  "@setRegionScope_title": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "setRegionScope_discover": "Discover from repeater",
+  "setRegionScope_none": "None (unscoped)",
+  "setRegionScope_save": "Save"
 }
