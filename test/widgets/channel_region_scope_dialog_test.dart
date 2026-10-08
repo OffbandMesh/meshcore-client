@@ -113,4 +113,46 @@ void main() {
     expect(find.text('Zephyr'), findsNothing);
     expect(find.text('alpha-rptr'), findsNothing);
   });
+
+  testWidgets(
+    'pathless repeaters are hidden by default, greyed + non-selectable on search',
+    (tester) async {
+      final repeaters = [
+        RepeaterChoice(name: 'HasPath', pubKey: Uint8List(32)),
+        RepeaterChoice(name: 'NoPath', pubKey: Uint8List(32), hasPath: false),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ChannelRegionScopeDialog(
+              channelName: 'general',
+              currentScope: null,
+              repeaters: repeaters,
+              service: RegionDiscoveryService((_, _) async => reply([])),
+              onSave: (_) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Default: only the path-having repeater is listed (scope to ListTile,
+      // since the search field can also hold the typed text).
+      expect(find.widgetWithText(ListTile, 'HasPath'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'NoPath'), findsNothing);
+      // Search surfaces the pathless one, labeled and disabled.
+      await tester.enterText(
+        find.byKey(const Key('regionScopeRepeaterSearch')),
+        'NoPath',
+      );
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ListTile, 'NoPath'), findsOneWidget);
+      expect(find.text('No stored path'), findsOneWidget);
+      final tile = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'NoPath'),
+      );
+      expect(tile.enabled, isFalse);
+    },
+  );
 }

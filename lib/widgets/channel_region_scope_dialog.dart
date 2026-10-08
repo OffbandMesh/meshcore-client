@@ -7,10 +7,18 @@ import '../l10n/l10n.dart';
 import '../services/region_discovery_service.dart';
 
 /// A repeater the user can discover regions from (name + 32-byte key).
+/// [hasPath] is whether a stored path to it exists; without one the companion
+/// can only flood the request and the repeater ignores it, so it cannot be
+/// selected.
 class RepeaterChoice {
-  const RepeaterChoice({required this.name, required this.pubKey});
+  const RepeaterChoice({
+    required this.name,
+    required this.pubKey,
+    this.hasPath = true,
+  });
   final String name;
   final Uint8List pubKey;
+  final bool hasPath;
 }
 
 /// Pick the flood region a channel's outgoing messages ride (Feature #812,
@@ -44,15 +52,22 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
   late final List<RepeaterChoice> _sortedRepeaters = [...widget.repeaters]
     ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-  late RepeaterChoice? _repeater = _sortedRepeaters.isEmpty
-      ? null
-      : _sortedRepeaters.first;
+  late RepeaterChoice? _repeater = _firstWithPath();
   String _repeaterFilter = '';
   late String? _selected = widget.currentScope;
 
+  RepeaterChoice? _firstWithPath() {
+    for (final r in _sortedRepeaters) {
+      if (r.hasPath) return r;
+    }
+    return null;
+  }
+
   void _discover() {
     final repeater = _repeater;
-    if (repeater != null) widget.service.discover(repeater.pubKey);
+    if (repeater != null && repeater.hasPath) {
+      widget.service.discover(repeater.pubKey);
+    }
   }
 
   @override
@@ -90,9 +105,24 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
 
     if (_sortedRepeaters.isNotEmpty) {
       final filter = _repeaterFilter.toLowerCase();
-      final filtered = _sortedRepeaters
-          .where((r) => r.name.toLowerCase().contains(filter))
-          .toList();
+      final searching = filter.isNotEmpty;
+      // Default view shows only repeaters with a stored path (the only ones
+      // that can answer). A search surfaces pathless matches too, but greyed
+      // out and non-selectable, so the user sees it exists and why it is
+      // blocked (D1 Option 1).
+      final filtered = _sortedRepeaters.where((r) {
+        if (!r.name.toLowerCase().contains(filter)) return false;
+        return searching || r.hasPath;
+      }).toList();
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            l10n.setRegionScope_pathNote,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      );
       children.add(
         TextField(
           key: const Key('regionScopeRepeaterSearch'),
@@ -113,13 +143,15 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
               for (final r in filtered)
                 ListTile(
                   dense: true,
+                  enabled: r.hasPath,
                   leading: const Icon(Icons.cell_tower),
                   title: Text(r.name),
+                  subtitle: r.hasPath ? null : Text(l10n.setRegionScope_noPath),
                   trailing: identical(r, _repeater)
                       ? const Icon(Icons.check)
                       : null,
                   selected: identical(r, _repeater),
-                  onTap: () => setState(() => _repeater = r),
+                  onTap: r.hasPath ? () => setState(() => _repeater = r) : null,
                 ),
             ],
           ),
@@ -132,7 +164,10 @@ class _ChannelRegionScopeDialogState extends State<ChannelRegionScopeDialog> {
             key: const Key('regionScopeDiscover'),
             icon: const Icon(Icons.travel_explore),
             label: Text(l10n.setRegionScope_discover),
-            onPressed: (widget.service.isLoading || _repeater == null)
+            onPressed:
+                (widget.service.isLoading ||
+                    _repeater == null ||
+                    !_repeater!.hasPath)
                 ? null
                 : _discover,
           ),

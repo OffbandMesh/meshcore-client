@@ -5335,4 +5335,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get setRegionScope_searchRepeaters => 'Search repeaters';
+
+  @override
+  String get setRegionScope_pathNote =>
+      'You can only discover regions from a repeater you have a stored path to.';
+
+  @override
+  String get setRegionScope_noPath => 'No stored path';
 }

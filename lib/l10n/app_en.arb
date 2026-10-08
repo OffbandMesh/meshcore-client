@@ -3238,5 +3238,7 @@
   "setRegionScope_discover": "Discover from repeater",
   "setRegionScope_none": "None (unscoped)",
   "setRegionScope_save": "Save",
-  "setRegionScope_searchRepeaters": "Search repeaters"
+  "setRegionScope_searchRepeaters": "Search repeaters",
+  "setRegionScope_pathNote": "You can only discover regions from a repeater you have a stored path to.",
+  "setRegionScope_noPath": "No stored path"
 }
