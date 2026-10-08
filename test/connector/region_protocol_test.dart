@@ -14,16 +14,20 @@ Uint8List _key16(int seed) =>
 
 void main() {
   group('buildAnonRegionsRequestFrame', () {
-    test('[57][pubkey32][ts4 LE][0x01][reply_path_len=0]', () {
-      final pub = Uint8List.fromList(List<int>.generate(32, (i) => i + 1));
-      final frame = buildAnonRegionsRequestFrame(pub, timestamp: 0x11223344);
-      expect(frame.length, 1 + 32 + 4 + 1 + 1);
-      expect(frame[0], cmdSendAnonReq);
-      expect(frame.sublist(1, 33), pub);
-      expect(frame.sublist(33, 37), [0x44, 0x33, 0x22, 0x11]); // LE timestamp
-      expect(frame[37], anonReqTypeRegions);
-      expect(frame[38], 0); // zero reply-path = zero-hop direct
-    });
+    test(
+      '[57][pubkey32][0x01][reply_path_len=0] (firmware prepends the tag)',
+      () {
+        final pub = Uint8List.fromList(List<int>.generate(32, (i) => i + 1));
+        final frame = buildAnonRegionsRequestFrame(pub);
+        // No client timestamp: BaseChatMesh.sendAnonReq prepends the 4-byte tag,
+        // so the type byte must sit immediately after the 32-byte pubkey (#836).
+        expect(frame.length, 1 + 32 + 1 + 1);
+        expect(frame[0], cmdSendAnonReq);
+        expect(frame.sublist(1, 33), pub);
+        expect(frame[33], anonReqTypeRegions);
+        expect(frame[34], 0); // reply_path_len = 0 (zero-hop reply)
+      },
+    );
   });
 
   group('flood-scope key frames', () {

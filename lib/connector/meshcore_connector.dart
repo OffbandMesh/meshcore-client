@@ -5811,20 +5811,7 @@ class MeshCoreConnector extends ChangeNotifier {
   // Frames and parsers live in meshcore_protocol.dart; this is the connector
   // wiring, modeled on the 0xC6 pkt-hash request/reply correlation above.
 
-  /// Pending regions-discovery requests, keyed by the tag the firmware echoes
-  /// (the anon request's timestamp, returned as RESP_CODE_SENT.tag and again in
-  /// the 0x8C reply). Mirrors [_pendingPktHashCompleters].
-  final Map<int, Completer<RegionsReply?>> _pendingRegionsCompleters = {};
   Completer<DefaultFloodScope?>? _defaultFloodScopeCompleter;
-  int _regionsTagSeq = 0;
-
-  /// Unique 32-bit tag for a regions request. The firmware treats the anon
-  /// request's timestamp purely as an echo tag, so a monotonic value avoids
-  /// collisions between back-to-back discoveries.
-  int _nextRegionsTag() {
-    final base = DateTime.now().millisecondsSinceEpoch & 0xFFFFFF;
-    return (base << 8) | (_regionsTagSeq++ & 0xFF);
-  }
 
   /// True iff the connected firmware supports region flood-scoping + discovery.
   bool get supportsRegionScope => firmwareSupportsRegionScope(_firmwareVerCode);
@@ -5839,47 +5826,46 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   /// Discover the flood regions a reachable repeater advertises. Sends an anon
-  /// regions request to [repeaterPubKey] (32 bytes) and awaits the 0x8C reply,
-  /// correlated by the echoed tag. Returns null on timeout. Throws [StateError]
-  /// when the firmware does not support region scoping (fail-closed; callers
-  /// gate the UI on [supportsRegionScope]).
+  /// regions request to [repeaterPubKey] (32 bytes).
+  ///
+  /// Correlation: the firmware generates the anon-request tag and returns it in
+  /// the `RESP_CODE_SENT` ack; the repeater echoes that same tag in its `0x8C`
+  /// reply. So we learn the tag from the ack that follows our send, then match
+  /// the `0x8C` by it (the client cannot pick the tag, #836). Returns null on
+  /// timeout. Throws [StateError] when the firmware does not support region
+  /// scoping (fail-closed; callers gate the UI on [supportsRegionScope]).
   Future<RegionsReply?> discoverRegions({
     required Uint8List repeaterPubKey,
     Duration timeout = const Duration(seconds: 10),
   }) async {
     _guardRegionScope();
-    final tag = _nextRegionsTag();
     final completer = Completer<RegionsReply?>();
-    _pendingRegionsCompleters[tag] = completer;
-    final timer = Timer(timeout, () {
-      if (!completer.isCompleted) completer.complete(null);
+    int? tag; // firmware tag, learned from the RESP_CODE_SENT after we send
+    void finish(RegionsReply? reply) {
+      if (!completer.isCompleted) completer.complete(reply);
+    }
+
+    final sub = receivedFrames.listen((frame) {
+      if (frame.isEmpty) return;
+      if (tag == null && frame[0] == respCodeSent && frame.length >= 6) {
+        tag = readUint32LE(frame, 2);
+        return;
+      }
+      if (tag != null && frame[0] == pushCodeBinaryResponse) {
+        final reply = parseRegionsReply(frame);
+        if (reply != null && reply.tag == tag) finish(reply);
+      }
     });
+    final timer = Timer(timeout, () => finish(null));
     try {
-      await sendFrame(
-        buildAnonRegionsRequestFrame(repeaterPubKey, timestamp: tag),
-      );
+      await sendFrame(buildAnonRegionsRequestFrame(repeaterPubKey));
       return await completer.future;
     } catch (e) {
-      appLogger.warn(
-        'regions discovery failed for tag $tag: $e',
-        tag: 'Region',
-      );
+      appLogger.warn('regions discovery failed: $e', tag: 'Region');
       return null;
     } finally {
       timer.cancel();
-      _pendingRegionsCompleters.remove(tag);
-    }
-  }
-
-  /// Routes a 0x8C binary response to a waiting regions request, matched by tag.
-  /// 0x8C is a generic envelope, so a frame whose tag matches no pending regions
-  /// request is left alone (a timeout, or another handler, owns it).
-  void _handleRegionsReply(Uint8List frame) {
-    final parsed = parseRegionsReply(frame);
-    if (parsed == null) return;
-    final completer = _pendingRegionsCompleters[parsed.tag];
-    if (completer != null && !completer.isCompleted) {
-      completer.complete(parsed);
+      await sub.cancel();
     }
   }
 
@@ -6317,9 +6303,6 @@ class MeshCoreConnector extends ChangeNotifier {
         break;
       case cmdOffbandPktHash:
         _handleOffbandPktHashFrame(frame);
-        break;
-      case pushCodeBinaryResponse:
-        _handleRegionsReply(frame);
         break;
       case respCodeDefaultFloodScope:
         _handleDefaultFloodScopeReply(frame);

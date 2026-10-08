@@ -25,14 +25,19 @@ Uint8List _padName(String name, int len) {
   return b;
 }
 
-// Build the 0x8C reply a repeater would elicit for a given outgoing request,
-// echoing the request's tag (bytes 33..37 of the CMD_SEND_ANON_REQ frame).
-Uint8List _regionsReplyFor(
-  Uint8List req, {
-  required int clock,
-  required String csv,
-}) {
-  final tag = ByteData.sublistView(req, 33, 37).getUint32(0, Endian.little);
+// The firmware's send ack: [RESP_CODE_SENT][flood][tag:4 LE][est:4]. The tag is
+// the firmware-chosen anon-req tag the repeater echoes in its 0x8C reply.
+Uint8List _respSent(int tag) {
+  final b = BytesBuilder()
+    ..addByte(respCodeSent)
+    ..addByte(0)
+    ..add(_u32le(tag))
+    ..add(_u32le(0));
+  return b.toBytes();
+}
+
+// The repeater's 0x8C regions reply: [0x8C][0][tag:4][clock:4][CSV].
+Uint8List _regionsReply(int tag, {required int clock, required String csv}) {
   final b = BytesBuilder()
     ..addByte(pushCodeBinaryResponse)
     ..addByte(0)
@@ -63,14 +68,16 @@ void main() {
         Uint8List? sent;
         connector.sendFrameOverrideForTest = (data) {
           sent = data;
+          // Firmware ack carries the tag; the repeater's 0x8C echoes it.
+          connector.handleFrameForTest(_respSent(0xAABBCCDD));
           connector.handleFrameForTest(
-            _regionsReplyFor(data, clock: 0x01020304, csv: 'oki,test,*'),
+            _regionsReply(0xAABBCCDD, clock: 0x01020304, csv: 'oki,test,*'),
           );
         };
         final reply = await connector.discoverRegions(repeaterPubKey: pub);
         expect(sent, isNotNull);
         expect(sent![0], cmdSendAnonReq);
-        expect(sent![37], anonReqTypeRegions);
+        expect(sent![33], anonReqTypeRegions); // type right after the pubkey
         expect(reply, isNotNull);
         expect(reply!.regionNames, ['oki', 'test', '*']);
         expect(reply.clock, 0x01020304);
@@ -90,13 +97,11 @@ void main() {
       'a 0x8C with a non-matching tag never satisfies the request',
       () async {
         connector.sendFrameOverrideForTest = (_) {
-          final b = BytesBuilder()
-            ..addByte(pushCodeBinaryResponse)
-            ..addByte(0)
-            ..add(_u32le(0xFFFFFFFF))
-            ..add(_u32le(1))
-            ..add(Uint8List.fromList([...'zzz'.codeUnits, 0]));
-          connector.handleFrameForTest(b.toBytes());
+          // Ack says tag A, but the 0x8C carries a different tag -> no match.
+          connector.handleFrameForTest(_respSent(0x11111111));
+          connector.handleFrameForTest(
+            _regionsReply(0x22222222, clock: 1, csv: 'zzz'),
+          );
         };
         final reply = await connector.discoverRegions(
           repeaterPubKey: pub,
