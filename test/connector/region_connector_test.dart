@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
+import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -118,6 +119,32 @@ void main() {
         connector.discoverRegions(repeaterPubKey: pub),
         throwsStateError,
       );
+    });
+
+    test('uses the repeater contact path as the reply path', () async {
+      final pk = Uint8List.fromList(List<int>.generate(32, (i) => 0x40 + i));
+      connector.contactsForTest.add(
+        Contact(
+          publicKey: pk,
+          name: 'rpt',
+          type: advTypeRepeater,
+          pathLength: 2,
+          pathHashWidth: 1,
+          path: Uint8List.fromList([0xAA, 0xBB]),
+          lastSeen: DateTime(2026),
+        ),
+      );
+      Uint8List? sent;
+      connector.sendFrameOverrideForTest = (data) {
+        sent = data;
+        connector.handleFrameForTest(_respSent(0x55));
+        connector.handleFrameForTest(_regionsReply(0x55, clock: 1, csv: 'oki'));
+      };
+      final reply = await connector.discoverRegions(repeaterPubKey: pk);
+      expect(reply, isNotNull);
+      expect(sent![33], anonReqTypeRegions);
+      expect(sent![34], 2); // packed path-len byte: 2 hops, 1-byte hashes
+      expect(sent!.sublist(35), [0xAA, 0xBB]);
     });
   });
 

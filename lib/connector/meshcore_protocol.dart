@@ -715,14 +715,22 @@ bool firmwareSupportsRegionScope(int? firmwareVerCode) =>
 /// reads it as a login request, never regions (D1 bug, #836). Correlate the
 /// reply by the `RESP_CODE_SENT` tag, not a client value.
 ///
-/// `reply_path_len = 0` asks the repeater to reply zero-hop, which fits a
-/// directly reachable repeater; a multi-hop return path is not yet supported.
-Uint8List buildAnonRegionsRequestFrame(Uint8List repeaterPubKey) {
+/// [replyPathLenByte] is the firmware packed path-len byte and [replyPath] the
+/// matching hop-hash bytes: the repeater routes its reply back along this path
+/// as-is (MeshCore paths are bidirectional, Mesh.cpp:176-177), so pass the
+/// repeater contact's own stored path for a multi-hop reply. An empty path
+/// (`replyPathLenByte = 0`) is zero-hop, which only reaches an adjacent repeater.
+Uint8List buildAnonRegionsRequestFrame(
+  Uint8List repeaterPubKey, {
+  int replyPathLenByte = 0,
+  Uint8List? replyPath,
+}) {
   final writer = BufferWriter();
   writer.writeByte(cmdSendAnonReq);
   writer.writeBytes(repeaterPubKey);
   writer.writeByte(anonReqTypeRegions);
-  writer.writeByte(0); // reply_path_len = 0 (zero-hop reply)
+  writer.writeByte(replyPathLenByte & 0xFF);
+  if (replyPath != null && replyPath.isNotEmpty) writer.writeBytes(replyPath);
   return writer.toBytes();
 }
 
