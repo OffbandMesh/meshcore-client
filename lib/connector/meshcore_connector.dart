@@ -5839,16 +5839,30 @@ class MeshCoreConnector extends ChangeNotifier {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     _guardRegionScope();
+    // Reply travels back along the repeater's own stored path (firmware routes
+    // it as-is), so a multi-hop repeater can answer. Empty => zero-hop.
+    final (replyPathLenByte, replyPath) = _regionReplyPathFor(repeaterPubKey);
     final completer = Completer<RegionsReply?>();
     int? tag; // firmware tag, learned from the RESP_CODE_SENT after we send
     void finish(RegionsReply? reply) {
       if (!completer.isCompleted) completer.complete(reply);
     }
 
+    Timer timer = Timer(timeout, () => finish(null));
     final sub = receivedFrames.listen((frame) {
       if (frame.isEmpty) return;
-      if (tag == null && frame[0] == respCodeSent && frame.length >= 6) {
+      if (tag == null && frame[0] == respCodeSent && frame.length >= 10) {
         tag = readUint32LE(frame, 2);
+        // Re-arm to the firmware's own round-trip estimate (scales with hops),
+        // rather than a fixed guess, when it is larger than the floor.
+        final estMs = readUint32LE(frame, 6);
+        if (estMs > timeout.inMilliseconds) {
+          timer.cancel();
+          timer = Timer(
+            Duration(milliseconds: estMs + 3000),
+            () => finish(null),
+          );
+        }
         return;
       }
       if (tag != null && frame[0] == pushCodeBinaryResponse) {
@@ -5856,9 +5870,14 @@ class MeshCoreConnector extends ChangeNotifier {
         if (reply != null && reply.tag == tag) finish(reply);
       }
     });
-    final timer = Timer(timeout, () => finish(null));
     try {
-      await sendFrame(buildAnonRegionsRequestFrame(repeaterPubKey));
+      await sendFrame(
+        buildAnonRegionsRequestFrame(
+          repeaterPubKey,
+          replyPathLenByte: replyPathLenByte,
+          replyPath: replyPath,
+        ),
+      );
       return await completer.future;
     } catch (e) {
       appLogger.warn('regions discovery failed: $e', tag: 'Region');
@@ -5867,6 +5886,26 @@ class MeshCoreConnector extends ChangeNotifier {
       timer.cancel();
       await sub.cancel();
     }
+  }
+
+  /// The regions reply path for [repeaterPubKey], as (packed path-len byte,
+  /// hop-hash bytes), taken from the repeater contact's stored path. Returns
+  /// (0, empty) when the repeater is unknown or has no path, which the firmware
+  /// treats as a zero-hop reply (only an adjacent repeater can answer). The list
+  /// is never filtered on this: stored paths go stale as the companion moves, so
+  /// a repeater that looks far (or pathless) may still answer, and one that looks
+  /// near may not.
+  (int, Uint8List) _regionReplyPathFor(Uint8List repeaterPubKey) {
+    final hex = pubKeyToHex(repeaterPubKey);
+    for (final c in _contacts) {
+      if (pubKeyToHex(c.publicKey) == hex) {
+        if (c.pathLength >= 0 && c.path.isNotEmpty) {
+          return (encodePathLen(c.pathLength, c.pathHashWidth), c.path);
+        }
+        return (0, Uint8List(0));
+      }
+    }
+    return (0, Uint8List(0));
   }
 
   /// Override the companion's flood send-scope with [key] (16 bytes) for
