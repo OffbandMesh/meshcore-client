@@ -146,6 +146,30 @@ void main() {
       expect(sent![34], 2); // packed path-len byte: 2 hops, 1-byte hashes
       expect(sent!.sublist(35), [0xAA, 0xBB]);
     });
+
+    test(
+      'auto-retries once: first attempt times out, second succeeds',
+      () async {
+        var sends = 0;
+        connector.sendFrameOverrideForTest = (_) {
+          sends++;
+          // First send injects nothing (that attempt times out); second answers.
+          if (sends >= 2) {
+            connector.handleFrameForTest(_respSent(0x77));
+            connector.handleFrameForTest(
+              _regionsReply(0x77, clock: 1, csv: 'oki'),
+            );
+          }
+        };
+        final reply = await connector.discoverRegions(
+          repeaterPubKey: pub,
+          timeout: const Duration(milliseconds: 60),
+        );
+        expect(reply, isNotNull);
+        expect(reply!.regionNames, ['oki']);
+        expect(sends, 2);
+      },
+    );
   });
 
   group('send-scope setters', () {

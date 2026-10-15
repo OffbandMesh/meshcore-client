@@ -5839,6 +5839,20 @@ class MeshCoreConnector extends ChangeNotifier {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     _guardRegionScope();
+    // One auto-retry: a single anon-request round-trip can drop over LoRa and a
+    // retry usually gets through; a genuinely unreachable repeater still ends in
+    // a timeout after both attempts (#836, D1 Option A).
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final reply = await _discoverRegionsOnce(repeaterPubKey, timeout);
+      if (reply != null) return reply;
+    }
+    return null;
+  }
+
+  Future<RegionsReply?> _discoverRegionsOnce(
+    Uint8List repeaterPubKey,
+    Duration timeout,
+  ) async {
     // Reply travels back along the repeater's own stored path (firmware routes
     // it as-is), so a multi-hop repeater can answer. Empty => zero-hop.
     final (replyPathLenByte, replyPath) = _regionReplyPathFor(repeaterPubKey);
