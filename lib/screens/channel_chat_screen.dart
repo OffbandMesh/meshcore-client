@@ -333,7 +333,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
           (c) => RepeaterChoice(
             name: c.name,
             pubKey: c.publicKey,
-            hasPath: c.pathLength >= 0 && c.path.isNotEmpty,
+            // A direct (0-hop) repeater has pathLength 0 and an empty path and
+            // is reachable (the best case). Only pathLength -1 (flood/unknown)
+            // has no usable route, so only that is treated as "no path".
+            hasPath: c.pathLength >= 0,
           ),
         )
         .toList();
