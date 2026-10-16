@@ -549,6 +549,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
   Timer? _channelsChangedDebounce;
+  Timer? _advertReconcileDebounce;
   int _channelSyncRetries = 0;
   int _nextChannelIndexToRequest = 0;
   int _totalChannelsToRequest = 0;
@@ -3505,6 +3506,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _offbandCaps2 = null;
     _femLnaEnabled = null;
     _blockListRetryTimer?.cancel();
+    // Per-connection debounce timers must die with the connection so a timer
+    // scheduled against this radio can't fire against the next one (#838 review).
+    _advertReconcileDebounce?.cancel();
+    _channelsChangedDebounce?.cancel();
     _blockDumpInFlight = false;
     _blockKeysTouchedDuringDump.clear();
     _firmwareVersion = null;
@@ -4010,6 +4015,31 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Future<void> refreshContactsSinceLastmod() async {
     await getContacts(since: _latestContactLastmod(), preserveExisting: true);
+  }
+
+  /// True when the connected radio's own auto-add policy covers this contact
+  /// type, i.e. the radio would have stored a new advert of this type (subject
+  /// to its hop/capacity limits, which only the radio enforces). Mirrors the
+  /// radio's type policy so a reconcile is nudged only when the radio might
+  /// actually hold something new. (#838)
+  bool _isAutoAddEligible(int type) =>
+      (_autoAddUsers && type == advTypeChat) ||
+      (_autoAddRepeaters && type == advTypeRepeater) ||
+      (_autoAddRoomServers && type == advTypeRoom) ||
+      (_autoAddSensors && type == advTypeSensor);
+
+  /// Coalesce a burst of new adverts into a single incremental contact sync so
+  /// a node the radio actually added surfaces without a manual sync, while a
+  /// node it rejected simply never comes back in the stream. (#838)
+  static const Duration _advertReconcileWindow = Duration(milliseconds: 800);
+
+  void _scheduleContactReconcile() {
+    if (!isConnected || _isLoadingContacts) return;
+    _advertReconcileDebounce?.cancel();
+    _advertReconcileDebounce = Timer(_advertReconcileWindow, () {
+      if (!isConnected || _isLoadingContacts) return;
+      unawaited(refreshContactsSinceLastmod());
+    });
   }
 
   /// The latest short full sync, kept until dismissed or a complete sync.
@@ -7441,25 +7471,30 @@ class MeshCoreConnector extends ChangeNotifier {
           'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
           tag: 'Connector',
         );
+      } else if (isContact) {
+        // The contact sync stream is radio truth; it is the only thing that
+        // populates the persisted list.
+        _contacts.add(contact);
+        appLogger.info(
+          'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
+          tag: 'Connector',
+        );
       } else {
-        if ((_autoAddUsers && contact.type == advTypeChat) ||
-            (_autoAddRepeaters && contact.type == advTypeRepeater) ||
-            (_autoAddRoomServers && contact.type == advTypeRoom) ||
-            (_autoAddSensors && contact.type == advTypeSensor) ||
-            isContact) {
-          _contacts.add(contact);
-          appLogger.info(
-            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
-            tag: 'Connector',
-          );
-        } else {
-          appLogger.info(
-            "Discovered contact ${contact.name} (type ${contact.typeLabelRaw}) not added due to auto-add settings",
-            tag: 'Connector',
-          );
-          notifyListeners();
-          return;
-        }
+        // #838: a live advert (NEW_ADVERT push) is NOT proof the radio stored
+        // the node. The firmware fires it even for adverts it rejects (beyond
+        // the auto-add hop limit, or when the contact table is full), and the
+        // client applies neither limit, so promoting them here drifted a
+        // long-lived session hundreds of contacts above radio truth. Keep it in
+        // discovery (added above) and, when the radio's own policy would have
+        // added it, nudge a reconcile so a genuinely-new contact still surfaces
+        // without a manual sync.
+        appLogger.info(
+          "Discovered contact ${contact.name} (type ${contact.typeLabelRaw}) left in discovery; not a synced contact",
+          tag: 'Connector',
+        );
+        if (_isAutoAddEligible(contact.type)) _scheduleContactReconcile();
+        notifyListeners();
+        return;
       }
       _knownContactKeys.add(contact.publicKeyHex);
       _loadMessagesForContact(contact.publicKeyHex);
@@ -9450,6 +9485,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _notifySubscription = null;
     _connectionSubscription?.cancel();
     _connectionSubscription = null;
+    // Per-connection debounce timers must not survive the drop and fire against
+    // the next radio (#838 review).
+    _advertReconcileDebounce?.cancel();
+    _channelsChangedDebounce?.cancel();
 
     _device = null;
     _rxCharacteristic = null;
@@ -9610,6 +9649,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
     _channelsChangedDebounce?.cancel();
+    _advertReconcileDebounce?.cancel();
     _contactRequestWatchdog?.cancel();
     _pendingKeyCheck?.timer?.cancel();
     _recoverySettleTimer?.cancel();
@@ -9856,17 +9896,19 @@ class MeshCoreConnector extends ChangeNotifier {
         longitude: longitude,
         lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
       );
-      if ((_autoAddUsers && type == advTypeChat) ||
-          (_autoAddRepeaters && type == advTypeRepeater) ||
-          (_autoAddRoomServers && type == advTypeRoom) ||
-          (_autoAddSensors && type == advTypeSensor)) {
-        _handleContactAdvert(newContact);
+      // #838: a raw overheard advert is not proof the radio stored the node, so
+      // it never joins the persisted contact list (that is what drifted a long
+      // session above radio truth). It feeds discovery, and when the radio's own
+      // auto-add policy would have added it, a reconcile pulls the radio's real
+      // entry in. The persisted list stays a mirror of the contact sync.
+      if (_isAutoAddEligible(type)) {
         _handleDiscovery(
           newContact,
           rawPacket,
           noNotify: true,
           addActive: true,
         );
+        _scheduleContactReconcile();
       } else {
         _handleDiscovery(newContact, rawPacket);
       }
