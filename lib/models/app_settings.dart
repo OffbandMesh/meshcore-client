@@ -158,11 +158,24 @@ class AppSettings {
   /// written, so an older build can be rolled back to without losing mutes.
   final Set<String> mutedChannels;
 
-  /// Per-channel notification level, keyed by [channelNotifyKey], the PSK
-  /// identity when known, else the slot index. Keying by PSK (not by display
-  /// name, and not by slot) means the setting survives a rename and does not
-  /// bleed across a slot reassignment (#193/#194).
+  /// Legacy flat per-channel notify map (pre-#839), keyed by `psk_<hex>` or a
+  /// bare slot index, with no per-radio scoping. Superseded by
+  /// [channelNotifyModesByRadio]. Retained only as migration input and for
+  /// rollback; never consulted by the live resolution. See #839.
   final Map<String, ChannelNotifyMode> channelNotifyModes;
+
+  /// Per-radio per-channel notify level: device-key prefix (first 10 hex of the
+  /// connected radio's public key, like every other per-radio store) -> channel
+  /// PSK hex -> mode. Keyed by PSK within a radio so it survives a rename and
+  /// does not follow a reused slot (#193/#194); scoped by radio so one radio's
+  /// settings never bleed into another, and there is no bare-index fallback that
+  /// could (#839). `all` is the default and is never stored.
+  final Map<String, Map<String, ChannelNotifyMode>> channelNotifyModesByRadio;
+
+  /// One-time guard: true once the legacy flat map / mute set has been migrated
+  /// into [channelNotifyModesByRadio] for the first radio seen post-upgrade, so
+  /// a second radio does not inherit the ambiguous legacy state (#839).
+  final bool channelNotifyMigrated;
   final bool mapShowDiscoveryContacts;
   final String tcpServerAddress;
   final int tcpServerPort;
@@ -183,17 +196,6 @@ class AppSettings {
       orElse: () => cyr2latProfiles.first,
     );
     return profile.charMap;
-  }
-
-  /// Storage key for a channel's notify mode.
-  ///
-  /// Mirrors the identity scheme [ChannelMessageStore] uses for history (#194):
-  /// the PSK hex when the channel is synced and its key is known, else the slot
-  /// index as a fallback. The `psk_` marker keeps the two spaces from colliding
-  /// (a PSK is 32 hex chars; an index is a small integer).
-  static String channelNotifyKey({required int channelIndex, String? pskHex}) {
-    if (pskHex != null && pskHex.isNotEmpty) return 'psk_$pskHex';
-    return '$channelIndex';
   }
 
   AppSettings({
@@ -234,6 +236,8 @@ class AppSettings {
     this.unitSystem = UnitSystem.metric,
     Set<String>? mutedChannels,
     Map<String, ChannelNotifyMode>? channelNotifyModes,
+    Map<String, Map<String, ChannelNotifyMode>>? channelNotifyModesByRadio,
+    this.channelNotifyMigrated = false,
     this.mapShowDiscoveryContacts = true,
     this.tcpServerAddress = '',
     this.tcpServerPort = 0,
@@ -251,6 +255,7 @@ class AppSettings {
        batteryChemistryByRepeaterId = batteryChemistryByRepeaterId ?? {},
        mutedChannels = mutedChannels ?? {},
        channelNotifyModes = channelNotifyModes ?? {},
+       channelNotifyModesByRadio = channelNotifyModesByRadio ?? {},
        translationDownloadedModels = translationDownloadedModels ?? const [],
        cyr2latProfiles =
            cyr2latProfiles ??
@@ -304,6 +309,13 @@ class AppSettings {
       'channel_notify_modes': channelNotifyModes.map(
         (key, mode) => MapEntry(key, mode.value),
       ),
+      'channel_notify_modes_by_radio': channelNotifyModesByRadio.map(
+        (prefix, modes) => MapEntry(
+          prefix,
+          modes.map((psk, mode) => MapEntry(psk, mode.value)),
+        ),
+      ),
+      'channel_notify_migrated': channelNotifyMigrated,
       'map_show_discovery_contacts': mapShowDiscoveryContacts,
       'tcp_server_address': tcpServerAddress,
       'tcp_server_port': tcpServerPort,
@@ -423,6 +435,19 @@ class AppSettings {
                 MapEntry(key.toString(), parseChannelNotifyMode(value)),
           ) ??
           {},
+      channelNotifyModesByRadio:
+          (json['channel_notify_modes_by_radio'] as Map?)?.map(
+            (prefix, modes) => MapEntry(
+              prefix.toString(),
+              (modes as Map?)?.map(
+                    (psk, value) =>
+                        MapEntry(psk.toString(), parseChannelNotifyMode(value)),
+                  ) ??
+                  <String, ChannelNotifyMode>{},
+            ),
+          ) ??
+          {},
+      channelNotifyMigrated: json['channel_notify_migrated'] as bool? ?? false,
       mapShowDiscoveryContacts:
           json['map_show_discovery_contacts'] as bool? ?? true,
       tcpServerAddress: json['tcp_server_address'] as String? ?? '',
@@ -521,6 +546,8 @@ class AppSettings {
     UnitSystem? unitSystem,
     Set<String>? mutedChannels,
     Map<String, ChannelNotifyMode>? channelNotifyModes,
+    Map<String, Map<String, ChannelNotifyMode>>? channelNotifyModesByRadio,
+    bool? channelNotifyMigrated,
     bool? mapShowDiscoveryContacts,
     String? tcpServerAddress,
     int? tcpServerPort,
@@ -585,6 +612,10 @@ class AppSettings {
       unitSystem: unitSystem ?? this.unitSystem,
       mutedChannels: mutedChannels ?? this.mutedChannels,
       channelNotifyModes: channelNotifyModes ?? this.channelNotifyModes,
+      channelNotifyModesByRadio:
+          channelNotifyModesByRadio ?? this.channelNotifyModesByRadio,
+      channelNotifyMigrated:
+          channelNotifyMigrated ?? this.channelNotifyMigrated,
       mapShowDiscoveryContacts:
           mapShowDiscoveryContacts ?? this.mapShowDiscoveryContacts,
       tcpServerAddress: tcpServerAddress ?? this.tcpServerAddress,

@@ -5341,6 +5341,33 @@ class MeshCoreConnector extends ChangeNotifier {
     // Apply ordering and notify UI
     _applyChannelOrder();
     notifyListeners();
+
+    // #839: one-time migration of the pre-per-radio notify state into THIS
+    // radio (the first synced after upgrade). The service guards itself with a
+    // persisted flag, so this is a no-op on every later sync and later radio.
+    _migrateLegacyChannelNotifyForThisRadio();
+  }
+
+  void _migrateLegacyChannelNotifyForThisRadio() {
+    final service = _appSettingsService;
+    if (service == null || service.settings.channelNotifyMigrated) return;
+    final prefix = selfPublicKeyHex;
+    if (prefix.isEmpty || _channels.isEmpty) return;
+    final pskByIndex = <int, String>{};
+    final pskByName = <String, String>{};
+    for (final channel in _channels) {
+      final psk = channel.pskHex;
+      if (psk.isEmpty) continue;
+      pskByIndex[channel.index] = psk;
+      pskByName[channel.name] = psk;
+    }
+    unawaited(
+      service.migrateLegacyChannelNotify(
+        devicePrefix: prefix,
+        pskByChannelIndex: pskByIndex,
+        pskByChannelName: pskByName,
+      ),
+    );
   }
 
   void _cleanupChannelSync({required bool completed}) {
@@ -8087,11 +8114,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // the setting survives a rename and does not follow a reused slot (#259).
     // Evaluated against resolvedText so a translated mention still matches.
     final mode = _appSettingsService!.channelNotifyMode(
-      identityKey: AppSettings.channelNotifyKey(
-        channelIndex: channelIndex,
-        pskHex: _findChannelByIndex(channelIndex)?.pskHex,
-      ),
-      channelName: label,
+      devicePrefix: selfPublicKeyHex,
+      pskHex: _findChannelByIndex(channelIndex)?.pskHex,
     );
     switch (mode) {
       case ChannelNotifyMode.off:

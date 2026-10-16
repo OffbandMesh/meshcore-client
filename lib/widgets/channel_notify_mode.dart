@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../models/app_settings.dart';
 import '../models/channel.dart';
@@ -9,13 +10,6 @@ import '../services/app_settings_service.dart';
 /// Shared per-channel notify-mode affordance (#262), reachable both from the
 /// Channels list and from inside a channel's chat (#275). Single implementation
 /// so the two entry points cannot drift.
-
-/// Notify-mode storage key for [channel]: its PSK identity, so the setting
-/// survives a rename and does not follow a reused slot (#259).
-String channelNotifyKeyFor(Channel channel) => AppSettings.channelNotifyKey(
-  channelIndex: channel.index,
-  pskHex: channel.pskHex,
-);
 
 IconData channelNotifyModeIcon(ChannelNotifyMode mode) {
   switch (mode) {
@@ -41,10 +35,10 @@ String channelNotifyModeLabel(BuildContext context, ChannelNotifyMode mode) {
 
 void showChannelNotifyModeDialog(BuildContext context, Channel channel) {
   final settingsService = context.read<AppSettingsService>();
-  final identityKey = channelNotifyKeyFor(channel);
+  final devicePrefix = context.read<MeshCoreConnector>().selfPublicKeyHex;
   final current = settingsService.channelNotifyMode(
-    identityKey: identityKey,
-    channelName: channel.name,
+    devicePrefix: devicePrefix,
+    pskHex: channel.pskHex,
   );
 
   showDialog<void>(
@@ -63,7 +57,8 @@ void showChannelNotifyModeDialog(BuildContext context, Channel channel) {
               onTap: () async {
                 Navigator.pop(dialogContext);
                 await settingsService.setChannelNotifyMode(
-                  identityKey: identityKey,
+                  devicePrefix: devicePrefix,
+                  pskHex: channel.pskHex,
                   channelName: channel.name,
                   mode: mode,
                 );
