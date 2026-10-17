@@ -169,14 +169,52 @@ Classification classifyDevicePopulation({
   );
 }
 
-/// True when [version] positively looks like a stock MeshCore version string
-/// (single `vX.Y.Z`), false when it positively looks like the Offband dual
-/// form (`<ob>-<mc>`, including the release-image `X-X` shape, firmware#691),
-/// null when absent or unrecognizable. Replaced by the full parser in #878.
-bool? _versionLooksStock(String? version) {
-  if (version == null || version.isEmpty) return null;
+/// What a firmware-version string positively claims about the population.
+enum VersionStringShape {
+  /// Single `vX.Y.Z` (or `X.Y.Z`): the stock FIRMWARE_VERSION form.
+  stock,
+
+  /// The Offband dual form: a semver, a dash, then more — covering
+  /// `<ob>-<mc>` ("1.4.0-1.17.0"), the release-image `X-X` shape
+  /// ("1.4.0-1.4.0", firmware#691), and bench builds' git-describe tails
+  /// ("1.1.0-4-g9f2e1c3-dirty").
+  offbandDual,
+
+  /// Absent, empty, or nothing this parser recognizes. Never corroborates
+  /// anything: the classifier treats it as a missing signal, which on a
+  /// fork-shape frame means fail closed.
+  unknown,
+}
+
+// Known limitation (Gemini review, #878): a stock PRE-RELEASE string of the
+// form "v1.19.0-rc1" would parse as the dual form. On a stock-shape frame
+// that is the inverse conflict and fails closed to stockLegacy — the safe
+// direction (the device loses the CLI offer, nothing misfires). Upstream has
+// not shipped suffixed FIRMWARE_VERSION strings to date; revisit only if one
+// appears in the field rather than inventing its format here.
+final RegExp _semver = RegExp(r'^v?\d+\.\d+\.\d+$');
+final RegExp _dualPrefix = RegExp(r'^v?\d+\.\d+\.\d+-.+$');
+
+/// Parses the device-info firmware-version field into its population claim
+/// (#878). Pure and total: any input maps to exactly one shape.
+VersionStringShape classifyVersionString(String? version) {
+  if (version == null) return VersionStringShape.unknown;
   final v = version.trim();
-  if (v.contains('-')) return false; // dual form: Offband
-  if (RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(v)) return true;
-  return null;
+  if (v.isEmpty) return VersionStringShape.unknown;
+  if (_semver.hasMatch(v)) return VersionStringShape.stock;
+  if (_dualPrefix.hasMatch(v)) return VersionStringShape.offbandDual;
+  return VersionStringShape.unknown;
+}
+
+/// Adapter kept for the classifier's tri-state contract: true = positively
+/// stock, false = positively Offband, null = no signal.
+bool? _versionLooksStock(String? version) {
+  switch (classifyVersionString(version)) {
+    case VersionStringShape.stock:
+      return true;
+    case VersionStringShape.offbandDual:
+      return false;
+    case VersionStringShape.unknown:
+      return null;
+  }
 }

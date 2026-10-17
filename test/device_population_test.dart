@@ -109,10 +109,52 @@ void main() {
         deviceInfo: deviceInfoFrame(length: 83, verCode: 22),
         firmwareVersion: 'my-custom-build',
       );
-      // 'my-custom-build' contains a dash, which the interim check reads as
-      // the dual form; the #878 parser tightens this. What matters here is it
-      // must not classify stock.
-      expect(c.population, isNot(DevicePopulation.stockModern));
+      // #878: 'my-custom-build' is no semver, so it corroborates nothing —
+      // the fork shape stays uncorroborated and the device fails closed.
+      expect(c.population, DevicePopulation.stockLegacy);
+      expect(c.conflict, isTrue);
+    });
+
+    group('classifyVersionString (#878)', () {
+      test('stock forms', () {
+        expect(classifyVersionString('v1.18.0'), VersionStringShape.stock);
+        expect(classifyVersionString('1.18.0'), VersionStringShape.stock);
+        expect(classifyVersionString(' v1.17.1 '), VersionStringShape.stock);
+      });
+      test('Offband dual forms', () {
+        expect(
+          classifyVersionString('1.4.0-1.17.0'),
+          VersionStringShape.offbandDual,
+        );
+        expect(
+          classifyVersionString('1.4.0-1.4.0'), // release image X-X (#691)
+          VersionStringShape.offbandDual,
+        );
+        expect(
+          classifyVersionString('1.1.0-4-g9f2e1c3-dirty'), // bench build
+          VersionStringShape.offbandDual,
+        );
+      });
+      test('unknown forms', () {
+        expect(classifyVersionString(null), VersionStringShape.unknown);
+        expect(classifyVersionString(''), VersionStringShape.unknown);
+        expect(
+          classifyVersionString('my-custom-build'),
+          VersionStringShape.unknown,
+        );
+        expect(classifyVersionString('v1.18'), VersionStringShape.unknown);
+        // Documented limitation: a hypothetical stock pre-release suffix
+        // reads as dual; on a stock-shape frame that fails CLOSED (inverse
+        // conflict), never open.
+        expect(
+          classifyVersionString('v1.19.0-rc1'),
+          VersionStringShape.offbandDual,
+        );
+        expect(
+          classifyVersionString('-1.17.0'),
+          VersionStringShape.unknown,
+        );
+      });
     });
 
     test('stock-shape frame with an Offband dual version string is a'
