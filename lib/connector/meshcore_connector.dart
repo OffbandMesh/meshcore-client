@@ -59,6 +59,7 @@ import '../utils/app_logger.dart';
 import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
+import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
 import '../storage/channel_region_scope_store.dart';
@@ -386,6 +387,7 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+  Classification? _classification;
   int? _offbandCaps2;
   bool? _femLnaEnabled;
   ButtonMatrix? _buttonMatrix;
@@ -849,6 +851,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// `offband_caps` capability bitfield from the device-info reply (v14+);
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
+
+  /// Population verdict from the last device-info reply (#875/#876); null
+  /// before one arrives. Capability decisions route through this, never
+  /// through bare ver-code or frame-offset reads.
+  Classification? get classification => _classification;
 
   /// Second `offband_caps` bitfield (frame offset 84, firmware #508). Null when
   /// the frame is too short, which means "no byte-2 capabilities" and is never
@@ -3436,6 +3443,13 @@ class MeshCoreConnector extends ChangeNotifier {
     _clientRepeat = null;
     _rememberedNonRepeatRadioState = null;
     _firmwareVerCode = null;
+    _classification = null;
+    // Capability bytes die with the connection, like the ver code above: a
+    // disconnect must not leave the previous radio's capabilities showing
+    // until the next device-info lands (Gemini review, task #876).
+    _offbandCaps = null;
+    _offbandCaps2 = null;
+    _femLnaEnabled = null;
     _blockListRetryTimer?.cancel();
     _blockDumpInFlight = false;
     _blockKeysTouchedDuringDump.clear();
@@ -6830,14 +6844,36 @@ class MeshCoreConnector extends ChangeNotifier {
     } else {
       _appDebugLogService?.info(widthNote, tag: 'Device');
     }
-    // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
-    // testable helper; offset verified against firmware (see parseOffbandCaps).
-    _offbandCaps = parseOffbandCaps(frame);
-    // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
-    // read on connect, a 0xC3 GET is only the fallback.
-    _femLnaEnabled = parseFemLnaState(frame);
-    // Second caps byte rides at offset 84, past the FEM state byte (#480).
-    _offbandCaps2 = parseOffbandCaps2(frame);
+    // Population first (#875/#876): stock 1.18 moved FIRMWARE_VER_CODE into
+    // the fork's spent range, so the caps bytes are only read once the
+    // classifier corroborates the fork layout. On a conflict every Offband
+    // field stays null — the same signals the fork absence always sent.
+    _classification = classifyDevicePopulation(
+      deviceInfo: frame,
+      firmwareVersion: info.version,
+    );
+    if (_classification!.conflict) {
+      _appDebugLogService?.warn(
+        'Population conflict, Offband surfaces disabled: '
+        '${_classification!.evidence}',
+        tag: 'Device',
+      );
+    }
+    if (_classification!.allowsOffbandFrames) {
+      // Offband config capability v14+ (byte 82). Extracted + bounds-checked
+      // in a testable helper; offset verified against firmware (see
+      // parseOffbandCaps).
+      _offbandCaps = parseOffbandCaps(frame);
+      // FEM LNA state rides one byte past the caps byte on v16+ (#304).
+      // Primary read on connect, a 0xC3 GET is only the fallback.
+      _femLnaEnabled = parseFemLnaState(frame);
+      // Second caps byte rides at offset 84, past the FEM state byte (#480).
+      _offbandCaps2 = parseOffbandCaps2(frame);
+    } else {
+      _offbandCaps = null;
+      _femLnaEnabled = null;
+      _offbandCaps2 = null;
+    }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
     // be told apart from "this radio says it can't". (#304)

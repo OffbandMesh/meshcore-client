@@ -1,7 +1,14 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/device_population.dart';
+import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/storage/drift/blob_store.dart';
+import 'package:meshcore_open/storage/drift/offband_database.dart';
+import 'package:meshcore_open/storage/prefs_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Builds a device-info reply frame of [length] bytes with [verCode] at
 /// byte 1, mirroring RESP_CODE_DEVICE_INFO layouts:
@@ -147,6 +154,93 @@ void main() {
         firmwareVersion: 'v9.9.9',
       );
       expect(c.population, DevicePopulation.stockLegacy);
+    });
+  });
+
+  group('connector routes caps parsing through the classifier (#876)', () {
+    late OffbandDatabase db;
+    late MeshCoreConnector connector;
+
+    /// Full RESP_CODE_DEVICE_INFO frame with the version string at its real
+    /// offset (60, 20 bytes NUL-padded) and optional fork tail bytes.
+    Uint8List deviceInfo({
+      required int verCode,
+      required String version,
+      int length = 82,
+      int caps = 0x21,
+      int caps2 = 0x0F,
+    }) {
+      final frame = Uint8List(length);
+      frame[0] = 13; // RESP_CODE_DEVICE_INFO
+      frame[1] = verCode;
+      final v = ascii.encode(version);
+      frame.setRange(60, 60 + v.length, v);
+      if (length > 82) frame[82] = caps;
+      if (length > 84) frame[84] = caps2;
+      return frame;
+    }
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      PrefsManager.reset();
+      await PrefsManager.initialize();
+      db = OffbandDatabase(NativeDatabase.memory());
+      BlobStore.overrideForTest(BlobStore(db));
+      connector = MeshCoreConnector();
+      connector.sendFrameOverrideForTest = (_) {};
+      connector.setConnectedForTest();
+    });
+
+    tearDown(() async {
+      BlobStore.clearTestOverride();
+      await db.close();
+    });
+
+    test('Offband frame with dual version populates caps', () {
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 22, version: '1.4.0-1.17.0', length: 85),
+      );
+      expect(connector.classification?.population, DevicePopulation.offband);
+      expect(connector.offbandCaps, 0x21);
+      expect(connector.offbandCaps2, 0x0F);
+      // femLna byte at offset 83 defaults to 0 in the fixture = bypass.
+      expect(connector.femLnaEnabled, isFalse);
+    });
+
+    test('83-byte Offband frame: caps byte 1 present, byte 2 and FEM state'
+        ' absent', () {
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 22, version: '1.4.0-1.17.0', length: 83),
+      );
+      expect(connector.classification?.population, DevicePopulation.offband);
+      expect(connector.offbandCaps, 0x21);
+      expect(connector.offbandCaps2, isNull);
+      expect(connector.femLnaEnabled, isNull);
+    });
+
+    test('fork-length frame with a stock version string leaves every Offband'
+        ' field null', () {
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 14, version: 'v1.18.0', length: 85),
+      );
+      expect(
+        connector.classification?.population,
+        DevicePopulation.stockLegacy,
+      );
+      expect(connector.classification?.conflict, isTrue);
+      expect(connector.offbandCaps, isNull);
+      expect(connector.offbandCaps2, isNull);
+    });
+
+    test('stock 1.18 frame classifies stockModern with null caps', () {
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 14, version: 'v1.18.0'),
+      );
+      expect(
+        connector.classification?.population,
+        DevicePopulation.stockModern,
+      );
+      expect(connector.offbandCaps, isNull);
     });
   });
 }
