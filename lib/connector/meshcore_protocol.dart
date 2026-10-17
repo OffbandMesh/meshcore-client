@@ -552,6 +552,15 @@ const int offbandCapBlock = 0x02;
 /// FEM-bearing boards report false today.
 const int offbandCapFemLna = 0x04;
 
+// POPULATION INVARIANT (#875-#877): every `offbandCaps`-anchored gate below is
+// safe against stock 1.18+ devices ONLY because the connector nulls the caps
+// bytes unless the population classifier corroborates the fork layout
+// (device_population.dart). The ver-code floors in these gates are FORK
+// contract numbers; stock reuses 14+ with different meanings, so a bare
+// `firmwareVerCode >=` comparison may only be added for codes BELOW 14
+// (pre-split, same meaning everywhere: see supportsCompanionRadioStats >= 8
+// and firmwareSupportsRegionScope >= 13) or behind a caps-anchored gate here.
+
 bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
     offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
 
