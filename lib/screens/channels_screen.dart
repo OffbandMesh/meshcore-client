@@ -490,8 +490,8 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     final parentContext = context;
     final settingsService = context.read<AppSettingsService>();
     final notifyMode = settingsService.channelNotifyMode(
-      identityKey: channelNotifyKeyFor(channel),
-      channelName: channel.name,
+      devicePrefix: connector.selfPublicKeyHex,
+      pskHex: channel.pskHex,
     );
 
     showModalBottomSheet(
