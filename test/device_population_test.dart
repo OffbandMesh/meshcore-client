@@ -242,5 +242,22 @@ void main() {
       );
       expect(connector.offbandCaps, isNull);
     });
+
+    test('fork gates never open on a stock device, whatever its ver code'
+        ' (#877): stock reuses the fork range 14+ with other meanings', () {
+      // A hypothetical future stock device reporting ver 22 (the fork's
+      // current contract number) must not light any Offband capability.
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 22, version: 'v9.9.9'),
+      );
+      expect(connector.supportsOffbandGps, isFalse);
+      expect(connector.supportsOffbandBlock, isFalse);
+      expect(connector.supportsOffbandFemLna, isFalse);
+      expect(connector.supportsButtonMatrix, isFalse);
+      expect(connector.supportsNotifyScope, isFalse);
+      expect(connector.supportsPktHash, isFalse);
+      // Pre-split floors (same meaning on every population) stay available.
+      expect(connector.supportsCompanionRadioStats, isTrue);
+    });
   });
 }
