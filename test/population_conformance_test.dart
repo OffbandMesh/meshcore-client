@@ -182,16 +182,25 @@ void main() {
     test('matrix: ${f.name}', () {
       connector.handleFrameForTest(f.frame);
       if (f.frame.length >= 4) {
-        expect(connector.classification?.population, f.population,
-            reason: 'population');
+        expect(
+          connector.classification?.population,
+          f.population,
+          reason: 'population',
+        );
       }
       expect(connector.supportsOffbandGps, f.offbandGps, reason: 'gps 0xC1');
       expect(connector.supportsOffbandBlock, f.offbandBlock, reason: 'block');
       expect(connector.supportsOffbandFemLna, f.femLna, reason: 'fem 0xC3');
-      expect(connector.supportsButtonMatrix, f.buttonMatrix,
-          reason: 'button matrix 0xC5');
-      expect(connector.supportsNotifyScope, f.notifyScope,
-          reason: 'notify scope 0xC5');
+      expect(
+        connector.supportsButtonMatrix,
+        f.buttonMatrix,
+        reason: 'button matrix 0xC5',
+      );
+      expect(
+        connector.supportsNotifyScope,
+        f.notifyScope,
+        reason: 'notify scope 0xC5',
+      );
       expect(connector.supportsPktHash, f.pktHash, reason: 'pkt hash 0xC6');
       expect(
         ObserverConfigClient.supportsConfig(
@@ -201,8 +210,11 @@ void main() {
         f.observerConfig,
         reason: '0xC0 config',
       );
-      expect(connector.supportsCompanionRadioStats, f.companionStats,
-          reason: 'pre-split stats >=8');
+      expect(
+        connector.supportsCompanionRadioStats,
+        f.companionStats,
+        reason: 'pre-split stats >=8',
+      );
     });
   }
 }

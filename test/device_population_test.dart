@@ -63,13 +63,16 @@ void main() {
       expect(c.allowsOffbandFrames, isTrue);
     });
 
-    test('Offband release image X-X version string (#691) still classifies', () {
-      final c = classifyDevicePopulation(
-        deviceInfo: deviceInfoFrame(length: 85, verCode: 22),
-        firmwareVersion: '1.4.0-1.4.0',
-      );
-      expect(c.population, DevicePopulation.offband);
-    });
+    test(
+      'Offband release image X-X version string (#691) still classifies',
+      () {
+        final c = classifyDevicePopulation(
+          deviceInfo: deviceInfoFrame(length: 85, verCode: 22),
+          firmwareVersion: '1.4.0-1.4.0',
+        );
+        expect(c.population, DevicePopulation.offband);
+      },
+    );
 
     test('ver >= 14 with a LONG frame but stock version string is a conflict:'
         ' fails closed to stockLegacy', () {
@@ -150,10 +153,7 @@ void main() {
           classifyVersionString('v1.19.0-rc1'),
           VersionStringShape.offbandDual,
         );
-        expect(
-          classifyVersionString('-1.17.0'),
-          VersionStringShape.unknown,
-        );
+        expect(classifyVersionString('-1.17.0'), VersionStringShape.unknown);
       });
     });
 
@@ -275,9 +275,7 @@ void main() {
     });
 
     test('stock 1.18 frame classifies stockModern with null caps', () {
-      connector.handleFrameForTest(
-        deviceInfo(verCode: 14, version: 'v1.18.0'),
-      );
+      connector.handleFrameForTest(deviceInfo(verCode: 14, version: 'v1.18.0'));
       expect(
         connector.classification?.population,
         DevicePopulation.stockModern,
@@ -289,9 +287,7 @@ void main() {
         ' (#877): stock reuses the fork range 14+ with other meanings', () {
       // A hypothetical future stock device reporting ver 22 (the fork's
       // current contract number) must not light any Offband capability.
-      connector.handleFrameForTest(
-        deviceInfo(verCode: 22, version: 'v9.9.9'),
-      );
+      connector.handleFrameForTest(deviceInfo(verCode: 22, version: 'v9.9.9'));
       expect(connector.supportsOffbandGps, isFalse);
       expect(connector.supportsOffbandBlock, isFalse);
       expect(connector.supportsOffbandFemLna, isFalse);
