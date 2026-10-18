@@ -1,4 +1,4 @@
-// E1.2 (#880): the conformance matrix — every capability gate against every
+// E1.2 (#880): the conformance matrix -every capability gate against every
 // population fixture (plan E1.2; INVESTIGATION.md §B3). This is the epic's
 // verification: it proves the F1 pieces cohere, it is not a re-run of the
 // unit tests.

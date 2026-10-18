@@ -6847,7 +6847,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Population first (#875/#876): stock 1.18 moved FIRMWARE_VER_CODE into
     // the fork's spent range, so the caps bytes are only read once the
     // classifier corroborates the fork layout. On a conflict every Offband
-    // field stays null — the same signals the fork absence always sent.
+    // field stays null -the same signals the fork absence always sent.
     _classification = classifyDevicePopulation(
       deviceInfo: frame,
       firmwareVersion: info.version,

@@ -109,7 +109,7 @@ void main() {
         deviceInfo: deviceInfoFrame(length: 83, verCode: 22),
         firmwareVersion: 'my-custom-build',
       );
-      // #878: 'my-custom-build' is no semver, so it corroborates nothing —
+      // #878: 'my-custom-build' is no semver, so it corroborates nothing -
       // the fork shape stays uncorroborated and the device fails closed.
       expect(c.population, DevicePopulation.stockLegacy);
       expect(c.conflict, isTrue);
