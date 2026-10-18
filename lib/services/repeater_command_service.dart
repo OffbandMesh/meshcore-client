@@ -5,6 +5,7 @@ import '../models/path_selection.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../utils/app_logger.dart';
+import 'command_correlation.dart';
 
 /// A repeater reply that arrived with no command waiting to receive it.
 ///
@@ -69,7 +70,7 @@ class RepeaterCommandService {
   final Map<String, String> _commandPrefixes = {};
   final Map<String, String> _pendingByPrefix = {};
   final Map<String, _ExpiredCommand> _expiredCommands = {};
-  int _prefixCounter = 0;
+  final PrefixAllocator _prefixes = PrefixAllocator();
 
   static const int maxRetries = 5;
 
@@ -208,12 +209,10 @@ class RepeaterCommandService {
     final repeaterKey = repeater.publicKeyHex;
     _pruneExpiredCommands();
 
-    String? prefix;
-    String responsePayload = responseText;
-    if (responseText.length >= 3 && responseText[2] == '|') {
-      prefix = responseText.substring(0, 3);
-      responsePayload = responseText.substring(3).trimLeft();
-    }
+    // Shared `cc|` grammar (#882): same splitter the local frame-66 path uses.
+    final correlated = splitCorrelated(responseText);
+    final prefix = correlated.prefix;
+    final responsePayload = correlated.payload;
 
     // A reply that carries a prefix is self-identifying. If that prefix matches
     // nothing pending, the answer belongs to a command that already completed
@@ -352,14 +351,5 @@ class RepeaterCommandService {
     onUnmatchedResponse = null;
   }
 
-  String _nextPrefixToken() {
-    for (var i = 0; i < 256; i++) {
-      final value = _prefixCounter++ & 0xFF;
-      final token = '${value.toRadixString(16).padLeft(2, '0').toUpperCase()}|';
-      if (!_pendingByPrefix.containsKey(token)) {
-        return token;
-      }
-    }
-    return '00|';
-  }
+  String _nextPrefixToken() => _prefixes.next(_pendingByPrefix.keys.toSet());
 }
