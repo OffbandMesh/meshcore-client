@@ -10,7 +10,7 @@
 // exactly 82 bytes; the fork appends offband_caps at offset 82 and caps
 // byte 2 at offset 84 [verified against companion-v1.18.0 and firmware-base,
 // INVESTIGATION.md §A/§B3]. The firmware's durable marker (decision D1)
-// replaces this at one seam — see classifyDevicePopulation's doc.
+// replaces this at one seam -see classifyDevicePopulation's doc.
 
 import 'dart:typed_data';
 
@@ -46,7 +46,7 @@ class Classification {
 
   /// True when the signals contradicted each other (for example a fork-length
   /// frame carrying a stock version string). Conflicts classify as
-  /// [DevicePopulation.stockLegacy] — fail closed — and [evidence] says why.
+  /// [DevicePopulation.stockLegacy] -fail closed -and [evidence] says why.
   final bool conflict;
 
   /// Human-readable signal summary for logs; never parsed.
@@ -64,7 +64,7 @@ class Classification {
 
 /// Stock device-info replies are exactly this long; the first fork byte
 /// (offband_caps) sits at this offset. [verified: CMD_DEVICE_QUERY reply
-/// construction at companion-v1.18.0 — 82 bytes, unchanged from 1.17.x]
+/// construction at companion-v1.18.0 -82 bytes, unchanged from 1.17.x]
 const int stockDeviceInfoLength = 82;
 
 /// Upstream ver code that introduces the CLI frame (66/29).
@@ -80,7 +80,7 @@ const int maxKnownVerCode = 32;
 ///
 /// [deviceInfo] is the raw RESP_CODE_DEVICE_INFO frame. [firmwareVersion] is
 /// the version string already extracted from it (null when absent/unreadable);
-/// it is a SECONDARY signal — absence never blocks, only a positive
+/// it is a SECONDARY signal -absence never blocks, only a positive
 /// contradiction does. Task #878 replaces the contains-check below with the
 /// full dual-format parser.
 ///
@@ -174,7 +174,7 @@ enum VersionStringShape {
   /// Single `vX.Y.Z` (or `X.Y.Z`): the stock FIRMWARE_VERSION form.
   stock,
 
-  /// The Offband dual form: a semver, a dash, then more — covering
+  /// The Offband dual form: a semver, a dash, then more -covering
   /// `<ob>-<mc>` ("1.4.0-1.17.0"), the release-image `X-X` shape
   /// ("1.4.0-1.4.0", firmware#691), and bench builds' git-describe tails
   /// ("1.1.0-4-g9f2e1c3-dirty").
@@ -188,7 +188,7 @@ enum VersionStringShape {
 
 // Known limitation (Gemini review, #878): a stock PRE-RELEASE string of the
 // form "v1.19.0-rc1" would parse as the dual form. On a stock-shape frame
-// that is the inverse conflict and fails closed to stockLegacy — the safe
+// that is the inverse conflict and fails closed to stockLegacy -the safe
 // direction (the device loses the CLI offer, nothing misfires). Upstream has
 // not shipped suffixed FIRMWARE_VERSION strings to date; revisit only if one
 // appears in the field rather than inventing its format here.
