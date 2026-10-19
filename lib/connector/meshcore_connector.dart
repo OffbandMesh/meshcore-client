@@ -6780,6 +6780,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactStore.setPublicKeyHex = selfPublicKeyHex;
     _channelStore.setPublicKeyHex = selfPublicKeyHex;
     _unreadStore.setPublicKeyHex = selfPublicKeyHex;
+    // Discovered contacts are what THIS radio heard; scope them per radio so
+    // they don't bleed across radios on one host (#754). The startup load that
+    // follows clears and reloads the in-memory list from this radio's key.
+    _discoveryContactStore.setPublicKeyHex = selfPublicKeyHex;
 
     // Now that we have self info, we can load all the persisted data for this
     // node. Each step is timed: this sequence has stalled the UI isolate for
