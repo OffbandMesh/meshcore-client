@@ -29,6 +29,7 @@ import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'device_cli_screen.dart';
 import 'export_config_screen.dart';
 import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
@@ -892,6 +893,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
     final settingsService = context.watch<AppSettingsService>();
+    // #884: the Device CLI console is offered only when the connected radio
+    // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
+    // at the upstream-1.18 absorb). select() so only this gate flipping
+    // rebuilds the pane, not every connector update (the #81 lesson).
+    final cliCapable = context.select<MeshCoreConnector, bool>(
+      (c) => c.classification?.allowsCliFrame ?? false,
+    );
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -903,6 +911,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
+          if (cliCapable) ...[
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: Text(l10n.deviceCli_title),
+              subtitle: Text(l10n.deviceCli_entrySubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DeviceCliScreen()),
+              ),
+            ),
+            const Divider(height: 1),
+          ],
           SwitchListTile(
             secondary: const Icon(Icons.bug_report_outlined),
             title: Text(l10n.appSettings_appDebugLogging),

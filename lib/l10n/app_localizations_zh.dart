@@ -317,6 +317,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceCli_title => 'Device CLI';
 
   @override
+  String get deviceCli_entrySubtitle => 'Run commands on the connected radio';
+
+  @override
   String get deviceCli_commandHint => 'command...';
 
   @override

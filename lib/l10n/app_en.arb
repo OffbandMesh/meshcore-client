@@ -160,6 +160,7 @@
   "device_quickSwitch": "Quick switch",
   "device_meshcore": "MeshCore",
   "deviceCli_title": "Device CLI",
+  "deviceCli_entrySubtitle": "Run commands on the connected radio",
   "deviceCli_commandHint": "command...",
   "deviceCli_emptyHint": "Commands run on the connected device",
   "deviceCli_noReply": "{command}: no reply in {seconds} s",

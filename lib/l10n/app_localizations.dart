@@ -706,6 +706,12 @@ abstract class AppLocalizations {
   /// **'Device CLI'**
   String get deviceCli_title;
 
+  /// No description provided for @deviceCli_entrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run commands on the connected radio'**
+  String get deviceCli_entrySubtitle;
+
   /// No description provided for @deviceCli_commandHint.
   ///
   /// In en, this message translates to:
