@@ -5873,6 +5873,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   @visibleForTesting
   void setFirmwareVerCodeForTest(int? value) => _firmwareVerCode = value;
+  void setOffbandCapsForTest(int? value) => _offbandCaps = value;
 
   void _guardRegionScope() {
     if (!supportsRegionScope) {
@@ -6245,6 +6246,21 @@ class MeshCoreConnector extends ChangeNotifier {
     final toImport = nodeSet.difference(local).difference(touched);
     final toPush = local.difference(nodeSet).difference(touched);
     unawaited(blockService.importKeys(toImport));
+    // #471 Option A: a radio that reports an EMPTY block list is treated as
+    // blank. Do NOT auto-offload the client's blocks onto it, which made
+    // fresh/erased radios come up pre-blocked. The client stays the source of
+    // truth; blocks reach a radio only by an explicit user action. A radio that
+    // already holds blocks still unions normally.
+    if (nodeSet.isEmpty) {
+      if (toPush.isNotEmpty) {
+        _appDebugLogService?.info(
+          'Radio reports no blocks; not offloading ${toPush.length} '
+          'client block(s) onto a blank radio (#471)',
+          tag: 'Block',
+        );
+      }
+      return;
+    }
     for (final key in toPush) {
       _pushBlockChange(key, true);
     }
