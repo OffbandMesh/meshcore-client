@@ -49,6 +49,12 @@ import '../widgets/sync_progress_overlay.dart';
 /// read from `dart_defines.json`, because that file feeds every build.
 const bool _anrTestBuild = bool.fromEnvironment('OFFBAND_ANR_TEST');
 
+/// Show the row only where it can actually do something. Exit records are
+/// Android-only, so on a desktop test build the flag alone would leave a button
+/// that does nothing.
+bool get _showAnrTestRow =>
+    _anrTestBuild && AppExitInfoService.isSupportedPlatform;
+
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
 /// to the UI enum range (always 5-8).
 int _toUiCodingRate(int deviceCr) {
@@ -288,8 +294,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : null,
           ),
         ),
-        if (_anrTestBuild) const SizedBox(height: 16),
-        if (_anrTestBuild)
+        if (_showAnrTestRow) const SizedBox(height: 16),
+        if (_showAnrTestRow)
           // Test-only, and absent from any normal build: the constant below is
           // false unless the build passes OFFBAND_ANR_TEST, so this row is
           // compiled out of the shipped artifact. Hanging the main thread is the

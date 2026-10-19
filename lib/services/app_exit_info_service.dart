@@ -327,8 +327,12 @@ class AppExitInfoService {
 
   bool _ran = false;
 
-  static bool get _isAndroid =>
+  /// Exit records exist only on Android. Public so the test trigger in Settings
+  /// can hide itself rather than offering a button that does nothing.
+  static bool get isSupportedPlatform =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  static bool get _isAndroid => isSupportedPlatform;
 
   /// The directory ANR traces are written to, or null when file logging is
   /// unavailable. Used by the log export so the traces ship with the log.
