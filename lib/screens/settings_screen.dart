@@ -523,21 +523,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _actionsPane(BuildContext context) {
     final connector = context.watch<MeshCoreConnector>();
+    // Config import/export and the GPX exports moved here from Debug (#902):
+    // they are user operations, not diagnostics.
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [_buildActionsCard(context, connector)],
+      children: [
+        _buildActionsCard(context, connector),
+        const SizedBox(height: 16),
+        _buildExportCard(connector),
+      ],
     );
   }
 
   Widget _diagnosticsPane(BuildContext context) {
-    final connector = context.watch<MeshCoreConnector>();
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [
-        _buildDebugCard(context),
-        const SizedBox(height: 16),
-        _buildExportCard(connector),
-      ],
+      children: [_buildDebugCard(context)],
     );
   }
 
@@ -761,6 +762,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.sync_problem_outlined),
+            title: const Text('Sync queued messages now'),
+            subtitle: const Text(
+              'Force-pull messages the radio is holding, diagnostic for #51 '
+              '(radio reports a count but the app shows none). Logs the flow '
+              'for diagnostics.',
+            ),
+            trailing: const Icon(Icons.download),
+            onTap: () {
+              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
+              showDismissibleSnackBar(
+                context,
+                content: const Text('Requested queued-message drain (force)'),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
             leading: const Icon(Icons.restart_alt, color: Colors.orange),
             title: Text(l10n.settings_rebootDevice),
             subtitle: Text(l10n.settings_rebootDeviceSubtitle),
@@ -884,21 +903,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.bluetooth_outlined),
-            title: Text(l10n.settings_companionDebugLog),
-            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BleDebugLogScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 1),
           SwitchListTile(
             secondary: const Icon(Icons.bug_report_outlined),
             title: Text(l10n.appSettings_appDebugLogging),
@@ -927,6 +931,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : l10n.appSettings_appDebugLoggingDisabled,
                 ),
                 duration: const Duration(seconds: 2),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.bluetooth_outlined),
+            title: Text(l10n.settings_companionDebugLog),
+            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BleDebugLogScreen(),
+                ),
               );
             },
           ),
@@ -977,24 +996,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(
                   builder: (context) => const TopologyDebugScreen(),
                 ),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.sync_problem_outlined),
-            title: const Text('Sync queued messages now'),
-            subtitle: const Text(
-              'Force-pull messages the radio is holding, diagnostic for #51 '
-              '(radio reports a count but the app shows none). Logs the flow '
-              'for diagnostics.',
-            ),
-            trailing: const Icon(Icons.download),
-            onTap: () {
-              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
-              showDismissibleSnackBar(
-                context,
-                content: const Text('Requested queued-message drain (force)'),
               );
             },
           ),
