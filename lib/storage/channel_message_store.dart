@@ -8,6 +8,45 @@ import '../helpers/reaction_helper.dart';
 import '../helpers/smaz.dart';
 import 'drift/blob_store.dart';
 
+/// Merges `incomingJson` into the stored channel history, off the UI isolate.
+///
+/// Top-level because `compute` sends it to another isolate; a closure capturing
+/// the store would not be sendable. Visible (not `_`-private) only so the test
+/// can call it directly and assert the merge semantics without an isolate.
+///
+/// Semantics are deliberately identical to the inline merge this replaced:
+/// upsert by [ChannelMessageStore._mergeKey], the incoming copy wins so edits,
+/// reactions and status updates are captured, and the result is sorted by
+/// timestamp. Deletion has its own path, so this never resurrects a deleted
+/// message.
+///
+/// **Throws** when the stored JSON will not decode, rather than merging into an
+/// empty base. [BlobStore.mergeOffThread] logs and declines to write, so a
+/// blob that cannot be read is never replaced by a truncated one (#334's
+/// original inline behaviour, preserved).
+String mergeChannelHistoryJson((String?, String) input) {
+  final (stored, incomingJson) = input;
+  final byKey = <String, ChannelMessage>{};
+
+  if (stored != null && stored.isNotEmpty) {
+    // No try/catch: a decode failure must propagate so the caller refuses the
+    // write. Swallowing it here would silently truncate the history.
+    for (final e in jsonDecode(stored) as List<dynamic>) {
+      final m = ChannelMessageStore._messageFromJson(e as Map<String, dynamic>);
+      byKey[ChannelMessageStore._mergeKey(m)] = m;
+    }
+  }
+
+  for (final e in jsonDecode(incomingJson) as List<dynamic>) {
+    final m = ChannelMessageStore._messageFromJson(e as Map<String, dynamic>);
+    byKey[ChannelMessageStore._mergeKey(m)] = m;
+  }
+
+  final merged = byKey.values.toList()
+    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  return jsonEncode(merged.map(ChannelMessageStore._messageToJson).toList());
+}
+
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
 
@@ -75,39 +114,22 @@ class ChannelMessageStore {
     // resurrects a message the user deleted.
     final key = _storageKey(channelIndex);
     final blobs = BlobStore.instance;
-    // Serialise the whole read-modify-write against other saves/deletes on this
-    // key so two concurrent saves cannot clobber each other (Gemini review).
-    await blobs.synchronized(key, () async {
-      final byKey = <String, ChannelMessage>{};
-      final existing = await blobs.readWithPrefsFallback(key);
-      if (existing != null && existing.isNotEmpty) {
-        try {
-          for (final e in jsonDecode(existing) as List<dynamic>) {
-            final m = _messageFromJson(e as Map<String, dynamic>);
-            byKey[_mergeKey(m)] = m;
-          }
-        } catch (e) {
-          // SAFELANE 6: never merge into an empty base and truncate silently.
-          appLogger.error(
-            'Failed to decode existing channel $channelIndex history before '
-            'merge; aborting save to avoid truncation: $e',
-            tag: 'Storage',
-          );
-          return;
-        }
-      }
-      for (final m in messages) {
-        byKey[_mergeKey(m)] = m;
-      }
-      final merged = byKey.values.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
-    });
+    // Only the INCOMING messages are encoded here, on the UI isolate: that is
+    // normally one message and costs microseconds. Decoding the stored history,
+    // merging and re-encoding it runs on another isolate (#919), because at the
+    // owner's largest channel (5.38 MB, 9,230 messages) that work measured
+    // 134 ms per save and a burst of them crossed Android's five-second
+    // watchdog (#334). `mergeOffThread` keeps the per-key serialisation that
+    // stops two saves clobbering each other, and fails closed: if the stored
+    // JSON will not decode, the key is not written, which is the same refusal
+    // this code made inline.
+    final incoming = jsonEncode(messages.map(_messageToJson).toList());
+    await blobs.mergeOffThread(key, incoming, mergeChannelHistoryJson);
   }
 
   /// Stable identity for merge/dedupe. messageId when present, else a composite
   /// that distinguishes distinct messages that share no id.
-  String _mergeKey(ChannelMessage m) {
+  static String _mergeKey(ChannelMessage m) {
     if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
     // Include the sender: two different senders can post identical text at the
     // same timestamp without a messageId, and would otherwise collide and lose
@@ -242,7 +264,7 @@ class ChannelMessageStore {
   }
 
   /// Convert ChannelMessage to JSON map
-  Map<String, dynamic> _messageToJson(ChannelMessage msg) {
+  static Map<String, dynamic> _messageToJson(ChannelMessage msg) {
     return {
       'senderKey': msg.senderKey != null ? base64Encode(msg.senderKey!) : null,
       'senderName': msg.senderName,
@@ -273,7 +295,7 @@ class ChannelMessageStore {
   }
 
   /// Convert JSON map to ChannelMessage
-  ChannelMessage _messageFromJson(Map<String, dynamic> json) {
+  static ChannelMessage _messageFromJson(Map<String, dynamic> json) {
     final rawText = json['text'] as String;
     final decodedText = Smaz.tryDecodePrefixed(rawText) ?? rawText;
     return ChannelMessage(
@@ -325,7 +347,7 @@ class ChannelMessageStore {
     );
   }
 
-  Map<String, dynamic> _repeatToJson(Repeat repeat) {
+  static Map<String, dynamic> _repeatToJson(Repeat repeat) {
     return {
       'repeaterKey': repeat.repeaterKey != null
           ? base64Encode(repeat.repeaterKey!)
@@ -336,7 +358,7 @@ class ChannelMessageStore {
     };
   }
 
-  Repeat _repeatFromJson(Map<String, dynamic> json) {
+  static Repeat _repeatFromJson(Map<String, dynamic> json) {
     return Repeat(
       repeaterKey: json['repeaterKey'] != null
           ? Uint8List.fromList(base64Decode(json['repeaterKey']))
