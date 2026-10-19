@@ -157,8 +157,13 @@ class BlobStore {
   ///
   /// [merge] **must be a top-level or static function**: `compute` sends it to
   /// another isolate, and a closure capturing `this` is not sendable. It
-  /// receives `(storedJson, incomingJson)` and returns the JSON to store, or
-  /// null to leave the key untouched.
+  /// receives `(storedJson, payload)` and returns the JSON to store, or null to
+  /// leave the key untouched.
+  ///
+  /// [payload] is whatever single string the callback needs alongside the
+  /// stored blob: the incoming batch as JSON when saving, the merge key of the
+  /// record to drop when deleting. The callback defines its meaning; this
+  /// method only carries it across the isolate boundary.
   ///
   /// Fails closed. If [merge] throws, including on malformed stored JSON, the
   /// error is logged and **the key is not written**, so a corrupt or
@@ -174,19 +179,19 @@ class BlobStore {
   /// Returns true when the key was written.
   Future<bool> mergeOffThread(
     String key,
-    String incomingJson,
+    String payload,
     BlobMergeCallback merge,
   ) {
     return synchronized(key, () async {
       final stored = await readWithPrefsFallback(key);
       final String? merged;
       try {
-        merged = await compute(merge, (stored, incomingJson));
+        merged = await compute(merge, (stored, payload));
       } catch (e, stack) {
         appLogger.error(
           'Off-thread merge FAILED for $key (stored '
-          '${stored?.length ?? "null"} chars, incoming '
-          '${incomingJson.length} chars): $e. The key was NOT written, so '
+          '${stored?.length ?? "null"} chars, payload '
+          '${payload.length} chars): $e. The key was NOT written, so '
           'nothing was truncated.\n$stack',
           tag: 'Storage',
         );
@@ -409,10 +414,10 @@ class BlobStore {
 
 /// Merge step for [BlobStore.mergeOffThread], run on another isolate.
 ///
-/// Takes `(storedJson, incomingJson)` and returns the JSON to store, or null to
+/// Takes `(storedJson, payload)` and returns the JSON to store, or null to
 /// leave the key untouched. Must be a top-level or static function so `compute`
-/// can send it; a record of strings is the payload so sendability is not in
-/// question.
+/// can send it; a record of two strings crosses the boundary, so sendability is
+/// not in question.
 typedef BlobMergeCallback = String? Function((String?, String) input);
 
 /// Mutable tally of a migration run; surfaced in the log and used by tests.

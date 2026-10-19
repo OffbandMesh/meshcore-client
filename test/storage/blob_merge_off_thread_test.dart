@@ -326,7 +326,6 @@ void main() {
       );
     });
   });
-
 }
 
 /// Top-level so `compute` can send it.

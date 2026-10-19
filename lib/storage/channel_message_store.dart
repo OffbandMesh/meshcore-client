@@ -47,6 +47,35 @@ String mergeChannelHistoryJson((String?, String) input) {
   return jsonEncode(merged.map(ChannelMessageStore._messageToJson).toList());
 }
 
+/// Drops the record whose merge key is `target` from a channel history blob.
+///
+/// `input` is `(storedJson, targetMergeKey)`. Top-level and static-only so
+/// `compute` can send it (#919). Returns null, so nothing is written, when
+/// there is no history or the target is not in it: re-encoding 5 MB to change
+/// nothing is exactly the cost this Epic exists to stop paying.
+///
+/// Throws on undecodable stored JSON, which `mergeOffThread` turns into a
+/// refused write. That matches the inline code it replaces, which logged and
+/// left the blob alone.
+String? dropFromChannelHistoryJson((String?, String) input) {
+  final (stored, target) = input;
+  if (stored == null || stored.isEmpty) return null;
+
+  final kept = <ChannelMessage>[];
+  var removed = false;
+  for (final e in jsonDecode(stored) as List<dynamic>) {
+    final m = ChannelMessageStore._messageFromJson(e as Map<String, dynamic>);
+    if (ChannelMessageStore._mergeKey(m) == target) {
+      removed = true;
+    } else {
+      kept.add(m);
+    }
+  }
+  if (!removed) return null;
+
+  return jsonEncode(kept.map(ChannelMessageStore._messageToJson).toList());
+}
+
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
 
@@ -144,33 +173,21 @@ class ChannelMessageStore {
   /// Removes a single message from the persisted history. The explicit delete
   /// path (#343): save merges and never removes, so deletion cannot go through
   /// save.
+  ///
+  /// Decode and re-encode run off the UI isolate for the same reason saving
+  /// does (#919): a delete rewrites the whole blob, so on a large channel it
+  /// blocked the UI for as long as a save did, right when the user had just
+  /// tapped something.
   Future<void> removeChannelMessage(
     int channelIndex,
     ChannelMessage message,
   ) async {
     if (publicKeyHex.isEmpty) return;
-    final key = _storageKey(channelIndex);
-    final blobs = BlobStore.instance;
-    await blobs.synchronized(key, () async {
-      final existing = await blobs.readWithPrefsFallback(key);
-      if (existing == null || existing.isEmpty) return;
-      final List<dynamic> raw;
-      try {
-        raw = jsonDecode(existing) as List<dynamic>;
-      } catch (e) {
-        appLogger.error(
-          'Failed to decode channel $channelIndex history for delete: $e',
-          tag: 'Storage',
-        );
-        return;
-      }
-      final target = _mergeKey(message);
-      final kept = raw
-          .map((e) => _messageFromJson(e as Map<String, dynamic>))
-          .where((m) => _mergeKey(m) != target)
-          .toList();
-      await blobs.write(key, jsonEncode(kept.map(_messageToJson).toList()));
-    });
+    await BlobStore.instance.mergeOffThread(
+      _storageKey(channelIndex),
+      _mergeKey(message),
+      dropFromChannelHistoryJson,
+    );
   }
 
   /// Load messages for a specific channel

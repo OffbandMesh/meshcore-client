@@ -38,6 +38,30 @@ String mergeDmHistoryJson((String?, String) input) {
   return jsonEncode(merged.map(MessageStore._messageToJson).toList());
 }
 
+/// Drops the record whose merge key is `target` from a DM history blob.
+///
+/// `input` is `(storedJson, targetMergeKey)`. Returns null, so nothing is
+/// written, when there is no history or the target is not in it. Throws on
+/// undecodable stored JSON, which `mergeOffThread` turns into a refused write.
+String? dropFromDmHistoryJson((String?, String) input) {
+  final (stored, target) = input;
+  if (stored == null || stored.isEmpty) return null;
+
+  final kept = <Message>[];
+  var removed = false;
+  for (final e in jsonDecode(stored) as List<dynamic>) {
+    final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+    if (MessageStore._mergeKey(m) == target) {
+      removed = true;
+    } else {
+      kept.add(m);
+    }
+  }
+  if (!removed) return null;
+
+  return jsonEncode(kept.map(MessageStore._messageToJson).toList());
+}
+
 class MessageStore {
   static const String _keyPrefix = 'messages_';
 
@@ -76,29 +100,17 @@ class MessageStore {
   }
 
   /// Explicit delete path (#343): save merges and never removes.
+  ///
+  /// Decode and re-encode run off the UI isolate (#919), as in the channel
+  /// store. This also gains the per-key serialisation it did not have before:
+  /// it was a read-modify-write outside [BlobStore.synchronized], so a save
+  /// landing after a delete could resurrect the deleted message.
   Future<void> removeMessage(String contactKeyHex, Message message) async {
     if (publicKeyHex.isEmpty) return;
-    final key = '$keyFor$contactKeyHex';
-    final existing = await BlobStore.instance.readWithPrefsFallback(key);
-    if (existing == null || existing.isEmpty) return;
-    final List<dynamic> raw;
-    try {
-      raw = jsonDecode(existing) as List<dynamic>;
-    } catch (e) {
-      appLogger.error(
-        'Failed to decode DM history for delete: $e',
-        tag: 'Storage',
-      );
-      return;
-    }
-    final target = _mergeKey(message);
-    final kept = raw
-        .map((e) => _messageFromJson(e as Map<String, dynamic>))
-        .where((m) => _mergeKey(m) != target)
-        .toList();
-    await BlobStore.instance.write(
-      key,
-      jsonEncode(kept.map(_messageToJson).toList()),
+    await BlobStore.instance.mergeOffThread(
+      '$keyFor$contactKeyHex',
+      _mergeKey(message),
+      dropFromDmHistoryJson,
     );
   }
 
