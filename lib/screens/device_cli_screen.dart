@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
+import '../helpers/device_name_validator.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../l10n/l10n.dart';
 import '../services/local_cli_service.dart';
@@ -116,11 +117,44 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
     return t.startsWith('Unknown command') || t.startsWith('Error');
   }
 
+  /// Extracts the name argument of a `set name <value>` command (any casing,
+  /// any inner spacing), or null when the command is not one. #885 mirrors the
+  /// device's own name-character rejection before the frame is sent.
+  static String? setNameArg(String command) {
+    final m = RegExp(
+      r'^set\s+name\s+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(command.trim());
+    return m?.group(1);
+  }
+
   Future<void> _sendCommand() async {
     final command = _commandController.text.trim();
     if (command.isEmpty) return;
     final service = _cliService;
     if (service == null) return;
+
+    // Mirror the firmware's `set name` character rejection locally: show the
+    // typed command and a rejection row, and never send the frame (#885).
+    final nameArg = setNameArg(command);
+    if (nameArg != null) {
+      final bad = forbiddenCharsIn(nameArg);
+      if (bad.isNotEmpty) {
+        setState(() {
+          _entries.add(_ConsoleEntry.command(command));
+          _entries.add(
+            _ConsoleEntry.sendFailed(
+              context.l10n.deviceCli_nameRejected(bad.join(' ')),
+            ),
+          );
+        });
+        _commandController.clear();
+        _historyIndex = -1;
+        _commandFocusNode.requestFocus();
+        _scrollToBottom();
+        return;
+      }
+    }
 
     final secret = isSecretCommand(command);
     setState(() {

@@ -203,6 +203,43 @@ void main() {
     expect(copied.single.arguments['text'], 'topsecret');
   });
 
+  testWidgets('set name with a forbidden char is rejected client-side, not '
+      'sent (#885)', (tester) async {
+    await pumpScreen(tester);
+    await tester.enterText(find.byType(TextField), 'set name My[Node]');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump(const Duration(milliseconds: 150)); // flush scroll timer
+
+    expect(sent, isEmpty); // the frame never left the client
+    expect(find.text('set name My[Node]'), findsOneWidget); // echoed
+    expect(find.textContaining('Not sent'), findsOneWidget); // rejection row
+    expect(find.textContaining('['), findsWidgets); // names the offender
+  });
+
+  testWidgets('a rejected set name is still recallable from history (#885 '
+      'Gemini review)', (tester) async {
+    // History derives from the command entries in the transcript, and the
+    // rejection path adds the command entry, so up-arrow recalls it to fix.
+    await pumpScreen(tester);
+    await tester.enterText(find.byType(TextField), 'set name bad:name');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    await tester.tap(find.byIcon(Icons.arrow_upward));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller?.text, 'set name bad:name');
+  });
+
+  testWidgets('a valid set name is sent normally (#885)', (tester) async {
+    await pumpScreen(tester);
+    await send(tester, 'set name MyNode');
+    expect(sent, hasLength(1));
+    connector.handleFrameForTest(replyFor(sent.single, '> ok'));
+    await tester.pumpAndSettle();
+    expect(find.text('> ok'), findsOneWidget);
+  });
+
   testWidgets('a blank command does nothing', (tester) async {
     await pumpScreen(tester);
     await tester.tap(find.byIcon(Icons.send));

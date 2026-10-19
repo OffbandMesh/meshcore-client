@@ -27,6 +27,7 @@ import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
+import '../helpers/device_name_validator.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
 import 'device_cli_screen.dart';
@@ -764,18 +765,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.sync_problem_outlined),
-            title: const Text('Sync queued messages now'),
-            subtitle: const Text(
-              'Force-pull messages the radio is holding, diagnostic for #51 '
-              '(radio reports a count but the app shows none). Logs the flow '
-              'for diagnostics.',
-            ),
+            title: Text(l10n.settings_syncQueuedMessages),
+            subtitle: Text(l10n.settings_syncQueuedMessagesSubtitle),
             trailing: const Icon(Icons.download),
             onTap: () {
               context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
               showDismissibleSnackBar(
                 context,
-                content: const Text('Requested queued-message drain (force)'),
+                content: Text(l10n.settings_syncQueuedMessagesRequested),
               );
             },
           ),
@@ -1121,37 +1118,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _editNodeName(BuildContext context, MeshCoreConnector connector) {
     final l10n = context.l10n;
     final controller = TextEditingController(text: connector.selfName ?? '');
+    String? errorText;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.settings_nodeName),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: l10n.settings_nodeNameHint,
-            border: const OutlineInputBorder(),
-          ),
-          maxLength: 31,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.common_cancel),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await connector.setNodeName(controller.text);
-              await connector.refreshDeviceInfo();
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(l10n.settings_nodeNameUpdated),
-              );
-            },
-            child: Text(l10n.common_save),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          // #885: mirror the firmware's `set name` character rejection so a
+          // bad name is caught here, not bounced as a cryptic device ERROR.
+          void revalidate(String value) {
+            final bad = forbiddenCharsIn(value);
+            setLocalState(() {
+              errorText = bad.isEmpty
+                  ? null
+                  : l10n.settings_nodeNameInvalidChars(bad.join(' '));
+            });
+          }
+
+          return AlertDialog(
+            title: Text(l10n.settings_nodeName),
+            content: TextField(
+              controller: controller,
+              onChanged: revalidate,
+              decoration: InputDecoration(
+                hintText: l10n.settings_nodeNameHint,
+                border: const OutlineInputBorder(),
+                errorText: errorText,
+              ),
+              maxLength: 31,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.common_cancel),
+              ),
+              TextButton(
+                onPressed: () async {
+                  if (!isValidDeviceName(controller.text)) {
+                    revalidate(controller.text); // show the error, keep open
+                    return;
+                  }
+                  Navigator.pop(context);
+                  await connector.setNodeName(controller.text);
+                  await connector.refreshDeviceInfo();
+                  if (!context.mounted) return;
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(l10n.settings_nodeNameUpdated),
+                  );
+                },
+                child: Text(l10n.common_save),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

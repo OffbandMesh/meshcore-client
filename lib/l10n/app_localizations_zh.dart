@@ -320,6 +320,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceCli_entrySubtitle => 'Run commands on the connected radio';
 
   @override
+  String deviceCli_nameRejected(String chars) {
+    return 'Not sent - name can\'t contain: $chars';
+  }
+
+  @override
   String get deviceCli_commandHint => 'command...';
 
   @override
@@ -382,6 +387,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settings_nodeNameUpdated => '节点名称已更新';
+
+  @override
+  String settings_nodeNameInvalidChars(String chars) {
+    return 'Name can\'t contain: $chars';
+  }
+
+  @override
+  String get settings_syncQueuedMessages => 'Sync queued messages now';
+
+  @override
+  String get settings_syncQueuedMessagesSubtitle =>
+      'Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.';
+
+  @override
+  String get settings_syncQueuedMessagesRequested =>
+      'Requested queued-message drain (force)';
 
   @override
   String get settings_radioSettings => '无线电设置';
