@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:meshcore_open/utils/app_logger.dart';
 
 import '../models/channel_message.dart';
@@ -76,6 +76,30 @@ String? dropFromChannelHistoryJson((String?, String) input) {
   return jsonEncode(kept.map(ChannelMessageStore._messageToJson).toList());
 }
 
+/// Converts a whole channel-history blob into one row per message (#920).
+///
+/// Top-level so `compute` can send it. Returns exactly one row per element of
+/// the source array, with no dedupe and no sorting: the migration's gate
+/// compares this count against an independent count of the blob, and does its
+/// own deduping, so doing either here would defeat the check.
+///
+/// Throws on undecodable JSON, which the migration turns into a refusal that
+/// leaves the blob as the source of truth.
+List<MessageRowInput> channelHistoryToRows(String blobJson) {
+  return (jsonDecode(blobJson) as List<dynamic>).map((e) {
+    final map = e as Map<String, dynamic>;
+    final m = ChannelMessageStore._messageFromJson(map);
+    return MessageRowInput(
+      mergeKey: ChannelMessageStore._mergeKey(m),
+      timestampMs: m.timestamp.millisecondsSinceEpoch,
+      // The source map, re-encoded, NOT a re-serialisation of the decoded
+      // object. A round trip through the model would quietly rewrite any field
+      // the model defaults, and this is a move, not a rewrite.
+      payload: jsonEncode(map),
+    );
+  }).toList();
+}
+
 class ChannelMessageStore {
   static const String _keyPrefix = 'channel_messages_';
 
@@ -143,18 +167,41 @@ class ChannelMessageStore {
     // resurrects a message the user deleted.
     final key = _storageKey(channelIndex);
     final blobs = BlobStore.instance;
-    // Only the INCOMING messages are encoded here, on the UI isolate: that is
-    // normally one message and costs microseconds. Decoding the stored history,
-    // merging and re-encoding it runs on another isolate (#919), because at the
-    // owner's largest channel (5.38 MB, 9,230 messages) that work measured
-    // 134 ms per save and a burst of them crossed Android's five-second
-    // watchdog (#334). `mergeOffThread` keeps the per-key serialisation that
+
+    // Rows (#920): one upsert per message in the list, which costs the same
+    // whether 50 or 50,000 messages are already stored. #919 moved the
+    // whole-history re-encode to another isolate; this removes it. The cost is
+    // proportional to the in-memory window being saved, never to the history.
+    if (await blobs.ensureMessageRowsMigrated(key, channelHistoryToRows)) {
+      await blobs.upsertMessageRows(key, messages.map(_toRow));
+      return;
+    }
+
+    // Blob fallback, for a key whose migration was refused. Still correct,
+    // still off the UI isolate (#919): only the INCOMING messages are encoded
+    // here, and decoding the stored history, merging and re-encoding it runs on
+    // another isolate. `mergeOffThread` keeps the per-key serialisation that
     // stops two saves clobbering each other, and fails closed: if the stored
-    // JSON will not decode, the key is not written, which is the same refusal
-    // this code made inline.
+    // JSON will not decode, the key is not written.
     final incoming = jsonEncode(messages.map(_messageToJson).toList());
     await blobs.mergeOffThread(key, incoming, mergeChannelHistoryJson);
   }
+
+  static MessageRowInput _toRow(ChannelMessage m) => MessageRowInput(
+    mergeKey: _mergeKey(m),
+    timestampMs: m.timestamp.millisecondsSinceEpoch,
+    payload: jsonEncode(_messageToJson(m)),
+  );
+
+  /// The store's own history encoding, for tests that need a blob fixture.
+  ///
+  /// Exists so a test never hand-writes one: a hand-rolled fixture rots the
+  /// moment a non-null field joins the schema, which is exactly how the #919
+  /// tests first failed. Saving through [saveChannelMessages] cannot serve that
+  /// purpose any more, because saves write rows now.
+  @visibleForTesting
+  static String encodeHistoryForTest(List<ChannelMessage> messages) =>
+      jsonEncode(messages.map(_messageToJson).toList());
 
   /// Stable identity for merge/dedupe. messageId when present, else a composite
   /// that distinguishes distinct messages that share no id.
@@ -174,17 +221,23 @@ class ChannelMessageStore {
   /// path (#343): save merges and never removes, so deletion cannot go through
   /// save.
   ///
-  /// Decode and re-encode run off the UI isolate for the same reason saving
-  /// does (#919): a delete rewrites the whole blob, so on a large channel it
-  /// blocked the UI for as long as a save did, right when the user had just
-  /// tapped something.
+  /// On rows this is a single-row DELETE (#920). On the blob fallback the
+  /// decode and re-encode run off the UI isolate (#919), because a delete
+  /// rewrites the whole blob and so blocked the UI for as long as a save did,
+  /// right when the user had just tapped something.
   Future<void> removeChannelMessage(
     int channelIndex,
     ChannelMessage message,
   ) async {
     if (publicKeyHex.isEmpty) return;
-    await BlobStore.instance.mergeOffThread(
-      _storageKey(channelIndex),
+    final key = _storageKey(channelIndex);
+    final blobs = BlobStore.instance;
+    if (await blobs.ensureMessageRowsMigrated(key, channelHistoryToRows)) {
+      await blobs.deleteMessageRow(key, _mergeKey(message));
+      return;
+    }
+    await blobs.mergeOffThread(
+      key,
       _mergeKey(message),
       dropFromChannelHistoryJson,
     );
@@ -200,6 +253,19 @@ class ChannelMessageStore {
     }
     final blobs = BlobStore.instance;
     final key = _storageKey(channelIndex);
+
+    // Rows (#920). The legacy-key adoption below works on blobs, so it has to
+    // run before this key can be considered settled: a key with no blob and no
+    // rows is migrated as "empty" and would then never adopt its slot-index
+    // history. So rows are only authoritative once they exist OR the blob is
+    // genuinely empty after adoption had its chance.
+    if (await blobs.isOnMessageRows(key)) {
+      final payloads = await blobs.messagePayloads(key);
+      if (payloads.isNotEmpty) {
+        return _decodePayloads(payloads, key);
+      }
+    }
+
     // Bulk data lives in drift (#335); the fallback covers an unmigrated key
     // and logs loudly if it fires.
     String? jsonString = await blobs.readWithPrefsFallback(key);
@@ -253,6 +319,12 @@ class ChannelMessageStore {
     if (jsonString == null || jsonString.isEmpty) {
       return [];
     }
+
+    // The blob holds history that is not in rows yet, either because this key
+    // has never been migrated or because adoption above just brought legacy
+    // history in. Move it now so the next load and every save is on rows.
+    await blobs.ensureMessageRowsMigrated(key, channelHistoryToRows);
+
     try {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
       return jsonList.map((json) => _messageFromJson(json)).toList();
@@ -262,14 +334,34 @@ class ChannelMessageStore {
     }
   }
 
+  List<ChannelMessage> _decodePayloads(List<String> payloads, String key) {
+    final out = <ChannelMessage>[];
+    for (final p in payloads) {
+      try {
+        out.add(_messageFromJson(jsonDecode(p) as Map<String, dynamic>));
+      } catch (e) {
+        // One unreadable row must not cost the whole channel. Unlike the blob,
+        // where a bad byte took every message with it, rows fail one at a time.
+        appLogger.error(
+          'Skipping an undecodable message row in $key: $e',
+          tag: 'Storage',
+        );
+      }
+    }
+    return out;
+  }
+
   /// Clear messages for a specific channel slot. Removes BOTH the PSK-identity
   /// key and the raw slot-index key: deleteChannel needs the channel's own
   /// history gone, and setChannel's reuse-clear (#193) needs any stale
   /// slot-index history gone so it can't be migrated onto the new occupant.
   Future<void> clearChannelMessages(int channelIndex) async {
     final blobs = BlobStore.instance;
-    await blobs.deleteEverywhere(_storageKey(channelIndex));
-    await blobs.deleteEverywhere(_indexKey(channelIndex));
+    for (final key in {_storageKey(channelIndex), _indexKey(channelIndex)}) {
+      await blobs.deleteEverywhere(key);
+      // Rows as well, or a clear would leave the history readable (#920).
+      await blobs.deleteMessageRows(key);
+    }
   }
 
   /// Clear all channel messages
@@ -277,6 +369,11 @@ class ChannelMessageStore {
     final blobs = BlobStore.instance;
     for (final key in await blobs.keysWithPrefix(keyFor)) {
       await blobs.deleteEverywhere(key);
+      await blobs.deleteMessageRows(key);
+    }
+    // Row-only keys have no blob left to list, so clear by row key too.
+    for (final key in await blobs.messageStoreKeys()) {
+      if (key.startsWith(keyFor)) await blobs.deleteMessageRows(key);
     }
   }
 
