@@ -1,6 +1,6 @@
 // Codec for the upstream 1.18 companion CLI frames (interop plan F2, #868):
 // CMD_RUN_CLI_COMMAND (66) out, RESP_CODE_CLI_REPLY (29) back. Pure codec,
-// no transport — mirrors the firmware contract at companion-v1.18.0
+// no transport - mirrors the firmware contract at companion-v1.18.0
 // (INVESTIGATION.md §A1):
 //   request  [66][ascii command], frame length >= 3
 //   reply    [29][ascii reply], reply text <= 165 bytes (reply_buf[166])
@@ -9,7 +9,7 @@
 // at the start of the reply. Same grammar the repeater CLI already uses.
 //
 // Only emit frame 66 to a device the population classifier places at
-// stockModern (or post-absorb Offband, via the D1 seam) — see
+// stockModern (or post-absorb Offband, via the D1 seam) - see
 // device_population.dart. The codec itself does not gate.
 
 import 'dart:convert';
@@ -32,7 +32,7 @@ final RegExp _prefixShape = RegExp(r'^..\|$');
 ///
 /// Throws [ArgumentError] on a blank command, a command too short for the
 /// firmware's `len >= 3` floor (two command bytes minimum), or a prefix that
-/// is not exactly three characters ending in `|` — fail closed rather than
+/// is not exactly three characters ending in `|` - fail closed rather than
 /// emit a frame the device will misparse.
 Uint8List buildRunCliCommandFrame(String command, {String? prefix}) {
   final trimmed = command.trim();
@@ -76,24 +76,24 @@ class CliReply {
   /// Reply text with any prefix stripped.
   final String text;
 
-  /// Raw payload byte count (prefix included) — truncation happens on the
+  /// Raw payload byte count (prefix included) - truncation happens on the
   /// device BEFORE the prefix is stripped, so the bound is judged here, not
   /// on [text] (Gemini review, #881 finding 2).
   final int payloadLength;
 
-  /// True when the payload sits at the device's truncation bound — the reply
+  /// True when the payload sits at the device's truncation bound - the reply
   /// may have been cut and the UI should say so rather than present it as
   /// complete.
   bool get atReplyBound => payloadLength >= maxCliReplyPayload;
 }
 
 /// Parses a `[29][reply]` frame; null when [frame] is not a CLI reply.
-/// Decoding is lenient (malformed bytes become U+FFFD) — a garbled reply is
+/// Decoding is lenient (malformed bytes become U+FFFD) - a garbled reply is
 /// still a reply, and dropping it would look like a timeout.
 ///
 /// Prefix detection is positional (third character `|`), the same rule the
 /// device and the repeater path use. A prefixless reply whose text happens to
-/// carry `|` at index 2 mis-splits — inherent to the wire grammar, mitigated
+/// carry `|` at index 2 mis-splits - inherent to the wire grammar, mitigated
 /// by callers always sending a prefix so real replies reflect one.
 CliReply? parseCliReply(Uint8List frame) {
   if (frame.isEmpty || frame[0] != respCodeCliReply) return null;

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,8 +5,10 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/cli_command_codec.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/services/app_debug_log_service.dart';
 import 'package:meshcore_open/services/command_correlation.dart';
 import 'package:meshcore_open/services/local_cli_service.dart';
+import 'package:meshcore_open/utils/app_logger.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
@@ -112,6 +113,34 @@ void main() {
       connector.handleFrameForTest(replyFor(sent[0], '> 1.0'));
       expect((await f2).text, '> off');
       expect((await f1).text, '> 1.0');
+    });
+
+    test('a late reply to a secret command never logs its cleartext'
+        ' (Gemini review #883)', () async {
+      final logService = AppDebugLogService();
+      appLogger.initialize(logService, enabled: true);
+      addTearDown(() => appLogger.setEnabled(false));
+
+      // The command times out, so its pending entry is dropped.
+      final future = service.run(
+        'get wifi.pwd',
+        timeout: const Duration(milliseconds: 40),
+      );
+      await expectLater(future, throwsA(isA<LocalCliTimeout>()));
+
+      // The device answers late, carrying the secret in cleartext.
+      const secret = 'hunter2-cleartext';
+      connector.handleFrameForTest(replyFor(sent.single, secret));
+
+      // The unmatched reply is logged for diagnostics, but its text is not.
+      expect(logService.entries, isNotEmpty);
+      for (final e in logService.entries) {
+        expect(e.message, isNot(contains(secret)));
+      }
+      expect(
+        logService.entries.any((e) => e.message.contains('text withheld')),
+        isTrue,
+      );
     });
   });
 }

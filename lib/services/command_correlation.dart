@@ -1,5 +1,5 @@
 // Shared `cc|` correlation grammar (#882): one allocator and one splitter for
-// every CLI path — the repeater text-message CLI (RepeaterCommandService) and
+// every CLI path - the repeater text-message CLI (RepeaterCommandService) and
 // the local frame-66 console (LocalCliService). The grammar is the device's:
 // a 3-char token ending in `|`, reflected at the start of the reply when the
 // command carried one.
@@ -12,8 +12,7 @@ class PrefixAllocator {
   String next(Set<String> inUse) {
     for (var i = 0; i < 256; i++) {
       final value = _counter++ & 0xFF;
-      final token =
-          '${value.toRadixString(16).padLeft(2, '0').toUpperCase()}|';
+      final token = '${value.toRadixString(16).padLeft(2, '0').toUpperCase()}|';
       if (!inUse.contains(token)) return token;
     }
     return '00|';

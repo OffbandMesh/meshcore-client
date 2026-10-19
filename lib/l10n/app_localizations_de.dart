@@ -330,6 +330,39 @@ class AppLocalizationsDe extends AppLocalizations {
   String get device_meshcore => 'MeshCore';
 
   @override
+  String get deviceCli_title => 'Device CLI';
+
+  @override
+  String get deviceCli_commandHint => 'command...';
+
+  @override
+  String get deviceCli_emptyHint => 'Commands run on the connected device';
+
+  @override
+  String deviceCli_noReply(String command, String seconds) {
+    return '$command: no reply in $seconds s';
+  }
+
+  @override
+  String deviceCli_sendFailed(String error) {
+    return 'Send failed: $error';
+  }
+
+  @override
+  String get deviceCli_truncatedByDevice => 'reply truncated by the device';
+
+  @override
+  String get deviceCli_secretLongPressToCopy => 'secret, long-press to copy';
+
+  @override
+  String get deviceCli_secretCopied => 'Secret copied to clipboard';
+
+  @override
+  String deviceCli_latencyMs(int ms) {
+    return '$ms ms';
+  }
+
+  @override
   String get settings_title => 'Einstellungen';
 
   @override

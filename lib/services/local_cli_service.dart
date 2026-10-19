@@ -20,9 +20,12 @@ class LocalCliTimeout implements Exception {
   final String command;
   final Duration timeout;
 
+  /// The armed window in seconds to one decimal, e.g. `10.0` - same shape as
+  /// [RepeaterCommandTimeout.secondsText] so UI strings read alike.
+  String get secondsText => (timeout.inMilliseconds / 1000).toStringAsFixed(1);
+
   @override
-  String toString() =>
-      'CLI command timed out after ${timeout.inMilliseconds / 1000} s';
+  String toString() => 'CLI command timed out after $secondsText s';
 }
 
 class LocalCliService {
@@ -85,10 +88,15 @@ class LocalCliService {
     }
     // Every command this service sends carries a prefix, so an unmatched or
     // prefixless reply answers something that already timed out (or another
-    // sender). Log it — never guess it onto a waiting command (#532's rule).
+    // sender). Log it - never guess it onto a waiting command (#532's rule).
+    // The reply TEXT is withheld: a late reply to a secret command (e.g.
+    // `get wifi.pwd`) would otherwise write cleartext to the app log, which the
+    // screen's masking cannot undo (Gemini review, #883). The correlation token
+    // and byte length carry the debug value without the content.
     appLogger.warn(
       'CLI reply matched no pending command '
-      '(prefix: ${prefix ?? 'none'}): ${reply.text}',
+      '(prefix: ${prefix ?? 'none'}, ${reply.payloadLength} bytes); '
+      'text withheld',
       tag: 'LocalCli',
     );
   }
@@ -107,10 +115,9 @@ class LocalCliService {
     _timeouts.clear();
     for (final c in _pending.values) {
       if (!c.isCompleted) {
-        c.completeError(const LocalCliTimeout(
-          command: '(disposed)',
-          timeout: Duration.zero,
-        ));
+        c.completeError(
+          const LocalCliTimeout(command: '(disposed)', timeout: Duration.zero),
+        );
       }
     }
     _pending.clear();

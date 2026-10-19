@@ -159,6 +159,39 @@
   "scanner_enableBluetooth": "Enable Bluetooth",
   "device_quickSwitch": "Quick switch",
   "device_meshcore": "MeshCore",
+  "deviceCli_title": "Device CLI",
+  "deviceCli_commandHint": "command...",
+  "deviceCli_emptyHint": "Commands run on the connected device",
+  "deviceCli_noReply": "{command}: no reply in {seconds} s",
+  "@deviceCli_noReply": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_sendFailed": "Send failed: {error}",
+  "@deviceCli_sendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_truncatedByDevice": "reply truncated by the device",
+  "deviceCli_secretLongPressToCopy": "secret, long-press to copy",
+  "deviceCli_secretCopied": "Secret copied to clipboard",
+  "deviceCli_latencyMs": "{ms} ms",
+  "@deviceCli_latencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
   "settings_title": "Settings",
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",

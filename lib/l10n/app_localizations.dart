@@ -700,6 +700,60 @@ abstract class AppLocalizations {
   /// **'MeshCore'**
   String get device_meshcore;
 
+  /// No description provided for @deviceCli_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Device CLI'**
+  String get deviceCli_title;
+
+  /// No description provided for @deviceCli_commandHint.
+  ///
+  /// In en, this message translates to:
+  /// **'command...'**
+  String get deviceCli_commandHint;
+
+  /// No description provided for @deviceCli_emptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands run on the connected device'**
+  String get deviceCli_emptyHint;
+
+  /// No description provided for @deviceCli_noReply.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: no reply in {seconds} s'**
+  String deviceCli_noReply(String command, String seconds);
+
+  /// No description provided for @deviceCli_sendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Send failed: {error}'**
+  String deviceCli_sendFailed(String error);
+
+  /// No description provided for @deviceCli_truncatedByDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'reply truncated by the device'**
+  String get deviceCli_truncatedByDevice;
+
+  /// No description provided for @deviceCli_secretLongPressToCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'secret, long-press to copy'**
+  String get deviceCli_secretLongPressToCopy;
+
+  /// No description provided for @deviceCli_secretCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret copied to clipboard'**
+  String get deviceCli_secretCopied;
+
+  /// No description provided for @deviceCli_latencyMs.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String deviceCli_latencyMs(int ms);
+
   /// No description provided for @settings_title.
   ///
   /// In en, this message translates to:
