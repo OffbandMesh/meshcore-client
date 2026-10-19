@@ -85,8 +85,10 @@ void main() {
     });
 
     test('non-ASCII commands are rejected at build time', () {
-      expect(() => buildRunCliCommandFrame('set name Ωmega'),
-          throwsArgumentError);
+      expect(
+        () => buildRunCliCommandFrame('set name Ωmega'),
+        throwsArgumentError,
+      );
     });
 
     test('non-ascii bytes decode leniently rather than throwing', () {
