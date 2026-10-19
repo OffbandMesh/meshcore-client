@@ -138,6 +138,66 @@ class BlobStore {
     await (_db.delete(_db.storedBlobs)..where((t) => t.key.equals(key))).go();
   }
 
+  /// Read-modify-write for a bulk key with the decode, merge and re-encode run
+  /// **off the UI isolate** (#919).
+  ///
+  /// Why this exists: the stores hold one JSON blob per key, so saving a single
+  /// message decodes, rebuilds and re-encodes the entire history. Measured on
+  /// the owner's live database, the largest channel is 5.38 MB holding 9,230
+  /// messages, and one save costs **134 ms** on a desktop CPU (decode 50,
+  /// rebuild 38, encode 51), scaling about 14 ms per 1,000 records. Saves on a
+  /// key are serialised by [synchronized], so a burst of arriving messages pays
+  /// that cost once each, back to back. Five messages on a phone five to ten
+  /// times slower than a desktop crosses Android's five-second input-dispatch
+  /// watchdog, which is what 25 ANR clusters on Play reported (#334).
+  ///
+  /// This does not make the work cheaper, only concurrent: the ~11 MB of string
+  /// and map allocation per save still happens, on another isolate. Removing
+  /// the cost needs one row per message (#920).
+  ///
+  /// [merge] **must be a top-level or static function**: `compute` sends it to
+  /// another isolate, and a closure capturing `this` is not sendable. It
+  /// receives `(storedJson, incomingJson)` and returns the JSON to store, or
+  /// null to leave the key untouched.
+  ///
+  /// Fails closed. If [merge] throws, including on malformed stored JSON, the
+  /// error is logged and **the key is not written**, so a corrupt or
+  /// undecodable blob can never be overwritten by a truncated one. This is the
+  /// same refusal the stores already made inline; it does not fall back to
+  /// merging on the UI isolate.
+  ///
+  /// On web `compute` runs [merge] inline, because web has no isolates. That is
+  /// documented `compute` behaviour, not a silent degradation: web keeps the
+  /// cost it has today and gains nothing here, which #920 fixes for every
+  /// platform at once.
+  ///
+  /// Returns true when the key was written.
+  Future<bool> mergeOffThread(
+    String key,
+    String incomingJson,
+    BlobMergeCallback merge,
+  ) {
+    return synchronized(key, () async {
+      final stored = await readWithPrefsFallback(key);
+      final String? merged;
+      try {
+        merged = await compute(merge, (stored, incomingJson));
+      } catch (e, stack) {
+        appLogger.error(
+          'Off-thread merge FAILED for $key (stored '
+          '${stored?.length ?? "null"} chars, incoming '
+          '${incomingJson.length} chars): $e. The key was NOT written, so '
+          'nothing was truncated.\n$stack',
+          tag: 'Storage',
+        );
+        return false;
+      }
+      if (merged == null) return false;
+      await write(key, merged);
+      return true;
+    });
+  }
+
   /// Unions an [incoming] bulk value into the stored value for [key] by element
   /// identity (message id / public key), keeping the stored copy on conflict and
   /// adding only what is missing. Used to consolidate stores found in old
@@ -346,6 +406,14 @@ class BlobStore {
     return value;
   }
 }
+
+/// Merge step for [BlobStore.mergeOffThread], run on another isolate.
+///
+/// Takes `(storedJson, incomingJson)` and returns the JSON to store, or null to
+/// leave the key untouched. Must be a top-level or static function so `compute`
+/// can send it; a record of strings is the payload so sendability is not in
+/// question.
+typedef BlobMergeCallback = String? Function((String?, String) input);
 
 /// Mutable tally of a migration run; surfaced in the log and used by tests.
 class MigrationReport {
