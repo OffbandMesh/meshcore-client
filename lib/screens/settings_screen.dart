@@ -27,8 +27,10 @@ import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
+import '../helpers/device_name_validator.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'device_cli_screen.dart';
 import 'export_config_screen.dart';
 import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
@@ -523,21 +525,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _actionsPane(BuildContext context) {
     final connector = context.watch<MeshCoreConnector>();
+    // Config import/export and the GPX exports moved here from Debug (#902):
+    // they are user operations, not diagnostics.
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [_buildActionsCard(context, connector)],
+      children: [
+        _buildActionsCard(context, connector),
+        const SizedBox(height: 16),
+        _buildExportCard(connector),
+      ],
     );
   }
 
   Widget _diagnosticsPane(BuildContext context) {
-    final connector = context.watch<MeshCoreConnector>();
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [
-        _buildDebugCard(context),
-        const SizedBox(height: 16),
-        _buildExportCard(connector),
-      ],
+      children: [_buildDebugCard(context)],
     );
   }
 
@@ -761,6 +764,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.sync_problem_outlined),
+            title: Text(l10n.settings_syncQueuedMessages),
+            subtitle: Text(l10n.settings_syncQueuedMessagesSubtitle),
+            trailing: const Icon(Icons.download),
+            onTap: () {
+              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
+              showDismissibleSnackBar(
+                context,
+                content: Text(l10n.settings_syncQueuedMessagesRequested),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
             leading: const Icon(Icons.restart_alt, color: Colors.orange),
             title: Text(l10n.settings_rebootDevice),
             subtitle: Text(l10n.settings_rebootDeviceSubtitle),
@@ -873,6 +890,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
     final settingsService = context.watch<AppSettingsService>();
+    // #884: the Device CLI console is offered only when the connected radio
+    // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
+    // at the upstream-1.18 absorb). select() so only this gate flipping
+    // rebuilds the pane, not every connector update (the #81 lesson).
+    final cliCapable = context.select<MeshCoreConnector, bool>(
+      (c) => c.classification?.allowsCliFrame ?? false,
+    );
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,21 +908,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.bluetooth_outlined),
-            title: Text(l10n.settings_companionDebugLog),
-            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
+          if (cliCapable) ...[
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: Text(l10n.deviceCli_title),
+              subtitle: Text(l10n.deviceCli_entrySubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const BleDebugLogScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 1),
+                MaterialPageRoute(builder: (_) => const DeviceCliScreen()),
+              ),
+            ),
+            const Divider(height: 1),
+          ],
           SwitchListTile(
             secondary: const Icon(Icons.bug_report_outlined),
             title: Text(l10n.appSettings_appDebugLogging),
@@ -927,6 +949,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : l10n.appSettings_appDebugLoggingDisabled,
                 ),
                 duration: const Duration(seconds: 2),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.bluetooth_outlined),
+            title: Text(l10n.settings_companionDebugLog),
+            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BleDebugLogScreen(),
+                ),
               );
             },
           ),
@@ -977,24 +1014,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(
                   builder: (context) => const TopologyDebugScreen(),
                 ),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.sync_problem_outlined),
-            title: const Text('Sync queued messages now'),
-            subtitle: const Text(
-              'Force-pull messages the radio is holding, diagnostic for #51 '
-              '(radio reports a count but the app shows none). Logs the flow '
-              'for diagnostics.',
-            ),
-            trailing: const Icon(Icons.download),
-            onTap: () {
-              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
-              showDismissibleSnackBar(
-                context,
-                content: const Text('Requested queued-message drain (force)'),
               );
             },
           ),
@@ -1099,37 +1118,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _editNodeName(BuildContext context, MeshCoreConnector connector) {
     final l10n = context.l10n;
     final controller = TextEditingController(text: connector.selfName ?? '');
+    String? errorText;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.settings_nodeName),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: l10n.settings_nodeNameHint,
-            border: const OutlineInputBorder(),
-          ),
-          maxLength: 31,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.common_cancel),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await connector.setNodeName(controller.text);
-              await connector.refreshDeviceInfo();
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(l10n.settings_nodeNameUpdated),
-              );
-            },
-            child: Text(l10n.common_save),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          // #885: mirror the firmware's `set name` character rejection so a
+          // bad name is caught here, not bounced as a cryptic device ERROR.
+          void revalidate(String value) {
+            final bad = forbiddenCharsIn(value);
+            setLocalState(() {
+              errorText = bad.isEmpty
+                  ? null
+                  : l10n.settings_nodeNameInvalidChars(bad.join(' '));
+            });
+          }
+
+          return AlertDialog(
+            title: Text(l10n.settings_nodeName),
+            content: TextField(
+              controller: controller,
+              onChanged: revalidate,
+              decoration: InputDecoration(
+                hintText: l10n.settings_nodeNameHint,
+                border: const OutlineInputBorder(),
+                errorText: errorText,
+              ),
+              maxLength: 31,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.common_cancel),
+              ),
+              TextButton(
+                onPressed: () async {
+                  if (!isValidDeviceName(controller.text)) {
+                    revalidate(controller.text); // show the error, keep open
+                    return;
+                  }
+                  Navigator.pop(context);
+                  await connector.setNodeName(controller.text);
+                  await connector.refreshDeviceInfo();
+                  if (!context.mounted) return;
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(l10n.settings_nodeNameUpdated),
+                  );
+                },
+                child: Text(l10n.common_save),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

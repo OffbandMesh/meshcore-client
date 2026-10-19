@@ -700,6 +700,72 @@ abstract class AppLocalizations {
   /// **'MeshCore'**
   String get device_meshcore;
 
+  /// No description provided for @deviceCli_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Device CLI'**
+  String get deviceCli_title;
+
+  /// No description provided for @deviceCli_entrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run commands on the connected radio'**
+  String get deviceCli_entrySubtitle;
+
+  /// Console row when a `set name` command is blocked client-side; {chars} is the offending characters, space-separated.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent - name can\'t contain: {chars}'**
+  String deviceCli_nameRejected(String chars);
+
+  /// No description provided for @deviceCli_commandHint.
+  ///
+  /// In en, this message translates to:
+  /// **'command...'**
+  String get deviceCli_commandHint;
+
+  /// No description provided for @deviceCli_emptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands run on the connected device'**
+  String get deviceCli_emptyHint;
+
+  /// No description provided for @deviceCli_noReply.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: no reply in {seconds} s'**
+  String deviceCli_noReply(String command, String seconds);
+
+  /// No description provided for @deviceCli_sendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Send failed: {error}'**
+  String deviceCli_sendFailed(String error);
+
+  /// No description provided for @deviceCli_truncatedByDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'reply truncated by the device'**
+  String get deviceCli_truncatedByDevice;
+
+  /// No description provided for @deviceCli_secretLongPressToCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'secret, long-press to copy'**
+  String get deviceCli_secretLongPressToCopy;
+
+  /// No description provided for @deviceCli_secretCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret copied to clipboard'**
+  String get deviceCli_secretCopied;
+
+  /// No description provided for @deviceCli_latencyMs.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String deviceCli_latencyMs(int ms);
+
   /// No description provided for @settings_title.
   ///
   /// In en, this message translates to:
@@ -765,6 +831,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Name updated'**
   String get settings_nodeNameUpdated;
+
+  /// Shown when a device name contains characters the firmware rejects; {chars} is the offending characters, space-separated.
+  ///
+  /// In en, this message translates to:
+  /// **'Name can\'t contain: {chars}'**
+  String settings_nodeNameInvalidChars(String chars);
+
+  /// No description provided for @settings_syncQueuedMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync queued messages now'**
+  String get settings_syncQueuedMessages;
+
+  /// No description provided for @settings_syncQueuedMessagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.'**
+  String get settings_syncQueuedMessagesSubtitle;
+
+  /// No description provided for @settings_syncQueuedMessagesRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Requested queued-message drain (force)'**
+  String get settings_syncQueuedMessagesRequested;
 
   /// No description provided for @settings_radioSettings.
   ///

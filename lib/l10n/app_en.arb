@@ -159,6 +159,49 @@
   "scanner_enableBluetooth": "Enable Bluetooth",
   "device_quickSwitch": "Quick switch",
   "device_meshcore": "MeshCore",
+  "deviceCli_title": "Device CLI",
+  "deviceCli_entrySubtitle": "Run commands on the connected radio",
+  "deviceCli_nameRejected": "Not sent - name can't contain: {chars}",
+  "@deviceCli_nameRejected": {
+    "description": "Console row when a `set name` command is blocked client-side; {chars} is the offending characters, space-separated.",
+    "placeholders": {
+      "chars": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_commandHint": "command...",
+  "deviceCli_emptyHint": "Commands run on the connected device",
+  "deviceCli_noReply": "{command}: no reply in {seconds} s",
+  "@deviceCli_noReply": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_sendFailed": "Send failed: {error}",
+  "@deviceCli_sendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_truncatedByDevice": "reply truncated by the device",
+  "deviceCli_secretLongPressToCopy": "secret, long-press to copy",
+  "deviceCli_secretCopied": "Secret copied to clipboard",
+  "deviceCli_latencyMs": "{ms} ms",
+  "@deviceCli_latencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
   "settings_title": "Settings",
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",
@@ -176,6 +219,18 @@
   "settings_nodeNameNotSet": "Not set",
   "settings_nodeNameHint": "Enter node name",
   "settings_nodeNameUpdated": "Name updated",
+  "settings_nodeNameInvalidChars": "Name can't contain: {chars}",
+  "@settings_nodeNameInvalidChars": {
+    "description": "Shown when a device name contains characters the firmware rejects; {chars} is the offending characters, space-separated.",
+    "placeholders": {
+      "chars": {
+        "type": "String"
+      }
+    }
+  },
+  "settings_syncQueuedMessages": "Sync queued messages now",
+  "settings_syncQueuedMessagesSubtitle": "Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.",
+  "settings_syncQueuedMessagesRequested": "Requested queued-message drain (force)",
   "settings_radioSettings": "Radio Settings",
   "settings_radioSettingsSubtitle": "Frequency, power, spreading factor",
   "settings_radioSettingsUpdated": "Radio settings updated",

@@ -59,6 +59,7 @@ import '../utils/app_logger.dart';
 import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
+import 'cli_command_codec.dart';
 import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
@@ -387,6 +388,19 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+
+  /// Listeners for RESP_CODE_CLI_REPLY (29) frames (#882). The connector only
+  /// routes; correlation and timeouts live in LocalCliService.
+  final List<void Function(CliReply)> _cliReplyListeners = [];
+
+  /// Registers [listener] for CLI replies; returns the detach callback.
+  void Function() addCliReplyListenerForLocalCli(
+    void Function(CliReply) listener,
+  ) {
+    _cliReplyListeners.add(listener);
+    return () => _cliReplyListeners.remove(listener);
+  }
+
   Classification? _classification;
   int? _offbandCaps2;
   bool? _femLnaEnabled;
@@ -6522,6 +6536,14 @@ class MeshCoreConnector extends ChangeNotifier {
           const Duration(milliseconds: 400),
           () => unawaited(getChannels(force: true)),
         );
+        break;
+      case respCodeCliReply:
+        final reply = parseCliReply(frame);
+        if (reply != null) {
+          for (final l in List.of(_cliReplyListeners)) {
+            l(reply);
+          }
+        }
         break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);

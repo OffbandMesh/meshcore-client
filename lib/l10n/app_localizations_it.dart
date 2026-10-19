@@ -330,6 +330,47 @@ class AppLocalizationsIt extends AppLocalizations {
   String get device_meshcore => 'MeshCore';
 
   @override
+  String get deviceCli_title => 'Device CLI';
+
+  @override
+  String get deviceCli_entrySubtitle => 'Run commands on the connected radio';
+
+  @override
+  String deviceCli_nameRejected(String chars) {
+    return 'Not sent - name can\'t contain: $chars';
+  }
+
+  @override
+  String get deviceCli_commandHint => 'command...';
+
+  @override
+  String get deviceCli_emptyHint => 'Commands run on the connected device';
+
+  @override
+  String deviceCli_noReply(String command, String seconds) {
+    return '$command: no reply in $seconds s';
+  }
+
+  @override
+  String deviceCli_sendFailed(String error) {
+    return 'Send failed: $error';
+  }
+
+  @override
+  String get deviceCli_truncatedByDevice => 'reply truncated by the device';
+
+  @override
+  String get deviceCli_secretLongPressToCopy => 'secret, long-press to copy';
+
+  @override
+  String get deviceCli_secretCopied => 'Secret copied to clipboard';
+
+  @override
+  String deviceCli_latencyMs(int ms) {
+    return '$ms ms';
+  }
+
+  @override
   String get settings_title => 'Impostazioni';
 
   @override
@@ -363,6 +404,22 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get settings_nodeNameUpdated => 'Nome aggiornato';
+
+  @override
+  String settings_nodeNameInvalidChars(String chars) {
+    return 'Name can\'t contain: $chars';
+  }
+
+  @override
+  String get settings_syncQueuedMessages => 'Sync queued messages now';
+
+  @override
+  String get settings_syncQueuedMessagesSubtitle =>
+      'Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.';
+
+  @override
+  String get settings_syncQueuedMessagesRequested =>
+      'Requested queued-message drain (force)';
 
   @override
   String get settings_radioSettings => 'Impostazioni Radio';
