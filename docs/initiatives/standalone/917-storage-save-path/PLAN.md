@@ -99,20 +99,19 @@ One, at the end of Epic A, and one at the end of Epic C: run the build on hardwa
 
 ## grant-terms
 
-```
-feature: Storage - remove O(history) work from the message save path
-epic_chain:
-  - A: blob read-modify-write off the UI isolate
-  - B: normalise messages into rows (migration)
-  - C: Integration Testing (A + B on hardware, both platforms)
-verification:
-  A: benchmark harness shows main-isolate block at or near zero on the real 5.39 MB payload; owner device check on burst
-  B: per-key message counts identical before and after on a copy of the real 41 MB database; per-message cost flat across history length
-  C: owner hardware test, Android and Windows
-merges: 3
-flash: 0
-reset: null
-duration: 72h
+The Epic chain is [#919](https://github.com/OffbandMesh/meshcore-client/issues/919) (A, isolate offload), [#920](https://github.com/OffbandMesh/meshcore-client/issues/920) (B, normalise to rows), [#921](https://github.com/OffbandMesh/meshcore-client/issues/921) (C, integration testing), merged in that order.
+
+```grant-terms
+{ "epic_chain": [919, 920, 921],
+  "chain": true,
+  "verification": {"mode": "owner"},
+  "merge": {"budget": 3,
+            "basis": "one merge per Epic in the chain (919, 920, 921); Tasks are commits on the Epic branch, so there is no per-task PR"},
+  "expires_after_hours": 72 }
 ```
 
-**Basis for each budget.** Merges is 3: the chain is three Epics and each merges once, with no per-task PR. Flash is 0: nothing here touches a radio. Reset is null: not applicable. Duration is 72h because Epic B carries a migration test against a 41 MB database, and a grant that outlasts a careful run beats one expiring mid-chain and needing a re-mint.
+**Basis for the expiry.** 72 hours because Epic B carries a migration test against a copy of the real 41 MB database, and a grant that outlasts a careful run beats one expiring mid-chain and needing a re-mint.
+
+**No flash or reset budget.** Nothing in this Feature touches a radio, so both keys are omitted and default to null.
+
+**Verification is `owner` rather than a command** because two of the three Epics end in a judgement only the owner can make: that the UI no longer freezes under a burst on his device, and that nothing is missing after the migration. A command here would be a check that cannot fail, which the tool flags and which would verify nothing.
