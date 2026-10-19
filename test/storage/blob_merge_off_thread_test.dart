@@ -43,20 +43,11 @@ void main() {
   // Fixtures go through the store's OWN encoder rather than a hand-written map.
   // A hand-rolled fixture silently rots the moment a non-null field is added to
   // the schema, which is exactly how the first run of this test failed.
-  Future<String> encodeVia(List<ChannelMessage> ms) async {
-    final fixtureDb = OffbandDatabase(NativeDatabase.memory());
-    final previous = BlobStore.instance;
-    BlobStore.overrideForTest(BlobStore(fixtureDb));
-    try {
-      final store = ChannelMessageStore()..setPublicKeyHex = 'f' * 20;
-      await store.saveChannelMessages(0, ms);
-      final keys = await BlobStore.instance.keysWithPrefix('channel_messages_');
-      return (await BlobStore.instance.read(keys.single))!;
-    } finally {
-      BlobStore.overrideForTest(previous);
-      await fixtureDb.close();
-    }
-  }
+  //
+  // This used to get there by calling saveChannelMessages and reading the blob
+  // back. Saves write rows now (#920), so it calls the encoder directly.
+  Future<String> encodeVia(List<ChannelMessage> ms) async =>
+      ChannelMessageStore.encodeHistoryForTest(ms);
 
   group('mergeChannelHistoryJson', () {
     test('adds incoming messages to the stored history', () async {
@@ -141,20 +132,8 @@ void main() {
     messageId: 'id$i',
   );
 
-  Future<String> encodeDmVia(List<Message> ms) async {
-    final fixtureDb = OffbandDatabase(NativeDatabase.memory());
-    final previous = BlobStore.instance;
-    BlobStore.overrideForTest(BlobStore(fixtureDb));
-    try {
-      final store = MessageStore()..setPublicKeyHex = 'f' * 20;
-      await store.saveMessages('abcd', ms);
-      final keys = await BlobStore.instance.keysWithPrefix('messages_');
-      return (await BlobStore.instance.read(keys.single))!;
-    } finally {
-      BlobStore.overrideForTest(previous);
-      await fixtureDb.close();
-    }
-  }
+  Future<String> encodeDmVia(List<Message> ms) async =>
+      MessageStore.encodeHistoryForTest(ms);
 
   group('mergeDmHistoryJson', () {
     test('adds incoming messages to the stored history', () async {

@@ -51,20 +51,9 @@ void main() {
 
   // Fixtures go through the store's own encoder rather than a hand-written map,
   // which silently rots the moment a non-null field is added to the schema.
-  Future<String> encodeVia(List<ChannelMessage> ms) async {
-    final fixtureDb = OffbandDatabase(NativeDatabase.memory());
-    final previous = BlobStore.instance;
-    BlobStore.overrideForTest(BlobStore(fixtureDb));
-    try {
-      final store = ChannelMessageStore()..setPublicKeyHex = 'f' * 20;
-      await store.saveChannelMessages(0, ms);
-      final keys = await BlobStore.instance.keysWithPrefix('channel_messages_');
-      return (await BlobStore.instance.read(keys.single))!;
-    } finally {
-      BlobStore.overrideForTest(previous);
-      await fixtureDb.close();
-    }
-  }
+  // Saves write rows now (#920), so this calls the encoder directly.
+  Future<String> encodeVia(List<ChannelMessage> ms) async =>
+      ChannelMessageStore.encodeHistoryForTest(ms);
 
   group('dropFromChannelHistoryJson', () {
     test('drops only the target and keeps the rest', () async {
