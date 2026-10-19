@@ -489,8 +489,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     Icon(
                       channelNotifyModeIcon(
                         context.read<AppSettingsService>().channelNotifyMode(
-                          identityKey: channelNotifyKeyFor(widget.channel),
-                          channelName: widget.channel.name,
+                          devicePrefix: context
+                              .read<MeshCoreConnector>()
+                              .selfPublicKeyHex,
+                          pskHex: widget.channel.pskHex,
                         ),
                       ),
                       size: 20,
