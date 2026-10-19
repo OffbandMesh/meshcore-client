@@ -243,6 +243,179 @@ class BlobStore {
     return rows.map((r) => r.read(key)!).toSet();
   }
 
+  /// Holds the set of store keys whose blob has been moved into rows.
+  ///
+  /// A separate marker rather than "this key has rows" because those are not
+  /// the same statement. A key can have rows and an incomplete migration at
+  /// the same time, and treating rows as proof of completeness is how a
+  /// half-migrated history would read as a whole one.
+  static const String migratedMarkerKey = '__msgrows_migrated';
+
+  Set<String>? _migratedKeys;
+
+  Future<Set<String>> _loadMigratedKeys() async {
+    if (_migratedKeys != null) return _migratedKeys!;
+    final raw = await read(migratedMarkerKey);
+    if (raw == null || raw.isEmpty) return _migratedKeys = <String>{};
+    try {
+      return _migratedKeys = (jsonDecode(raw) as List<dynamic>)
+          .cast<String>()
+          .toSet();
+    } catch (e) {
+      // Refuse to guess. An unreadable marker means every key is treated as
+      // unmigrated, which is the safe direction: the blobs are all still there.
+      appLogger.error(
+        'Could not decode the row-migration marker, treating every key as '
+        'unmigrated (the blobs are intact): $e',
+        tag: 'Storage',
+      );
+      return _migratedKeys = <String>{};
+    }
+  }
+
+  Future<void> _markMigrated(String storeKey) async {
+    await synchronized(migratedMarkerKey, () async {
+      final keys = await _loadMigratedKeys();
+      if (keys.contains(storeKey)) return;
+      keys.add(storeKey);
+      await write(migratedMarkerKey, jsonEncode(keys.toList()));
+    });
+  }
+
+  /// Whether [storeKey] reads from rows. False means its blob is still the
+  /// source of truth.
+  Future<bool> isOnMessageRows(String storeKey) async =>
+      (await _loadMigratedKeys()).contains(storeKey);
+
+  @visibleForTesting
+  void resetMigratedKeyCache() => _migratedKeys = null;
+
+  /// Moves [storeKey]'s blob into rows, once, and reports whether the key is
+  /// now on rows (#920).
+  ///
+  /// Idempotent and safe to call on every save and load: a key already marked
+  /// migrated returns immediately from an in-memory set.
+  ///
+  /// The gate, in order:
+  ///
+  /// 1. No blob, or an empty one, means there is nothing to move. The key is
+  ///    marked migrated and starts on rows.
+  /// 2. The blob's top-level element count is measured **independently of
+  ///    [toRows]**, by a decode that does nothing but count. Asking the
+  ///    converter how many records it saw would be a check that cannot fail;
+  ///    the first version of this did exactly that and a deliberately lossy
+  ///    converter sailed through it.
+  /// 3. [toRows] decodes the blob **off the UI isolate**, because it is the
+  ///    same multi-megabyte decode #919 moved. If it throws, nothing is
+  ///    written and the key stays on the blob. It must return one row per
+  ///    source element; a shortfall against step 2 refuses the migration.
+  /// 4. The rows are inserted in one transaction, so a failure part-way leaves
+  ///    no partial set behind.
+  /// 5. The stored row count is read back and compared to the number of
+  ///    DISTINCT merge keys. Only an exact match marks the key migrated.
+  ///
+  /// Steps 2 and 5 together close the loop from blob element to stored row,
+  /// and either can fail on its own.
+  ///
+  /// **The blob is never deleted**, not even on a verified match. Rows become
+  /// the read and write path and the blob is left untouched. Reclaiming that
+  /// space is deliberately a separate, owner-gated step: the moment the delete
+  /// runs is the moment a mistake stops being recoverable.
+  ///
+  /// A mismatch keeps the key on the blob path, which still works, and says so
+  /// loudly. It does not retry: a count that did not match once will not match
+  /// on a loop, and a retry would just hammer the same keys.
+  Future<bool> ensureMessageRowsMigrated(
+    String storeKey,
+    BlobToRowsCallback toRows,
+  ) async {
+    if (await isOnMessageRows(storeKey)) return true;
+
+    return synchronized(storeKey, () async {
+      // Re-check inside the lock: a concurrent save may have migrated it while
+      // this call waited its turn.
+      if (await isOnMessageRows(storeKey)) return true;
+
+      final blob = await readWithPrefsFallback(storeKey);
+      if (blob == null || blob.isEmpty) {
+        await _markMigrated(storeKey);
+        return true;
+      }
+
+      final int sourceCount;
+      final List<MessageRowInput> rows;
+      try {
+        sourceCount = await compute(countJsonArrayElements, blob);
+        rows = await compute(toRows, blob);
+      } catch (e, stack) {
+        appLogger.error(
+          'Row migration of $storeKey FAILED while decoding its ${blob.length} '
+          'char blob: $e. Nothing was written and the key still reads from the '
+          'blob.\n$stack',
+          tag: 'Storage',
+        );
+        return false;
+      }
+
+      if (rows.length != sourceCount) {
+        appLogger.error(
+          'Row migration of $storeKey REFUSED: the blob holds $sourceCount '
+          'records but the converter produced ${rows.length} rows. Nothing '
+          'was written. The blob is kept and still the source of truth.',
+          tag: 'Storage',
+        );
+        return false;
+      }
+
+      final deduped = <String, MessageRowInput>{};
+      for (final r in rows) {
+        deduped[r.mergeKey] = r;
+      }
+      if (deduped.length != rows.length) {
+        appLogger.warn(
+          'Row migration of $storeKey: the blob held ${rows.length} records '
+          'but only ${deduped.length} distinct identities, so '
+          '${rows.length - deduped.length} were duplicates. Comparing against '
+          'the distinct count.',
+          tag: 'Storage',
+        );
+      }
+
+      try {
+        await upsertMessageRows(storeKey, deduped.values);
+      } catch (e, stack) {
+        appLogger.error(
+          'Row migration of $storeKey FAILED while inserting '
+          '${deduped.length} rows: $e. The blob is untouched and still the '
+          'source of truth for this key.\n$stack',
+          tag: 'Storage',
+        );
+        return false;
+      }
+
+      final stored = await messageRowCount(storeKey);
+      if (stored != deduped.length) {
+        appLogger.error(
+          'Row migration of $storeKey REFUSED: read back $stored rows but '
+          'expected ${deduped.length}. The blob is kept, nothing is deleted, '
+          'and this key keeps reading from the blob. Rows written so far are '
+          'left in place and are harmless because the key is not marked '
+          'migrated.',
+          tag: 'Storage',
+        );
+        return false;
+      }
+
+      await _markMigrated(storeKey);
+      appLogger.info(
+        'Row migration of $storeKey: ${deduped.length} messages now stored as '
+        'rows. The blob is retained untouched (#920).',
+        tag: 'Storage',
+      );
+      return true;
+    });
+  }
+
   /// Read-modify-write for a bulk key with the decode, merge and re-encode run
   /// **off the UI isolate** (#919).
   ///
@@ -516,6 +689,23 @@ class BlobStore {
     return value;
   }
 }
+
+/// Counts the top-level elements of a JSON array, and nothing else.
+///
+/// Exists so [BlobStore.ensureMessageRowsMigrated] can learn how many records
+/// a blob holds without asking the converter it is checking. Top-level so
+/// `compute` can send it.
+int countJsonArrayElements(String json) =>
+    (jsonDecode(json) as List<dynamic>).length;
+
+/// Turns one history blob into per-message rows, run on another isolate.
+///
+/// Must be a top-level or static function so `compute` can send it. Takes the
+/// raw blob JSON and returns one [MessageRowInput] per message. Throwing is the
+/// correct response to an undecodable blob: [BlobStore.ensureMessageRowsMigrated]
+/// turns that into a refused migration and leaves the blob as the source of
+/// truth.
+typedef BlobToRowsCallback = List<MessageRowInput> Function(String blobJson);
 
 /// One message on its way into [MessageRecords] (#920).
 ///
