@@ -6,12 +6,14 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val usbFunctions by lazy { MeshcoreUsbFunctions(this) }
+    private val appExitInfoFunctions by lazy { AppExitInfoFunctions(this) }
 
     private val appLifecycleChannelName = "meshcore_open/app_lifecycle"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         usbFunctions.configureFlutterEngine(flutterEngine)
+        appExitInfoFunctions.configureFlutterEngine(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -32,6 +34,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         usbFunctions.dispose()
+        appExitInfoFunctions.dispose()
         super.onDestroy()
     }
 }
