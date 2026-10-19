@@ -8,31 +8,102 @@ on:
       - dev
 
 jobs:
+  # #904: same classifier as build.yml (workflows cannot share jobs without a
+  # reusable-workflow indirection; the duplication is the cheaper evil and the
+  # two copies are kept textually identical). Plain git, no third-party
+  # actions. Ambiguity always classifies as code.
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    env:
+      # #904 SPIKE ONLY: forces the docs-only path so the short-circuit
+      # semantics can be proven on the machinery PR itself (whose .yml diff
+      # would otherwise classify as code). REMOVED in the follow-up commit;
+      # it must never reach dev.
+      SPIKE_FORCE_DOCS_ONLY: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: diff
+        run: |
+          set -eu
+          if [ "${SPIKE_FORCE_DOCS_ONLY:-}" = "true" ]; then
+            echo "SPIKE: forcing docs_only=true (#904 verification)"
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # checkout hands us the PR merge commit; parent 1 is the current
+            # base tip, so this is exactly the PR's effective diff.
+            git diff --name-only HEAD^1 HEAD > changed.txt
+          else
+            before="${{ github.event.before }}"
+            if [ "$before" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$before" 2>/dev/null; then
+              echo "no usable before-SHA; classifying as code"
+              echo "docs_only=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git diff --name-only "$before" "${{ github.sha }}" > changed.txt
+          fi
+          echo "changed files:"
+          cat changed.txt
+          if [ ! -s changed.txt ]; then
+            echo "empty diff; classifying as code"
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_only=true
+          while IFS= read -r f; do
+            case "$f" in
+              *.md) ;;
+              docs/*) ;;
+              LICENSE) ;;
+              .github/ISSUE_TEMPLATE/*) ;;
+              *) docs_only=false; echo "not docs: $f"; break ;;
+            esac
+          done < changed.txt
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
   analyze:
     runs-on: ubuntu-latest
+    needs: classify
     steps:
+      - name: "Docs-only change: analyze short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to analyze"
       - name: Checkout
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/checkout@v4
 
       - name: Guard against em-dash characters (#464)
+        if: needs.classify.outputs.docs_only != 'true'
         run: python3 .github/scripts/check_no_emdash.py
 
       - name: Set up Flutter
+        if: needs.classify.outputs.docs_only != 'true'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.44.1"
 
       - name: Install dependencies
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter pub get
 
       - name: Generate code (drift / build_runner)
+        if: needs.classify.outputs.docs_only != 'true'
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Analyze code
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter analyze --fatal-infos --fatal-warnings
 
       - name: Verify formatting
+        if: needs.classify.outputs.docs_only != 'true'
         run: dart format --output=none --set-exit-if-changed .
 
       - name: Run tests
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter test -r github
