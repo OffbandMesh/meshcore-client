@@ -135,7 +135,16 @@ jobs:
         if: needs.classify.outputs.docs_only != 'true'
 
   linux:
-    runs-on: ubuntu-latest
+    # PINNED, not ubuntu-latest (#929). GitHub moved ubuntu-latest from 24.04
+    # to 26.04 on 2026-10-19, and 26.04's glibc headers clash with the vendored
+    # native sources: "typedef redefinition with different types ('__once_flag'
+    # vs 'int')" plus "conflicting types for 'pthread_once'", two seconds into
+    # the native compile. The same commit built on 24.04 that morning.
+    #
+    # This buys time, it does not fix anything: 24.04 images get retired, and
+    # the header conflict has to be resolved before that. #929 carries the real
+    # fix. The other ubuntu jobs pass on 26.04 and stay on ubuntu-latest.
+    runs-on: ubuntu-24.04
     needs: classify
     steps:
       - name: "Docs-only change: linux build short-circuited (#904)"
