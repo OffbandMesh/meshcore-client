@@ -82,6 +82,36 @@ A real drift table beside `StoredBlobs`, one row per message. A save becomes an 
 
 **Epic verification:** per-key message counts identical before and after on a copy of the real 41 MB database, and the benchmark shows per-message cost flat across history length.
 
+#### Epic B outcome, 2026-10-19
+
+Built as B1 (`message_records` at schema 2 plus a row API), B2 (both stores on rows), B3 (the per-key migration and its gate), B4 (verification). Run against a copy of the live 41.17 MiB database:
+
+| | |
+|---|---|
+| keys migrated | **138 of 138** |
+| records in blobs | 64,883 |
+| rows stored | **64,883** |
+| elapsed | 4,382 ms |
+
+Exact parity, no refusals, and every blob byte-identical afterwards (length and content hash per key).
+
+Per-message save cost against history length, median of 20:
+
+| history | one more save |
+|---|---|
+| 500 | 0.124 ms |
+| 5,000 | 0.126 ms |
+| 50,000 | 0.133 ms |
+
+A hundred times the history for 1.07x the cost, against 381 ms of UI block at 9,230 messages on the blob path. The Feature's "done when" is met.
+
+One-time migration of the worst key (5.38 MiB, 9,230 messages), measured with a production-shaped background-isolate connection: **UI blocked 64 ms, wall 447 ms**. So the first open of the biggest channel after this ships costs one 64 ms hitch on a desktop.
+
+**Two deliberate departures from this plan, both stricter or narrower, never looser:**
+
+1. **The blob is never deleted**, not even on a verified match. This plan said "retained until per-key readback matches"; the implementation keeps it after the match too. Rows become the read and write path and the blob is left untouched, so the database temporarily holds both copies. Reclaiming that space is a separate owner-gated step, because the moment that delete runs is the moment a mistake stops being recoverable.
+2. **One row per message with the per-message JSON in a `payload` column**, rather than a column per field. The migration is then a pure re-key with no field mapping that can silently drop or coerce a value, and the stores reuse their existing encoders verbatim. The trade, stated on the issue before building: message fields are not SQL-queryable. Columns can be added beside the payload later without another data migration.
+
 ### Epic C: Integration Testing
 
 A and B together on real hardware, Android and Windows. Carries the test that validates #334 is dead, which gates closing it.
