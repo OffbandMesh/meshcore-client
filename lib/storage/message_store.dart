@@ -8,6 +8,36 @@ import '../utils/app_logger.dart';
 import 'drift/blob_store.dart';
 import 'prefs_manager.dart';
 
+/// Merges a DM history blob with an incoming batch, entirely in JSON.
+///
+/// Top-level and free of any instance state so `compute` can send it to
+/// another isolate (#919). Both arguments and the result are JSON strings, so
+/// only two strings cross the isolate boundary rather than the object graph.
+///
+/// Throws if [stored] is not decodable. That is deliberate: `mergeOffThread`
+/// turns the throw into a refused write, which keeps an unreadable blob intact
+/// instead of replacing a whole history with just the incoming batch.
+String mergeDmHistoryJson((String?, String) input) {
+  final (stored, incomingJson) = input;
+  final byKey = <String, Message>{};
+
+  if (stored != null && stored.isNotEmpty) {
+    for (final e in jsonDecode(stored) as List<dynamic>) {
+      final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+      byKey[MessageStore._mergeKey(m)] = m;
+    }
+  }
+
+  for (final e in jsonDecode(incomingJson) as List<dynamic>) {
+    final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+    byKey[MessageStore._mergeKey(m)] = m;
+  }
+
+  final merged = byKey.values.toList()
+    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  return jsonEncode(merged.map(MessageStore._messageToJson).toList());
+}
+
 class MessageStore {
   static const String _keyPrefix = 'messages_';
 
@@ -31,34 +61,16 @@ class MessageStore {
     // (removeMessage).
     final key = '$keyFor$contactKeyHex';
     final blobs = BlobStore.instance;
-    await blobs.synchronized(key, () async {
-      final byKey = <String, Message>{};
-      final existing = await blobs.readWithPrefsFallback(key);
-      if (existing != null && existing.isNotEmpty) {
-        try {
-          for (final e in jsonDecode(existing) as List<dynamic>) {
-            final m = _messageFromJson(e as Map<String, dynamic>);
-            byKey[_mergeKey(m)] = m;
-          }
-        } catch (e) {
-          appLogger.error(
-            'Failed to decode existing DM history before merge; aborting save '
-            'to avoid truncation: $e',
-            tag: 'Storage',
-          );
-          return;
-        }
-      }
-      for (final m in messages) {
-        byKey[_mergeKey(m)] = m;
-      }
-      final merged = byKey.values.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
-    });
+    // Same shape as the channel path (#919): only the INCOMING messages are
+    // encoded on the UI isolate; decoding the stored history, merging and
+    // re-encoding it happens on another isolate. `mergeOffThread` keeps the
+    // per-key serialisation and fails closed, so an undecodable blob is logged
+    // and left alone rather than overwritten by a truncated one.
+    final incoming = jsonEncode(messages.map(_messageToJson).toList());
+    await blobs.mergeOffThread(key, incoming, mergeDmHistoryJson);
   }
 
-  String _mergeKey(Message m) {
+  static String _mergeKey(Message m) {
     if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
     return 'x:${m.senderKeyHex}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
   }
@@ -144,7 +156,7 @@ class MessageStore {
     await PrefsManager.instance.remove(key);
   }
 
-  Map<String, dynamic> _messageToJson(Message msg) {
+  static Map<String, dynamic> _messageToJson(Message msg) {
     return {
       'senderKey': base64Encode(msg.senderKey),
       'text': msg.text,
@@ -181,7 +193,7 @@ class MessageStore {
     };
   }
 
-  Message _messageFromJson(Map<String, dynamic> json) {
+  static Message _messageFromJson(Map<String, dynamic> json) {
     final rawText = json['text'] as String;
     final isCli = json['isCli'] as bool? ?? false;
     final decodedText = isCli
