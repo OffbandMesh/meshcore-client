@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/foundation.dart';
@@ -18,6 +20,7 @@ import 'services/app_settings_service.dart';
 import 'services/notification_service.dart';
 import 'services/ble_debug_log_service.dart';
 import 'services/app_debug_log_service.dart';
+import 'services/app_exit_info_service.dart';
 import 'services/file_log_service.dart';
 import 'services/background_service.dart';
 import 'services/map_tile_cache_service.dart';
@@ -167,6 +170,15 @@ void main() async {
       radioPresetService: radioPresetService,
     ),
   );
+
+  // Report why the previous process died, if it did (#906). Scheduled after the
+  // first frame and deliberately not awaited: #334 is the leading hypothesis for
+  // the ANRs this exists to diagnose, so the collector must not itself add work
+  // to startup. The Android side does its query and trace reads on a background
+  // executor.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(AppExitInfoService.instance.collect());
+  });
 }
 
 void _registerThirdPartyLicenses() {
