@@ -28,7 +28,7 @@ part 'offband_database.g.dart';
 /// IndexedDB and runs in a worker rather than on the UI thread.
 ///
 /// Settings stay in SharedPreferences. Only bulk data moves here.
-@DriftDatabase(tables: [StoredBlobs])
+@DriftDatabase(tables: [StoredBlobs, MessageRecords])
 class OffbandDatabase extends _$OffbandDatabase {
   OffbandDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
@@ -315,7 +315,41 @@ class OffbandDatabase extends _$OffbandDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  /// Schema 2 adds [MessageRecords] (#920). Purely additive: [StoredBlobs] is
+  /// untouched and keeps every byte it had, so an install that opens this
+  /// schema and is then taken back to an older build still finds its history
+  /// where that build looks for it.
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(messageRecords);
+        await m.createIndex(
+          Index(
+            'idx_message_records_store_ts',
+            'CREATE INDEX IF NOT EXISTS idx_message_records_store_ts '
+                'ON message_records (store_key, timestamp_ms)',
+          ),
+        );
+        appLogger.info(
+          'drift schema $from -> $to: created message_records (#920). '
+          'stored_blobs untouched.',
+        );
+      }
+    },
+    beforeOpen: (details) async {
+      // A fresh database is created at the current schema, so onUpgrade never
+      // runs for it and the index would be missing.
+      if (details.wasCreated) {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_message_records_store_ts '
+          'ON message_records (store_key, timestamp_ms)',
+        );
+      }
+    },
+  );
 
   /// Step-1 gate for #335: proves the database opens, writes and reads back on
   /// the current platform. Deliberately trivial - no user data is involved, so
@@ -351,4 +385,47 @@ class StoredBlobs extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+/// One row per message, replacing one element of a [StoredBlobs] JSON array
+/// each (#920).
+///
+/// Why this exists: with the whole history in one blob, saving a single message
+/// decoded, rebuilt and re-encoded every message that came before it. On the
+/// owner's largest channel that was 9,230 records and 134 ms of work per
+/// arriving message, and #919 could only move that cost to another isolate,
+/// not remove it. One row per message makes a save an upsert of one row.
+///
+/// [storeKey] is deliberately the SAME key the blob used, not a new scheme.
+/// All of the per-radio and per-channel scoping rules (#194, #472) already live
+/// in those keys, so reusing them means this table inherits that scoping
+/// unchanged, and the migration becomes a per-key operation with an exact
+/// record count to verify against.
+///
+/// [payload] holds the per-message JSON exactly as the stores already emit it,
+/// rather than a column per field. That keeps the migration a pure re-key with
+/// no field mapping that could silently drop or coerce a value, lets the
+/// stores reuse their existing encoders, and means a new message field needs
+/// no second data migration. The trade: message fields are not SQL-queryable.
+/// Columns can be added beside the payload later without another migration if
+/// that is ever wanted.
+class MessageRecords extends Table {
+  @override
+  String get tableName => 'message_records';
+
+  /// The store key this message belongs to, byte-identical to the blob key.
+  TextColumn get storeKey => text()();
+
+  /// Stable per-message identity: the stores' existing `_mergeKey`. Upserting
+  /// on it preserves exactly the dedupe semantics the blob merge had.
+  TextColumn get mergeKey => text()();
+
+  /// Sender-claimed time in epoch milliseconds, for ordering and paging. An
+  /// INTEGER column so ORDER BY and LIMIT happen in SQLite, not in Dart.
+  IntColumn get timestampMs => integer()();
+
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column> get primaryKey => {storeKey, mergeKey};
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../utils/app_logger.dart';
@@ -136,6 +137,110 @@ class BlobStore {
 
   Future<void> delete(String key) async {
     await (_db.delete(_db.storedBlobs)..where((t) => t.key.equals(key))).go();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-message rows (#920)
+  //
+  // The blob API above keeps a whole history in one row, so every save paid for
+  // every message that came before it. These methods work one message at a
+  // time. They live on BlobStore rather than in a second class because both
+  // APIs must use the SAME OffbandDatabase instance: opening the database twice
+  // is an error on the web backends, and a second singleton would be one
+  // mistake away from doing exactly that.
+  // ---------------------------------------------------------------------------
+
+  /// Inserts or updates [rows] under [storeKey] in one transaction.
+  ///
+  /// Upserts on `(storeKey, mergeKey)`, which is the same identity the blob
+  /// merge deduped on, so saving a message that is already stored updates it
+  /// instead of duplicating it. Cost is proportional to [rows], not to the
+  /// history already stored, which is the entire point.
+  Future<void> upsertMessageRows(
+    String storeKey,
+    Iterable<MessageRowInput> rows,
+  ) async {
+    if (rows.isEmpty) return;
+    await _db.batch((b) {
+      b.insertAllOnConflictUpdate(
+        _db.messageRecords,
+        rows
+            .map(
+              (r) => MessageRecordsCompanion.insert(
+                storeKey: storeKey,
+                mergeKey: r.mergeKey,
+                timestampMs: r.timestampMs,
+                payload: r.payload,
+              ),
+            )
+            .toList(),
+      );
+    });
+  }
+
+  /// The stored message payloads for [storeKey], oldest first.
+  ///
+  /// Ordering and paging happen in SQLite, so loading the most recent N no
+  /// longer means decoding the whole history first. [limit] with no [offset]
+  /// returns the NEWEST [limit] messages, still in oldest-first order, because
+  /// that is what a chat screen opens with.
+  Future<List<String>> messagePayloads(
+    String storeKey, {
+    int? limit,
+    int? offset,
+  }) async {
+    final q = _db.select(_db.messageRecords)
+      ..where((t) => t.storeKey.equals(storeKey));
+    if (limit != null) {
+      q.orderBy([
+        (t) => OrderingTerm(expression: t.timestampMs, mode: OrderingMode.desc),
+      ]);
+      q.limit(limit, offset: offset);
+      final newestFirst = await q.get();
+      return newestFirst.reversed.map((r) => r.payload).toList();
+    }
+    q.orderBy([(t) => OrderingTerm(expression: t.timestampMs)]);
+    final rows = await q.get();
+    return rows.map((r) => r.payload).toList();
+  }
+
+  /// How many messages are stored under [storeKey]. The migration's readback
+  /// gate compares this against the number of records decoded from the blob.
+  Future<int> messageRowCount(String storeKey) async {
+    final count = _db.messageRecords.mergeKey.count();
+    final row =
+        await (_db.selectOnly(_db.messageRecords)
+              ..addColumns([count])
+              ..where(_db.messageRecords.storeKey.equals(storeKey)))
+            .getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  /// Removes one message. O(1), with no history rewrite.
+  Future<void> deleteMessageRow(String storeKey, String mergeKey) async {
+    await (_db.delete(_db.messageRecords)..where(
+          (t) => t.storeKey.equals(storeKey) & t.mergeKey.equals(mergeKey),
+        ))
+        .go();
+  }
+
+  /// Removes every message under [storeKey], for the stores' clear paths.
+  Future<void> deleteMessageRows(String storeKey) async {
+    await (_db.delete(
+      _db.messageRecords,
+    )..where((t) => t.storeKey.equals(storeKey))).go();
+  }
+
+  /// Store keys that already have rows, so a caller can tell a migrated key
+  /// from one still on the blob path without reading any payloads.
+  Future<Set<String>> messageStoreKeys() async {
+    final key = _db.messageRecords.storeKey;
+    final rows =
+        await (_db.selectOnly(_db.messageRecords)
+              ..addColumns([key])
+              ..groupBy([key]))
+            .get();
+    return rows.map((r) => r.read(key)!).toSet();
   }
 
   /// Read-modify-write for a bulk key with the decode, merge and re-encode run
@@ -410,6 +515,23 @@ class BlobStore {
     if (value is List) return value.map(_canonicalize).toList();
     return value;
   }
+}
+
+/// One message on its way into [MessageRecords] (#920).
+///
+/// A plain record rather than a drift companion so the stores can build it
+/// without importing the generated code, and so the merge key and timestamp
+/// are named at the call site instead of being positional.
+class MessageRowInput {
+  const MessageRowInput({
+    required this.mergeKey,
+    required this.timestampMs,
+    required this.payload,
+  });
+
+  final String mergeKey;
+  final int timestampMs;
+  final String payload;
 }
 
 /// Merge step for [BlobStore.mergeOffThread], run on another isolate.
