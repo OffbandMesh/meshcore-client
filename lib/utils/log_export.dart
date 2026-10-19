@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
+import '../services/app_exit_info_service.dart';
 import '../services/file_log_service.dart';
 import 'log_web_download.dart';
 
@@ -67,6 +68,12 @@ class LogExport {
     final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
     final file = await FileLogService.instance.flushAndGetActiveFile();
+    // ANR traces live beside the log rather than inside it, so they have to be
+    // attached explicitly or they never reach anyone (#906). Mobile only: the
+    // records are Android-only, and the desktop path saves a single file.
+    final extras = _isMobile
+        ? await AppExitInfoService.traceFiles()
+        : const <File>[];
     await _exportFile(
       messenger,
       file: file,
@@ -74,6 +81,7 @@ class LogExport {
       subject: l10n.debugLog_shareSubject,
       unavailableMessage: l10n.debugLog_logUnavailable,
       savedMessage: l10n.debugLog_logSaved,
+      extraFiles: extras,
     );
   }
 
@@ -104,6 +112,7 @@ class LogExport {
     required String subject,
     required String unavailableMessage,
     required String savedMessage,
+    List<File> extraFiles = const [],
   }) async {
     if (file == null) {
       messenger.showSnackBar(SnackBar(content: Text(unavailableMessage)));
@@ -111,7 +120,13 @@ class LogExport {
     }
     if (_isMobile) {
       await SharePlus.instance.share(
-        ShareParams(subject: subject, files: [XFile(file.path)]),
+        ShareParams(
+          subject: subject,
+          files: [
+            XFile(file.path),
+            for (final extra in extraFiles) XFile(extra.path),
+          ],
+        ),
       );
       return;
     }
