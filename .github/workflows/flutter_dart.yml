@@ -16,12 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       docs_only: ${{ steps.diff.outputs.docs_only }}
-    env:
-      # #904 SPIKE ONLY: forces the docs-only path so the short-circuit
-      # semantics can be proven on the machinery PR itself (whose .yml diff
-      # would otherwise classify as code). REMOVED in the follow-up commit;
-      # it must never reach dev.
-      SPIKE_FORCE_DOCS_ONLY: "true"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,11 +24,12 @@ jobs:
         id: diff
         run: |
           set -eu
-          if [ "${SPIKE_FORCE_DOCS_ONLY:-}" = "true" ]; then
-            echo "SPIKE: forcing docs_only=true (#904 verification)"
-            echo "docs_only=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          # No override, by design (#927). The #904 spike added an env flag
+          # that forced docs_only=true, it reached dev, and for every PR after
+          # it the build and test jobs reported pass in a few seconds having
+          # built nothing. A switch that turns every merge gate in the repo
+          # into a no-op, silently, is not worth the convenience of testing
+          # this job against itself.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # checkout hands us the PR merge commit; parent 1 is the current
             # base tip, so this is exactly the PR's effective diff.
