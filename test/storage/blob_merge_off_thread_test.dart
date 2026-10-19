@@ -1,11 +1,14 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/models/channel_message.dart';
+import 'package:meshcore_open/models/message.dart';
 import 'package:meshcore_open/storage/channel_message_store.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
+import 'package:meshcore_open/storage/message_store.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -130,6 +133,115 @@ void main() {
     );
   });
 
+  Message dm(int i, {String? text}) => Message(
+    senderKey: Uint8List.fromList(const [1, 2, 3, 4]),
+    text: text ?? 'm$i',
+    timestamp: DateTime.fromMillisecondsSinceEpoch(1000 + i),
+    isOutgoing: false,
+    messageId: 'id$i',
+  );
+
+  Future<String> encodeDmVia(List<Message> ms) async {
+    final fixtureDb = OffbandDatabase(NativeDatabase.memory());
+    final previous = BlobStore.instance;
+    BlobStore.overrideForTest(BlobStore(fixtureDb));
+    try {
+      final store = MessageStore()..setPublicKeyHex = 'f' * 20;
+      await store.saveMessages('abcd', ms);
+      final keys = await BlobStore.instance.keysWithPrefix('messages_');
+      return (await BlobStore.instance.read(keys.single))!;
+    } finally {
+      BlobStore.overrideForTest(previous);
+      await fixtureDb.close();
+    }
+  }
+
+  group('mergeDmHistoryJson', () {
+    test('adds incoming messages to the stored history', () async {
+      final stored = await encodeDmVia([dm(1), dm(2)]);
+      final incoming = await encodeDmVia([dm(3)]);
+
+      final out =
+          jsonDecode(mergeDmHistoryJson((stored, incoming))) as List<dynamic>;
+
+      expect(out.length, 3);
+      expect(
+        out.map((e) => (e as Map<String, dynamic>)['messageId']),
+        containsAll(['id1', 'id2', 'id3']),
+      );
+    });
+
+    test('incoming wins on the same id, so a status change lands', () async {
+      final stored = await encodeDmVia([dm(1, text: 'original')]);
+      final incoming = await encodeDmVia([dm(1, text: 'edited')]);
+
+      final out =
+          jsonDecode(mergeDmHistoryJson((stored, incoming))) as List<dynamic>;
+
+      expect(
+        out.length,
+        1,
+        reason: 'same messageId must upsert, not duplicate',
+      );
+      expect((out.single as Map<String, dynamic>)['text'], 'edited');
+    });
+
+    test('result is sorted by timestamp regardless of input order', () async {
+      final stored = await encodeDmVia([dm(9), dm(3)]);
+      final incoming = await encodeDmVia([dm(5)]);
+
+      final out =
+          jsonDecode(mergeDmHistoryJson((stored, incoming))) as List<dynamic>;
+      final stamps = out
+          .map((e) => (e as Map<String, dynamic>)['timestamp'] as int)
+          .toList();
+
+      expect(stamps, [...stamps]..sort());
+    });
+
+    test(
+      'an empty or absent stored blob merges into just the incoming',
+      () async {
+        final incoming = await encodeDmVia([dm(1)]);
+
+        for (final stored in <String?>[null, '']) {
+          final out =
+              jsonDecode(mergeDmHistoryJson((stored, incoming)))
+                  as List<dynamic>;
+          expect(out.length, 1, reason: 'stored=$stored');
+        }
+      },
+    );
+
+    test(
+      'THROWS on an undecodable stored blob rather than truncating',
+      () async {
+        final incoming = await encodeDmVia([dm(1)]);
+
+        expect(
+          () => mergeDmHistoryJson(('{not json at all', incoming)),
+          throwsA(anything),
+        );
+      },
+    );
+
+    test(
+      'a full DM save round trip through mergeOffThread keeps both',
+      () async {
+        final store = MessageStore()..setPublicKeyHex = 'a' * 20;
+        await store.saveMessages('beef', [dm(1)]);
+        await store.saveMessages('beef', [dm(2)]);
+
+        final loaded = await store.loadMessages('beef');
+        expect(
+          loaded.map((m) => m.messageId),
+          ['id1', 'id2'],
+          reason: 'the second save must merge, not overwrite (#343)',
+        );
+      },
+    );
+  });
+
   group('BlobStore.mergeOffThread', () {
     test('writes the merged result', () async {
       final blobs = BlobStore.instance;
@@ -214,6 +326,7 @@ void main() {
       );
     });
   });
+
 }
 
 /// Top-level so `compute` can send it.
