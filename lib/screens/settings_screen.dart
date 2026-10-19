@@ -16,6 +16,7 @@ import '../models/offband_gps_status.dart';
 import '../models/radio_preset.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
+import '../services/app_exit_info_service.dart';
 import '../services/app_settings_service.dart';
 import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
@@ -38,6 +39,15 @@ import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
 import '../widgets/radio_preset_picker.dart';
 import '../widgets/sync_progress_overlay.dart';
+
+/// True only in a build that passed `--dart-define=OFFBAND_ANR_TEST=true`.
+///
+/// Gates the force-an-ANR row in the Experimental section. The Experimental
+/// section itself ships in release behind a 7-tap unlock, which is not enough
+/// protection for a control whose whole job is to hang the app, so the row is
+/// compiled out entirely unless a build asks for it (#906). Deliberately NOT
+/// read from `dart_defines.json`, because that file feeds every build.
+const bool _anrTestBuild = bool.fromEnvironment('OFFBAND_ANR_TEST');
 
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
 /// to the UI enum range (always 5-8).
@@ -278,6 +288,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : null,
           ),
         ),
+        if (_anrTestBuild) const SizedBox(height: 16),
+        if (_anrTestBuild)
+          // Test-only, and absent from any normal build: the constant below is
+          // false unless the build passes OFFBAND_ANR_TEST, so this row is
+          // compiled out of the shipped artifact. Hanging the main thread is the
+          // only way to produce a real ANR record to read back (#906/#911); no
+          // adb command induces one. Label is deliberately not localized, since
+          // it never reaches a user.
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.hourglass_disabled),
+              title: const Text('Force an ANR (test build only)'),
+              subtitle: const Text(
+                'Hangs the UI for 20 seconds so Android raises an ANR. '
+                'Let the system dialog close the app, then reopen it and '
+                'export the debug log.',
+              ),
+              onTap: () => AppExitInfoService.instance.forceMainThreadBlock(),
+            ),
+          ),
         const SizedBox(height: 16),
         // Disable, not just hide: turns off every experimental toggle and
         // re-locks the section, so nothing keeps running invisibly (#553).
