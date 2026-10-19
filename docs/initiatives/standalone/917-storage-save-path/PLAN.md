@@ -54,6 +54,28 @@ One helper in `lib/storage/drift/blob_store.dart` that runs the entire read, dec
 
 **Epic verification:** the benchmark harness shows main-isolate block time at or near zero against the real 5.39 MB payload, and the owner confirms a burst no longer freezes the UI.
 
+#### Epic A outcome, 2026-10-19
+
+Built as A1 (`BlobStore.mergeOffThread`), A2 (DM save), A3 (both explicit delete paths), A5 (verification). Measured against the owner's real largest channel, 5,650,194 chars / 9,230 messages, on a desktop:
+
+| | UI blocked | wall | heartbeats |
+|---|---|---|---|
+| 1 save, inline (pre-#919) | 381 ms | 381 ms | 1 |
+| 1 save, off-thread | 44 ms | 297 ms | 174 |
+| 5 saves, inline | 1,385 ms | 1,385 ms | 1 |
+| 5 saves, off-thread | 66 ms | 1,496 ms | 964 |
+
+Wall time barely moves, as predicted. Inline, the blocked time equals the whole operation. The burst case is now measured rather than arithmetic, though still on desktop hardware; the device check remains the owner's.
+
+**A4 (`storage_service.dart`) was measured and declined**, which is this section's "smaller stores follow only if measurement says they matter" resolving to no. The largest value that file touches is 20,907 bytes (`path_history`, from the owner's live prefs); it costs 0.22 ms inline and 0.48 ms through `Isolate.run`, so converting those 11 call sites would add 2.2x the work. Full numbers: [#919 comment](https://github.com/OffbandMesh/meshcore-client/issues/919#issuecomment-6269611306).
+
+That measurement turned up two things outside this Feature's shape, filed rather than absorbed:
+
+- [#923](https://github.com/OffbandMesh/meshcore-client/issues/923): on Windows, one `SharedPreferences` write costs **49.4 ms on the UI isolate**, because `shared_preferences_windows` is pure Dart and re-encodes plus rewrites the whole file per key. Measured against the owner's live 4.23 MB prefs.
+- [#924](https://github.com/OffbandMesh/meshcore-client/issues/924): `path_history_` is unbounded on disk, 2,041 keys and 86% of that prefs file, which makes every write in #923 worse over time.
+
+Both are children of #334 and neither is fixed by this Feature.
+
 ### Epic B: normalise messages into rows
 
 A real drift table beside `StoredBlobs`, one row per message. A save becomes an INSERT; reads page. Both message stores' read and write paths rewritten. An additive migration that never deletes a blob until readback proves the per-key count matches.
