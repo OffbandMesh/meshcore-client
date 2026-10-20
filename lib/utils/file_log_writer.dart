@@ -24,6 +24,23 @@ class FileLogWriter {
   File get activeFile => File('${dir.path}/$baseName.log');
   File _rotated(int n) => File('${dir.path}/$baseName.$n.log');
 
+  /// Every log file that exists, newest first: the active file then the rotated
+  /// ones.
+  ///
+  /// The rotation naming lives here rather than in callers, so an exporter does
+  /// not have to duplicate the scheme. Needed because a line written once, at
+  /// startup, can rotate out of the active file long before the user exports,
+  /// and until now nothing could reach the rotated files at all (#906).
+  Future<List<File>> existingFiles() async {
+    final files = <File>[];
+    if (await activeFile.exists()) files.add(activeFile);
+    for (var n = 1; n < maxFiles; n++) {
+      final f = _rotated(n);
+      if (await f.exists()) files.add(f);
+    }
+    return files;
+  }
+
   /// Append [line] (a trailing newline is added), rotating first if it would
   /// push the active file past [maxBytes].
   Future<void> writeLine(String line) async {
