@@ -348,6 +348,7 @@ void main() {
         ExitInfoMessages.watermarkReadFailed('boom'),
         ExitInfoMessages.watermarkWriteFailed('boom'),
         ExitInfoMessages.forceBlockFailed('boom'),
+        ExitInfoMessages.dartBlockSurvived(20000, 1234),
       ];
       for (final m in messages) {
         expect(m, isNotEmpty);
@@ -523,6 +524,27 @@ void main() {
       handle((_) async => reply([rec(10)]));
       AppExitInfoService.instance.resetForTest();
       await AppExitInfoService.instance.collect();
+      expect(calls, isEmpty);
+    });
+
+    // #931: the Dart block is a 20 second spin by design, so a missing platform
+    // guard would hang a desktop build rather than fail visibly. This proves it
+    // returns immediately off Android; the block itself is hardware-tested.
+    test('the Dart isolate block is an immediate no-op off Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final started = DateTime.now();
+      await AppExitInfoService.instance.forceDartIsolateBlock(millis: 20000);
+      expect(
+        DateTime.now().difference(started).inSeconds,
+        lessThan(2),
+        reason: 'it must not spin on a platform with no exit records',
+      );
+    });
+
+    test('the native block is an immediate no-op off Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      handle((_) async => 20000);
+      await AppExitInfoService.instance.forceMainThreadBlock();
       expect(calls, isEmpty);
     });
   });
