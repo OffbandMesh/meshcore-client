@@ -117,7 +117,9 @@ class Link:
                     return out
             if not got and out and time.time() - last > quiet:
                 return out
-            if not got and not out and time.time() - start > max(quiet, 1.5):
+            # No reply yet: a radio busy with mesh traffic can take a few
+            # seconds, and giving up early files its answer under the next step.
+            if not got and not out and time.time() - start > max(quiet, 5.0):
                 return out
         return out
 
@@ -165,6 +167,17 @@ def main():
         })
         return replies
 
+    # A radio can take a few seconds to answer right after the port opens. Wait
+    # for the first reply before timing anything, or late answers get filed
+    # under the wrong step. Unanswered queries are dropped from the trace.
+    for _ in range(5):
+        link.send(bytes([CMD_DEVICE_QUERY, 3]))
+        first = link.frames(quiet=0.4, limit=4.0)
+        if any(f and f[0] == RESP_DEVICE_INFO for f in first):
+            break
+    else:
+        sys.exit("the radio never answered DEVICE_QUERY: is it a USB companion, and is the app closed?")
+    link.frames(quiet=0.6, limit=2.0)  # drain any straggler
     info = step(bytes([CMD_DEVICE_QUERY, 3]))
     channels = info[0][3] if info and info[0][0] == RESP_DEVICE_INFO and len(info[0]) > 3 else 8
     step(bytes([CMD_APP_START, 0, 0, 0, 0, 0, 0, 0]) + b"offband-trace")
