@@ -23,11 +23,11 @@ void main() {
       expect(m.offbandCommands['CMD_OFFBAND_PKT_HASH'], 0xC6);
     });
 
-    test('stock: companion-v1.17.1, code 13, no Offband anything', () {
+    test('stock: companion-v1.18.0, code 14, no Offband anything', () {
       final m = FakeRadioManifest.pinnedStock();
       expect(m.isOffband, isFalse);
-      expect(m.firmwareVerCode, 13);
-      expect(m.deviceInfoVersion, 'v1.17.1');
+      expect(m.firmwareVerCode, 14);
+      expect(m.deviceInfoVersion, 'v1.18.0');
       expect(m.offbandCaps, isEmpty);
       expect(m.offbandCommands, isEmpty);
     });

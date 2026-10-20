@@ -163,7 +163,7 @@ void main() {
         profile: FakeRadioProfile.stock(),
       ).deviceInfoFrame();
       final ver = info[1];
-      expect(ver, 13);
+      expect(ver, 14);
       expect(caps(info), isNull);
       expect(caps2(info), isNull);
       expect(firmwareSupportsOffbandBlock(caps(info), ver), isFalse);

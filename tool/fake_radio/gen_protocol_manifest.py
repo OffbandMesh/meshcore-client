@@ -9,7 +9,7 @@ Reads the source at a git ref (no checkout) and prints JSON to stdout.
       --repo C:/Dev/meshcore-firmware --ref offband-v1.5.0-beta7 \
       --flavor offband > test/support/fake_radio/manifests/offband-v1.5.0-beta7.json
 
-Stock: --ref companion-v1.17.1 --flavor stock (upstream meshcore-dev/MeshCore
+Stock: --ref companion-v1.18.0 --flavor stock (upstream meshcore-dev/MeshCore
 tag, fetched into the clone).
 """
 import argparse

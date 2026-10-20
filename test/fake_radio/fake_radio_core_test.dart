@@ -44,8 +44,8 @@ void main() {
       final f = FakeRadio(
         profile: FakeRadioProfile.stock(),
       ).handle(_cmd([fwCmdDeviceQuery, 4])).single;
-      expect(f[1], 13);
-      expect(_cstr(f, 60, 20), 'v1.17.1');
+      expect(f[1], 14);
+      expect(_cstr(f, 60, 20), 'v1.18.0');
       expect(f.length, 82);
     });
   });
