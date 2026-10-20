@@ -76,6 +76,57 @@ void main() {
       expect(File('${dir.path}/t.1.log').existsSync(), isTrue);
     });
 
+    // #906: the export used to ship only the active file, so a line written
+    // once at startup was lost as soon as the log rotated. These pin the
+    // accessor the export now relies on.
+    group('existingFiles (#906)', () {
+      test('is empty before anything is written', () async {
+        final w = FileLogWriter(dir: dir, baseName: 't', maxBytes: 1 << 20);
+        expect(await w.existingFiles(), isEmpty);
+      });
+
+      test('returns just the active file before any rotation', () async {
+        final w = FileLogWriter(dir: dir, baseName: 't', maxBytes: 1 << 20);
+        await w.writeLine('only');
+        final files = await w.existingFiles();
+        expect(files.map((f) => f.uri.pathSegments.last), ['t.log']);
+      });
+
+      test('returns the rotated files too, newest first', () async {
+        final w = FileLogWriter(
+          dir: dir,
+          baseName: 't',
+          maxBytes: 100,
+          maxFiles: 3,
+        );
+        for (var i = 0; i < 60; i++) {
+          await w.writeLine('line $i ${'x' * 20}');
+        }
+        final names = (await w.existingFiles())
+            .map((f) => f.uri.pathSegments.last)
+            .toList();
+        expect(names, ['t.log', 't.1.log', 't.2.log']);
+      });
+
+      test('never reports more than maxFiles', () async {
+        final w = FileLogWriter(
+          dir: dir,
+          baseName: 't',
+          maxBytes: 60,
+          maxFiles: 2,
+        );
+        for (var i = 0; i < 80; i++) {
+          await w.writeLine('line $i ${'y' * 20}');
+        }
+        final files = await w.existingFiles();
+        expect(files.length, lessThanOrEqualTo(2));
+        expect(
+          files.map((f) => f.uri.pathSegments.last),
+          isNot(contains('t.2.log')),
+        );
+      });
+    });
+
     // #906: exit-record capture puts a pointer line in offband.log and the
     // trace itself in a sibling file, partly because a trace is tens of KB.
     // These pin down what a large entry actually does to rotation, so the

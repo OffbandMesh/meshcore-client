@@ -67,16 +67,26 @@ class LogExport {
     // possibly-deactivated widget after the await.
     final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
-    final file = await FileLogService.instance.flushAndGetActiveFile();
-    // ANR traces live beside the log rather than inside it, so they have to be
-    // attached explicitly or they never reach anyone (#906). Mobile only: the
-    // records are Android-only, and the desktop path saves a single file.
-    final extras = _isMobile
-        ? await AppExitInfoService.traceFiles()
-        : const <File>[];
+    // On mobile, take every log file rather than just the active one, and the
+    // ANR traces with them (#906). Two reasons: a trace lives beside the log
+    // rather than inside it, and a pointer line written once at startup can
+    // rotate into `.1.log` before the user exports, which would hand over a
+    // trace with its metadata line missing. Desktop keeps its single-file Save
+    // As: there are no exit records off Android.
+    final List<File> logs;
+    if (_isMobile) {
+      logs = await FileLogService.instance.flushAndGetAllFiles();
+    } else {
+      final active = await FileLogService.instance.flushAndGetActiveFile();
+      logs = active == null ? const <File>[] : <File>[active];
+    }
+    final extras = <File>[
+      ...logs.skip(1),
+      if (_isMobile) ...await AppExitInfoService.traceFiles(),
+    ];
     await _exportFile(
       messenger,
-      file: file,
+      file: logs.isEmpty ? null : logs.first,
       fileName: _defaultFileName,
       subject: l10n.debugLog_shareSubject,
       unavailableMessage: l10n.debugLog_logUnavailable,

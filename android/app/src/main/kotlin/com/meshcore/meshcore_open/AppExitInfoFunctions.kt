@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * Reads the system's record of why this app's processes died, so an ANR that
@@ -44,6 +45,8 @@ class AppExitInfoFunctions(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
+    @Volatile private var disposed = false
+
     fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
@@ -56,10 +59,19 @@ class AppExitInfoFunctions(
     }
 
     fun dispose() {
-        ioExecutor.shutdownNow()
+        disposed = true
+        // shutdown(), NOT shutdownNow(): an in-flight read is holding a
+        // MethodChannel.Result, and interrupting it would leave that Result
+        // neither succeeded nor errored, so the Dart future would never
+        // complete. Letting the task finish is cheap; a hung future is not.
+        ioExecutor.shutdown()
     }
 
     private fun handleGetExitRecords(result: MethodChannel.Result) {
+        if (disposed) {
+            result.error("exit_info_disposed", "activity is being destroyed", null)
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             result.success(
                 mapOf(
@@ -72,29 +84,35 @@ class AppExitInfoFunctions(
             return
         }
 
-        ioExecutor.execute {
-            try {
-                val records = collectExitRecords()
-                mainHandler.post {
-                    result.success(
-                        mapOf(
-                            "supported" to true,
-                            "sdkInt" to Build.VERSION.SDK_INT,
-                            "records" to records,
-                        ),
-                    )
-                }
-            } catch (error: Exception) {
-                // Surfaced, never swallowed: Dart logs this and leaves the
-                // watermark untouched so the next launch retries.
-                mainHandler.post {
-                    result.error(
-                        "exit_info_query_failed",
-                        error.message ?: error.javaClass.simpleName,
-                        error.stackTraceToString().take(2000),
-                    )
+        try {
+            ioExecutor.execute {
+                try {
+                    val records = collectExitRecords()
+                    mainHandler.post {
+                        result.success(
+                            mapOf(
+                                "supported" to true,
+                                "sdkInt" to Build.VERSION.SDK_INT,
+                                "records" to records,
+                            ),
+                        )
+                    }
+                } catch (error: Exception) {
+                    // Surfaced, never swallowed: Dart logs this and leaves the
+                    // watermark untouched so the next launch retries.
+                    mainHandler.post {
+                        result.error(
+                            "exit_info_query_failed",
+                            error.message ?: error.javaClass.simpleName,
+                            error.stackTraceToString().take(2000),
+                        )
+                    }
                 }
             }
+        } catch (error: RejectedExecutionException) {
+            // The executor shut down between the disposed check and here. Reply
+            // rather than returning silently, so the Dart future completes.
+            result.error("exit_info_rejected", error.message ?: "executor shut down", null)
         }
     }
 
@@ -123,16 +141,27 @@ class AppExitInfoFunctions(
             "status" to info.status,
         )
 
-        if (info.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
-            // From API 31 this stream is a protobuf tombstone, not text. Writing
-            // it into a text log would corrupt the log, so v1 records that it
-            // existed and leaves the bytes alone (#906).
-            record["traceUnavailable"] = "native_tombstone_not_text"
-            return record
-        }
-
         readTrace(info, record)
         return record
+    }
+
+    /**
+     * A text ANR trace is printable ASCII; a native tombstone protobuf is not.
+     *
+     * Content, not reason code, decides whether the bytes are usable. Gating on
+     * [ApplicationExitInfo.REASON_CRASH_NATIVE] instead would lose a real text
+     * trace, because AOSP says a trace from an earlier ANR stays attached to the
+     * record even when the process later died for a different reason.
+     */
+    private fun looksLikeText(bytes: ByteArray): Boolean {
+        val sample = minOf(bytes.size, 256)
+        if (sample == 0) return false
+        var printable = 0
+        for (i in 0 until sample) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b == 0x09 || b == 0x0A || b == 0x0D || (b in 0x20..0x7E)) printable++
+        }
+        return printable * 10 >= sample * 9
     }
 
     /**
@@ -167,8 +196,16 @@ class AppExitInfoFunctions(
                     record["traceUnavailable"] = "empty_stream"
                     return
                 }
-                record["traceBytes"] = sink.toByteArray()
-                if (sink.size() >= maxTraceBytes) {
+                val bytes = sink.toByteArray()
+                if (!looksLikeText(bytes)) {
+                    // Almost certainly a native tombstone protobuf (API 31+).
+                    // Recorded rather than written, because concatenating binary
+                    // into a text log would corrupt it (#906).
+                    record["traceUnavailable"] = "binary_tombstone_not_text"
+                    return
+                }
+                record["traceBytes"] = bytes
+                if (bytes.size >= maxTraceBytes) {
                     record["traceTruncated"] = true
                 }
             }
@@ -210,10 +247,20 @@ class AppExitInfoFunctions(
         val millis = (call.argument<Int>("millis") ?: 20000).coerceIn(1000, 120000)
         result.success(millis)
         mainHandler.post {
-            try {
-                Thread.sleep(millis.toLong())
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
+            // Sleeps to a deadline and swallows interrupts rather than a single
+            // Thread.sleep. An interrupt cutting the block short would mean no
+            // ANR, no record, and a wasted trip to the hardware. Looping on
+            // short sleeps keeps the duration guaranteed without the CPU burn
+            // (and thermal throttling) of a busy-wait.
+            val deadline = System.nanoTime() + millis * 1_000_000L
+            while (true) {
+                val remainingMs = (deadline - System.nanoTime()) / 1_000_000L
+                if (remainingMs <= 0) break
+                try {
+                    Thread.sleep(minOf(remainingMs, 250L))
+                } catch (_: InterruptedException) {
+                    // Deliberately ignored; the deadline is what ends this.
+                }
             }
         }
     }
