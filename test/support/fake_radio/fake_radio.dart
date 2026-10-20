@@ -108,6 +108,9 @@ class FakeRadio {
   /// Nodes this companion is logged in to as admin; only these run CLI.
   final Set<FakeRemoteNode> _adminSessions = {};
 
+  /// Whether this companion is logged in to [node] as admin.
+  bool hasAdminSession(FakeRemoteNode node) => _adminSessions.contains(node);
+
   /// Adds [node], and its contact if the companion doesn't know it yet.
   FakeRemoteNode addRemoteNode(FakeRemoteNode node) {
     remoteNodes.add(node);
