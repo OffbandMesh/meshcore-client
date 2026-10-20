@@ -546,9 +546,13 @@ class AppExitInfoService {
   Future<void> forceDartIsolateBlock({int millis = 20000}) async {
     if (!isSupportedPlatform) return;
     final payload = _blockPayload();
-    final deadline = DateTime.now().add(Duration(milliseconds: millis));
+    // Stopwatch, not DateTime.now(): the wall clock can move backwards (NTP, or
+    // the tester changing it) and would push the deadline away, leaving the app
+    // frozen well past the intended window or indefinitely. The Kotlin block
+    // already uses a monotonic source, so this matches it.
+    final elapsed = Stopwatch()..start();
     var encoded = 0;
-    while (DateTime.now().isBefore(deadline)) {
+    while (elapsed.elapsedMilliseconds < millis) {
       encoded += jsonEncode(payload).length;
     }
     // Only reached when the process survived, so the tester gets told why.

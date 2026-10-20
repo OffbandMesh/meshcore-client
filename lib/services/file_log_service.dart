@@ -84,7 +84,15 @@ class FileLogService {
     await _flush();
     final w = _writer;
     if (w == null) return const [];
-    return w.existingFiles();
+    try {
+      return await w.existingFiles();
+    } catch (_) {
+      // Degrade to the active file rather than failing the export outright:
+      // this is the logger, so it cannot report its own listing failure
+      // anywhere, and handing over one log beats handing over none.
+      final active = w.activeFile;
+      return await active.exists() ? <File>[active] : const <File>[];
+    }
   }
 
   /// Cancel the periodic flush and flush once more. The singleton normally lives

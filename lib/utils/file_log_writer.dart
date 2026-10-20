@@ -31,14 +31,25 @@ class FileLogWriter {
   /// not have to duplicate the scheme. Needed because a line written once, at
   /// startup, can rotate out of the active file long before the user exports,
   /// and until now nothing could reach the rotated files at all (#906).
+  ///
+  /// One directory listing rather than a per-name `exists()` walk: the periodic
+  /// flush can rotate while this is awaiting, and a walk could return a name it
+  /// had just confirmed and that rotation then renamed, which would hand the
+  /// exporter a path that no longer resolves and fail the whole share.
   Future<List<File>> existingFiles() async {
-    final files = <File>[];
-    if (await activeFile.exists()) files.add(activeFile);
-    for (var n = 1; n < maxFiles; n++) {
-      final f = _rotated(n);
-      if (await f.exists()) files.add(f);
+    if (!await dir.exists()) return const [];
+    final byName = <String, File>{};
+    for (final entry in await dir.list(followLinks: false).toList()) {
+      if (entry is File) byName[entry.uri.pathSegments.last] = entry;
     }
-    return files;
+    final ordered = <File>[];
+    final active = byName['$baseName.log'];
+    if (active != null) ordered.add(active);
+    for (var n = 1; n < maxFiles; n++) {
+      final rotated = byName['$baseName.$n.log'];
+      if (rotated != null) ordered.add(rotated);
+    }
+    return ordered;
   }
 
   /// Append [line] (a trailing newline is added), rotating first if it would

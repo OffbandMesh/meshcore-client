@@ -80,18 +80,26 @@ class LogExport {
       final active = await FileLogService.instance.flushAndGetActiveFile();
       logs = active == null ? const <File>[] : <File>[active];
     }
-    final extras = <File>[
-      ...logs.skip(1),
+    final candidates = <File>[
+      ...logs,
       if (_isMobile) ...await AppExitInfoService.traceFiles(),
     ];
+    // Last-moment existence check. Rotation renames files underneath us and a
+    // trace can be pruned, so a path collected a moment ago may already be
+    // gone; handing a missing path to the share sheet fails the whole export
+    // rather than one attachment.
+    final present = <File>[];
+    for (final f in candidates) {
+      if (await f.exists()) present.add(f);
+    }
     await _exportFile(
       messenger,
-      file: logs.isEmpty ? null : logs.first,
+      file: present.isEmpty ? null : present.first,
       fileName: _defaultFileName,
       subject: l10n.debugLog_shareSubject,
       unavailableMessage: l10n.debugLog_logUnavailable,
       savedMessage: l10n.debugLog_logSaved,
-      extraFiles: extras,
+      extraFiles: present.skip(1).toList(),
     );
   }
 
