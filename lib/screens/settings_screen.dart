@@ -311,15 +311,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.hourglass_disabled),
-              title: const Text('Force an ANR (test build only)'),
+              title: const Text('Force an ANR, native side (test build only)'),
               subtitle: const Text(
-                'Freezes the UI for 20 seconds. KEEP TAPPING the screen while '
-                'it is frozen: Android raises an ANR only when an input event '
-                'goes unanswered for 5 seconds, so a freeze with nothing '
-                'pending just recovers. Then let the dialog close the app, '
-                'reopen, and export the debug log.',
+                'Freezes the UI for 20 seconds in the Android layer. KEEP '
+                'TAPPING the screen while it is frozen: Android raises an ANR '
+                'only when an input event goes unanswered for 5 seconds, so a '
+                'freeze with nothing pending just recovers. Then let the dialog '
+                'close the app, reopen, and export the debug log.',
               ),
               onTap: () => AppExitInfoService.instance.forceMainThreadBlock(),
+            ),
+          ),
+        if (_showAnrTestRow) const SizedBox(height: 16),
+        if (_showAnrTestRow)
+          // The second trigger exists because the first one cannot answer the
+          // question the Epic was filed for (#931). Blocking the Android main
+          // thread yields a Java stack, which proved the capture works but says
+          // nothing about our Dart frames. The real ANRs block on the Dart UI
+          // isolate inside the JSON stringifier, so this one blocks there, the
+          // same way, and its trace should match the Play clusters' shape.
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.data_object),
+              title: const Text('Force an ANR, Dart side (test build only)'),
+              subtitle: const Text(
+                'Freezes the UI for 20 seconds by encoding JSON on the Dart '
+                'isolate, which is what the real ANRs do. Same procedure: KEEP '
+                'TAPPING while frozen, let the dialog close the app, reopen, '
+                'then export. Use this one to see whether our own Dart function '
+                'names show up in the trace.',
+              ),
+              onTap: () => AppExitInfoService.instance.forceDartIsolateBlock(),
             ),
           ),
         const SizedBox(height: 16),

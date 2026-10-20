@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -113,6 +114,14 @@ abstract final class ExitInfoMessages {
 
   static String forceBlockFailed(Object error) =>
       'forceMainThreadBlock failed: $error';
+
+  /// Not an error. Logged when the Dart isolate block ran its full duration
+  /// without the system raising an ANR, which means no input went unanswered.
+  /// Says why, so the tester is not left guessing (#931).
+  static String dartBlockSurvived(int millis, int encodedBytes) =>
+      'dart isolate block ran ${millis}ms and encoded $encodedBytes bytes, '
+      'but no ANR was raised: Android raises one only when an input event goes '
+      'unanswered for 5 seconds, so keep tapping the screen during the freeze';
 
   /// Fragments that must never appear in a line produced on the happy path.
   static const List<String> failureMarkers = [
@@ -520,6 +529,49 @@ class AppExitInfoService {
       _log('WARN', ExitInfoMessages.forceBlockFailed(error));
     }
   }
+
+  /// Test-only, same double gating as [forceMainThreadBlock]. Blocks the **Dart
+  /// UI isolate** instead of the Android main thread, and blocks it the way the
+  /// real ANRs do rather than with an artificial spin (#931).
+  ///
+  /// Why this exists separately. The Kotlin block produces a Java stack, so it
+  /// proved the capture works but could say nothing about whether our own Dart
+  /// frames survive into a trace. The Play clusters show the real ANRs blocking
+  /// on this isolate inside the JSON stringifier and under allocation pressure,
+  /// so encoding a large nested structure in a loop should yield a trace of the
+  /// same shape, and answer whether any of our Dart frames resolve.
+  ///
+  /// It spins on purpose. Any `await` inside the loop would yield to the event
+  /// loop, the isolate would keep answering input, and no ANR would fire.
+  Future<void> forceDartIsolateBlock({int millis = 20000}) async {
+    if (!isSupportedPlatform) return;
+    final payload = _blockPayload();
+    final deadline = DateTime.now().add(Duration(milliseconds: millis));
+    var encoded = 0;
+    while (DateTime.now().isBefore(deadline)) {
+      encoded += jsonEncode(payload).length;
+    }
+    // Only reached when the process survived, so the tester gets told why.
+    _log('WARN', ExitInfoMessages.dartBlockSurvived(millis, encoded));
+    await FileLogService.instance.flushAndGetActiveFile();
+  }
+
+  /// Shaped like the stores #334 is about: many keyed entries, each a nested
+  /// object, which is what gets JSON-encoded on this isolate in the real bug.
+  static Map<String, Object?> _blockPayload() => {
+    for (var i = 0; i < 400; i++)
+      'entry_$i': {
+        'id': i,
+        'name': 'contact-$i',
+        'path': List<int>.generate(24, (j) => (i + j) & 0xFF),
+        'meta': {
+          'lastSeen': i * 1000,
+          'snr': -(i % 40),
+          'flags': const ['a', 'b', 'c'],
+        },
+        'text': 'x' * 64,
+      },
+  };
 
   /// Visible for tests so a second `collect()` can be exercised.
   @visibleForTesting
