@@ -22,7 +22,7 @@ const _key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
 Contact _contact({required DateTime lastSeen}) => Contact(
   publicKey: hex2Uint8List(_key),
-  name: 'Bob',
+  receivedName: 'Bob',
   type: advTypeChat,
   pathLength: -1,
   path: Uint8List(0),

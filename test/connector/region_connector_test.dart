@@ -126,7 +126,7 @@ void main() {
       connector.contactsForTest.add(
         Contact(
           publicKey: pk,
-          name: 'rpt',
+          receivedName: 'rpt',
           type: advTypeRepeater,
           pathLength: 2,
           pathHashWidth: 1,

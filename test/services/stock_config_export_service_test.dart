@@ -27,7 +27,7 @@ Contact makeContact({
 }) {
   return Contact(
     publicKey: Uint8List(32),
-    name: name,
+    receivedName: name,
     type: type,
     flags: flags,
     pathLength: pathLength,

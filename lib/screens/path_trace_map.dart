@@ -378,7 +378,10 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
         path: Uint8List(0),
         pathLength: 0,
         publicKey: connector.selfPublicKey ?? Uint8List(0),
-        name: context.l10n.pathTrace_you,
+        // A synthetic tile for this device, not a real contact. There is no
+        // user label to override, so the localized "You" is the received name
+        // and `.name` returns it unchanged. (#750)
+        receivedName: context.l10n.pathTrace_you,
         type: advTypeChat,
         latitude: connector.selfLatitude,
         longitude: connector.selfLongitude,

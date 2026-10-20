@@ -5120,7 +5120,9 @@ class MeshCoreConnector extends ChangeNotifier {
     if (index >= 0) {
       _contacts[index] = _contacts[index].copyWith(
         type: latestContact.type,
-        name: latestContact.name,
+        // Received, not `.name`: copying the getter would move one contact's
+        // custom name onto another's received field. (#750)
+        receivedName: latestContact.receivedName,
         pathLength: latestContact.pathLength,
         path: latestContact.path,
         flags: updatedFlags,
@@ -5659,7 +5661,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _handleContactAdvert(
       Contact(
         publicKey: contact.publicKey,
-        name: contact.name,
+        receivedName: contact.receivedName,
         type: contact.type,
         pathLength: contact.pathLength,
         path: contact.path,
@@ -10399,7 +10401,7 @@ class MeshCoreConnector extends ChangeNotifier {
       Contact(
         rawPacket: frame,
         publicKey: publicKey,
-        name: name,
+        receivedName: name,
         type: type,
         pathLength: pathBytes.isEmpty ? -1 : pathBytes.length,
         path: Uint8List.fromList(
@@ -10483,7 +10485,7 @@ class MeshCoreConnector extends ChangeNotifier {
       final newContact = Contact(
         rawPacket: rawPacket,
         publicKey: publicKey,
-        name: name,
+        receivedName: name,
         type: type,
         pathLength: path.length,
         path: Uint8List.fromList(
@@ -10532,7 +10534,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _contacts[existingIndex] = existing.copyWith(
         latitude: hasLocation ? latitude : existing.latitude,
         longitude: hasLocation ? longitude : existing.longitude,
-        name: hasName ? name : existing.name,
+        // The received name updates; the user's custom name is untouched, so
+        // what they see does not move. This is the whole point of #750: before
+        // it, an advert took the user's chosen name back every time, which is
+        // why the client could never hold one. `copyWith` leaves `customName`
+        // alone unless `clearCustomName` is passed, so nothing else is needed
+        // here. A nameless advert (`hasName` false) must not blank the
+        // received name either. (T15, T16, T18, T19)
+        receivedName: hasName ? name : existing.receivedName,
         path: Uint8List.fromList(path.reversed.toList()),
         pathLength: path.length,
         lastMessageAt: mergedLastMessageAt,
@@ -10624,7 +10633,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _discoveredContacts[existingIndex] = _discoveredContacts[existingIndex]
           .copyWith(
             rawPacket: rawPacket,
-            name: contact.name,
+            receivedName: contact.receivedName,
             type: contact.type,
             pathLength: contact.pathLength,
             path: contact.path,
@@ -10642,7 +10651,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final disContact = Contact(
       rawPacket: rawPacket,
       publicKey: contact.publicKey,
-      name: contact.name,
+      receivedName: contact.receivedName,
       type: contact.type,
       pathLength: contact.pathLength,
       path: contact.path,
