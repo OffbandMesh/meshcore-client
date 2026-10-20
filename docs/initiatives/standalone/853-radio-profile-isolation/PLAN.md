@@ -68,8 +68,8 @@ Tasks are 3 to 4 points. Each Epic ends with a verification task and gets one PR
 | Task | Pts |
 |---|---|
 | **B1 · Delete the dead `pending_messages` API** (#855): three methods and the key, with the harness updated so the surface leaves the inventory rather than being reclassified | 3 |
-| **B2 · Path history per radio, in drift** (#854 and #924): scope by radio prefix, move the store from SharedPreferences to `BlobStore`, and bound what persists to what `PathHistoryService` actually caches | 4 |
-| **B3 · Delivery observations per radio** (#856): scope by radio prefix so the model trains per radio | 3 |
+| **B2 · Path history per radio, in drift** (#854 and #924): scope by radio prefix, move the store from SharedPreferences to `BlobStore`, bound what persists to what `PathHistoryService` actually caches, and **delete the 2,041 legacy untagged keys once the readback gate passes** (decision 1) | 4 |
+| **B3 · Delivery observations per radio** (#856): scope by radio prefix so the model trains per radio, and **delete the legacy global list** (decision 1) | 3 |
 | **B4 · Epic verification:** A2's repros now pass, the inventory shows no unclassified surface, and the owner's real prefs file is measurably smaller with route history intact | 1 |
 
 ### Epic C: [#938](https://github.com/OffbandMesh/meshcore-client/issues/938) Blocked per-radio view
@@ -138,8 +138,8 @@ What merging this plan authorizes, in words:
 
 | Where | Can't tell what | Does |
 |---|---|---|
-| Legacy untagged `path_history_<contact>` key | which radio learned this route | **stop** — never assign it to a radio. Disposition is the owner's choice 1 below; the code does not guess |
-| Legacy untagged `delivery_observations` | which radio produced these observations | **stop** — same. Mixed-radio data is worse than no data for the model |
+| Legacy untagged `path_history_<contact>` key | which radio learned this route | **stop** — never assign it to a radio. Per decision 1 it is deleted, not guessed at, and only after the per-radio readback gate passes |
+| Legacy untagged `delivery_observations` | which radio produced these observations | **stop** — same. Deleted per decision 1; mixed-radio data is worse than no data for the model |
 | Per-radio read with an empty or unset scope prefix (#158) | which radio is connected | **stop** — return nothing, never fall back to the last known prefix. This is the #754 precedent: an unset key loads nothing and never writes |
 | A surface in the inventory with no declared verdict | whether it should be per-radio | **stop** — the harness fails the build. That is the point of A1 |
 | Path-history migration readback mismatch | whether every route survived the move into drift | **stop** — keep the prefs copy, delete nothing, surface loudly. Same gate as #920, which caught a lossy converter precisely because the count was measured independently of the converter |
@@ -159,15 +159,17 @@ No fail-open branches. Nothing in this plan needs a fail-open grant.
 - #924 is closed as a side effect of B2.
 - On the owner's own twelve-radio install, a radio switch and a restart show no data belonging to any other radio.
 
-## 9. Your choices
+## 9. Decisions
 
-| # | Question | Option A | Option B | Rec. | Your choice |
-|---|---|---|---|---|---|
-| 1 | What happens to the 2,041 legacy untagged `path_history_` keys and the global `delivery_observations`? | **Delete them.** Routes relearn in normal use and the model retrains, and this removes 86% of the prefs file, which is what makes every other settings write slow (#923) | **Orphan them in place**, as #754 did for discovery, and let each radio build its own | A | |
-| 2 | Does path history move out of SharedPreferences into drift, or just gain a radio prefix where it is? | **Move it to drift** (`BlobStore`), as #335 did for messages and contacts. Resolves #924 and most of #923's cost as a side effect | **Scope it in place.** Smaller change, but leaves 2,041 keys and the whole-file rewrite tax | A | |
-| 3 | Do #158 and #190 (Epic D) belong in this Feature, or should they split out? | **Keep them in.** The Feature cannot claim isolation while a read can still resolve against a stale prefix | **Split them out** as a separate Epic outside #853, since they are a timing defect rather than a scoping one | A | |
+Settled by the owner, 2026-10-20. No open choices remain in this plan.
 
-**Why A on each.** (1) #754's orphan choice was right because its blob was small; here the orphaned data *is* the performance problem, and both surfaces are regenerable so nothing a user would notice is lost. (2) SharedPreferences is a settings store, and 3.65 MB of route history in it is the #306 mistake repeating; doing both at once costs one migration instead of two. (3) They are already #853's children, and a user cannot tell the difference between "wrong store" and "right store, wrong moment".
+| # | Decision | What it means for the build |
+|---|---|---|
+| 1 | **Delete the legacy untagged data.** The 2,041 `path_history_<contact>` keys and the global `delivery_observations` are removed, not orphaned | B2 and B3 each delete their legacy key **only after** the per-radio readback gate passes. Both surfaces are regenerable: routes relearn in normal use and the ML model retrains. This is also what reclaims 86% of the prefs file |
+| 2 | **Path history moves into drift**, not just a radio prefix in place | B2 is a store move plus a scoping change in one migration, following #335's precedent for messages and contacts. Resolves #924, and cuts most of #923's per-write cost as a side effect by shrinking the file every other write re-encodes |
+| 3 | **#158 and #190 stay in this Feature**, as Epic D | The Feature cannot claim isolation while a read can still resolve against a stale prefix. A user cannot tell "wrong store" from "right store, wrong moment" |
+
+Decision 1 differs from #754's choice to orphan, deliberately: that blob was small, whereas here the orphaned data *is* the performance problem.
 
 ## 10. Carried-in work
 
