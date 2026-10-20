@@ -14,7 +14,7 @@ Contact _contact({
 }) {
   return Contact(
     publicKey: Uint8List(32),
-    name: 'R',
+    receivedName: 'R',
     type: advTypeRepeater,
     pathLength: pathLength,
     pathHashWidth: pathHashWidth,

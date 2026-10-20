@@ -14,7 +14,7 @@ Contact _contact({
 }) {
   return Contact(
     publicKey: Uint8List.fromList(List.generate(32, (i) => i + 1)),
-    name: 'Node',
+    receivedName: 'Node',
     type: type,
     pathLength: pathLength,
     path: Uint8List(0),

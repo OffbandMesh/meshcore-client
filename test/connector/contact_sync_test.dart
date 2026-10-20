@@ -44,7 +44,7 @@ Uint8List get _end => Uint8List.fromList([respCodeEndOfContacts, ..._u32(0)]);
 
 Contact _saved(int keyByte, String name) => Contact(
   publicKey: Uint8List.fromList(List<int>.filled(32, keyByte)),
-  name: name,
+  receivedName: name,
   type: advTypeChat,
   pathLength: -1,
   path: Uint8List(0),
