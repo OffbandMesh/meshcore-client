@@ -302,14 +302,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // only way to produce a real ANR record to read back (#906/#911); no
           // adb command induces one. Label is deliberately not localized, since
           // it never reaches a user.
+          //
+          // The subtitle says to keep tapping for a reason. Android's only
+          // relevant trigger is "has not responded to an input event within 5
+          // seconds", and it documents no time-based trigger for a blocked main
+          // thread. A freeze with nothing pending can therefore recover with no
+          // ANR, no process death and no exit record to read back.
           Card(
             child: ListTile(
               leading: const Icon(Icons.hourglass_disabled),
               title: const Text('Force an ANR (test build only)'),
               subtitle: const Text(
-                'Hangs the UI for 20 seconds so Android raises an ANR. '
-                'Let the system dialog close the app, then reopen it and '
-                'export the debug log.',
+                'Freezes the UI for 20 seconds. KEEP TAPPING the screen while '
+                'it is frozen: Android raises an ANR only when an input event '
+                'goes unanswered for 5 seconds, so a freeze with nothing '
+                'pending just recovers. Then let the dialog close the app, '
+                'reopen, and export the debug log.',
               ),
               onTap: () => AppExitInfoService.instance.forceMainThreadBlock(),
             ),
