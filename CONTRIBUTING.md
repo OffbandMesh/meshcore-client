@@ -57,6 +57,13 @@ information on good commit messages.
 `dart format .` and `flutter analyze`. The continuous development checks will
 fail if issues here are not addressed before hand.
 
+* **Documentation-only changes get fast CI.** When every changed file is
+documentation (`*.md`, `docs/`, `LICENSE`, issue templates), the build checks
+still run and still report, but short-circuit to success in seconds instead of
+building all platforms. Anything else in the same PR, including any `.json`
+or config file, runs the full matrix. You do not need to do anything to opt
+in; it is decided from the diff.
+
 ## AI-use
 
 Everyone loves some help, AI agents are a tool in many of our belts. The project
