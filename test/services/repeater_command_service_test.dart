@@ -19,7 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Contact _repeater() => Contact(
   publicKey: Uint8List.fromList(List<int>.generate(32, (i) => i)),
-  name: 'Test Repeater',
+  receivedName: 'Test Repeater',
   type: 2,
   pathLength: 0,
   path: Uint8List(0),
