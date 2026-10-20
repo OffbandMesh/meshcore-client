@@ -5044,7 +5044,10 @@ class MeshCoreConnector extends ChangeNotifier {
           hashWidth: hashWidth,
           type: contact.type,
           flags: contact.flags,
-          name: contact.name,
+          // receivedName, never `.name`. The radio's contact table is the
+          // shared record of what this node calls itself; the user's label is
+          // ours alone and there is nowhere on the device to put it. (#750, T11)
+          name: contact.receivedName,
         ),
       );
       // USB writes return instantly (no BLE flow control), so give the firmware
@@ -5110,7 +5113,7 @@ class MeshCoreConnector extends ChangeNotifier {
         hashWidth: latestContact.pathHashWidth,
         type: latestContact.type,
         flags: updatedFlags,
-        name: latestContact.name,
+        name: latestContact.receivedName, // never `.name` (#750, T11)
       ),
     );
 
@@ -5614,7 +5617,10 @@ class MeshCoreConnector extends ChangeNotifier {
         -1,
         type: stub.type,
         flags: 0,
-        name: stub.name,
+        // A card or QR stub carries the shared name as its received name, so
+        // this is unchanged in practice. Reading `.name` would still be wrong:
+        // a user could rename before the add completes. (#750, T13)
+        name: stub.receivedName,
         // The whole point of this path. Anything else here would trip the
         // firmware advert replay guard and leave the contact permanently deaf
         // to its own adverts. See buildUpdateContactPathFrame. (#620)
@@ -5642,7 +5648,7 @@ class MeshCoreConnector extends ChangeNotifier {
         hashWidth: contact.pathHashWidth,
         type: contact.type,
         flags: contact.flags,
-        name: contact.name,
+        name: contact.receivedName, // never `.name` (#750, T11)
         lat: contact.latitude,
         lon: contact.longitude,
         lastModified: contact.lastSeen,
