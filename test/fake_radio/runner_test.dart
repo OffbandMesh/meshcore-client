@@ -225,7 +225,7 @@ void main() {
       socket.add(Uint8List.fromList([0x3c, 2, 0, fwCmdDeviceQuery, 3]));
       final info = await reply.future.timeout(const Duration(seconds: 20));
       expect(info[0], fwRespDeviceInfo);
-      expect(info[1], 13); // stock profile
+      expect(info[1], 14); // stock profile, companion-v1.18.0
 
       proc.stdin.writeln('quit');
       expect(await proc.exitCode.timeout(const Duration(seconds: 20)), 0);

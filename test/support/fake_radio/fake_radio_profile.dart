@@ -47,7 +47,7 @@ class FakeRadioProfile {
   factory FakeRadioProfile.offband() =>
       FakeRadioProfile.fromManifest(FakeRadioManifest.pinnedOffband());
 
-  /// The pinned upstream MeshCore release (`companion-v1.17.1`).
+  /// The pinned upstream MeshCore release (`companion-v1.18.0`).
   factory FakeRadioProfile.stock() =>
       FakeRadioProfile.fromManifest(FakeRadioManifest.pinnedStock());
 

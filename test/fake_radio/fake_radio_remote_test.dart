@@ -174,6 +174,37 @@ void main() {
       },
     );
 
+    test('get radio: Offband prints ftoa3, stock prints the float32', () {
+      var (radio, _, _) = setUpNode();
+      login(radio, 'password');
+      expect(cli(radio, 'get radio'), '> 910.525,62.5,7,5');
+      expect(cli(radio, 'get freq'), '> 910.525');
+      (radio, _, _) = setUpNode(offband: false);
+      login(radio, 'password');
+      expect(cli(radio, 'get radio'), '> 910.5250244,62.5,7,5');
+      expect(cli(radio, 'get freq'), '> 910.5250244');
+    });
+
+    test('ftoa matches the firmware function, compiled and run (#784)', () {
+      // Output of _ftoa from companion-v1.18.0 TxtDataHelpers.cpp, built
+      // with g++ for these inputs.
+      const firmware = [
+        (910.525, '910.5250244'),
+        (869.618, '869.6179809'),
+        (433.0, '433.0'),
+        (62.5, '62.5'),
+        (2400.0, '2400.0'),
+        (0.5, '0.5'),
+        (150.0, '150.0'),
+        (915.8, '915.7999877'),
+        (-3.25, '-3.25'),
+        (0.0, '0.0'),
+      ];
+      for (final (value, text) in firmware) {
+        expect(FakeRemoteNode.ftoa(value), text, reason: '$value');
+      }
+    });
+
     test('an "XX|" prefix from the companion is reflected in the reply', () {
       final (radio, node, _) = setUpNode();
       login(radio, 'password');

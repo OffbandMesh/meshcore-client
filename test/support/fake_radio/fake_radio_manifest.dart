@@ -32,7 +32,7 @@ class FakeRadioManifest {
 
   /// The upstream MeshCore release the fake's stock profile is pinned to.
   static FakeRadioManifest pinnedStock() =>
-      FakeRadioManifest.load('$_dir/stock-companion-v1.17.1.json');
+      FakeRadioManifest.load('$_dir/stock-companion-v1.18.0.json');
 
   final Map<String, dynamic> json;
 

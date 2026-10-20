@@ -1,9 +1,11 @@
+import 'dart:typed_data';
+
 import 'fake_radio_seed.dart';
 
 /// A repeater, room server or sensor out on the mesh, reached through the
 /// companion with login and CLI commands (#774). Its CLI replies are copied
 /// from firmware `src/helpers/CommonCLI.cpp`; [offband] picks the Offband or
-/// stock (upstream `companion-v1.17.1`) behavior where they differ.
+/// stock (upstream `companion-v1.18.0`) behavior where they differ.
 class FakeRemoteNode {
   FakeRemoteNode({
     required this.contact,
@@ -110,14 +112,18 @@ class FakeRemoteNode {
     return t;
   }
 
-  /// `handleGetCmd` (CommonCLI.cpp:1653-1697).
+  /// `handleGetCmd` (CommonCLI.cpp:1653-1697). Offband prints the frequency
+  /// with `ftoa3`; stock with `ftoa` (CommonRadioPrefs.cpp:35, :61 in
+  /// companion-v1.18.0; CommonCLI.cpp:861, :901 in v1.17.1).
   String _get(String key) => switch (key.trim()) {
-    'radio' => '> ${_ftoa3(freqMhz)},${_ftoa3(bwKhz)},$sf,$cr',
+    'radio' => '> ${_freq()},${_ftoa3(bwKhz)},$sf,$cr',
     'tx' => '> $txPowerDbm',
     'path.hash.mode' => '> $pathHashMode',
-    'freq' => '> ${_ftoa3(freqMhz)}',
+    'freq' => '> ${_freq()}',
     _ => 'Unknown command',
   };
+
+  String _freq() => offband ? _ftoa3(freqMhz) : ftoa(freqMhz);
 
   /// `handleSetCmd` (CommonCLI.cpp:1333-1482).
   String _set(String config) {
@@ -189,6 +195,39 @@ class FakeRemoteNode {
     }
     if (s.endsWith('.')) s = s.substring(0, s.length - 1);
     return s;
+  }
+
+  /// `StrHelper::ftoa` (src/helpers/TxtDataHelpers.cpp:57-146): the value as
+  /// a float32, seven decimals truncated, trailing zeros dropped down to one.
+  /// So 910.525 prints as 910.5250244.
+  static String ftoa(double value) {
+    final bits = (ByteData(4)..setFloat32(0, value)).getInt32(0);
+    if (bits & 0x7FFFFFFF == 0) return '0.0';
+    final exp2 = ((bits >> 23) & 0xFF) - 127;
+    final mantissa = (bits & 0xFFFFFF) | 0x800000;
+    if (exp2 >= 31 || exp2 < -23) return '0'; // _FTOA_TOO_LARGE / SMALL
+    var intPart = 0;
+    var frac = 0;
+    if (exp2 >= 23) {
+      intPart = mantissa << (exp2 - 23);
+    } else if (exp2 >= 0) {
+      intPart = mantissa >> (23 - exp2);
+      frac = (mantissa << (exp2 + 1)) & 0xFFFFFF;
+    } else {
+      frac = (mantissa & 0xFFFFFF) >> -(exp2 + 1);
+    }
+    final out = StringBuffer(bits < 0 ? '-' : '')..write('$intPart.');
+    if (frac == 0) return '${out}0';
+    var digits = '';
+    for (var i = 0; i < 7; i++) {
+      frac *= 10;
+      digits += '${frac >> 24}';
+      frac &= 0xFFFFFF;
+    }
+    while (digits.length > 1 && digits.endsWith('0')) {
+      digits = digits.substring(0, digits.length - 1);
+    }
+    return '$out$digits';
   }
 }
 
