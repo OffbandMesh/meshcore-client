@@ -140,20 +140,17 @@ Classification classifyDevicePopulation({
     );
   }
 
-  if (versionLooksStock == false) {
-    // Stock-shape frame carrying the Offband dual version form: the inverse
-    // conflict (Gemini review, task #875 finding 2). A fork device that
-    // failed to append its caps bytes lands here instead of stockModern,
-    // which keeps CLI frame 66 away from a device that may not have it.
-    return Classification(
-      population: DevicePopulation.stockLegacy,
-      conflict: true,
-      evidence:
-          'stock-shape frame (len=$length) but Offband version string '
-          '"$firmwareVersion"',
-    );
-  }
-
+  // A stock-shape (82-byte) frame is definitively stock: the Offband fork
+  // always appends at least one caps byte (>=83 bytes), so a stock-shape frame
+  // can never be an Offband device. The version string is therefore NOT used to
+  // force a conflict in the stock direction. This replaces the old inverse
+  // conflict (#875 finding 2), which guarded an impossible case (an Offband
+  // device that failed to append caps) and misfired on real stock firmware:
+  // stock 1.18.0 reports "v1.18.0-81dbae5" (semver + git-describe hash), which
+  // reads as the dual form and hid the console on every real device (#946,
+  // found by E2.2 bench verification). The fork-shape branch above still
+  // requires dual-version corroboration, because emitting fork frames is the
+  // direction where being wrong is dangerous.
   if (verCode >= stockCliMinVerCode) {
     return Classification(
       population: DevicePopulation.stockModern,
@@ -186,12 +183,12 @@ enum VersionStringShape {
   unknown,
 }
 
-// Known limitation (Gemini review, #878): a stock PRE-RELEASE string of the
-// form "v1.19.0-rc1" would parse as the dual form. On a stock-shape frame
-// that is the inverse conflict and fails closed to stockLegacy -the safe
-// direction (the device loses the CLI offer, nothing misfires). Upstream has
-// not shipped suffixed FIRMWARE_VERSION strings to date; revisit only if one
-// appears in the field rather than inventing its format here.
+// A stock version with a suffix (a git-describe hash like "v1.18.0-81dbae5",
+// or a pre-release like "v1.19.0-rc1") parses as the dual form here. That no
+// longer mis-classifies a stock device: a stock-shape (82-byte) frame is
+// classified by its ver code regardless of the version string (#946), because
+// the frame shape is definitive. This parser's dual verdict only matters on a
+// FORK-shape frame, where it corroborates the caps bytes.
 final RegExp _semver = RegExp(r'^v?\d+\.\d+\.\d+$');
 final RegExp _dualPrefix = RegExp(r'^v?\d+\.\d+\.\d+-.+$');
 

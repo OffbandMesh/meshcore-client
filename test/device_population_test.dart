@@ -146,9 +146,9 @@ void main() {
           VersionStringShape.unknown,
         );
         expect(classifyVersionString('v1.18'), VersionStringShape.unknown);
-        // Documented limitation: a hypothetical stock pre-release suffix
-        // reads as dual; on a stock-shape frame that fails CLOSED (inverse
-        // conflict), never open.
+        // A stock pre-release / git-suffixed string reads as dual at the parser
+        // level; that is harmless now, because a stock-shape frame is classified
+        // by ver code regardless of the version string (#946).
         expect(
           classifyVersionString('v1.19.0-rc1'),
           VersionStringShape.offbandDual,
@@ -157,15 +157,32 @@ void main() {
       });
     });
 
-    test('stock-shape frame with an Offband dual version string is a'
-        ' conflict: fails closed', () {
+    test('real stock 1.18.0 with a git-suffixed version classifies'
+        ' stockModern (#946, hardware)', () {
+      // The field device reports "v1.18.0-81dbae5" (semver + git-describe
+      // hash), which classifyVersionString reads as the dual form. An 82-byte
+      // frame is definitively stock (Offband always appends caps bytes), so the
+      // version string must not override the shape: the console must be offered.
+      final c = classifyDevicePopulation(
+        deviceInfo: deviceInfoFrame(length: 82, verCode: 14),
+        firmwareVersion: 'v1.18.0-81dbae5',
+      );
+      expect(c.population, DevicePopulation.stockModern);
+      expect(c.allowsCliFrame, isTrue);
+      expect(c.conflict, isFalse);
+    });
+
+    test('stock-shape frame with a dual-looking version is still stockModern:'
+        ' the 82-byte shape is definitive (#946)', () {
+      // Previously an inverse conflict (fail closed); the shape is definitive,
+      // so a stock-shape frame is never forced to a conflict by its version.
       final c = classifyDevicePopulation(
         deviceInfo: deviceInfoFrame(length: 82, verCode: 14),
         firmwareVersion: '1.4.0-1.17.0',
       );
-      expect(c.population, DevicePopulation.stockLegacy);
-      expect(c.conflict, isTrue);
-      expect(c.allowsCliFrame, isFalse);
+      expect(c.population, DevicePopulation.stockModern);
+      expect(c.conflict, isFalse);
+      expect(c.allowsCliFrame, isTrue);
     });
 
     test('length 84 with a dual version string classifies offband', () {
