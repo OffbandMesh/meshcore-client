@@ -4842,6 +4842,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get block_none => 'No blocked users';
 
   @override
+  String get block_noRadio => 'No radio connected';
+
+  @override
+  String get block_noRadioHint =>
+      'Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.';
+
+  @override
   String get block_keysSection => 'Blocked contacts';
 
   @override

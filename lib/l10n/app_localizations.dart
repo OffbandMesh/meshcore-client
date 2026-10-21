@@ -8596,6 +8596,18 @@ abstract class AppLocalizations {
   /// **'No blocked users'**
   String get block_none;
 
+  /// No description provided for @block_noRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'No radio connected'**
+  String get block_noRadio;
+
+  /// No description provided for @block_noRadioHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.'**
+  String get block_noRadioHint;
+
   /// No description provided for @block_keysSection.
   ///
   /// In en, this message translates to:
