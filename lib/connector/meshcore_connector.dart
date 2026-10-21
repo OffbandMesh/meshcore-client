@@ -3202,6 +3202,36 @@ class MeshCoreConnector extends ChangeNotifier {
     unawaited(service.loadForDevice(key == null ? null : pubKeyToHex(key)));
   }
 
+  /// Drops the identity that scopes every per-radio store, so a read before
+  /// the next radio's SELF_INFO returns nothing instead of the last radio's
+  /// data (#158).
+  ///
+  /// Every store below treats an empty key as "no radio": loads nothing,
+  /// writes nothing. That is deliberate and is the #754 precedent, so this is
+  /// a fail-closed reset rather than a cache invalidation.
+  ///
+  /// `_selfPublicKey` goes too, because `channels_screen` builds its own store
+  /// from `selfPublicKeyHex` rather than sharing these instances, so clearing
+  /// only the stores here would leave that path reading a stale prefix.
+  @visibleForTesting
+  void clearStorageScopeKeysForTest() => _clearStorageScopeKeys();
+
+  void _clearStorageScopeKeys() {
+    _selfPublicKey = null;
+    _channelMessageStore.setPublicKeyHex = '';
+    _messageStore.setPublicKeyHex = '';
+    _channelOrderStore.setPublicKeyHex = '';
+    _channelSettingsStore.setPublicKeyHex = '';
+    _channelRegionScopeStore.setPublicKeyHex = '';
+    _contactSettingsStore.setPublicKeyHex = '';
+    _contactStore.setPublicKeyHex = '';
+    _channelStore.setPublicKeyHex = '';
+    _unreadStore.setPublicKeyHex = '';
+    _discoveryContactStore.setPublicKeyHex = '';
+    storageService?.setPublicKeyHex = '';
+    _applySelfKeyToBlockService();
+  }
+
   void _resetConnectionHandshakeState() {
     _selfPublicKey = null;
     _applySelfKeyToBlockService();
@@ -9427,6 +9457,18 @@ class MeshCoreConnector extends ChangeNotifier {
     // Preserve deviceId and displayName for UI display during reconnection
     // They're only cleared on manual disconnect via disconnect() method
     _hasReceivedDeviceInfo = false;
+    // But NOT the identity that scopes stored data (#158). A manual
+    // disconnect() clears _selfPublicKey; an unexpected drop did not, so
+    // every per-radio store, and the one channels_screen builds from
+    // `selfPublicKeyHex`, kept the previous radio's prefix. Connect a
+    // DIFFERENT radio after a drop and any read before its SELF_INFO lands
+    // served the old radio's history. Desktop-only in practice, which is
+    // where #158 was seen.
+    //
+    // Cleared here so those reads fail closed and return nothing, the #754
+    // precedent. The names above stay, so the UI can still say which radio it
+    // is reconnecting to; it is only the data-scoping identity that goes.
+    _clearStorageScopeKeys();
     _maxContacts = _defaultMaxContacts;
     _maxChannels = _defaultMaxChannels;
     _resetSyncProgressState();
