@@ -190,17 +190,12 @@ const List<StorageSurface> storageSurfaces = [
         'which is why it was never reported',
     owner: 'lib/services/storage_service.dart',
   ),
-  StorageSurface(
-    'pending_messages',
-    verdict: ScopingVerdict.knownHole,
-    issue: 855,
-    reason:
-        'global, but DEAD: loadPendingMessages, savePendingMessages and '
-        'clearPendingMessages have no callers anywhere in lib/ or test/, and '
-        'the key is absent from the owner\'s live prefs. The fix is deletion, '
-        'not scoping',
-    owner: 'lib/services/storage_service.dart',
-  ),
+  // `pending_messages` (#855) was listed here and is GONE, not reclassified.
+  // It had no callers anywhere in lib/ or test/ and the key was absent from
+  // the owner's live prefs, so the fix was deletion rather than scoping. The
+  // inventory's "declared but vanished from source" check is what keeps that
+  // honest in the other direction: if the key ever comes back, the gate fails
+  // until somebody declares it and says why.
 
   // ---------------------------------------------------------------------------
   // Global on purpose. The reason is the point: it stops a later audit

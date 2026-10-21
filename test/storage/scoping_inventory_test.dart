@@ -67,14 +67,19 @@ void main() {
       );
     });
 
-    test('the known holes are exactly the ones Epic B fixes', () {
+    test('the known holes are exactly the ones Epic B has left to fix', () {
       // Pins the set. A NEW hole cannot hide among the known ones, and a hole
-      // fixed in Epic B cannot be left mislabelled here.
+      // Epic B has fixed cannot be left mislabelled here.
+      //
+      // #855 is absent on purpose: Epic B DELETED that surface rather than
+      // scoping it, so there is no hole left to track. This expectation
+      // shrinks as B1, B2 and B3 land, and reaching an empty set is what
+      // closing Epic B looks like.
       final holes = {
         for (final s in storageSurfaces)
           if (s.verdict == ScopingVerdict.knownHole) s.issue!,
       };
-      expect(holes, {854, 855, 856});
+      expect(holes, {854, 856});
     });
   });
 
