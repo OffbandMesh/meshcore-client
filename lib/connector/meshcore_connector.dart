@@ -574,6 +574,17 @@ class MeshCoreConnector extends ChangeNotifier {
   final ChannelRegionScopeStore _channelRegionScopeStore =
       ChannelRegionScopeStore();
   final ContactSettingsStore _contactSettingsStore = ContactSettingsStore();
+
+  /// Custom names by pubkey hex, the in-memory mirror of what
+  /// `contact_settings_store` holds. (#750)
+  ///
+  /// Needed because `contact_store` deliberately does not persist the custom
+  /// name: that record is rebuilt from radio contact-sync data, so a save
+  /// after a sync would wipe it. The cost of keeping it out of there is that
+  /// the live `Contact` objects have to be reattached to it, which is what
+  /// [_withCustomName] does at every path that rebuilds one.
+  final Map<String, String> _customNames = {};
+
   final ContactStore _contactStore = ContactStore();
   final ContactDiscoveryStore _discoveryContactStore = ContactDiscoveryStore();
   final ChannelStore _channelStore = ChannelStore();
@@ -1610,6 +1621,64 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reattaches the stored custom name to [contact], if the user set one.
+  ///
+  /// Call this anywhere a `Contact` is built from the radio or from
+  /// `contact_store`, because neither source carries the custom name. Paths
+  /// that use `copyWith` on an EXISTING contact do not need it: `copyWith`
+  /// preserves `customName` unless `clearCustomName` is passed. (#750)
+  /// Loads the stored custom names for [keys] into [_customNames] in one pass.
+  ///
+  /// Batched rather than per-contact for the reason documented on
+  /// `_ensureContactCyr2LatSettingLoaded`: a notify per contact rebuilds the
+  /// tree twice per contact, and each rebuild walks the contact list.
+  Future<void> _loadCustomNames(Iterable<String> keys) async {
+    final loaded = await Future.wait([
+      for (final key in keys)
+        _contactSettingsStore
+            .loadCustomName(key)
+            .then((name) => MapEntry(key, name)),
+    ]);
+    for (final entry in loaded) {
+      final name = entry.value;
+      if (name != null && name.trim().isNotEmpty) {
+        _customNames[entry.key] = name;
+      }
+    }
+  }
+
+  Contact _withCustomName(Contact contact) {
+    final custom = _customNames[contact.publicKeyHex];
+    if (custom == null) return contact;
+    return contact.copyWith(customName: custom);
+  }
+
+  /// The user's label for a contact, or null. Read by the contacts UI.
+  String? customNameFor(String contactKeyHex) => _customNames[contactKeyHex];
+
+  /// Sets or clears the user's label for a contact.
+  ///
+  /// Null, empty and whitespace-only all clear it, matching `Contact.name` and
+  /// the store, so a user who deletes the field's text cannot end up with a
+  /// blank name and no way back. (T34b, T34c)
+  Future<void> setContactCustomName(String contactKeyHex, String? name) async {
+    final cleaned = (name == null || name.trim().isEmpty) ? null : name;
+    if (cleaned == null) {
+      _customNames.remove(contactKeyHex);
+    } else {
+      _customNames[contactKeyHex] = cleaned;
+    }
+    await _contactSettingsStore.saveCustomName(contactKeyHex, cleaned);
+
+    final index = _contacts.indexWhere((c) => c.publicKeyHex == contactKeyHex);
+    if (index >= 0) {
+      _contacts[index] = cleaned == null
+          ? _contacts[index].copyWith(clearCustomName: true)
+          : _contacts[index].copyWith(customName: cleaned);
+    }
+    notifyListeners();
+  }
+
   Future<void> setContactCyr2LatEnabled(
     String contactKeyHex,
     bool enabled,
@@ -1755,9 +1824,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _knownContactKeys
       ..clear()
       ..addAll(cached.map((c) => c.publicKeyHex));
+    // Custom names first, so the contacts below are hydrated with them in one
+    // pass rather than rebuilt a second time. Without this a restart silently
+    // loses every rename the user made, because contact_store does not hold
+    // them on purpose. (#750, T35)
+    await _loadCustomNames(cached.map((c) => c.publicKeyHex));
     _contacts
       ..clear()
-      ..addAll(cached);
+      ..addAll(cached.map(_withCustomName));
     // Load every contact's settings without notifying per contact, then
     // notify once. Per-contact notification rebuilt the whole tree 2x per
     // contact (600 rebuilds for 300 contacts), and each rebuild walks the
@@ -3261,6 +3335,20 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void resetConnectionHandshakeStateForTest() =>
       _resetConnectionHandshakeState();
+
+  /// Scopes the contact stores to [radioKeyHex] and hydrates the cache, which
+  /// normally happens as part of the connect handshake. (#750)
+  @visibleForTesting
+  Future<void> loadContactCacheForTest(String radioKeyHex) async {
+    _contactStore.setPublicKeyHex = radioKeyHex;
+    _contactSettingsStore.setPublicKeyHex = radioKeyHex;
+    await loadContactCache();
+  }
+
+  /// Scopes the contact settings store without a connect handshake. (#750)
+  @visibleForTesting
+  void setContactSettingsKeyForTest(String radioKeyHex) =>
+      _contactSettingsStore.setPublicKeyHex = radioKeyHex;
 
   /// Feeds a device frame through the normal dispatch, so parse paths can be
   /// exercised without a radio. (#578)
@@ -7437,12 +7525,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
         // Preserve user-selected path settings and previously known GPS when
         // refreshed frames omit coordinates (lat/lon encoded as 0,0).
-        _contacts[existingIndex] = contact.copyWith(
-          lastMessageAt: mergedLastMessageAt,
-          pathOverride: existing.pathOverride, // Preserve user's path choice
-          pathOverrideBytes: existing.pathOverrideBytes,
-          latitude: contact.latitude ?? existing.latitude,
-          longitude: contact.longitude ?? existing.longitude,
+        // `contact` is built from the device frame, which carries no custom
+        // name, so copyWith from it drops the user's label. Reattach it. (#750)
+        _contacts[existingIndex] = _withCustomName(
+          contact.copyWith(
+            lastMessageAt: mergedLastMessageAt,
+            pathOverride: existing.pathOverride, // Preserve user's path choice
+            pathOverrideBytes: existing.pathOverrideBytes,
+            latitude: contact.latitude ?? existing.latitude,
+            longitude: contact.longitude ?? existing.longitude,
+          ),
         );
 
         appLogger.info(
@@ -7455,7 +7547,7 @@ class MeshCoreConnector extends ChangeNotifier {
             (_autoAddRoomServers && contact.type == advTypeRoom) ||
             (_autoAddSensors && contact.type == advTypeSensor) ||
             isContact) {
-          _contacts.add(contact);
+          _contacts.add(_withCustomName(contact));
           appLogger.info(
             'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
             tag: 'Connector',
@@ -7545,10 +7637,13 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       // CRITICAL: Preserve user's path override when contact is refreshed from device
-      _contacts[existingIndex] = contact.copyWith(
-        lastMessageAt: mergedLastMessageAt,
-        pathOverride: existing.pathOverride, // Preserve user's path choice
-        pathOverrideBytes: existing.pathOverrideBytes,
+      // Built from the device frame, so reattach the user's label. (#750)
+      _contacts[existingIndex] = _withCustomName(
+        contact.copyWith(
+          lastMessageAt: mergedLastMessageAt,
+          pathOverride: existing.pathOverride, // Preserve user's path choice
+          pathOverrideBytes: existing.pathOverrideBytes,
+        ),
       );
 
       appLogger.info(
@@ -7556,7 +7651,7 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Connector',
       );
     } else {
-      _contacts.add(contact);
+      _contacts.add(_withCustomName(contact));
       appLogger.info(
         'Added new contact ${contact.name}: pathLen=${contact.pathLength}',
         tag: 'Connector',
