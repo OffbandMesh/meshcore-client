@@ -738,6 +738,27 @@
     }
   },
   "contact_info": "Contact Info",
+  "contact_rename": "Rename",
+  "contact_renameTitle": "Custom name",
+  "contact_renameHint": "Your name for this node",
+  "contact_renameExplain": "Only you see this. The node keeps its own name, and adverts keep that up to date.",
+  "contact_renameClear": "Clear",
+  "contact_renameTooLong": "Keep it under {max} characters",
+  "@contact_renameTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "contact_nodeCallsItself": "Node name: {name}",
+  "@contact_nodeCallsItself": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "contact_settings": "Contact Settings",
   "contact_telemetry": "Telemetry",
   "contact_lastSeen": "Last seen",
