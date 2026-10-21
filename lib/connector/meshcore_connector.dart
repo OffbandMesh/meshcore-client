@@ -5375,6 +5375,7 @@ class MeshCoreConnector extends ChangeNotifier {
     bool? teleBase,
     bool? teleLoc,
     bool? teleEnv,
+    bool? remoteCli,
   }) async {
     if (!isConnected) return;
     final latestContact =
@@ -5398,6 +5399,11 @@ class MeshCoreConnector extends ChangeNotifier {
         ? (teleEnv
               ? (updatedFlags | contactFlagTeleEnv)
               : (updatedFlags & ~contactFlagTeleEnv))
+        : updatedFlags;
+    updatedFlags = remoteCli != null
+        ? (remoteCli
+              ? (updatedFlags | contactFlagRemoteCliAllowed)
+              : (updatedFlags & ~contactFlagRemoteCliAllowed))
         : updatedFlags;
 
     await sendFrame(

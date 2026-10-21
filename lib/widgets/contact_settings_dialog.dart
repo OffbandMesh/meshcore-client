@@ -23,6 +23,7 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
   bool teleBaseEnabled = contact.teleBaseEnabled;
   bool teleLocEnabled = contact.teleLocEnabled;
   bool teleEnvEnabled = contact.teleEnvEnabled;
+  bool remoteCliEnabled = contact.remoteCliAllowed;
   showDialog(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -115,6 +116,16 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
                   setDialogState(() => teleEnvEnabled = value);
                 },
               ),
+              const Divider(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(context.l10n.contact_remoteCli),
+                subtitle: Text(context.l10n.contact_remoteCliSubtitle),
+                value: remoteCliEnabled,
+                onChanged: (value) {
+                  setDialogState(() => remoteCliEnabled = value);
+                },
+              ),
             ],
           ),
         ),
@@ -126,6 +137,7 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
                 teleBase: teleBaseEnabled,
                 teleLoc: teleLocEnabled,
                 teleEnv: teleEnvEnabled,
+                remoteCli: remoteCliEnabled,
               );
               Navigator.pop(context);
             },

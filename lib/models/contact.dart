@@ -531,4 +531,7 @@ class Contact {
   bool get teleBaseEnabled => (flags & contactFlagTeleBase) != 0;
   bool get teleLocEnabled => (flags & contactFlagTeleLoc) != 0;
   bool get teleEnvEnabled => (flags & contactFlagTeleEnv) != 0;
+
+  /// This contact may run remote CLI (TXT type 3) commands on our radio (#887).
+  bool get remoteCliAllowed => (flags & contactFlagRemoteCliAllowed) != 0;
 }

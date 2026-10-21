@@ -1532,6 +1532,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Permitir el intercambio de datos de sensores de entorno';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => 'Canales';
 
   @override

@@ -1021,6 +1021,11 @@ const int contactFlagFavorite = 0x01;
 const int contactFlagTeleBase = 0x02; // 'base' permission includes battery
 const int contactFlagTeleLoc = 0x04;
 const int contactFlagTeleEnv = 0x08; //access environment sensors
+// 0x10 (isRemoteCLIAllowed): this contact may run remote CLI (TXT type 3)
+// commands on our radio. The receiving side checks it, so setting it here grants
+// the contact permission to command THIS device. [verified: BaseChatMesh.cpp /
+// MyMesh.cpp companion at companion-v1.18.0; INVESTIGATION.md section A]
+const int contactFlagRemoteCliAllowed = 0x10;
 const int contactPathLenOffset = 35;
 const int contactPathOffset = 36;
 const int contactNameOffset = 100;

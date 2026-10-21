@@ -1538,6 +1538,13 @@ class AppLocalizationsHu extends AppLocalizations {
       'Engedje meg az érzékelő adatok megosztását';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => 'Csatornák';
 
   @override

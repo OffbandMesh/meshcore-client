@@ -793,6 +793,8 @@
   "contact_teleLocSubtitle": "Allow sharing location data",
   "contact_teleEnv": "Telemetry Environment",
   "contact_teleEnvSubtitle": "Allow sharing environment sensor data",
+  "contact_remoteCli": "Remote CLI",
+  "contact_remoteCliSubtitle": "Let this contact run CLI commands on your radio",
   "channels_title": "Channels",
   "channels_noChannelsConfigured": "No channels configured",
   "channels_addPublicChannel": "Add Public Channel",
