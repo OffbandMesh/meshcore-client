@@ -2404,6 +2404,48 @@ abstract class AppLocalizations {
   /// **'Contact Info'**
   String get contact_info;
 
+  /// No description provided for @contact_rename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get contact_rename;
+
+  /// No description provided for @contact_renameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom name'**
+  String get contact_renameTitle;
+
+  /// No description provided for @contact_renameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name for this node'**
+  String get contact_renameHint;
+
+  /// No description provided for @contact_renameExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you see this. The node keeps its own name, and adverts keep that up to date.'**
+  String get contact_renameExplain;
+
+  /// No description provided for @contact_renameClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get contact_renameClear;
+
+  /// No description provided for @contact_renameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep it under {max} characters'**
+  String contact_renameTooLong(int max);
+
+  /// No description provided for @contact_nodeCallsItself.
+  ///
+  /// In en, this message translates to:
+  /// **'Node name: {name}'**
+  String contact_nodeCallsItself(String name);
+
   /// No description provided for @contact_settings.
   ///
   /// In en, this message translates to:
