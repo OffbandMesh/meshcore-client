@@ -17,6 +17,42 @@ class BlockedView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<BlockService, MeshCoreConnector>(
       builder: (context, block, connector, child) {
+        // No radio connected is NOT the same as nothing blocked, and before
+        // #507 both rendered as "No blocked users". Blocks are per radio
+        // (#471), so with none connected there is no list to show rather than
+        // an empty one, and saying "no blocked users" invited the reader to
+        // conclude their blocks had been lost.
+        if (block.selfKeyHex == null) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.radio_button_unchecked,
+                      size: 40,
+                      color: Colors.grey[500],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(context.l10n.block_noRadio),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        context.l10n.block_noRadioHint,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
         final keys = block.blockedKeys.toList()..sort();
         final names = block.blockedNames.keys.toList()..sort();
         final indicator = _offloadIndicator(context, connector);

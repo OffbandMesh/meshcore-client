@@ -2904,6 +2904,8 @@
   "block_settingsTitle": "Blocked",
   "block_settingsSubtitle": "Users you've blocked",
   "block_none": "No blocked users",
+  "block_noRadio": "No radio connected",
+  "block_noRadioHint": "Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.",
   "block_keysSection": "Blocked contacts",
   "block_namesSection": "Blocked names",
   "block_namesHint": "Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.",
