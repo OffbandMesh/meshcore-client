@@ -29,6 +29,7 @@ import '../helpers/cayenne_lpp.dart';
 import '../helpers/path_helper.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/ble_debug_log_service.dart';
+import '../services/storage_service.dart';
 import '../services/linux_ble_error_classifier.dart';
 import '../services/linux_ble_pairing_service_stub.dart'
     if (dart.library.io) '../services/linux_ble_pairing_service.dart';
@@ -577,6 +578,15 @@ class MeshCoreConnector extends ChangeNotifier {
   final ContactDiscoveryStore _discoveryContactStore = ContactDiscoveryStore();
   final ChannelStore _channelStore = ChannelStore();
   final UnreadStore _unreadStore = UnreadStore();
+
+  /// Injected from `main()`, because `StorageService` is shared with
+  /// `PathHistoryService` and `TimeoutPredictionService` and so cannot be
+  /// owned here like the stores above.
+  ///
+  /// Needed since #854 and #856: path history and delivery observations are
+  /// per-radio now, so this service needs the device key on connect like
+  /// every other per-radio store.
+  StorageService? storageService;
   List<Channel> _cachedChannels = [];
   final Map<int, bool> _channelCyr2LatEnabled = {};
   final Map<int, String?> _channelCyr2LatProfileId = {};
@@ -6800,6 +6810,11 @@ class MeshCoreConnector extends ChangeNotifier {
     // they don't bleed across radios on one host (#754). The startup load that
     // follows clears and reloads the in-memory list from this radio's key.
     _discoveryContactStore.setPublicKeyHex = selfPublicKeyHex;
+    // Path history and delivery observations, same reasoning (#854, #856): a
+    // route or an ACK timing is what THIS radio measured. Unset, both load
+    // nothing and never write, so a read before this point cannot serve
+    // another radio's data.
+    storageService?.setPublicKeyHex = selfPublicKeyHex;
 
     // Now that we have self info, we can load all the persisted data for this
     // node. Each step is timed: this sequence has stalled the UI isolate for
@@ -6833,6 +6848,24 @@ class MeshCoreConnector extends ChangeNotifier {
     await step('channelMessages', () => loadAllChannelMessages());
     await step('unreadState', loadUnreadState);
     await step('discoveredContacts', _loadDiscoveredContactCache);
+
+    // One-time cleanup of the pre-#854/#856 untagged keys, after the loads so
+    // it never delays first paint. Both are no-ops once done, so this is safe
+    // to run on every connect, and both chunk or are small enough not to
+    // block: the path-history purge measured 12.7 s of total work on the
+    // owner's 2,092 keys and yields every 20 removals (plan decision 1).
+    await step('purgeLegacyStorage', () async {
+      final removed = await storageService?.purgeLegacyPathHistory() ?? 0;
+      final hadObs =
+          await storageService?.purgeLegacyDeliveryObservations() ?? false;
+      if (removed > 0 || hadObs) {
+        appLogger.info(
+          'Legacy storage purge: $removed path-history keys, '
+          '${hadObs ? "the" : "no"} global observation list (#854, #856)',
+          tag: 'Storage',
+        );
+      }
+    });
   }
 
   /// Extract the additive `offband_caps` byte from a device-info reply.

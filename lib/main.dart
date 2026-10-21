@@ -85,6 +85,12 @@ void main() async {
   // Initialize services
   final storage = StorageService();
   final connector = MeshCoreConnector();
+  // StorageService is shared with PathHistoryService and
+  // TimeoutPredictionService, so the connector cannot own it the way it owns
+  // the other per-radio stores. It still needs the device key on connect,
+  // because path history and delivery observations are per-radio now
+  // (#854, #856).
+  connector.storageService = storage;
   final pathHistoryService = PathHistoryService(storage);
   final meshTopologyService = MeshTopologyService();
   final retryService = MessageRetryService();

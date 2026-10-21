@@ -1,31 +1,37 @@
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/models/delivery_observation.dart';
 import 'package:meshcore_open/models/path_history.dart';
 import 'package:meshcore_open/services/storage_service.dart';
 import 'package:meshcore_open/services/timeout_prediction_service.dart';
+import 'package:meshcore_open/storage/drift/blob_store.dart';
+import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// #936 A2: the two remaining bleeds, reproduced against the real store.
+/// #937 B2 and B3: the two bleeds, now isolated.
 ///
-/// **These assert the BUG on purpose.** They are characterization tests: they
-/// pin exactly what bleeds today so Epic B (#937) has something concrete to
-/// invert, and so the bleed cannot be quietly half-fixed. Each one names the
-/// issue it characterizes and says what Epic B replaces it with.
+/// These were written in Epic A (#936) asserting the BUG, so Epic B had
+/// something concrete to invert rather than a prose description. This is that
+/// inversion: every expectation that previously demanded the bleed now demands
+/// isolation, and the before/after is in the git history of this one file.
 ///
-/// Why characterization rather than genuinely-failing tests, which is what the
-/// plan's A2 asked for: a red test cannot merge, and Epic A's PR has to land
-/// before Epic B starts. These demonstrate the bleed just as concretely and go
-/// red the moment it stops, which is the property that matters.
-///
-/// They use the REAL `StorageService` against real prefs, not the
-/// `FakeStorageService` the existing path-history tests use, because the defect
-/// is in the KEY rather than in the service logic. A fake would hide it.
+/// Still against the REAL `StorageService` rather than a fake, because the
+/// defect was in the key and a fake would have hidden it.
 void main() {
+  late OffbandDatabase db;
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     PrefsManager.reset();
     await PrefsManager.initialize();
+    db = OffbandDatabase(NativeDatabase.memory());
+    BlobStore.overrideForTest(BlobStore(db));
+  });
+
+  tearDown(() async {
+    await db.close();
+    BlobStore.clearTestOverride();
   });
 
   PathRecord record(int hops, int ms) => PathRecord(
@@ -38,79 +44,114 @@ void main() {
     failureCount: 0,
   );
 
-  group('#854 path history bleeds between radios', () {
-    test('BUG: the stored key carries no radio, only the contact '
-        '(Epic B scopes it)', () async {
-      final storage = StorageService();
-      await storage.savePathHistory(
-        'cafebabe',
-        ContactPathHistory(
-          contactPubKeyHex: 'cafebabe',
-          recentPaths: [record(2, 500)],
-        ),
+  StorageService radio(String key) =>
+      StorageService()..setPublicKeyHex = key * 20;
+
+  ContactPathHistory history(String contact, int hops, int ms) =>
+      ContactPathHistory(
+        contactPubKeyHex: contact,
+        recentPaths: [record(hops, ms)],
       );
 
-      final keys = PrefsManager.instance
-          .getKeys()
-          .where((k) => k.contains('path_history_'))
-          .toList();
+  group('#854 path history is per radio', () {
+    test('the key carries the radio, not just the contact', () async {
+      await radio('a').savePathHistory('cafebabe', history('cafebabe', 2, 500));
 
-      expect(keys.length, 1, reason: 'one contact, one key');
+      final keys = await BlobStore.instance.keysWithPrefix('path_history_');
+
+      expect(keys.length, 1);
       expect(
         keys.single,
-        contains('path_history_cafebabe'),
+        'path_history_aaaaaaaaaacafebabe',
         reason:
-            'the key is prefix + contact. There is no radio in it, '
-            'which IS the bug: any radio that shares this contact reads '
-            'and overwrites the same route',
+            'prefix + radio + contact. Before #854 this was '
+            'path_history_cafebabe, with no radio in it',
       );
     });
 
-    test('BUG: a route learned under radio A is served to radio B '
-        '(Epic B isolates them)', () async {
-      // Nothing here distinguishes the radios, because the store offers no
-      // way to: `savePathHistory` takes a contact and nothing else. That is
-      // the defect, demonstrated rather than described. Two StorageService
-      // instances standing in for two connected radios share one row.
-      final radioA = StorageService();
-      final radioB = StorageService();
+    test('a route learned by radio A is NOT served to radio B', () async {
+      await radio(
+        'a',
+      ).savePathHistory('cafebabe', history('cafebabe', 7, 9000));
 
-      await radioA.savePathHistory(
-        'cafebabe',
-        ContactPathHistory(
-          contactPubKeyHex: 'cafebabe',
-          recentPaths: [record(7, 9000)],
-        ),
-      );
-
-      final seenByB = await radioB.loadPathHistory('cafebabe');
+      final seenByB = await radio('b').loadPathHistory('cafebabe');
 
       expect(
-        seenByB?.recentPaths.single.hopCount,
-        7,
+        seenByB,
+        isNull,
         reason:
-            'radio B sees a 7-hop route it never learned. A route '
-            'measured by a 1 W handheld is applied to a repeater. After '
-            'Epic B this must be null for radio B',
+            'the 7-hop route radio A measured must not reach radio B. '
+            'This asserted hopCount == 7 before Epic B',
+      );
+    });
+
+    test('each radio keeps its own route to the same contact', () async {
+      await radio('a').savePathHistory('cafebabe', history('cafebabe', 2, 400));
+      await radio(
+        'b',
+      ).savePathHistory('cafebabe', history('cafebabe', 7, 9000));
+
+      expect(
+        (await radio(
+          'a',
+        ).loadPathHistory('cafebabe'))!.recentPaths.single.hopCount,
+        2,
+      );
+      expect(
+        (await radio(
+          'b',
+        ).loadPathHistory('cafebabe'))!.recentPaths.single.hopCount,
+        7,
+      );
+    });
+
+    test('an unset radio key loads nothing and writes nothing', () async {
+      final unset = StorageService();
+
+      await unset.savePathHistory('cafebabe', history('cafebabe', 2, 400));
+
+      expect(await unset.loadPathHistory('cafebabe'), isNull);
+      expect(
+        await BlobStore.instance.keysWithPrefix('path_history_'),
+        isEmpty,
+        reason:
+            'the #754 precedent: with no radio connected it must not '
+            'write an unscoped key that a later radio could pick up',
+      );
+    });
+
+    test('clearing one radio does not touch another', () async {
+      await radio('a').savePathHistory('cafebabe', history('cafebabe', 2, 400));
+      await radio(
+        'b',
+      ).savePathHistory('cafebabe', history('cafebabe', 7, 9000));
+
+      await radio('a').clearAllPathHistories();
+
+      expect(await radio('a').loadPathHistory('cafebabe'), isNull);
+      expect(
+        await radio('b').loadPathHistory('cafebabe'),
+        isNotNull,
+        reason:
+            'clearAllPathHistories was global before #854 and would have '
+            'taken radio B\'s routes with it',
       );
     });
   });
 
-  group('#856 delivery observations bleed between radios', () {
-    test('BUG: observations live under one global key '
-        '(Epic B scopes it)', () async {
-      final storage = StorageService();
-      await storage.saveDeliveryObservations([
-        DeliveryObservation(
-          contactKey: 'cafebabe',
-          pathLength: 3,
-          messageBytes: 100,
-          secondsSinceLastRx: 10,
-          isFlood: false,
-          deliveryMs: 2500,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(1700000000000),
-        ),
-      ]);
+  group('#856 delivery observations are per radio', () {
+    DeliveryObservation obs(int ms, int hops) => DeliveryObservation(
+      contactKey: 'cafebabe',
+      pathLength: hops,
+      messageBytes: 100,
+      secondsSinceLastRx: 10,
+      isFlood: false,
+      deliveryMs: ms,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+    );
+
+    test('the key carries the radio', () async {
+      await radio('a').saveDeliveryObservations([obs(2500, 3)]);
 
       final keys = PrefsManager.instance
           .getKeys()
@@ -119,50 +160,139 @@ void main() {
 
       expect(keys.length, 1);
       expect(
-        keys.single.endsWith('delivery_observations'),
+        keys.single.endsWith('delivery_observations${'a' * 10}'),
         isTrue,
-        reason:
-            'no radio component. Every radio trains on, and pollutes, '
-            'the same ACK-timeout model',
+        reason: 'before #856 this was the bare key, shared by every radio',
       );
     });
 
-    test('BUG: one radio\'s RF timing reaches another radio\'s model '
-        '(Epic B isolates them)', () async {
-      // A slow, many-hop repeater observation, then a fresh service standing
-      // in for a different radio. It inherits the other radio's timing.
-      await StorageService().saveDeliveryObservations([
-        DeliveryObservation(
-          contactKey: 'cafebabe',
-          pathLength: 7,
-          messageBytes: 100,
-          secondsSinceLastRx: 10,
-          isFlood: false,
-          deliveryMs: 45000,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(1700000000000),
-        ),
-      ]);
+    test(
+      'one radio\'s RF timing does NOT reach another radio\'s model',
+      () async {
+        // A repeater's slow 45-second delivery.
+        await radio('a').saveDeliveryObservations([obs(45000, 7)]);
 
-      final otherRadio = TimeoutPredictionService(StorageService());
-      await otherRadio.initialize();
+        final otherRadio = TimeoutPredictionService(radio('b'));
+        await otherRadio.initialize();
 
-      expect(
-        otherRadio.observationCount,
-        1,
-        reason:
-            'this radio has sent nothing, yet it starts with another '
-            'radio\'s 45-second observation in its training data. After '
-            'Epic B this must be 0',
-      );
+        expect(
+          otherRadio.observationCount,
+          0,
+          reason:
+              'radio B has sent nothing, so it must start with no training '
+              'data. This asserted 1 before Epic B',
+        );
+      },
+    );
+
+    test('each radio trains on its own observations', () async {
+      await radio('a').saveDeliveryObservations([obs(45000, 7)]);
+      await radio('b').saveDeliveryObservations([obs(800, 1), obs(900, 1)]);
+
+      final a = TimeoutPredictionService(radio('a'));
+      final b = TimeoutPredictionService(radio('b'));
+      await a.initialize();
+      await b.initialize();
+
+      expect(a.observationCount, 1);
+      expect(b.observationCount, 2);
     });
   });
 
-  // #855's round-trip test was here and is gone with the API it pinned (B1).
-  // Its job was to prove the thing being deleted actually worked, so the
-  // deletion was provably removal of dead code and not of a live feature. It
-  // served that purpose and then became a test of nothing.
-  //
-  // What still guards the deletion: the inventory's "declared but vanished
-  // from source" check, which fails if `pending_messages` ever returns
-  // undeclared.
+  group('legacy purges (plan decision 1: delete, do not orphan)', () {
+    test(
+      'untagged path-history keys are removed, scoped ones are not',
+      () async {
+        // Pre-#854 keys live in PREFS; the new scheme writes to drift, so the
+        // two cannot be confused and no shape heuristic is needed.
+        SharedPreferences.setMockInitialValues({
+          'flutter.path_history_aaaa': '{}',
+          'flutter.path_history_bbbb': '{}',
+          'flutter.unrelated_setting': 'keep me',
+        });
+        PrefsManager.reset();
+        await PrefsManager.initialize();
+        final storage = radio('a');
+        await storage.savePathHistory('cafebabe', history('cafebabe', 2, 400));
+
+        final removed = await storage.purgeLegacyPathHistory(chunkSize: 1);
+
+        expect(removed, 2);
+        expect(
+          PrefsManager.instance.getKeys().where(
+            (k) => k.contains('path_history_'),
+          ),
+          isEmpty,
+        );
+        expect(
+          PrefsManager.instance.getString('unrelated_setting'),
+          'keep me',
+          reason: 'the purge must touch only its own prefix',
+        );
+        expect(
+          await storage.loadPathHistory('cafebabe'),
+          isNotNull,
+          reason: 'the drift-side scoped history survives the prefs purge',
+        );
+      },
+    );
+
+    test('purging twice is a no-op, not an error', () async {
+      SharedPreferences.setMockInitialValues({
+        'flutter.path_history_aaaa': '{}',
+      });
+      PrefsManager.reset();
+      await PrefsManager.initialize();
+      final storage = radio('a');
+
+      expect(await storage.purgeLegacyPathHistory(), 1);
+      expect(
+        await storage.purgeLegacyPathHistory(),
+        0,
+        reason:
+            'it runs on every connect, so it has to be idempotent and '
+            'do no writes when there is nothing left',
+      );
+    });
+
+    test(
+      'the global observation list is removed, the scoped one is not',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'flutter.delivery_observations': '[]',
+        });
+        PrefsManager.reset();
+        await PrefsManager.initialize();
+        final storage = radio('a');
+        await storage.saveDeliveryObservations([
+          DeliveryObservation(
+            contactKey: 'cafebabe',
+            pathLength: 1,
+            messageBytes: 10,
+            secondsSinceLastRx: 1,
+            isFlood: false,
+            deliveryMs: 100,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+          ),
+        ]);
+
+        expect(await storage.purgeLegacyDeliveryObservations(), isTrue);
+
+        expect(
+          PrefsManager.instance.containsKey('delivery_observations'),
+          isFalse,
+        );
+        expect(
+          (await storage.loadDeliveryObservations()).length,
+          1,
+          reason: 'this radio\'s own observations are not collateral',
+        );
+        expect(
+          await storage.purgeLegacyDeliveryObservations(),
+          isFalse,
+          reason: 'idempotent',
+        );
+      },
+    );
+  });
 }

@@ -171,23 +171,25 @@ const List<StorageSurface> storageSurfaces = [
   // ---------------------------------------------------------------------------
   StorageSurface(
     'path_history_',
-    verdict: ScopingVerdict.knownHole,
-    issue: 854,
+    verdict: ScopingVerdict.perRadio,
     reason:
-        'keyed by contact public key only, with no radio in the key, so a '
-        'learned mesh route bleeds between any two radios that share a '
-        'contact. Also unbounded at 2,041 keys and 86% of the prefs file '
-        '(#924), while PathHistoryService caches only 50',
+        'prefix + device key + contact key, in DRIFT, since #854 and #924. '
+        'Was keyed by contact alone in prefs, so a route measured by a 1 W '
+        'handheld was applied to a repeater. The move out of prefs went with '
+        'the scoping because that one store held 2,092 keys and 86% of a '
+        '4.28 MB file, and every prefs write re-encodes the whole file '
+        '(#923). Unset key loads nothing and never writes',
     owner: 'lib/services/storage_service.dart',
   ),
   StorageSurface(
     'delivery_observations',
-    verdict: ScopingVerdict.knownHole,
-    issue: 856,
+    verdict: ScopingVerdict.perRadio,
     reason:
-        'one global list feeding the ACK-timeout ML model, so one radio\'s '
-        'RF timing trains another radio\'s predictions. Silent accuracy loss, '
-        'which is why it was never reported',
+        'prefix + device key since #856. Was one global list, so a '
+        'repeater\'s 45-second deliveries trained the ACK-timeout model a '
+        '1 W handheld then used. Stays in prefs unlike path history: one '
+        'small key, 3,091 bytes and 14 entries on the owner\'s install, so '
+        'there is no cost argument for moving it',
     owner: 'lib/services/storage_service.dart',
   ),
   // `pending_messages` (#855) was listed here and is GONE, not reclassified.
