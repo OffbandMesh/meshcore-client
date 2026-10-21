@@ -1446,6 +1446,32 @@ class AppLocalizationsSl extends AppLocalizations {
   String get contact_info => 'Kontaktni podatki';
 
   @override
+  String get contact_rename => 'Rename';
+
+  @override
+  String get contact_renameTitle => 'Custom name';
+
+  @override
+  String get contact_renameHint => 'Your name for this node';
+
+  @override
+  String get contact_renameExplain =>
+      'Only you see this. The node keeps its own name, and adverts keep that up to date.';
+
+  @override
+  String get contact_renameClear => 'Clear';
+
+  @override
+  String contact_renameTooLong(int max) {
+    return 'Keep it under $max characters';
+  }
+
+  @override
+  String contact_nodeCallsItself(String name) {
+    return 'Node name: $name';
+  }
+
+  @override
   String get contact_settings => 'Nastavitve stika';
 
   @override
