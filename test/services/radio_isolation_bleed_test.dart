@@ -157,18 +157,12 @@ void main() {
     });
   });
 
-  group('#855 pending messages', () {
-    test('the API round-trips but nothing in the app calls it '
-        '(Epic B deletes it)', () async {
-      // Kept deliberately small: the finding is that this API has no
-      // callers in lib/ or test/, which a unit test cannot assert. It is
-      // recorded in scoping_inventory.dart and proved by grep. This test
-      // only pins that the thing being deleted currently works, so the
-      // deletion is removal of dead code rather than of a live feature.
-      final storage = StorageService();
-      await storage.savePendingMessages({'a': 'b'});
-
-      expect(await storage.loadPendingMessages(), {'a': 'b'});
-    });
-  });
+  // #855's round-trip test was here and is gone with the API it pinned (B1).
+  // Its job was to prove the thing being deleted actually worked, so the
+  // deletion was provably removal of dead code and not of a live feature. It
+  // served that purpose and then became a test of nothing.
+  //
+  // What still guards the deletion: the inventory's "declared but vanished
+  // from source" check, which fails if `pending_messages` ever returns
+  // undeclared.
 }
