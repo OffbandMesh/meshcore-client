@@ -46,7 +46,11 @@ void main() {
       final holes = storageSurfaces.where(
         (s) => s.verdict == ScopingVerdict.knownHole,
       );
-      expect(holes, isNotEmpty, reason: 'sanity: the holes are the point');
+      // No `isNotEmpty` sanity check any more. Epic A had one, reasoning that
+      // "the holes are the point", and Epic B closing the last hole made it
+      // fail. The invariant that actually matters is conditional: IF a hole
+      // is declared, it must name an issue. An empty set satisfies that and
+      // is the desired end state.
       for (final s in holes) {
         expect(
           s.issue,
@@ -67,19 +71,27 @@ void main() {
       );
     });
 
-    test('the known holes are exactly the ones Epic B has left to fix', () {
-      // Pins the set. A NEW hole cannot hide among the known ones, and a hole
-      // Epic B has fixed cannot be left mislabelled here.
+    test('no known holes remain', () {
+      // This expectation shrank as Epic B landed: {854, 855, 856} at the
+      // start, then {854, 856} once B1 deleted the dead pending_messages
+      // surface, now empty. #855 was deleted, #854 and #856 are scoped per
+      // radio.
       //
-      // #855 is absent on purpose: Epic B DELETED that surface rather than
-      // scoping it, so there is no hole left to track. This expectation
-      // shrinks as B1, B2 and B3 land, and reaching an empty set is what
-      // closing Epic B looks like.
+      // Empty is the state Epic B exists to reach, and the assertion stays so
+      // a future hole cannot be added quietly: adding one makes this fail
+      // until somebody deliberately changes the expectation.
       final holes = {
         for (final s in storageSurfaces)
-          if (s.verdict == ScopingVerdict.knownHole) s.issue!,
+          if (s.verdict == ScopingVerdict.knownHole) s.issue,
       };
-      expect(holes, {854, 856});
+      expect(
+        holes,
+        isEmpty,
+        reason:
+            'every surface is now perRadio or globalOnPurpose with a '
+            'reason. A new hole here needs a deliberate decision, not a '
+            'silent label',
+      );
     });
   });
 
