@@ -1524,6 +1524,13 @@ class AppLocalizationsSk extends AppLocalizations {
       'Povoliť zdieľanie údajov senzorov prostredia';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => 'Kanály';
 
   @override

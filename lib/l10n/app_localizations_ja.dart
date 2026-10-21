@@ -1481,6 +1481,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get contact_teleEnvSubtitle => '環境センサーのデータを共有することを許可する';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => 'チャンネル';
 
   @override

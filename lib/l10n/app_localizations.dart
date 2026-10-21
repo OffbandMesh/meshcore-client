@@ -2746,6 +2746,18 @@ abstract class AppLocalizations {
   /// **'Allow sharing environment sensor data'**
   String get contact_teleEnvSubtitle;
 
+  /// No description provided for @contact_remoteCli.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CLI'**
+  String get contact_remoteCli;
+
+  /// No description provided for @contact_remoteCliSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let this contact run CLI commands on your radio'**
+  String get contact_remoteCliSubtitle;
+
   /// No description provided for @channels_title.
   ///
   /// In en, this message translates to:

@@ -1533,6 +1533,13 @@ class AppLocalizationsPt extends AppLocalizations {
       'Permitir compartilhamento de dados do sensor de ambiente';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => 'Canais';
 
   @override

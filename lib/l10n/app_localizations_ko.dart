@@ -1476,6 +1476,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get contact_teleEnvSubtitle => '환경 센서 데이터를 공유하도록 허용';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => '채널';
 
   @override

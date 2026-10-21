@@ -1462,6 +1462,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get contact_teleEnvSubtitle => '允许共享环境传感器数据';
 
   @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
   String get channels_title => '频道';
 
   @override
