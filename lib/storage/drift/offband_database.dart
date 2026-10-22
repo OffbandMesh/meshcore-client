@@ -377,8 +377,23 @@ class OffbandDatabase extends _$OffbandDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
       if (from > to) {
-        // Best-effort: path_provider has no web implementation, and a message
-        // without the path still beats the silent rewrite it replaces.
+        // Logged BEFORE the path lookup and before the throw, deliberately.
+        // This runs inside drift's beforeOpen, so it fires on whichever
+        // isolate issued the first query, and whoever catches the exception
+        // decides what the user sees. A downgrade that only stopped
+        // background work, with nothing in the log, would be the quiet
+        // failure this branch exists to replace (Gemini review).
+        appLogger.error(
+          'Refusing to open the database: it is at schema $from and this '
+          'build understands $to. The upgrade to a newer schema is one-way '
+          '(#943).',
+          tag: 'Storage',
+        );
+        // Best-effort: path_provider has no web implementation, and on the
+        // platforms where a downgrade is reachable this reads environment
+        // variables rather than a platform channel, and has already resolved
+        // once to open this database. A message without the path still beats
+        // the silent version rewrite it replaces.
         String? path;
         try {
           path = await pinnedDatabasePath();
