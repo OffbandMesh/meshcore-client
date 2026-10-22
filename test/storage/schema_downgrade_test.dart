@@ -27,6 +27,23 @@ void main() {
 
   tearDown(BlobStore.clearTestOverride);
 
+  /// This build's schema, and one past it. Derived rather than written as a
+  /// literal: hard-coding 3 here would turn these tests green-but-meaningless
+  /// the day the real schema becomes 3, which is exactly when they matter.
+  ///
+  /// Read in setUpAll and closed straight away, so the probe never overlaps
+  /// with the databases the tests build (drift warns about two live instances
+  /// of one class, and warnings in test output are how real ones get missed).
+  late final int current;
+  late final int future;
+
+  setUpAll(() async {
+    final probe = OffbandDatabase(NativeDatabase.memory());
+    current = probe.schemaVersion;
+    future = current + 1;
+    await probe.close();
+  });
+
   /// A database shaped like one a build at [userVersion] left behind, with
   /// both of today's tables and real data in the blob table.
   QueryExecutor databaseAtVersion(
@@ -78,7 +95,7 @@ void main() {
       // directions into onUpgrade ("Schema version upgrades and downgrades
       // will both be run here"). So whether a downgrade is caught is decided
       // by OUR onUpgrade, not by drift.
-      const downgrade = OpeningDetails(3, 2);
+      final downgrade = OpeningDetails(future, current);
       expect(downgrade.hadUpgrade, isTrue);
       expect(downgrade.wasCreated, isFalse);
     });
@@ -100,7 +117,7 @@ void main() {
   group('this build refuses a database from a future schema', () {
     test('opening one throws OffbandSchemaDowngrade', () async {
       final db = OffbandDatabase(
-        databaseAtVersion(3, {'contacts': '[{"name":"someone"}]'}),
+        databaseAtVersion(future, {'contacts': '[{"name":"someone"}]'}),
       );
       addTearDown(() async {
         try {
@@ -115,15 +132,18 @@ void main() {
     });
 
     test('and the message names both schemas and what to do', () {
+      // Deliberately not `current`/`future`: this checks the message renders
+      // whatever it is given, so fixed numbers unrelated to today's schema
+      // make a wrong substitution visible.
       const e = OffbandSchemaDowngrade(
-        from: 3,
-        to: 2,
+        from: 7,
+        to: 6,
         databasePath: r'C:\somewhere\offband_store.sqlite',
       );
       final text = e.toString();
 
-      expect(text, contains('schema 3'));
-      expect(text, contains('only understands 2'));
+      expect(text, contains('schema 7'));
+      expect(text, contains('only understands 6'));
       expect(text, contains('one-way'));
       expect(text, contains(r'C:\somewhere\offband_store.sqlite'));
     });
@@ -140,11 +160,18 @@ void main() {
       // the database's record of having been on a newer build. Before #943
       // this came back 2 and that evidence was gone.
       final dir = await Directory.systemTemp.createTemp('offband_downgrade');
-      addTearDown(() => dir.delete(recursive: true));
+      // Swallowed deliberately: if this test fails the database is left open,
+      // Windows keeps the file locked, and a throwing cleanup would replace
+      // the real failure with a PathAccessException.
+      addTearDown(() async {
+        try {
+          await dir.delete(recursive: true);
+        } catch (_) {}
+      });
       final file = File('${dir.path}/offband_store.sqlite');
 
       final db = OffbandDatabase(
-        databaseAtVersion(3, {'contacts': '[]'}, file: file),
+        databaseAtVersion(future, {'contacts': '[]'}, file: file),
       );
       await expectLater(
         BlobStore(db).read('contacts'),
@@ -156,14 +183,14 @@ void main() {
 
       // Read it back on a connection that declares no schema of its own.
       final raw = NativeDatabase(file);
-      final probe = _Probe(raw);
+      final probe = _Probe(raw, future);
       addTearDown(probe.close);
       expect(
         await probe
             .customSelect('PRAGMA user_version')
             .getSingle()
             .then((r) => r.data.values.first as int),
-        3,
+        future,
         reason: 'the refusal must leave the version alone',
       );
     });
@@ -185,7 +212,7 @@ void main() {
         addTearDown(db.close);
         await BlobStore(db).read('anything');
 
-        expect(await userVersionOf(db), 2);
+        expect(await userVersionOf(db), current);
       },
     );
 
@@ -211,7 +238,7 @@ void main() {
       addTearDown(db.close);
 
       expect(await BlobStore(db).read('contacts'), '[{"name":"keep me"}]');
-      expect(await userVersionOf(db), 2);
+      expect(await userVersionOf(db), current);
     });
   });
 }
@@ -219,11 +246,12 @@ void main() {
 /// A drift database with no tables and no migration, for reading a PRAGMA off
 /// a file without declaring a schema that would itself trigger a migration.
 class _Probe extends GeneratedDatabase {
-  _Probe(super.executor);
+  _Probe(super.executor, this.schemaVersion);
+
+  /// Matches the file's own version, so opening it runs no migration.
+  @override
+  final int schemaVersion;
 
   @override
   Iterable<TableInfo<Table, dynamic>> get allTables => const [];
-
-  @override
-  int get schemaVersion => 3;
 }
