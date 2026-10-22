@@ -204,8 +204,23 @@ class BlobStore {
     return rows.map((r) => r.payload).toList();
   }
 
-  /// How many messages are stored under [storeKey]. The migration's readback
-  /// gate compares this against the number of records decoded from the blob.
+  /// Every stored identity under [storeKey].
+  ///
+  /// The migration's readback gate asks this, not [messageRowCount], because
+  /// the question that matters is whether any record from the blob is MISSING
+  /// from rows. A total count cannot answer that once rows may legitimately
+  /// hold messages the frozen blob does not (#952).
+  Future<Set<String>> messageMergeKeys(String storeKey) async {
+    final key = _db.messageRecords.mergeKey;
+    final rows =
+        await (_db.selectOnly(_db.messageRecords)
+              ..addColumns([key])
+              ..where(_db.messageRecords.storeKey.equals(storeKey)))
+            .get();
+    return rows.map((r) => r.read(key)!).toSet();
+  }
+
+  /// How many messages are stored under [storeKey].
   Future<int> messageRowCount(String storeKey) async {
     final count = _db.messageRecords.mergeKey.count();
     final row =
@@ -311,11 +326,20 @@ class BlobStore {
   ///    source element; a shortfall against step 2 refuses the migration.
   /// 4. The rows are inserted in one transaction, so a failure part-way leaves
   ///    no partial set behind.
-  /// 5. The stored row count is read back and compared to the number of
-  ///    DISTINCT merge keys. Only an exact match marks the key migrated.
+  /// 5. The stored identities are read back and every DISTINCT merge key from
+  ///    the blob must be among them. Rows BEYOND that set are fine.
   ///
   /// Steps 2 and 5 together close the loop from blob element to stored row,
   /// and either can fail on its own.
+  ///
+  /// Step 5 compared totals until #952. That was wrong in one direction: once
+  /// a key is on rows its blob is frozen, so an earlier refused attempt or a
+  /// newer message leaves rows the blob can never contain, the counts can
+  /// never be brought level again, and the key is refused on every future
+  /// attempt forever. Four of the owner's keys were stuck that way, including
+  /// his two largest channels. "No blob record is missing" is the invariant
+  /// that was actually wanted; it still catches a short insert, which is what
+  /// the step is for.
   ///
   /// **The blob is never deleted**, not even on a verified match. Rows become
   /// the read and write path and the blob is left untouched. Reclaiming that
@@ -393,17 +417,34 @@ class BlobStore {
         return false;
       }
 
-      final stored = await messageRowCount(storeKey);
-      if (stored != deduped.length) {
+      final storedKeys = await messageMergeKeys(storeKey);
+      final missing = deduped.keys
+          .where((k) => !storedKeys.contains(k))
+          .toList();
+      if (missing.isNotEmpty) {
         appLogger.error(
-          'Row migration of $storeKey REFUSED: read back $stored rows but '
-          'expected ${deduped.length}. The blob is kept, nothing is deleted, '
-          'and this key keeps reading from the blob. Rows written so far are '
-          'left in place and are harmless because the key is not marked '
-          'migrated.',
+          'Row migration of $storeKey REFUSED: ${missing.length} of the '
+          '${deduped.length} records in the blob are not present as rows after '
+          'the insert (e.g. ${missing.take(3).join(', ')}). The blob is kept, '
+          'nothing is deleted, and this key keeps reading from the blob.',
           tag: 'Storage',
         );
         return false;
+      }
+
+      // Rows beyond the blob's contents are expected, not a fault: once a key
+      // is on rows the blob is frozen, so an earlier refused attempt or a
+      // newer message leaves rows the blob will never contain. Comparing
+      // TOTALS here is what trapped four of the owner's keys permanently
+      // (#952), because the two numbers could never be brought back level.
+      final extra = storedKeys.length - deduped.length;
+      if (extra > 0) {
+        appLogger.info(
+          'Row migration of $storeKey: $extra row(s) beyond the '
+          '${deduped.length} in the blob were already stored. Every blob '
+          'record is present, so the migration stands.',
+          tag: 'Storage',
+        );
       }
 
       await _markMigrated(storeKey);
