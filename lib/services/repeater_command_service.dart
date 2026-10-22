@@ -92,8 +92,11 @@ class RepeaterCommandService {
 
   RepeaterCommandService(this._connector);
 
-  /// Send a CLI command to a repeater with automatic retries
-  /// Returns a future that completes when a response is received or after max retries
+  /// Send a CLI command to a contact (a repeater/room server OR a companion)
+  /// with automatic retries. Returns a future that completes when a response is
+  /// received or after max retries. The message type is chosen by the target's
+  /// role (#888/#889): a companion gets TXT_TYPE_CLI_COMMAND, a repeater/room
+  /// server the universal CLI_DATA; the reply path is identical for both.
   Future<String> sendCommand(
     Contact repeater,
     String command, {
@@ -159,6 +162,9 @@ class RepeaterCommandService {
         framedCommand,
         attempt: attempt,
         timestampSeconds: timestampSeconds,
+        // The target split: companions take the 1.18 command type, repeaters and
+        // room servers the universal CLI_DATA type (#888/#889).
+        txtType: cliTxtTypeForContactType(repeater.type),
       );
       final responseBytes = frame.length > maxFrameSize
           ? frame.length
