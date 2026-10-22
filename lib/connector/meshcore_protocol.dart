@@ -259,6 +259,10 @@ const int cmdImportPrivateKey = 24;
 const int txtTypePlain = 0;
 const int txtTypeCliData = 1;
 const int txtTypeSigned = 2;
+// Remote CLI command to a companion (upstream 1.18, TXT_TYPE_CLI_COMMAND).
+// Repeaters/room servers treat it exactly like CLI_DATA; a pre-1.18 or
+// Offband-pre-absorb companion silently drops it (surfaced as no reply).
+const int txtTypeCliCommand = 3;
 
 // Repeater request types (for server requests)
 const int reqTypeGetStatus = 0x01;
@@ -1630,20 +1634,30 @@ int calculateMessageTimeout({
 
 // Build CLI command text message frame (companion_radio format)
 // Format: [cmd][txt_type][attempt][timestamp x4][pub_key_prefix x6][text...]\0
+/// The CLI txt type for a command sent to a peer of [contactType] (#888).
+/// Decided by ROLE, not firmware version: a companion (chat) takes the 1.18
+/// command type; a repeater/room server takes the universal CLI_DATA type it
+/// has always used. A Contact carries no version, and a non-1.18 companion
+/// silently drops the command type, so role is both sufficient and safe. A
+/// later refinement could pin a peer's version with a `ver` probe on connect.
+int cliTxtTypeForContactType(int contactType) =>
+    contactType == advTypeChat ? txtTypeCliCommand : txtTypeCliData;
+
 Uint8List buildSendCliCommandFrame(
-  Uint8List repeaterPubKey,
+  Uint8List peerPubKey,
   String command, {
   int attempt = 0,
   int? timestampSeconds,
+  int txtType = txtTypeCliData,
 }) {
   final timestamp =
       timestampSeconds ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
   final writer = BufferWriter();
   writer.writeByte(cmdSendTxtMsg);
-  writer.writeByte(txtTypeCliData);
+  writer.writeByte(txtType);
   writer.writeByte(attempt.clamp(0, 255));
   writer.writeUInt32LE(timestamp);
-  writer.writeBytes(repeaterPubKey.sublist(0, 6));
+  writer.writeBytes(peerPubKey.sublist(0, 6));
   writer.writeString(command);
   writer.writeByte(0);
   return writer.toBytes();
