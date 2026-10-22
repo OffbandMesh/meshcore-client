@@ -29,6 +29,7 @@
 | 8 | Clearing history already removes both copies. | `clearChannelMessages` calls `deleteEverywhere` **and** `deleteMessageRows` (`channel_message_store.dart:361,372`). | No stale-history-after-delete hole to fix. Checked because it would be worse than wasted space. |
 | 9 | Losing the marker after deletion is survivable. | `blob_store.dart:340`: an empty or absent blob re-marks the key and reads rows. | Deletion does not create a new single point of failure beyond the rows themselves. |
 | 10 | It affects users, not just this install. | ~175 active Android installs (173 on 2026-10-17, Play installs overview) plus desktop. Schema 2 is on `dev` at `4d4d44a6` and absent from v1.6.0. | Shippable before anyone is exposed. |
+| 11 | `VACUUM` removes nothing. It reclaims only pages the deletes already freed. | Measured on a copy: 40 migrated blobs deleted, 291 keys kept **including all 98 unmigrated history blobs**, each hashed before and after. 0 missing, 0 byte-changed, 0 unexpected; rows 28,389 to 28,389; file 74,350,592 to 54,927,360; `integrity_check ok`. | **All the risk is in the DELETE selection, none in `VACUUM`.** The safety budget belongs on the per-key re-verify and the key-pattern restriction, which is where this plan puts it. |
 
 **What the snapshot does and does not protect**, so this is not mistaken for removing a backup: it protects the *pre-migration* history against a migration or read-path bug found later; it protects **nothing** that arrived since, which is single-copy from the instant it lands either way; and its coverage decays as new messages accumulate.
 
@@ -129,6 +130,7 @@ No fail-open branch touches data. The one branch that proceeds affects file size
   - A migrated key with no timestamp is stamped, not deleted.
   - `contacts`, `discovered_contacts` and `path_history_` keys are never considered, asserted by name.
   - An unmigrated history key keeps its blob.
+  - **Every kept blob is byte-identical after `VACUUM`**, compared by hash before and after, with the unmigrated history keys asserted present by name. Row count unchanged. This is the owner's question answered as a test rather than a paragraph: the sweep must be shown to delete only what it selected, and `VACUUM` to add nothing to that set.
   - Run against a copy of a real database, reporting bytes reclaimed, and skipping loudly rather than passing when no database is supplied.
 
 ## 8. Done when
