@@ -1536,7 +1536,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final canTranslateMessage =
         translationService.canTranslateIncoming(
           text: message.text,
-          isCli: message.isCli,
+          // A received command is a CLI string, never translate it (#890).
+          isCli: message.isCli || message.isCliCommand,
           isOutgoing: message.isOutgoing,
         ) &&
         (message.translatedText?.trim().isEmpty ?? true);
@@ -1820,6 +1821,24 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           ),
                           if (gifUrl == null) const SizedBox(height: 4),
+                        ],
+                        if (message.isCliCommand) ...[
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.terminal, size: 13, color: metaColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                context.l10n.chat_remoteCliCommand,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: metaColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
                         ],
                         if (poi != null)
                           _buildPoiMessage(

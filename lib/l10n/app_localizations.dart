@@ -3160,6 +3160,12 @@ abstract class AppLocalizations {
   /// **'No messages yet'**
   String get chat_noMessages;
 
+  /// No description provided for @chat_remoteCliCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Command for your radio'**
+  String get chat_remoteCliCommand;
+
   /// No description provided for @chat_sendMessage.
   ///
   /// In en, this message translates to:

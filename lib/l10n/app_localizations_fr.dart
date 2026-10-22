@@ -1775,6 +1775,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chat_noMessages => 'Aucun message pour le moment.';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => 'Envoyer un message';
 
   @override

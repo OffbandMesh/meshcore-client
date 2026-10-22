@@ -6851,6 +6851,10 @@ class MeshCoreConnector extends ChangeNotifier {
   void setFirmwareVerCodeForTest(int? value) => _firmwareVerCode = value;
   void setOffbandCapsForTest(int? value) => _offbandCaps = value;
 
+  @visibleForTesting
+  Message? parseContactMessageForTest(Uint8List frame) =>
+      _parseContactMessage(frame);
+
   void _guardRegionScope() {
     if (!supportsRegionScope) {
       throw StateError('firmware does not support region scoping');
@@ -8904,7 +8908,13 @@ class MeshCoreConnector extends ChangeNotifier {
       final isPlain =
           shiftedType == txtTypePlain || rawType == txtTypePlain || isSigned;
       final isCli = shiftedType == txtTypeCliData || rawType == txtTypeCliData;
-      if (!isPlain && !isCli) {
+      // An inbound remote-CLI COMMAND (type 3): a contact asking to run a
+      // command on our radio. It reaches the app as a message (the firmware
+      // queues it when the sender lacks the 0x10 grant), so render it rather
+      // than dropping it (#890).
+      final isCliCommand =
+          shiftedType == txtTypeCliCommand || rawType == txtTypeCliCommand;
+      if (!isPlain && !isCli && !isCliCommand) {
         appLogger.warn(
           'Unknown message type received: txtType=$txtType, shifted=$shiftedType, raw=$rawType',
         );
@@ -8915,7 +8925,7 @@ class MeshCoreConnector extends ChangeNotifier {
         appLogger.warn('Received message with empty text, ignoring');
         return null;
       }
-      final decodedText = isCli
+      final decodedText = (isCli || isCliCommand)
           ? msgText
           : (Smaz.tryDecodePrefixed(msgText) ?? msgText);
 
@@ -8936,6 +8946,7 @@ class MeshCoreConnector extends ChangeNotifier {
         timestamp: timestamp,
         isOutgoing: isOutgoing,
         isCli: isCli,
+        isCliCommand: isCliCommand,
         status: isOutgoing ? MessageStatus.sent : MessageStatus.delivered,
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
