@@ -318,9 +318,20 @@ class OffbandDatabase extends _$OffbandDatabase {
   int get schemaVersion => 2;
 
   /// Schema 2 adds [MessageRecords] (#920). Purely additive: [StoredBlobs] is
-  /// untouched and keeps every byte it had, so an install that opens this
-  /// schema and is then taken back to an older build still finds its history
-  /// where that build looks for it.
+  /// untouched and keeps every byte it had.
+  ///
+  /// That is true of the data and NOT of a downgrade, which is what #943
+  /// corrects. drift has no "newer schema" refusal: it compares the stored
+  /// `user_version` against [schemaVersion] for inequality and routes BOTH
+  /// directions into this callback. The pre-#917 build declared schema 1 and
+  /// no strategy at all, so it got drift's default `onUpgrade`, which throws,
+  /// and so it could never reach the blobs it would have found.
+  ///
+  /// This build does not throw on a downgrade, because the guard below is
+  /// `from < 2`. A database from a future schema opens here silently and drift
+  /// then stamps `user_version` back down, erasing the only record that it has
+  /// been through a newer build. #943 holds the decision on what to do about
+  /// that; `test/storage/schema_downgrade_test.dart` pins the behaviour.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
