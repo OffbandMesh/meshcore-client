@@ -930,6 +930,7 @@
   "channels_enterHashtag": "Enter hashtag",
   "channels_hashtagHint": "e.g. #team",
   "chat_noMessages": "No messages yet",
+  "chat_remoteCliCommand": "Command for your radio",
   "chat_sendMessage": "Send message",
   "chat_sendMessageTo": "Send a message to {contactName}",
   "@chat_sendMessageTo": {

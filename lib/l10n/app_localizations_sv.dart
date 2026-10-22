@@ -1750,6 +1750,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chat_noMessages => 'Inga meddelanden ännu';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => 'Skicka meddelande';
 
   @override

@@ -1778,6 +1778,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chat_noMessages => 'Még nincs üzenet.';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => 'Üzenet küldése';
 
   @override

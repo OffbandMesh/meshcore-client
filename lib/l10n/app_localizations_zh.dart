@@ -1690,6 +1690,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chat_noMessages => '暂无消息';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => '发送消息';
 
   @override

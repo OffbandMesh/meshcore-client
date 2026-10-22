@@ -250,6 +250,7 @@ class MessageStore {
       'timestamp': msg.timestamp.millisecondsSinceEpoch,
       'isOutgoing': msg.isOutgoing,
       'isCli': msg.isCli,
+      'isCliCommand': msg.isCliCommand,
       'status': msg.status.index,
       'messageId': msg.messageId,
       'originalText': msg.originalText,
@@ -283,7 +284,9 @@ class MessageStore {
   static Message _messageFromJson(Map<String, dynamic> json) {
     final rawText = json['text'] as String;
     final isCli = json['isCli'] as bool? ?? false;
-    final decodedText = isCli
+    final isCliCommand = json['isCliCommand'] as bool? ?? false;
+    // Neither a CLI reply nor a CLI command is SMAZ-compressed on the wire.
+    final decodedText = (isCli || isCliCommand)
         ? rawText
         : (Smaz.tryDecodePrefixed(rawText) ?? rawText);
     return Message(
@@ -292,6 +295,7 @@ class MessageStore {
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       isOutgoing: json['isOutgoing'] as bool,
       isCli: isCli,
+      isCliCommand: isCliCommand,
       status: MessageStatus.values[json['status'] as int],
       messageId: json['messageId'] as String?,
       originalText: json['originalText'] as String?,

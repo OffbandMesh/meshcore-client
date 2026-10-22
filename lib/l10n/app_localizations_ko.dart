@@ -1704,6 +1704,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chat_noMessages => '아직 메시지가 없습니다.';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => '메시지를 보내기';
 
   @override

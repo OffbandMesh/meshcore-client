@@ -1760,6 +1760,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get chat_noMessages => 'Nog geen berichten.';
 
   @override
+  String get chat_remoteCliCommand => 'Command for your radio';
+
+  @override
   String get chat_sendMessage => 'Verzend bericht';
 
   @override
