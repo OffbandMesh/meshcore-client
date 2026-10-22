@@ -26,6 +26,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const String _benchDb = String.fromEnvironment('BENCH_DB');
 
+/// Non-empty `messageId`s in a history blob, read straight from the JSON.
+///
+/// Deliberately not via the converter: this is used to check the converter's
+/// output, so sharing its code would make the check circular.
+List<String> _messageIdsIn(String? blob) {
+  if (blob == null || blob.isEmpty) return const [];
+  return (jsonDecode(blob) as List<dynamic>)
+      .map((e) => (e as Map<String, dynamic>)['messageId'] as String?)
+      .whereType<String>()
+      .where((id) => id.isNotEmpty)
+      .toList();
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -115,14 +128,40 @@ void main() {
         (ok ? recovered : refused).add(key);
 
         if (ok) {
-          // Every blob record must be readable as a row, and the extra rows
-          // that caused the old refusal must still be there.
           expect(
             rowsAfter,
             greaterThanOrEqualTo(records),
             reason: '$key lost records while migrating',
           );
           expect(await blobs.isOnMessageRows(key), isTrue);
+
+          // Counts alone would pass against a converter that produced the
+          // right NUMBER of rows with the wrong contents (Gemini review).
+          // Identity and payloads are checked too, derived from the raw blob
+          // rather than from the converter under test, so this is not
+          // circular.
+          //
+          // Only records carrying a messageId are identity-checked: the `x:`
+          // fallback merge key would mean reimplementing the converter here,
+          // which would make the check circular again. The count assertion
+          // above still covers those.
+          final ids = _messageIdsIn(blob);
+          final stored = await blobs.messageMergeKeys(key);
+          final absent = ids.where((id) => !stored.contains('id:$id')).toList();
+          expect(
+            absent,
+            isEmpty,
+            reason:
+                '$key: ${absent.length} of ${ids.length} identified messages '
+                'in the blob have no row carrying their identity',
+          );
+
+          final payloads = await blobs.messagePayloads(key);
+          expect(
+            payloads.where((p) => p.trim().length <= 2),
+            isEmpty,
+            reason: '$key stored empty payloads',
+          );
         }
       }
 
