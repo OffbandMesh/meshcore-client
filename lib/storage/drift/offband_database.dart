@@ -13,6 +13,40 @@ import 'db_snapshot_web.dart' if (dart.library.io) 'db_snapshot_io.dart';
 
 part 'offband_database.g.dart';
 
+/// Thrown when the database on disk is at a NEWER schema than this build
+/// understands (#943).
+///
+/// The upgrade to schema 2 is one-way by design, so this is a refusal and not
+/// a recoverable condition. It exists to make that refusal legible: drift
+/// would otherwise run this build's `onUpgrade` for a downgrade and then stamp
+/// `user_version` backwards, leaving no trace that the database had been on a
+/// newer build.
+class OffbandSchemaDowngrade implements Exception {
+  const OffbandSchemaDowngrade({
+    required this.from,
+    required this.to,
+    this.databasePath,
+  });
+
+  /// The schema the database on disk is at.
+  final int from;
+
+  /// The newest schema this build understands.
+  final int to;
+
+  /// Where that database is, when it could be resolved.
+  final String? databasePath;
+
+  @override
+  String toString() =>
+      'OffbandSchemaDowngrade: this database is at schema $from and this '
+      'build only understands $to. A newer version of the app has already '
+      'migrated it, and that upgrade is one-way, so this build cannot open '
+      'it. Install the newer version again, or restore a pre-migration copy '
+      'of the database, which loses everything received since.'
+      '${databasePath == null ? '' : ' Database: $databasePath'}';
+}
+
 /// Bulk data store (#335). Replaces SharedPreferences for message history,
 /// contacts and discovered contacts.
 ///
@@ -327,14 +361,30 @@ class OffbandDatabase extends _$OffbandDatabase {
   /// no strategy at all, so it got drift's default `onUpgrade`, which throws,
   /// and so it could never reach the blobs it would have found.
   ///
-  /// This build does not throw on a downgrade, because the guard below is
-  /// `from < 2`. A database from a future schema opens here silently and drift
-  /// then stamps `user_version` back down, erasing the only record that it has
-  /// been through a newer build. #943 holds the decision on what to do about
-  /// that; `test/storage/schema_downgrade_test.dart` pins the behaviour.
+  /// A downgrade therefore has to be refused HERE, which is what the first
+  /// branch below does (#943, owner decision 2026-10-22). Without it the
+  /// `from < 2` guard let a future schema open silently, and drift then
+  /// stamped `user_version` back down, erasing the only record the database
+  /// had ever been on a newer build.
+  ///
+  /// Downgrades are deliberately unsupported rather than made to work. Once a
+  /// key is on rows its blob is frozen, so an older build would read stale
+  /// history and write into the blob while this one reads rows, orphaning
+  /// everything it received. Supporting a downgrade would mean dual-writing
+  /// the blob on every save, which is the cost #917 exists to remove.
+  /// `test/storage/schema_downgrade_test.dart` pins all of this.
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
+      if (from > to) {
+        // Best-effort: path_provider has no web implementation, and a message
+        // without the path still beats the silent rewrite it replaces.
+        String? path;
+        try {
+          path = await pinnedDatabasePath();
+        } catch (_) {}
+        throw OffbandSchemaDowngrade(from: from, to: to, databasePath: path);
+      }
       if (from < 2) {
         await m.createTable(messageRecords);
         await m.createIndex(
