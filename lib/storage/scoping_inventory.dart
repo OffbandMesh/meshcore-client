@@ -282,6 +282,18 @@ const List<StorageSurface> storageSurfaces = [
         'radio-scoped, so scoping the marker would scope it twice',
     owner: 'lib/storage/drift/blob_store.dart',
   ),
+  StorageSurface(
+    '__msgrows_migrated_at',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'when each migrated store key migrated, for the stale-blob sweep '
+        '(#962). Global for the same reason as __msgrows_migrated: it is keyed '
+        'BY those store keys, which already carry the radio, so scoping it '
+        'would scope it twice. Kept separate from that marker because the '
+        'marker is read on every save and load through a cache, and reshaping '
+        'it into a map would put a migration on the hottest storage path',
+    owner: 'lib/storage/drift/blob_store.dart',
+  ),
 ];
 
 /// Constants that match the key shape but are not persistence keys.
