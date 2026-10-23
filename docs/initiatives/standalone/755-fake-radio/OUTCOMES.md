@@ -21,7 +21,7 @@ The same fake runs as a program on a PC (`dart run tool/fake_radio.dart`), so th
 
 ## Evidence
 
-- **Full suite at this PR's head:** `flutter analyze` clean; `flutter test` 1234 passed, 1 skipped (`real_store_rehearsal_test.dart`, which predates this Feature). The 146 fake-radio tests all ran, none skipped, including the Python capture against the runner and `dart run tool/fake_radio.dart`.
+- **Full suite at this PR's head** (Epic D on its original stacked base, not rebased onto dev): `flutter analyze --fatal-infos --fatal-warnings` clean, format and em-dash checks clean. `flutter test`: 1239 passed, 1 skipped (`real_store_rehearsal_test.dart`, which predates this Feature). The fake-radio suites all ran, none skipped, including the Python capture against the runner and `dart run tool/fake_radio.dart`.
 - **Real radios (D1 captures, D2):** 51 requests each, one answer per request.
   - Stock: Heltec V4, `v1.18.0-81dbae5`, code 14, 82-byte DEVICE_INFO, 40 channels, 350 contacts. Replay: no differences.
   - Offband: RAK4631, `1.5.0-1.17.0`, code 22, 87-byte DEVICE_INFO, caps `0x22`, caps2 `0x0e`. Replay: no differences after the seeding fix below.
