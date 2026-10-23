@@ -94,7 +94,7 @@ A and B both touch `blob_store.dart`; B also touches the Settings screen and ARB
 
 ```grant-terms
 {
-  "epic_chain": [],
+  "epic_chain": [965, 966, 967],
   "chain": true,
   "verification": { "mode": "owner" },
   "merge": { "budget": 3, "basis": "one merge per Epic (A the timestamp and sweep, B the manual action, C Integration Testing); Tasks are commits on the Epic branch, so there is no per-task PR" },
@@ -104,7 +104,9 @@ A and B both touch `blob_store.dart`; B also touches the Settings screen and ARB
 }
 ```
 
-**`epic_chain` is empty on purpose.** The Epic issues do not exist yet: canon creates them when this plan merges. It is filled in before the grant is minted, not before the plan is approved.
+**`epic_chain` filled 2026-10-23:** [#965](https://github.com/OffbandMesh/meshcore-client/issues/965) (Epic A, the timestamp and sweep), [#966](https://github.com/OffbandMesh/meshcore-client/issues/966) (Epic B, the manual action), [#967](https://github.com/OffbandMesh/meshcore-client/issues/967) (Epic C, Integration Testing). All three are sub-issues of #962, with Citadel tasks `meshcore-open-5vt`, `-gan` and `-2jd` chained A to B to C.
+
+It was left empty when this plan first merged, which was a sequencing mistake: `grant.py` requires a non-empty chain, so the plan as merged could not have minted a grant and this follow-up was needed. The Epic issues should exist before a plan PR merges.
 
 **Basis for the expiry.** 168 hours, the maximum. Epic C ends in an owner hardware step on two platforms and he has a day job; a grant expiring between Epic B's merge and Epic C's run would need a re-mint for no reason.
 
