@@ -197,6 +197,28 @@ void main() {
       expect(await blobs.read(key), isNull);
     });
 
+    test('a converter that silently drops a record is refused', () async {
+      // The hole Gemini found, closed. A converter can fail without throwing:
+      // it returns fewer rows than the blob holds. Comparing only the records
+      // it DID produce would find them all present and delete the blob that
+      // holds the only copy of the dropped one. The verify path therefore
+      // cross-checks against an independent count, as the migration gate does.
+      await migratedDaysAgo(key, 31);
+
+      final result = await blobs.reclaimVerifiedHistoryBlob(key, (json) {
+        final all = toRows(json);
+        return all.take(all.length - 1).toList();
+      });
+
+      expect(result.deleted, isFalse);
+      expect(
+        result.missing,
+        isNull,
+        reason: 'a lossy converter is UNVERIFIABLE, not verified-empty',
+      );
+      expect(await blobs.read(key), isNotNull);
+    });
+
     test('an undecodable blob is refused, not treated as empty', () async {
       await migratedDaysAgo(key, 31);
       await blobs.write(key, 'this is not json');
@@ -246,6 +268,46 @@ void main() {
       );
     });
 
+    test('a migrated key with no blob is neither cleared nor refused', () async {
+      // The empty-blob migration path marks a key without there ever being a
+      // blob, and a second sweep sees a key it already reclaimed. Both must be
+      // silent: counting them as cleared would overstate what was reclaimed,
+      // and as refused would raise a false alarm. On the owner's database 7 of
+      // 47 aged keys are in exactly this state.
+      await migratedDaysAgo(key, 31);
+      expect((await StaleHistorySweep(blobs).run()).cleared, [key]);
+
+      final second = await StaleHistorySweep(blobs).run();
+
+      expect(second.cleared, isEmpty);
+      expect(second.refused, isEmpty);
+      expect(second.bytesReclaimed, 0);
+    });
+
+    test(
+      'reclaim is atomic: verify and delete hold the same key lock',
+      () async {
+        // Checking through one call and deleting through another leaves a window
+        // where the answer can go stale, and a delete decided on a stale answer
+        // cannot be taken back. BlobStore.reclaimVerifiedHistoryBlob exists to
+        // close that, so assert the sweep goes through it rather than doing its
+        // own read-then-delete.
+        await migratedDaysAgo(key, 31);
+
+        final result = await blobs.reclaimVerifiedHistoryBlob(key, toRows);
+
+        expect(result.deleted, isTrue);
+        expect(result.missing, isEmpty);
+        expect(await blobs.read(key), isNull);
+
+        // Called again on the now-blobless key it reports no delete and no
+        // problem, which is what makes a second sweep silent.
+        final again = await blobs.reclaimVerifiedHistoryBlob(key, toRows);
+        expect(again.deleted, isFalse);
+        expect(again.missing, isEmpty);
+      },
+    );
+
     test('an unmigrated history key keeps its blob', () async {
       await blobs.write(key, bigBlobWith(20));
       // Never migrated: the blob is authoritative.
@@ -274,12 +336,33 @@ void main() {
           isFalse,
           reason: '$k must never be considered a history key',
         );
+        // Asserting the helper alone would pass even if `run` stopped calling
+        // it, because the loop only visits keys that HAVE rows and these
+        // normally have none (Gemini review). So give them rows and a stale
+        // timestamp: now the only thing standing between them and a delete is
+        // the prefix guard inside `run`.
+        await blobs.upsertMessageRows(k, const [
+          MessageRowInput(
+            mergeKey: 'id:planted',
+            timestampMs: 1,
+            payload: '{}',
+          ),
+        ]);
+        await blobs.setMessageRowsMigratedAtForTest(
+          k,
+          DateTime.now().subtract(const Duration(days: 99)),
+        );
       }
       await migratedDaysAgo(key, 31);
 
       final outcome = await StaleHistorySweep(blobs).run();
 
       expect(outcome.cleared, [key]);
+      expect(
+        outcome.refused,
+        isEmpty,
+        reason: 'they must be skipped outright, not refused',
+      );
       for (final k in others) {
         expect(await blobs.read(k), '[{"name":"keep me"}]', reason: k);
       }
