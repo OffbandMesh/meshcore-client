@@ -186,12 +186,34 @@ class StaleHistorySweep {
     }
 
     if (cleared.isNotEmpty || refused.isNotEmpty) {
+      // Names the keys, not just a count. "Cleared 40" is not an audit trail
+      // for a delete that cannot be undone.
       appLogger.info(
         'Stale history sweep: cleared ${cleared.length}, kept '
         '${refused.length} that could not be verified, '
-        '${bytesBefore - bytesAfter} bytes returned.',
+        '${bytesBefore - bytesAfter} bytes returned.\n'
+        'cleared: ${cleared.join(', ')}'
+        '${refused.isEmpty ? '' : '\nkept: ${refused.join(', ')}'}',
         tag: 'Storage',
       );
+
+      // And durably, because the log above is gated on the app-debug-logging
+      // setting, which is off by default. Without this an irreversible delete
+      // would leave no trail at all on a normal install.
+      try {
+        await _blobs.appendReclaimAudit(
+          at: at,
+          cleared: cleared,
+          refused: refused,
+          bytesBefore: bytesBefore,
+          bytesAfter: bytesAfter,
+        );
+      } catch (e) {
+        appLogger.warn(
+          'Could not write the reclaim audit entry: $e',
+          tag: 'Storage',
+        );
+      }
     }
 
     return StaleHistoryOutcome(

@@ -294,6 +294,17 @@ const List<StorageSurface> storageSurfaces = [
         'it into a map would put a migration on the hottest storage path',
     owner: 'lib/storage/drift/blob_store.dart',
   ),
+  StorageSurface(
+    '__msgrows_reclaim_audit',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'a durable record of what each stale-blob sweep deleted (#962). Global '
+        'because one sweep spans every radio and the entries name store keys, '
+        'which already carry the radio. It exists because the app log is gated '
+        'on a setting that is off by default, so an irreversible delete would '
+        'otherwise leave no trail at all; capped at the last few sweeps',
+    owner: 'lib/storage/drift/blob_store.dart',
+  ),
 ];
 
 /// Constants that match the key shape but are not persistence keys.
