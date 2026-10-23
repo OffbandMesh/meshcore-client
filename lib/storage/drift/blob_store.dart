@@ -241,8 +241,16 @@ class BlobStore {
     final blob = await readWithPrefsFallback(storeKey);
     if (blob == null || blob.isEmpty) return const [];
 
+    final int sourceCount;
     final List<MessageRowInput> rows;
     try {
+      // The converter's own output cannot be the measure of the converter.
+      // `countJsonArrayElements` decodes the blob and does nothing but count,
+      // in a separate `compute`, exactly as the migration gate does. Without
+      // it a converter that silently dropped a record would report every
+      // record it produced as present and this would delete the blob holding
+      // the only copy of the one it dropped (Gemini review).
+      sourceCount = await compute(countJsonArrayElements, blob);
       rows = await compute(toRows, blob);
     } catch (e) {
       appLogger.error(
@@ -254,10 +262,54 @@ class BlobStore {
       return null;
     }
 
+    if (rows.length != sourceCount) {
+      appLogger.error(
+        'Cannot verify $storeKey against its rows: its blob holds '
+        '$sourceCount records but the converter produced ${rows.length}. '
+        'Treating this as unverifiable; the blob is kept.',
+        tag: 'Storage',
+      );
+      return null;
+    }
+
     return _absentFrom(
       rows.map((r) => r.mergeKey),
       await messageMergeKeys(storeKey),
     );
+  }
+
+  /// Verifies [storeKey]'s stale blob against its rows and deletes it **only**
+  /// if every record is accounted for, as one atomic step (#962).
+  ///
+  /// The verify and the delete have to hold the same per-key lock. Checking
+  /// and then deleting through two separate calls leaves a window, and a
+  /// delete decided on a stale answer is not recoverable (Gemini review). This
+  /// also serialises the reclaim against [ensureMessageRowsMigrated] and
+  /// [mergeOffThread], which take the same lock, so the sweep cannot run
+  /// against a key mid-migration.
+  ///
+  /// `deleted` says whether a blob actually went, so the caller does not have
+  /// to infer it. `missing` is null when the blob could not be verified at all
+  /// and the key must be refused, empty when nothing was missing, and
+  /// otherwise the records that have no row.
+  ///
+  /// Nothing inside the locked section may take the same lock again: the chain
+  /// is not re-entrant and would deadlock. Everything called here reads.
+  Future<({bool deleted, List<String>? missing})> reclaimVerifiedHistoryBlob(
+    String storeKey,
+    BlobToRowsCallback toRows,
+  ) {
+    return synchronized(storeKey, () async {
+      if (await read(storeKey) == null) {
+        return (deleted: false, missing: const <String>[]);
+      }
+      final missing = await missingFromRows(storeKey, toRows);
+      if (missing == null || missing.isNotEmpty) {
+        return (deleted: false, missing: missing);
+      }
+      await delete(storeKey);
+      return (deleted: true, missing: const <String>[]);
+    });
   }
 
   /// The one place the "no blob record is missing from rows" rule lives.

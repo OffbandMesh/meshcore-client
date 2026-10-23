@@ -103,9 +103,19 @@ class StaleHistorySweep {
       if (migratedAt == null) continue; // unstamped: nothing to age against
       if (at.difference(migratedAt) < window) continue;
 
-      if (await _blobs.read(key) == null) continue; // already reclaimed
+      // Verify and delete under the key's own lock, as one step. Deciding on
+      // one call and deleting on another leaves a window, and a delete made on
+      // a stale answer cannot be taken back.
+      final result = await _blobs.reclaimVerifiedHistoryBlob(
+        key,
+        converterFor(key),
+      );
 
-      final missing = await _blobs.missingFromRows(key, converterFor(key));
+      if (result.deleted) {
+        cleared.add(key);
+        continue;
+      }
+      final missing = result.missing;
       if (missing == null) {
         // Unverifiable, NOT verified-empty. Keep it.
         refused.add(key);
@@ -119,16 +129,31 @@ class StaleHistorySweep {
           tag: 'Storage',
         );
         refused.add(key);
-        continue;
       }
-
-      await _blobs.delete(key);
-      cleared.add(key);
+      // Otherwise there was no blob left to reclaim: not cleared, not refused.
     }
 
     if (cleared.isNotEmpty) {
+      // VACUUM takes an exclusive lock and rebuilds the file, so database
+      // access queues behind it. It does NOT block the UI thread: drift_flutter
+      // runs SQLite in a spawned isolate (`_isolateEntrypoint` ->
+      // `DriftIsolate.inCurrent`), so this is a stall on history-backed reads
+      // rather than an ANR, which is the distinction that matters for an app
+      // whose storage work started as an ANR investigation.
+      //
+      // It is also close to once per install: a key is cleared once and then
+      // has no blob to consider, so later launches delete nothing and never
+      // reach here. Measured at 0.6 s on the owner's 70.9 MiB database. The
+      // duration is logged because that is a number worth watching in the
+      // field rather than assuming.
+      final sw = Stopwatch()..start();
       try {
         await _blobs.vacuum();
+        appLogger.info(
+          'VACUUM took ${sw.elapsedMilliseconds} ms after clearing '
+          '${cleared.length} stale blob(s).',
+          tag: 'Storage',
+        );
       } catch (e) {
         // The deletes already happened and were each verified; VACUUM only
         // affects file size, so a failure here costs space and not data. The
