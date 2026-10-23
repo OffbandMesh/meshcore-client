@@ -38,6 +38,38 @@ class StaleHistoryOutcome {
   bool get didAnything => cleared.isNotEmpty;
 }
 
+/// What a sweep WOULD do, for the confirmation dialog (#962).
+class StaleHistoryPreview {
+  const StaleHistoryPreview({
+    required this.eligible,
+    required this.refused,
+    required this.approximateBytes,
+    required this.messagesKept,
+  });
+
+  /// Keys whose stale copy is verified redundant and would be deleted.
+  final List<String> eligible;
+
+  /// Keys already known to be unverifiable, so they would be kept. Saying so
+  /// before the press beats reporting it afterwards.
+  final List<String> refused;
+
+  /// Blob bytes that would go.
+  ///
+  /// **Approximate on purpose.** It is the sum of the blob lengths, which is
+  /// not the same as what `VACUUM` returns to the filesystem: page rounding
+  /// and existing free pages both move the real figure. The dialog says
+  /// "about", and the result afterwards reports what actually changed.
+  final int approximateBytes;
+
+  /// Total stored messages, so the dialog can say what is NOT affected. The
+  /// reassurance is the point: this action deletes, and the user needs to know
+  /// their history is not what is being deleted.
+  final int messagesKept;
+
+  bool get hasWork => eligible.isNotEmpty;
+}
+
 /// Deletes the frozen pre-migration blob of a key that has been on rows long
 /// enough, and returns the space to the filesystem (#962).
 ///
@@ -76,13 +108,95 @@ class StaleHistorySweep {
       ? channelHistoryToRows
       : dmHistoryToRows;
 
+  /// Whether a key is old enough to reclaim. The ONE age rule, shared by
+  /// [preview] and [run], so the dialog cannot promise what the sweep will not
+  /// do.
+  ///
+  /// A key with no timestamp, or one stamped during this pass, has no age to
+  /// judge. For the automatic sweep that means **not eligible**: the stamp
+  /// exists so installing an update never deletes a blob on sight. For an
+  /// explicit press it means **eligible**, because a user asking to clear now
+  /// is not an app update. Treating the two the same made the button report
+  /// "nothing to clear" on any install that migrated before #962, which is
+  /// every real install, since none of their keys carry a stamp yet.
+  static bool eligibleByAge({
+    required DateTime? migratedAt,
+    required bool freshlyStamped,
+    required Duration window,
+    required DateTime at,
+    required bool includeNewlyStamped,
+  }) {
+    if (freshlyStamped || migratedAt == null) return includeNewlyStamped;
+    return at.difference(migratedAt) >= window;
+  }
+
+  /// What a sweep would do, without doing any of it (#962).
+  ///
+  /// The confirmation dialog states real numbers rather than an estimate, so
+  /// the verification has to run before the delete rather than as part of it.
+  /// The cost is that it happens twice for a confirmed clear: once here, once
+  /// under the key lock in [run]. That is the price of saying what will go
+  /// before it goes.
+  ///
+  /// Writes nothing. In particular it does not stamp, so calling it never
+  /// changes what a later [run] does.
+  Future<StaleHistoryPreview> preview({
+    Duration? olderThan,
+    DateTime? now,
+    bool includeNewlyStamped = false,
+  }) async {
+    final window = olderThan ?? staleHistoryWindow;
+    final at = now ?? DateTime.now();
+
+    final eligible = <String>[];
+    final refused = <String>[];
+    var bytes = 0;
+
+    for (final key in (await _blobs.messageStoreKeys()).toList()..sort()) {
+      if (!isHistoryKey(key)) continue;
+      if (!await _blobs.isOnMessageRows(key)) continue;
+      if (!eligibleByAge(
+        migratedAt: await _blobs.messageRowsMigratedAt(key),
+        freshlyStamped: false,
+        window: window,
+        at: at,
+        includeNewlyStamped: includeNewlyStamped,
+      )) {
+        continue;
+      }
+
+      final blob = await _blobs.read(key);
+      if (blob == null) continue; // already reclaimed
+
+      final missing = await _blobs.missingFromRows(key, converterFor(key));
+      if (missing == null || missing.isNotEmpty) {
+        refused.add(key);
+        continue;
+      }
+      eligible.add(key);
+      bytes += blob.length;
+    }
+
+    return StaleHistoryPreview(
+      eligible: eligible,
+      refused: refused,
+      approximateBytes: bytes,
+      messagesKept: await _blobs.totalMessageRows(),
+    );
+  }
+
   /// Runs one sweep.
   ///
   /// [olderThan] defaults to [staleHistoryWindow]; [now] exists so tests can
   /// choose a moment rather than wait. Backfills a timestamp onto any
-  /// already-migrated key that has none, which never makes a key eligible on
-  /// the same pass: it starts that key's window instead.
-  Future<StaleHistoryOutcome> run({Duration? olderThan, DateTime? now}) async {
+  /// already-migrated key that has none. [includeNewlyStamped] decides whether
+  /// such a key can be cleared on the same pass: false for the automatic
+  /// sweep, true for an explicit press. See [eligibleByAge].
+  Future<StaleHistoryOutcome> run({
+    Duration? olderThan,
+    DateTime? now,
+    bool includeNewlyStamped = false,
+  }) async {
     final window = olderThan ?? staleHistoryWindow;
     final at = now ?? DateTime.now();
     final bytesBefore = await _blobs.databaseSizeBytes();
@@ -97,11 +211,15 @@ class StaleHistorySweep {
     for (final key in (await _blobs.messageStoreKeys()).toList()..sort()) {
       if (!isHistoryKey(key)) continue;
       if (!await _blobs.isOnMessageRows(key)) continue;
-      if (stamped.contains(key)) continue;
-
-      final migratedAt = await _blobs.messageRowsMigratedAt(key);
-      if (migratedAt == null) continue; // unstamped: nothing to age against
-      if (at.difference(migratedAt) < window) continue;
+      if (!eligibleByAge(
+        migratedAt: await _blobs.messageRowsMigratedAt(key),
+        freshlyStamped: stamped.contains(key),
+        window: window,
+        at: at,
+        includeNewlyStamped: includeNewlyStamped,
+      )) {
+        continue;
+      }
 
       // Verify and delete under the key's own lock, as one step. Deciding on
       // one call and deleting on another leaves a window, and a delete made on

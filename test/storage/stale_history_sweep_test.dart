@@ -448,6 +448,148 @@ void main() {
     });
   });
 
+  group('the age rule, shared by preview and run', () {
+    final at = DateTime(2026, 10, 23, 12);
+
+    test('an unstamped key is NOT eligible for the automatic sweep', () {
+      expect(
+        StaleHistorySweep.eligibleByAge(
+          migratedAt: null,
+          freshlyStamped: false,
+          window: staleHistoryWindow,
+          at: at,
+          includeNewlyStamped: false,
+        ),
+        isFalse,
+        reason: 'the stamp exists so an app update never deletes on sight',
+      );
+    });
+
+    test('an unstamped key IS eligible for an explicit press', () {
+      expect(
+        StaleHistorySweep.eligibleByAge(
+          migratedAt: null,
+          freshlyStamped: true,
+          window: Duration.zero,
+          at: at,
+          includeNewlyStamped: true,
+        ),
+        isTrue,
+        reason: 'a user asking to clear now is not an app update',
+      );
+    });
+
+    test('29 days out, 30 days in', () {
+      bool eligible(int days) => StaleHistorySweep.eligibleByAge(
+        migratedAt: at.subtract(Duration(days: days)),
+        freshlyStamped: false,
+        window: staleHistoryWindow,
+        at: at,
+        includeNewlyStamped: false,
+      );
+      expect(eligible(29), isFalse);
+      expect(eligible(30), isTrue);
+    });
+  });
+
+  group('the bug the preview exposed', () {
+    test('an install with NO stamps clears on the first press', () async {
+      // Every install that migrated before #962 has an empty
+      // __msgrows_migrated_at. The sweep stamps them all, and the old
+      // "skip anything stamped this pass" rule then skipped every one, so the
+      // button reported nothing to clear against real reclaimable blobs. That
+      // was the owner's install exactly: 47 migrated keys, none stamped.
+      await blobs.write(key, bigBlobWith(20));
+      await blobs.ensureMessageRowsMigrated(key, toRows);
+      await blobs.write(BlobStore.migratedAtKey, '{}'); // nothing stamped
+      blobs.resetMigratedKeyCache();
+
+      // The automatic sweep still refuses, which is correct.
+      expect((await StaleHistorySweep(blobs).run()).cleared, isEmpty);
+      expect(await blobs.read(key), isNotNull);
+
+      // The explicit press does not.
+      final outcome = await StaleHistorySweep(
+        blobs,
+      ).run(olderThan: Duration.zero, includeNewlyStamped: true);
+      expect(outcome.cleared, [key]);
+      expect(await blobs.read(key), isNull);
+      expect(await blobs.messageRowCount(key), 20);
+    });
+  });
+
+  group('preview', () {
+    test('it reports what a press would clear, and writes nothing', () async {
+      await blobs.write(key, bigBlobWith(20));
+      await blobs.ensureMessageRowsMigrated(key, toRows);
+      await blobs.write(BlobStore.migratedAtKey, '{}');
+      blobs.resetMigratedKeyCache();
+
+      final p = await StaleHistorySweep(
+        blobs,
+      ).preview(olderThan: Duration.zero, includeNewlyStamped: true);
+
+      expect(p.eligible, [key]);
+      expect(p.refused, isEmpty);
+      expect(p.hasWork, isTrue);
+      expect(p.approximateBytes, greaterThan(0));
+      expect(p.messagesKept, 20);
+
+      // Nothing was deleted and nothing was stamped, so a later run behaves
+      // exactly as if the preview had never happened.
+      expect(await blobs.read(key), isNotNull);
+      expect(await blobs.read(BlobStore.migratedAtKey), '{}');
+    });
+
+    test('it forecasts a refusal instead of discovering it later', () async {
+      await migratedDaysAgo(key, 31);
+      await blobs.deleteMessageRow(
+        key,
+        (await blobs.messageMergeKeys(key)).first,
+      );
+
+      final p = await StaleHistorySweep(blobs).preview();
+
+      expect(p.eligible, isEmpty);
+      expect(p.refused, [key]);
+      expect(
+        p.hasWork,
+        isFalse,
+        reason: 'nothing to confirm, so the card reports without a dialog',
+      );
+    });
+
+    test('preview and run agree on eligibility', () async {
+      // The dialog must not promise what the sweep will not do. Same inputs,
+      // same answer.
+      await migratedDaysAgo(key, 31);
+      const young = 'channel_messages_aaaaaaaaaapsk_young';
+      await migratedDaysAgo(young, 2);
+
+      final p = await StaleHistorySweep(blobs).preview();
+      final outcome = await StaleHistorySweep(blobs).run();
+
+      expect(p.eligible, [key]);
+      expect(outcome.cleared, [key]);
+      expect(await blobs.read(young), isNotNull);
+    });
+
+    test('non-history and unmigrated keys never appear', () async {
+      await blobs.write('contacts', '[{"name":"a"}]');
+      await blobs.upsertMessageRows('contacts', const [
+        MessageRowInput(mergeKey: 'id:x', timestampMs: 1, payload: '{}'),
+      ]);
+      await blobs.write('channel_messages_bbbbbbbbbbpsk_un', bigBlobWith(5));
+
+      final p = await StaleHistorySweep(
+        blobs,
+      ).preview(olderThan: Duration.zero, includeNewlyStamped: true);
+
+      expect(p.eligible, isEmpty);
+      expect(p.refused, isEmpty);
+    });
+  });
+
   group('what the manual action relies on (#966)', () {
     test('olderThan zero makes a key migrated seconds ago eligible', () async {
       // The button passes Duration.zero, which is the whole point of it: no

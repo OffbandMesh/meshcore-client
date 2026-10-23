@@ -31,9 +31,22 @@ void main() {
     bytesAfter: after,
   );
 
+  StaleHistoryPreview preview({
+    List<String> eligible = const ['a'],
+    List<String> refused = const [],
+    int bytes = 16 * 1024 * 1024,
+    int messagesKept = 29975,
+  }) => StaleHistoryPreview(
+    eligible: eligible,
+    refused: refused,
+    approximateBytes: bytes,
+    messagesKept: messagesKept,
+  );
+
   Future<void> pump(
     WidgetTester tester, {
     required Future<StaleHistoryOutcome> Function() runSweep,
+    Future<StaleHistoryPreview> Function()? runPreview,
     Future<int> Function()? readSize,
   }) async {
     await tester.pumpWidget(
@@ -42,12 +55,18 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: StorageReclaimCard(
+            runPreview: runPreview ?? () async => preview(),
             runSweep: runSweep,
             readSize: readSize ?? () async => 70 * 1024 * 1024,
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> confirm(WidgetTester tester) async {
+    await tester.tap(find.textContaining('Clear 1 copies'));
     await tester.pumpAndSettle();
   }
 
@@ -65,13 +84,120 @@ void main() {
     expect(find.textContaining('70.0 MB'), findsOneWidget);
   });
 
-  testWidgets('nothing eligible reports nothing to clear', (tester) async {
-    await pump(tester, runSweep: () async => outcome());
+  group('the confirmation (variants 8 to 10)', () {
+    testWidgets('it states the scope before anything is deleted', (
+      tester,
+    ) async {
+      await pump(tester, runSweep: () async => outcome(cleared: const ['a']));
 
-    await tapClear(tester);
+      await tapClear(tester);
 
-    expect(find.text('Nothing to clear.'), findsOneWidget);
-    expect(find.textContaining('Kept'), findsNothing);
+      expect(find.text('Clear stale history?'), findsOneWidget);
+      expect(find.textContaining('1 old copies'), findsOneWidget);
+      expect(find.textContaining('16.0 MB'), findsOneWidget);
+      expect(find.textContaining('All 29975 stay'), findsOneWidget);
+      expect(find.text('This cannot be undone.'), findsOneWidget);
+      // The action carries the count, so the scope is the last thing read.
+      expect(find.textContaining('Clear 1 copies'), findsOneWidget);
+    });
+
+    testWidgets('Cancel deletes nothing and re-enables the button', (
+      tester,
+    ) async {
+      var swept = false;
+      await pump(
+        tester,
+        runSweep: () async {
+          swept = true;
+          return outcome(cleared: const ['a']);
+        },
+      );
+
+      await tapClear(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(swept, isFalse, reason: 'Cancel must not run the sweep');
+      expect(find.text('Clear stale history?'), findsNothing);
+      expect(find.textContaining('Cleared'), findsNothing);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull,
+        reason: 'cancelling must not leave the action dead for the session',
+      );
+    });
+
+    testWidgets('a forecast refusal is shown BEFORE the press', (tester) async {
+      await pump(
+        tester,
+        runPreview: () async => preview(refused: const ['b']),
+        runSweep: () async => outcome(cleared: const ['a']),
+      );
+
+      await tapClear(tester);
+
+      expect(
+        find.textContaining('1 will be kept back'),
+        findsOneWidget,
+        reason: 'knowing beforehand beats discovering it afterwards',
+      );
+      expect(find.textContaining('cannot be undone'), findsOneWidget);
+    });
+
+    testWidgets('no eligible keys means no dialog at all', (tester) async {
+      await pump(
+        tester,
+        runPreview: () async => preview(eligible: const []),
+        runSweep: () async => outcome(),
+      );
+
+      await tapClear(tester);
+
+      expect(
+        find.text('Clear stale history?'),
+        findsNothing,
+        reason: 'a dialog that only says zero is not worth opening',
+      );
+      expect(find.text('Nothing to clear.'), findsOneWidget);
+    });
+
+    testWidgets('a refusal with nothing eligible still reports, no dialog', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        runPreview: () async =>
+            preview(eligible: const [], refused: const ['b']),
+        runSweep: () async => outcome(),
+      );
+
+      await tapClear(tester);
+
+      expect(find.text('Clear stale history?'), findsNothing);
+      expect(
+        find.textContaining('Kept 1 that could not be verified'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a preview failure reports and does not open a dialog', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        runPreview: () async => throw StateError('no preview'),
+        runSweep: () async => outcome(cleared: const ['a']),
+      );
+
+      await tapClear(tester);
+
+      expect(find.text('Clear stale history?'), findsNothing);
+      expect(find.textContaining('Could not finish'), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull,
+      );
+    });
   });
 
   testWidgets('cleared keys report the count and the size returned', (
@@ -87,6 +213,7 @@ void main() {
     );
 
     await tapClear(tester);
+    await confirm(tester);
 
     expect(find.textContaining('Cleared 3 old copies'), findsOneWidget);
     expect(find.textContaining('16.0 MB returned'), findsOneWidget);
@@ -102,6 +229,7 @@ void main() {
     );
 
     await tapClear(tester);
+    await confirm(tester);
 
     expect(
       find.textContaining('Kept 1 that could not be verified'),
@@ -125,6 +253,7 @@ void main() {
     await pump(tester, runSweep: () async => outcome(refused: const ['b']));
 
     await tapClear(tester);
+    await confirm(tester);
 
     expect(find.text('Nothing to clear.'), findsOneWidget);
     expect(
@@ -142,6 +271,7 @@ void main() {
     await pump(tester, runSweep: () async => throw StateError('boom'));
 
     await tapClear(tester);
+    await confirm(tester);
 
     expect(find.textContaining('Could not finish'), findsOneWidget);
     expect(find.textContaining('messages are intact'), findsOneWidget);
@@ -159,25 +289,32 @@ void main() {
   ) async {
     // The disabled button is not enough: setState only SCHEDULES a rebuild,
     // so two taps inside one frame both see a live onPressed. _clear guards
-    // on _running for that, and two concurrent sweeps would mean two
-    // concurrent VACUUMs.
-    var runs = 0;
-    final gate = Completer<StaleHistoryOutcome>();
+    // on _running for that.
+    //
+    // A tap now starts the PREVIEW, not the sweep, so that is what has to be
+    // counted. Two previews would also mean two dialogs stacked on each other.
+    var previews = 0;
+    final gate = Completer<StaleHistoryPreview>();
     await pump(
       tester,
-      runSweep: () {
-        runs++;
+      runPreview: () {
+        previews++;
         return gate.future;
       },
+      runSweep: () async => outcome(cleared: const ['a']),
     );
 
     final button = find.text('Clear Stale History Now');
     await tester.tap(button, warnIfMissed: false);
     await tester.tap(button, warnIfMissed: false);
 
-    expect(runs, 1, reason: 'the second tap in the same frame must be ignored');
+    expect(
+      previews,
+      1,
+      reason: 'the second tap in the same frame must be ignored',
+    );
 
-    gate.complete(outcome());
+    gate.complete(preview(eligible: const []));
     await tester.pumpAndSettle();
   });
 
@@ -185,7 +322,8 @@ void main() {
     final gate = Completer<StaleHistoryOutcome>();
     await pump(tester, runSweep: () => gate.future);
 
-    await tester.tap(find.text('Clear Stale History Now'));
+    await tapClear(tester);
+    await confirm(tester);
     await tester.pump();
 
     expect(
