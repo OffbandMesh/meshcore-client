@@ -167,7 +167,24 @@ class StaleHistorySweep {
       }
     }
 
-    final bytesAfter = await _blobs.databaseSizeBytes();
+    // A sweep that deleted blobs correctly must not be reported as a failure
+    // because the closing size read threw. The deletes are the work; the byte
+    // count is reporting. Falling back to `bytesBefore` makes the reclaimed
+    // figure read as 0, which understates rather than invents, and keeps the
+    // manual action from telling the user nothing happened when something did
+    // (Gemini review).
+    int bytesAfter;
+    try {
+      bytesAfter = await _blobs.databaseSizeBytes();
+    } catch (e) {
+      appLogger.warn(
+        'Cleared ${cleared.length} stale blob(s) but could not read the '
+        'database size afterwards, so the reclaimed figure reads as 0: $e',
+        tag: 'Storage',
+      );
+      bytesAfter = bytesBefore;
+    }
+
     if (cleared.isNotEmpty || refused.isNotEmpty) {
       appLogger.info(
         'Stale history sweep: cleared ${cleared.length}, kept '

@@ -5457,4 +5457,39 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get setRegionScope_noPath => 'No stored path';
+
+  @override
+  String get storage_title => 'Storage';
+
+  @override
+  String storage_databaseSize(String size) {
+    return 'Message database: $size';
+  }
+
+  @override
+  String get storage_staleHint =>
+      'When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.';
+
+  @override
+  String get storage_clearStaleNow => 'Clear Stale History Now';
+
+  @override
+  String get storage_working => 'Clearing...';
+
+  @override
+  String get storage_resultNothing => 'Nothing to clear.';
+
+  @override
+  String storage_resultCleared(int count, String size) {
+    return 'Cleared $count old copies, $size returned.';
+  }
+
+  @override
+  String storage_resultRefused(int count) {
+    return 'Kept $count that could not be verified. Your messages are intact; nothing was deleted for those.';
+  }
+
+  @override
+  String get storage_resultFailed =>
+      'Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.';
 }
