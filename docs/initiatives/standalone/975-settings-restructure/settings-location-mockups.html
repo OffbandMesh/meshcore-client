@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Location screen and settings restructure mockups</title>
+<style>
+/* Doc chrome: Offband design-doc family, as the firmware GUI mockups.
+   Inside the frames: Flutter Material 3, drawn against the real widgets in
+   lib/screens/settings/settings_shell.dart (ListTile + leading Icon + subtitle
+   + chevron, inside Cards, under a centred AppBar).
+   Self-contained on purpose: icons are inline SVG, fonts are system stacks.
+   Nothing here needs the network to render. */
+:root{
+  --bg2:#161C19; --line:#34403A; --line2:#232C28;
+  --ink:#EFF3E8; --ink2:#BAC4B5; --dim:#8B9A91; --sig:#7BEFA8;
+  --warn:#FFA552; --bad:#FF7A6E;
+  --sans:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+  --mono:'Cascadia Mono',Consolas,'SF Mono',Menlo,monospace;
+  --page:#0a0d0c; --pageInk:#cfd6cc;
+  /* Material 3, blue seed, light. The client's actual scheme. */
+  --surface:#FDFBFF; --onSurface:#1A1C1E; --onSurfaceVar:#44474F;
+  --cardBg:#F2F3F7; --outline:#74777F; --outlineVar:#C4C6D0;
+  --primary:#0061A4; --secCont:#D6E3FF; --onSecCont:#001D36;
+  --ok:#1E6B39; --amber:#8A5000; --grey:#74777F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--pageInk);font-family:var(--sans);padding:24px 16px 56px}
+h1{font-size:25px;font-weight:600;color:var(--ink);letter-spacing:-.2px}
+h3{font-size:17px;font-weight:600;color:var(--sig);margin:32px 0 12px}
+.lede{font-size:14px;color:var(--dim);margin:8px 0 4px;max-width:1040px;line-height:1.55}
+.lede b{color:var(--ink2);font-weight:500}
+code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
+.why code{color:var(--ink2)}
+.flag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;color:#0a0d0c;background:var(--sig);border-radius:3px;padding:2px 7px}
+.grid{display:flex;flex-wrap:wrap;gap:30px}
+.card{width:324px}
+.card h2{font-size:17px;font-weight:600;color:var(--ink)}
+.card .n{font-family:var(--mono);font-size:12px;color:var(--sig);margin-right:7px}
+.card>p{font-size:13.5px;color:var(--ink2);margin:5px 0 12px;line-height:1.45;min-height:58px}
+.card ul{font-size:12.5px;color:var(--dim);margin:12px 0 0 16px;line-height:1.5}
+.card li{margin-bottom:5px}
+.card ul b{color:var(--ink2);font-weight:500}
+.sub{font-size:12.5px;color:var(--dim);margin-bottom:8px}
+
+.dev{border:1px solid #2a332f;border-radius:14px;overflow:hidden;background:#000}
+.d-loc{width:324px;height:468px} .s-loc{width:390px;height:563px;transform:scale(.8308)}
+.d-set{width:316px;height:600px} .s-set{width:390px;height:740px;transform:scale(.8103)}
+.d-pan{width:316px;height:268px} .s-pan{width:390px;height:331px;transform:scale(.8103)}
+.scr{transform-origin:0 0;background:var(--surface);color:var(--onSurface);
+  font-family:'Segoe UI',system-ui,Roboto,sans-serif;display:flex;flex-direction:column}
+
+/* Material 3 parts */
+.ic{width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+.ic .f{fill:currentColor;stroke:none}
+.ab{height:64px;flex:none;display:flex;align-items:center;padding:0 4px;position:relative}
+.ab .nav{width:48px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--onSurface)}
+.ab .t{position:absolute;left:56px;right:56px;text-align:center;font-size:21px;color:var(--onSurface)}
+.lv{flex:1;min-height:0;overflow:hidden}
+.lv.p16{padding:16px}
+.tile{display:flex;align-items:center;gap:16px;padding:10px 16px;min-height:56px}
+.tile.two{min-height:72px}
+.tile .lead{flex:none;color:var(--onSurfaceVar)}
+.tile .txt{flex:1;min-width:0}
+.tile .ti{font-size:15.5px;color:var(--onSurface);line-height:1.3}
+.tile .ts{font-size:13px;color:var(--onSurfaceVar);line-height:1.35;margin-top:3px}
+.tile .tr{flex:none;color:var(--onSurfaceVar)}
+.tile .btn{flex:none;font-size:14px;font-weight:500;color:var(--primary);padding:10px 8px 10px 12px}
+.tile.sel{background:var(--secCont)}
+.tile.sel .ti,.tile.sel .lead,.tile.sel .ts,.tile.sel .tr{color:var(--onSecCont)}
+.dv{height:1px;background:var(--outlineVar)}
+.mcard{background:var(--cardBg);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.10);overflow:hidden;margin-bottom:16px}
+.lbl{font-size:13px;color:var(--onSurfaceVar);padding:14px 16px 8px}
+.segwrap{padding:0 16px 14px}
+.seg{display:grid;border:1px solid var(--outline);border-radius:20px;overflow:hidden;height:40px}
+.seg.c3{grid-template-columns:repeat(3,minmax(0,1fr))} .seg.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.seg>div{display:flex;align-items:center;justify-content:center;gap:5px;font-size:13.5px;
+  color:var(--onSurface);border-right:1px solid var(--outline);white-space:nowrap}
+.seg>div:last-child{border-right:0}
+.seg>div.on{background:var(--secCont);color:var(--onSecCont)}
+.seg .ck{width:17px;height:17px;flex:none}
+.ic-ok{color:var(--ok)} .ic-am{color:var(--amber)} .ic-gr{color:var(--grey)}
+.badge{font-size:10.5px;color:#0a3d1a;background:#B7E6C4;border-radius:100px;padding:2px 8px;margin-left:8px;vertical-align:1px}
+.keep{font-size:10.5px;color:var(--onSurfaceVar);margin-left:8px}
+
+.why{display:flex;flex-wrap:wrap;gap:18px}
+.why>div{width:436px;border-left:2px solid var(--sig);padding:2px 0 2px 13px}
+.why.red>div{border-left-color:var(--bad)}
+.why h4{font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.why p{font-size:12.5px;color:var(--dim);line-height:1.55}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21.5S19 15 19 10a7 7 0 10-14 0c0 5 7 11.5 7 11.5z"/><circle cx="12" cy="10" r="2.6"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 6.8V12l3.6 2.1"/></symbol>
+<symbol id="i-gpsfix" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.4"/><circle class="f" cx="12" cy="12" r="2.4"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22"/></symbol>
+<symbol id="i-gpsoff" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.4"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22"/><path d="M4.5 19.5l15-15"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M10.2 9.3v5.4M13.8 9.3v5.4"/></symbol>
+<symbol id="i-hour" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10"/><path d="M7 3c0 4.2 5 5.9 5 9s-5 4.8-5 9"/><path d="M17 3c0 4.2-5 5.9-5 9s5 4.8 5 9"/></symbol>
+<symbol id="i-badge" viewBox="0 0 24 24"><rect x="3.2" y="6" width="17.6" height="14.4" rx="2.4"/><path d="M9 6V4.6A1.4 1.4 0 0110.4 3.2h3.2A1.4 1.4 0 0115 4.6V6"/><circle cx="12" cy="11.6" r="2.2"/><path d="M8.4 17.6c.7-1.5 2-2.2 3.6-2.2s2.9.7 3.6 2.2"/></symbol>
+<symbol id="i-ant" viewBox="0 0 24 24"><circle cx="12" cy="6.4" r="2.8"/><path d="M12 9.2V21M7.5 21h9"/><path d="M6.6 10.4a7.6 7.6 0 0110.8 0"/><path d="M4.2 7.6a11 11 0 0115.6 0"/></symbol>
+<symbol id="i-sensor" viewBox="0 0 24 24"><circle class="f" cx="12" cy="12" r="2.2"/><path d="M8.3 8.3a5.2 5.2 0 000 7.4M15.7 8.3a5.2 5.2 0 010 7.4"/><path d="M5.6 5.6a9 9 0 000 12.8M18.4 5.6a9 9 0 010 12.8"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.2l7.2 2.9v5.6c0 4.5-3 7.9-7.2 9.1-4.2-1.2-7.2-4.6-7.2-9.1V6.1z"/></symbol>
+<symbol id="i-contacts" viewBox="0 0 24 24"><rect x="3.2" y="5.2" width="17.6" height="13.6" rx="2.2"/><circle cx="9.2" cy="10.8" r="2.3"/><path d="M5.8 16.4c.7-1.7 1.9-2.4 3.4-2.4s2.7.7 3.4 2.4"/><path d="M15.2 10h3.4M15.2 13.6h3.4"/></symbol>
+<symbol id="i-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M6 18L18 6"/></symbol>
+<symbol id="i-sms" viewBox="0 0 24 24"><path d="M20.8 15.2a2 2 0 01-2 2H8l-4.8 4V5a2 2 0 012-2h13.6a2 2 0 012 2z"/><circle class="f" cx="8.4" cy="10.4" r="1.1"/><circle class="f" cx="12" cy="10.4" r="1.1"/><circle class="f" cx="15.6" cy="10.4" r="1.1"/></symbol>
+<symbol id="i-tune" viewBox="0 0 24 24"><path d="M3.6 7h12M18.4 7h2M3.6 12h4M10 12h10.4M3.6 17h10M16 17h4.4"/><circle cx="16.8" cy="7" r="2"/><circle cx="8.6" cy="12" r="2"/><circle cx="14.6" cy="17" r="2"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5"/><circle class="f" cx="12" cy="7.9" r="1"/></symbol>
+<symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c1.5-3.6 4-5.2 7.2-5.2s5.7 1.6 7.2 5.2"/></symbol>
+<symbol id="i-radiobtn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><circle class="f" cx="12" cy="12" r="4"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M18.4 16.4V11a6.4 6.4 0 10-12.8 0v5.4l-1.8 1.9h16.4z"/><path d="M10 20.2a2.2 2.2 0 004 0"/></symbol>
+<symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.2v5.6h3.6l5 4.2V5L7.6 9.2z"/><path d="M15.8 9.4a3.8 3.8 0 010 5.2M18.4 6.8a7.6 7.6 0 010 10.4"/></symbol>
+</defs></svg>
+
+<h1>Location screen and settings restructure (client #969, epic #975)</h1>
+<p class="lede">Material 3 blue seed, light, drawn at 390&times;844 against the real widgets: <code>SettingsShell</code> renders each category as a <code>ListTile</code> with a leading <code>Icon</code>, a subtitle and a trailing chevron under a centred <code>AppBar</code>, and detail panes are <code>Card</code>s of <code>ListTile</code>s split by <code>Divider(height: 1)</code>. Icon choices match <code>settings_screen.dart</code>; they are drawn here as inline SVG so this file needs no network to render. Values are examples; <b>the bullets are the behavior to build</b>. Wire transport for GPS mode is Route A, firmware <code>0xC7</code>, blocked on meshcore-firmware#1789. <span class="flag">Owner-approved 2026-10-23</span> <b>Approved as drawn:</b> one three-way GPS control above the coordinates, one consolidated status row between them, Location as a top-level category under Radio Settings, Radio stats unchanged for now, and button and buzzer split across Node Settings and Message Settings.</p>
+
+<h3>The Location screen, one control and three states</h3><div class="grid">
+
+<div class="card"><h2><span class="n">1</span>GPS off</h2><p>The selector is the only on/off control. The status row goes quiet and the sleep row is gone, because neither has meaning here.</p>
+<div class="dev d-loc"><div class="scr s-loc">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Location</span></div>
+<div class="lv p16">
+<div class="mcard">
+<div class="lbl">GPS</div>
+<div class="segwrap"><div class="seg c3"><div class="on"><svg class="ic ck"><use href="#i-check"/></svg>Off</div><div>On</div><div>Power save</div></div></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead ic-gr"><svg class="ic"><use href="#i-gpsoff"/></svg></span><div class="txt"><div class="ti">GPS is off</div><div class="ts">Showing the last stored position</div></div><span class="btn">Query</span></div>
+</div>
+<div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Coordinates</div><div class="ts">39.103118, -84.512020</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div>
+</div></div></div>
+<ul><li>Off writes <code>gps.en = 0</code> and <b>leaves the mode byte untouched</b>, matching <code>gpsStoredModeForPick</code>.</li><li>So Off then On returns to Power save, not to continuous On. That property is why this is one control and not two.</li><li>Coordinates stay editable with GPS off; they are the manual fallback.</li></ul></div>
+
+<div class="card"><h2><span class="n">2</span>GPS on</h2><p>Continuous acquisition. The sleep row stays hidden: it governs Power save only, and a dead row invites someone to set it.</p>
+<div class="dev d-loc"><div class="scr s-loc">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Location</span></div>
+<div class="lv p16">
+<div class="mcard">
+<div class="lbl">GPS</div>
+<div class="segwrap"><div class="seg c3"><div>Off</div><div class="on"><svg class="ic ck"><use href="#i-check"/></svg>On</div><div>Power save</div></div></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead ic-ok"><svg class="ic"><use href="#i-gpsfix"/></svg></span><div class="txt"><div class="ti">GPS is on</div><div class="ts">Fix 2 minutes ago, 3 satellites</div></div><span class="btn">Query</span></div>
+</div>
+<div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Coordinates</div><div class="ts">39.103118, -84.512020</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div>
+</div></div></div>
+<ul><li>On writes <code>gps.en = 1</code> and <code>gps.mode = 1</code> together, the way <code>setGpsMode()</code> does on the device.</li><li>A stored <code>0xFF</code> (never set) also displays as On, per <code>gpsModeFromPrefs</code>.</li><li>This is the costly state: about 48 mA, roughly 1.8 days on a 3000 mAh cell against 6.8 days with GPS off.</li></ul></div>
+
+<div class="card"><h2><span class="n">3</span>Power save, backed off</h2><p>The state a badge at an event actually sits in. One status row carries activity, next attempt and last fix, so nothing is said twice.</p>
+<div class="dev d-loc"><div class="scr s-loc">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Location</span></div>
+<div class="lv p16">
+<div class="mcard">
+<div class="lbl">GPS</div>
+<div class="segwrap"><div class="seg c3"><div>Off</div><div>On</div><div class="on"><svg class="ic ck"><use href="#i-check"/></svg>Power save</div></div></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead ic-am"><svg class="ic"><use href="#i-pause"/></svg></span><div class="txt"><div class="ti">Backed off</div><div class="ts">Next try in 48 min, last fix 2 min ago</div></div><span class="btn">Query</span></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-hour"/></svg></span><div class="txt"><div class="ti">Sleep between fix attempts</div><div class="ts">Firmware default</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div>
+<div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Coordinates</div><div class="ts">39.103118, -84.512020</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div>
+</div></div></div>
+<ul><li>Power save writes <code>gps.en = 1</code> and <code>gps.mode = 2</code>.</li><li><b>Backed off must be named.</b> Otherwise a user sees no fix and reads a working radio as broken. The firmware models five activity states and expects this to be the common one at an event.</li><li><b>0 is a legal value</b> meaning firmware default, so the reporting-interval rule that rejects anything under 60 must not be copied onto this field.</li><li>No tuned default is offered: every measured indoor attempt at 30 minutes and beyond failed to acquire (firmware #1553).</li></ul></div>
+
+<div class="card"><h2><span class="n">4</span>A build that cannot do Power save</h2><p>Most variants do not compile the duty cycle. The third option is absent rather than offered and ignored.</p>
+<div class="dev d-loc"><div class="scr s-loc">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Location</span></div>
+<div class="lv p16">
+<div class="mcard">
+<div class="lbl">GPS</div>
+<div class="segwrap"><div class="seg c2"><div>Off</div><div class="on"><svg class="ic ck"><use href="#i-check"/></svg>On</div></div></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead ic-ok"><svg class="ic"><use href="#i-gpsfix"/></svg></span><div class="txt"><div class="ti">GPS is on</div><div class="ts">Fix 2 minutes ago, 3 satellites</div></div><span class="btn">Query</span></div>
+</div>
+<div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Coordinates</div><div class="ts">39.103118, -84.512020</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div>
+</div></div></div>
+<ul><li><code>OFFBAND_GPS_POWER_SAVE</code> is opt-in per variant and today is set <b>only on the QCC badge</b>.</li><li>The device guards its own screen with <code>gpsPowerSaveAvailable()</code> so it never offers a mode nothing drives. The client needs the same signal.</li><li><b>Open with firmware:</b> that signal must be separate from the <code>0xC7</code> capability bit, or a radio speaking 0xC7 without the duty cycle would be offered Power save and simply stay on.</li></ul></div>
+
+</div>
+
+<h3>Where it lives</h3><div class="grid">
+
+<div class="card" style="width:688px"><h2><span class="n">5</span>Settings, current and proposed</h2><p>GPS sits two levels down today, inside Node Settings then the Location dialog, with its enable toggle duplicated in both. Location becomes its own category and owns GPS outright.</p>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+
+<div><div class="sub">Current</div>
+<div class="dev d-set"><div class="scr s-set">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Settings</span></div>
+<div class="lv">
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-badge"/></svg></span><div class="txt"><div class="ti">Node Settings</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-ant"/></svg></span><div class="txt"><div class="ti">Radio Settings</div><div class="ts">Frequency, power, spreading factor</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-sensor"/></svg></span><div class="txt"><div class="ti">Radio stats</div><div class="ts">Noise floor, RSSI, SNR, and airtime</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-shield"/></svg></span><div class="txt"><div class="ti">Privacy Settings</div><div class="ts">Control what information is shared.</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-contacts"/></svg></span><div class="txt"><div class="ti">Contacts</div><div class="ts">Settings for how contacts are added.</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-block"/></svg></span><div class="txt"><div class="ti">Blocked</div><div class="ts">Users you've blocked</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-sms"/></svg></span><div class="txt"><div class="ti">Message Settings</div><div class="ts">Notifications and message handling</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-tune"/></svg></span><div class="txt"><div class="ti">App Settings</div><div class="ts">Appearance, translation, and map preferences</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-info"/></svg></span><div class="txt"><div class="ti">Device Info</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div></div></div>
+
+<div><div class="sub">Proposed</div>
+<div class="dev d-set"><div class="scr s-set">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Settings</span></div>
+<div class="lv">
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-badge"/></svg></span><div class="txt"><div class="ti">Node Settings</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-ant"/></svg></span><div class="txt"><div class="ti">Radio Settings</div><div class="ts">Frequency, power, spreading factor</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two sel"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Location<span class="badge">new</span></div><div class="ts">GPS, coordinates, and reporting</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-sensor"/></svg></span><div class="txt"><div class="ti">Radio stats<span class="keep">unchanged for now</span></div><div class="ts">Noise floor, RSSI, SNR, and airtime</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-shield"/></svg></span><div class="txt"><div class="ti">Privacy Settings</div><div class="ts">Control what information is shared.</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-contacts"/></svg></span><div class="txt"><div class="ti">Contacts</div><div class="ts">Settings for how contacts are added.</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-block"/></svg></span><div class="txt"><div class="ti">Blocked</div><div class="ts">Users you've blocked</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-sms"/></svg></span><div class="txt"><div class="ti">Message Settings</div><div class="ts">Notifications and message handling</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-tune"/></svg></span><div class="txt"><div class="ti">App Settings</div><div class="ts">Appearance, translation, and map preferences</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-info"/></svg></span><div class="txt"><div class="ti">Device Info</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div></div></div>
+
+</div>
+<ul><li>Location sits directly under Radio Settings and becomes the single home for GPS. The duplicate enable toggle in Node Settings goes away.</li><li>Radio stats stays for now by owner decision, to be revisited (#980). It is also reachable from the app-bar icon.</li><li>Category order otherwise unchanged; Observer still appears conditionally and is not drawn here.</li></ul></div>
+
+<div class="card" style="width:688px"><h2><span class="n">6</span>Button and buzzer split across two panes</h2><p>One screen today, gated on button matrix or notify scope together. Hardware like the T1000-E has a buzzer and no button, so they are not one feature.</p>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+
+<div><div class="sub">Node Settings keeps the button</div>
+<div class="dev d-pan"><div class="scr s-pan">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Node Settings</span></div>
+<div class="lv p16"><div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-person"/></svg></span><div class="txt"><div class="ti">Node name</div><div class="ts">Strycher</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two sel"><span class="lead"><svg class="ic"><use href="#i-radiobtn"/></svg></span><div class="txt"><div class="ti">Button actions</div><div class="ts">Assign what the button does</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div>
+</div></div></div>
+
+<div><div class="sub">Message Settings gains the buzzer</div>
+<div class="dev d-pan"><div class="scr s-pan">
+<div class="ab"><span class="nav"><svg class="ic"><use href="#i-back"/></svg></span><span class="t">Message Settings</span></div>
+<div class="lv p16"><div class="mcard">
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-bell"/></svg></span><div class="txt"><div class="ti">Notifications</div><div class="ts">When this phone alerts you</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile two sel"><span class="lead"><svg class="ic"><use href="#i-vol"/></svg></span><div class="txt"><div class="ti">Buzzer and tones<span class="badge">new</span></div><div class="ts">When this radio beeps, and which tone</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div>
+</div></div></div>
+
+</div>
+<ul><li>Button actions stay under Node Settings. Buzzer and tones move beside Notifications, which Message Settings already advertises in its subtitle.</li><li>Split apart, each half needs its own capability gate: a buzzer-only radio must show tones and hide button actions.</li><li><b>Open with firmware:</b> whether the existing <code>0xC5</code> bits can already answer "buzzer but no button", or whether that needs bit allocation.</li></ul></div>
+
+</div>
+
+<h3>Why these choices, so a later change knows what it is breaking</h3>
+<div class="why">
+<div><h4>One three-way control, not a toggle plus a picker</h4><p>The badge's own screen does exactly this: <code>setGpsMode()</code> at <code>MyMesh.h:458</code> writes both fields, and <code>gpsEnabledForMode</code> exists for the writer that sets both. What is forbidden is a bool-only writer clobbering the mode byte. An earlier draft had two controls and was wrong; #969's original wording pointed that way.</p></div>
+<div><h4>One status row, not two</h4><p>Activity and last fix were separate blocks in the first draft. In a dense app that is one job taking two slots, so they are merged into a single <code>ListTile</code> between the selector and the coordinates.</p></div>
+<div><h4>Sleep interval is not the reporting interval</h4><p><code>gps_interval</code> is a reporting cadence; <code>gps_ps_interval_s</code> is a power duty cycle (<code>NodePrefs.h:73-78</code>). They live in different cards so the difference is visible, and are never merged.</p></div>
+<div><h4>Deferred, tracked separately</h4><p>GPS fix state in the Channels and Contacts headers is #974; it lands in the same shared app-bar widget as epic #613, so it must follow #614 rather than run beside it. Where Radio stats lives is #980.</p></div>
+</div>
+<div class="why red" style="margin-top:18px">
+<div><h4>The save reply must echo what was stored</h4><p>The client renders the device's answer, never its own assumption. Choosing Off does not change the stored mode byte, so a client modelling its own write would show the wrong mode. Clamping has the same shape: the reporting interval is already constrained to 0 through 86400, so the user must see the clamped value, not what they typed. Requested from firmware as part of 0xC7.</p></div>
+<div><h4>Power save is hidden where the build cannot drive it</h4><p><code>OFFBAND_GPS_POWER_SAVE</code> is per variant and currently only on the QCC badge. Without a signal separate from the 0xC7 capability bit, the client would offer a mode that does nothing. Requested from firmware.</p></div>
+</div>
+
+</body></html>
