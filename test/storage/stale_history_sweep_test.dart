@@ -369,6 +369,85 @@ void main() {
     });
   });
 
+  group('the audit trail', () {
+    test('a sweep records WHICH keys it deleted, durably', () async {
+      // The app log is gated on a setting that is off by default, so without
+      // this an irreversible delete leaves no trail on a normal install. And
+      // a count is not an audit trail.
+      await migratedDaysAgo(key, 31);
+
+      final outcome = await StaleHistorySweep(blobs).run();
+      expect(outcome.cleared, [key]);
+
+      final audit = await blobs.reclaimAudit();
+      expect(audit, hasLength(1));
+      expect(audit.single['cleared'], [key]);
+      expect(audit.single['refused'], isEmpty);
+      expect(audit.single['bytesBefore'], outcome.bytesBefore);
+      expect(audit.single['bytesAfter'], outcome.bytesAfter);
+      expect(audit.single['at'], isA<String>());
+    });
+
+    test('it survives a fresh store object, so it is really on disk', () async {
+      await migratedDaysAgo(key, 31);
+      await StaleHistorySweep(blobs).run();
+
+      // A new BlobStore over the same database is what a restart looks like
+      // to storage. The audit has to come back.
+      final reopened = BlobStore(db);
+      expect((await reopened.reclaimAudit()).single['cleared'], [key]);
+    });
+
+    test('refusals are recorded too, not only deletions', () async {
+      await migratedDaysAgo(key, 31);
+      await blobs.deleteMessageRow(
+        key,
+        (await blobs.messageMergeKeys(key)).first,
+      );
+
+      await StaleHistorySweep(blobs).run();
+
+      final audit = await blobs.reclaimAudit();
+      expect(audit.single['cleared'], isEmpty);
+      expect(audit.single['refused'], [key]);
+    });
+
+    test('a sweep that did nothing writes no entry', () async {
+      await migratedDaysAgo(key, 1); // inside the window
+      await StaleHistorySweep(blobs).run();
+      expect(await blobs.reclaimAudit(), isEmpty);
+    });
+
+    test('it is capped, so it cannot grow without bound', () async {
+      for (var i = 0; i < BlobStore.reclaimAuditEntries + 3; i++) {
+        final k = 'channel_messages_aaaaaaaaaapsk_run$i';
+        await migratedDaysAgo(k, 31, messages: 2);
+        await StaleHistorySweep(blobs).run();
+      }
+
+      final audit = await blobs.reclaimAudit();
+      expect(audit, hasLength(BlobStore.reclaimAuditEntries));
+      // Oldest dropped, newest kept.
+      expect(
+        audit.last['cleared'],
+        contains(
+          'channel_messages_aaaaaaaaaapsk_run'
+          '${BlobStore.reclaimAuditEntries + 2}',
+        ),
+      );
+    });
+
+    test('an unreadable audit does not stop a sweep', () async {
+      await blobs.write(BlobStore.reclaimAuditKey, 'not json');
+      await migratedDaysAgo(key, 31);
+
+      final outcome = await StaleHistorySweep(blobs).run();
+
+      expect(outcome.cleared, [key], reason: 'the sweep still has to work');
+      expect((await blobs.reclaimAudit()).single['cleared'], [key]);
+    });
+  });
+
   group('what the manual action relies on (#966)', () {
     test('olderThan zero makes a key migrated seconds ago eligible', () async {
       // The button passes Duration.zero, which is the whole point of it: no

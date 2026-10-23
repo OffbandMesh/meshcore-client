@@ -480,6 +480,70 @@ class BlobStore {
     });
   }
 
+  /// A durable record of what each reclaim sweep deleted (#962).
+  ///
+  /// Why this exists rather than relying on the log: `appLogger` is gated on
+  /// the app-debug-logging setting, which is **off by default**, so the only
+  /// trail of an irreversible delete would not exist on a normal install. And
+  /// the log previously recorded a count, never which keys went. "Cleared 40"
+  /// is not an audit trail.
+  ///
+  /// Written into the database itself, so it survives restarts and the logging
+  /// toggle, and can be read back without the app running.
+  static const String reclaimAuditKey = '__msgrows_reclaim_audit';
+
+  /// How many sweeps the audit keeps. A key is cleared once and then has no
+  /// blob to consider again, so this operation is close to once per install
+  /// and a handful of entries is a generous history rather than a stingy one.
+  static const int reclaimAuditEntries = 5;
+
+  /// Appends one sweep's outcome to the audit, oldest entries dropped.
+  ///
+  /// The key lists are stored in full: naming what was deleted is the entire
+  /// point, and truncating them would recreate the "Cleared 40" problem.
+  Future<void> appendReclaimAudit({
+    required DateTime at,
+    required List<String> cleared,
+    required List<String> refused,
+    required int bytesBefore,
+    required int bytesAfter,
+  }) async {
+    await synchronized(reclaimAuditKey, () async {
+      final entries = await reclaimAudit();
+      entries.add({
+        'at': at.toIso8601String(),
+        'cleared': cleared,
+        'refused': refused,
+        'bytesBefore': bytesBefore,
+        'bytesAfter': bytesAfter,
+      });
+      while (entries.length > reclaimAuditEntries) {
+        entries.removeAt(0);
+      }
+      await write(reclaimAuditKey, jsonEncode(entries));
+    });
+  }
+
+  /// The reclaim audit, oldest first. Empty when nothing has ever been swept.
+  Future<List<Map<String, dynamic>>> reclaimAudit() async {
+    final raw = await read(reclaimAuditKey);
+    if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
+    try {
+      return (jsonDecode(raw) as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .toList();
+    } catch (e) {
+      // An unreadable audit must not stop a sweep, and must not be silently
+      // replaced either: it is logged and the next append starts a fresh list.
+      appLogger.error(
+        'Could not decode the reclaim audit; the next sweep starts a new '
+        'one: $e',
+        tag: 'Storage',
+      );
+      return <Map<String, dynamic>>[];
+    }
+  }
+
   /// When [storeKey] migrated to rows, or null if it has not or is unstamped.
   Future<DateTime?> messageRowsMigratedAt(String storeKey) async {
     final ms = (await _loadMigratedAt())[storeKey];
