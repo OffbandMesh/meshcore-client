@@ -9226,6 +9226,42 @@ abstract class AppLocalizations {
   /// **'Kept {count} that could not be verified. Your messages are intact; nothing was deleted for those.'**
   String storage_resultRefused(int count);
 
+  /// No description provided for @storage_confirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear stale history?'**
+  String get storage_confirmTitle;
+
+  /// Body of the confirmation shown before clearing stale history. The size is approximate because VACUUM's real figure depends on page rounding (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'This removes {count} old copies of history that has already moved to the new format, freeing about {size}.'**
+  String storage_confirmBody(int count, String size);
+
+  /// Reassurance in the clear confirmation: this deletes duplicate copies, not history (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Your messages are not affected. All {count} stay.'**
+  String storage_confirmSafe(int count);
+
+  /// No description provided for @storage_confirmIrreversible.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone.'**
+  String get storage_confirmIrreversible;
+
+  /// Shown when the preview already knows a copy will be refused, so the user hears it before the press rather than after (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'{count} will be kept back because its messages could not be verified. This cannot be undone.'**
+  String storage_confirmKeptBack(int count);
+
+  /// Confirm button. Carries the count so the scope is the last thing read before the tap (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Clear {count} copies'**
+  String storage_confirmAction(int count);
+
   /// Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962).
   ///
   /// In en, this message translates to:

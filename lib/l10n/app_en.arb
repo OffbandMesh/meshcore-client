@@ -3336,6 +3336,47 @@
       }
     }
   },
+  "storage_confirmTitle": "Clear stale history?",
+  "storage_confirmBody": "This removes {count} old copies of history that has already moved to the new format, freeing about {size}.",
+  "@storage_confirmBody": {
+    "description": "Body of the confirmation shown before clearing stale history. The size is approximate because VACUUM's real figure depends on page rounding (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_confirmSafe": "Your messages are not affected. All {count} stay.",
+  "@storage_confirmSafe": {
+    "description": "Reassurance in the clear confirmation: this deletes duplicate copies, not history (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_confirmIrreversible": "This cannot be undone.",
+  "storage_confirmKeptBack": "{count} will be kept back because its messages could not be verified. This cannot be undone.",
+  "@storage_confirmKeptBack": {
+    "description": "Shown when the preview already knows a copy will be refused, so the user hears it before the press rather than after (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_confirmAction": "Clear {count} copies",
+  "@storage_confirmAction": {
+    "description": "Confirm button. Carries the count so the scope is the last thing read before the tap (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "storage_resultFailed": "Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.",
   "@storage_resultFailed": {
     "description": "Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962)."

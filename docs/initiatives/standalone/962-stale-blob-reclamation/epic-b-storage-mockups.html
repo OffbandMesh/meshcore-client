@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage card mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+/* Material 3, light scheme, blue seed, as main.dart actually configures it
+   (useMaterial3, ThemeMode.system, seed blue). Dark follows automatically and
+   is not drawn. Phone pane shown at 360 wide, the narrowest real target. */
+:root{
+  --surf:#FDFCFF; --surfC:#FFFFFF; --surfCHigh:#F3F3FA; --surfCHighest:#E5E2EA;
+  --onSurf:#1B1B1F; --onSurfVar:#45464F; --outline:#767680; --outlineVar:#C7C5D0;
+  --prim:#0B57D0; --onPrim:#FFFFFF; --primCont:#D8E2FF; --onPrimCont:#001849;
+  --err:#BA1A1A; --errCont:#FFDAD6; --onErrCont:#410002;
+  --okCont:#C4EED0; --onOkCont:#002110;
+  --warnCont:#FFDEA6; --onWarnCont:#2A1800;
+  --page:#15151A; --pageInk:#D8D8E0; --pageDim:#8E8E99;
+  --sans:'Roboto',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--pageInk);font-family:var(--sans);padding:24px 16px 48px}
+h1{font-size:26px;font-weight:500;color:#fff}
+h3{font-size:18px;font-weight:500;color:#9FC2FF;margin:30px 0 10px}
+.lede{font-size:15px;color:var(--pageDim);margin:8px 0 10px;max-width:980px;line-height:1.5}
+.lede b{color:var(--pageInk);font-weight:500}
+.grid{display:flex;flex-wrap:wrap;gap:28px}
+.card{width:360px}
+.card h2{font-size:17px;font-weight:500;color:#fff}
+.card .n{font-family:var(--mono);font-size:12px;color:#9FC2FF;margin-right:6px}
+.card p{font-size:14px;color:var(--pageInk);margin:4px 0 10px;line-height:1.35;min-height:60px}
+.card ul{font-size:13px;color:var(--pageDim);margin:10px 0 0 16px;line-height:1.4}
+.card ul b{color:var(--pageInk);font-weight:500}
+/* phone pane */
+.dev{width:360px;border:1px solid #2c2c33;border-radius:12px;overflow:hidden;background:var(--surf)}
+.appbar{height:56px;display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--surfCHigh);color:var(--onSurf)}
+.appbar .bk{font-size:20px;color:var(--onSurfVar)}
+.appbar .t{font-size:20px;font-weight:400}
+.pane{padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--surf)}
+.mc{background:var(--surfC);border-radius:12px;padding:16px 20px;color:var(--onSurf);border:1px solid var(--outlineVar)}
+.mc .ct{font-size:16px;font-weight:500;margin-bottom:8px}
+.mc .size{font-size:16px;margin-bottom:8px}
+.mc .hint{font-size:12px;color:var(--onSurfVar);line-height:1.45;margin-bottom:12px}
+.mc .res{font-size:14px;margin-top:12px;line-height:1.5}
+.mc .res.kept{color:var(--onWarnCont);background:var(--warnCont);border-radius:8px;padding:8px 10px;margin-top:8px}
+.mc .res.bad{color:var(--onErrCont);background:var(--errCont);border-radius:8px;padding:8px 10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 20px;border-radius:20px;
+  font-size:14px;font-weight:500;background:var(--primCont);color:var(--onPrimCont);border:none}
+.btn.off{background:var(--surfCHighest);color:var(--outline)}
+.btn.txt{background:none;color:var(--prim);padding:0 12px}
+.btn.dang{background:var(--errCont);color:var(--onErrCont)}
+.ghost{font-size:14px;color:var(--onSurfVar)}
+/* dialog */
+.scrim{background:rgba(0,0,0,.45);padding:28px 16px;display:flex;justify-content:center}
+.dlg{background:var(--surfCHigh);border-radius:28px;padding:24px;max-width:312px;width:100%;color:var(--onSurf)}
+.dlg .dt{font-size:24px;font-weight:400;line-height:1.25;margin-bottom:16px}
+.dlg .db{font-size:14px;color:var(--onSurfVar);line-height:1.5;margin-bottom:12px}
+.dlg .db b{color:var(--onSurf);font-weight:500}
+.dlg .note{font-size:13px;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.45}
+.dlg .note.ok{background:var(--okCont);color:var(--onOkCont)}
+.dlg .note.warn{background:var(--warnCont);color:var(--onWarnCont)}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--outline);border-top-color:transparent;border-radius:50%;margin-right:8px;vertical-align:-2px}
+.tag{font-family:var(--mono);font-size:11px;color:#9FC2FF}
+</style>
+</head>
+<body>
+<h1>Storage card and clear confirmation (Epic B, #966)</h1>
+<p class="lede">Material 3, light scheme, blue seed, as <span class="tag">main.dart</span> configures it. Dark follows the same tokens and is not drawn. Phone pane at 360 wide, the narrowest real target; the Windows pane is the same widget in a wider column. Numbers are the owner's actual install on 2026-10-22: <b>70.9 MB database, 47 migrated keys, 40 with a stale copy, 29,975 messages, about 16.6 MB reclaimable</b>. Bullets under each card are the behaviour to build. <b>Owner-approved 2026-10-23:</b> all variants as drawn, and the label stays <b>Clear Stale History Now</b> rather than "Compact" &mdash; his reason is that the name generalises, so the same action can later cover clearing stale history for other reasons, such as the retention limit in #963. Variants 1 to 10 are built; 11 is the rejected label alternative, kept for the record.</p>
+
+<h3>Where it lives</h3>
+<div class="grid">
+<div class="card"><h2><span class="n">1</span>App Settings, bottom of the pane</h2><p>A new <b>Storage</b> card after Cyr2Lat, last in the list. It is a read-only status plus one action, so it sits below the preference cards rather than among them.</p>
+<div class="dev"><div class="appbar"><span class="bk">&#8249;</span><span class="t">App Settings</span></div>
+<div class="pane">
+<div class="mc"><div class="ct">Cyrillic to Latin</div><div class="hint" style="margin:0">Transliterate incoming Cyrillic text.</div></div>
+<div class="mc"><div class="ct">Storage</div><div class="size">Message database: 70.9 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span></div>
+</div></div>
+<ul><li>Last card, so a destructive action is never the first thing under a thumb.</li><li>Size is read on build and after any clear. A failure to read it hides the row, never blocks the button (variant 7).</li><li>Same widget on Windows; only the column width differs.</li></ul></div>
+</div>
+
+<h3>The card's states, as built today</h3>
+<div class="grid">
+
+<div class="card"><h2><span class="n">2</span>Working</h2><p>The button disables and relabels while the sweep runs. A second tap in the same frame is also refused in code, because <span class="tag">setState</span> only schedules a rebuild.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 70.9 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn off"><span class="spin"></span>Clearing...</span></div></div></div>
+<ul><li>Two concurrent sweeps would mean two concurrent <span class="tag">VACUUM</span>s.</li><li>Re-enables on success and on failure, or the action works exactly once per launch.</li></ul></div>
+
+<div class="card"><h2><span class="n">3</span>Cleared</h2><p>Count and bytes returned, and the size row updates to what the sweep actually left behind rather than the number it started with.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 54.3 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span>
+<div class="res">Cleared 40 old copies, 16.6 MB returned.</div></div></div></div>
+<ul><li>Bytes come from SQLite either side of the sweep, not from adding up blob lengths.</li><li>Pressing again is harmless: those keys have no copy left, so it reports nothing to clear.</li></ul></div>
+
+<div class="card"><h2><span class="n">4</span>Cleared, with something kept back</h2><p>A key whose rows could not be verified keeps its copy and is <b>reported</b>, not merely logged. This is the case the Epic exists for.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 54.3 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span>
+<div class="res">Cleared 39 old copies, 16.2 MB returned.</div>
+<div class="res kept">Kept 1 that could not be verified. Your messages are intact; nothing was deleted for those.</div></div></div></div>
+<ul><li>Shown even when a refusal is the reason <b>nothing</b> was cleared, which is the most important case to surface, not the least.</li><li>The automatic 30-day sweep stays log-only: nobody is watching it.</li><li>Which keys and which records are named in the durable audit, not on screen.</li></ul></div>
+
+<div class="card"><h2><span class="n">5</span>Nothing to clear</h2><p>The ordinary state for anyone who has already swept, or who has no migrated history yet.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 54.3 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span>
+<div class="res">Nothing to clear.</div></div></div></div>
+<ul><li>Says so plainly rather than showing a zero-byte success.</li></ul></div>
+
+<div class="card"><h2><span class="n">6</span>Failed</h2><p>It must not read as "something was half-deleted", and it must not claim nothing happened either, because the sweep deletes per key and a throw can follow real deletes.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 70.9 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span>
+<div class="res bad">Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.</div></div></div></div>
+<ul><li>No exception text on screen; the reason goes to the log and the audit.</li></ul></div>
+
+<div class="card"><h2><span class="n">7</span>Size unreadable</h2><p>A size we cannot read is not a reason to block clearing, so the row is left out and the action stays live.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span></div></div></div>
+<ul><li>Logged as a warning, never surfaced as an error.</li></ul></div>
+
+</div>
+
+<h3>Proposed: confirm before deleting</h3>
+<p class="lede">None of this exists. It needs a <b>preview pass</b> in the sweep: verify every eligible key and total it, without deleting, so the dialog can state real numbers rather than a guess. The verification then runs twice, once to preview and once under the key lock to delete, which is the cost of saying what will go before it goes.</p>
+<div class="grid">
+
+<div class="card"><h2><span class="n">8</span>Confirm, the normal case</h2><p>States what will be cleared, what is not affected, and that it cannot be undone. The action button carries the count so the last thing read is the scope.</p>
+<div class="dev"><div class="scrim"><div class="dlg">
+<div class="dt">Clear stale history?</div>
+<div class="db">This removes <b>40 old copies</b> of history that has already moved to the new format, freeing about <b>16.6 MB</b>.</div>
+<div class="note ok">Your messages are not affected. All 29,975 stay.</div>
+<div class="note warn">This cannot be undone.</div>
+<div class="acts"><span class="btn txt">Cancel</span><span class="btn dang">Clear 40 copies</span></div>
+</div></div></div>
+<ul><li>Counts come from a real preview pass, not an estimate.</li><li>Cancel is the plain text button and sits left, so the destructive one is never the default target.</li><li>Dismissing by tapping outside or back cancels.</li></ul></div>
+
+<div class="card"><h2><span class="n">9</span>Confirm, with a forecast refusal</h2><p>If the preview already knows a key cannot be verified, say so <b>before</b> the press rather than reporting it afterwards.</p>
+<div class="dev"><div class="scrim"><div class="dlg">
+<div class="dt">Clear stale history?</div>
+<div class="db">This removes <b>39 old copies</b> of history that has already moved to the new format, freeing about <b>16.2 MB</b>.</div>
+<div class="note ok">Your messages are not affected. All 29,975 stay.</div>
+<div class="note warn">1 copy will be kept back because its messages could not be verified. This cannot be undone.</div>
+<div class="acts"><span class="btn txt">Cancel</span><span class="btn dang">Clear 39 copies</span></div>
+</div></div></div>
+<ul><li>The count in the button excludes what will be kept, so it matches what actually goes.</li><li>A refusal discovered only at delete time still reports after the fact, as variant 4.</li></ul></div>
+
+<div class="card"><h2><span class="n">10</span>Nothing eligible, no dialog</h2><p>With nothing to clear there is nothing to confirm, so the press reports straight away rather than opening a dialog to say "zero".</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 54.3 MB</div>
+<div class="hint">When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.</div>
+<span class="btn">Clear Stale History Now</span>
+<div class="res">Nothing to clear.</div></div></div></div>
+<ul><li>The preview runs on the press. Empty result means no dialog at all.</li><li>So the preview must be cheap enough to run on a tap: it reads and verifies, it does not write.</li></ul></div>
+
+<div class="card"><h2><span class="n">11</span>Label: the open question</h2><p>The owner said "Compact"; the button says "Clear Stale History Now". Drawn here with his word in the title and the plain description in the body.</p>
+<div class="dev"><div class="pane"><div class="mc"><div class="ct">Storage</div><div class="size">Message database: 70.9 MB</div>
+<div class="hint">Compacting removes the old copy of history that has already moved to the new format, and returns the space. It happens on its own 30 days after the move.</div>
+<span class="btn">Compact now</span></div></div></div>
+<ul><li>"Compact" is what <span class="tag">VACUUM</span> does and reads less alarming; "Clear Stale History" says what is removed.</li><li>Owner's call. Either way the dialog in variant 8 states the scope.</li></ul></div>
+
+</div>
+</body></html>

@@ -22,14 +22,19 @@ class StorageReclaimCard extends StatefulWidget {
   const StorageReclaimCard({
     super.key,
     BlobStore? blobs,
+    Future<StaleHistoryPreview> Function()? runPreview,
     Future<StaleHistoryOutcome> Function()? runSweep,
     Future<int> Function()? readSize,
   }) : _blobs = blobs,
+       _runPreview = runPreview,
        _runSweep = runSweep,
        _readSize = readSize;
 
   /// Injectable for tests; production reads the singleton.
   final BlobStore? _blobs;
+
+  /// The preview, injectable for the same reason as the sweep.
+  final Future<StaleHistoryPreview> Function()? _runPreview;
 
   /// The sweep, injectable.
   ///
@@ -85,12 +90,34 @@ class _StorageReclaimCardState extends State<StorageReclaimCard> {
       _error = null;
     });
     try {
-      // `olderThan: Duration.zero` is the whole point of the button: every
-      // migrated key is eligible immediately. The per-key verification is
-      // unchanged, so this skips the wait and not the safety.
-      final outcome =
-          await (widget._runSweep ??
-              () => StaleHistorySweep(_blobs).run(olderThan: Duration.zero))();
+      // Ask what WOULD go, then ask the user, then do it. Mockup variants 8
+      // to 10, owner-approved 2026-10-23: a delete this size has to state its
+      // scope before it runs.
+      final preview = await (widget._runPreview ?? _defaultPreview)();
+      if (!mounted) return;
+
+      // Nothing to clear means nothing to confirm. Reporting straight away
+      // beats opening a dialog to say zero (variant 10).
+      if (!preview.hasWork) {
+        setState(
+          () => _result = StaleHistoryOutcome(
+            cleared: const [],
+            refused: preview.refused,
+            bytesBefore: _sizeBytes ?? 0,
+            bytesAfter: _sizeBytes ?? 0,
+          ),
+        );
+        return;
+      }
+
+      final go = await _confirm(preview);
+      if (!go || !mounted) return;
+
+      // `olderThan: Duration.zero` with `includeNewlyStamped` is the whole
+      // point of the button: every migrated key is eligible immediately, even
+      // one stamped on this very pass. It skips the WAIT, not the safety; the
+      // per-key verification under the lock is unchanged.
+      final outcome = await (widget._runSweep ?? _defaultSweep)();
       if (!mounted) return;
       setState(() {
         _result = outcome;
@@ -104,6 +131,87 @@ class _StorageReclaimCardState extends State<StorageReclaimCard> {
       if (mounted) setState(() => _running = false);
     }
   }
+
+  Future<StaleHistoryPreview> _defaultPreview() => StaleHistorySweep(
+    _blobs,
+  ).preview(olderThan: Duration.zero, includeNewlyStamped: true);
+
+  Future<StaleHistoryOutcome> _defaultSweep() => StaleHistorySweep(
+    _blobs,
+  ).run(olderThan: Duration.zero, includeNewlyStamped: true);
+
+  /// The confirmation. Returns false on Cancel, on a tap outside, and on back.
+  Future<bool> _confirm(StaleHistoryPreview p) async {
+    final l10n = context.l10n;
+    final scheme = Theme.of(context).colorScheme;
+    final count = p.eligible.length;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.storage_confirmTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.storage_confirmBody(count, _mb(p.approximateBytes))),
+            const SizedBox(height: 12),
+            _note(
+              l10n.storage_confirmSafe(p.messagesKept),
+              Icons.check,
+              scheme.secondaryContainer,
+              scheme.onSecondaryContainer,
+            ),
+            const SizedBox(height: 8),
+            _note(
+              p.refused.isEmpty
+                  ? l10n.storage_confirmIrreversible
+                  : l10n.storage_confirmKeptBack(p.refused.length),
+              Icons.warning_amber,
+              scheme.tertiaryContainer,
+              scheme.onTertiaryContainer,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.common_cancel),
+          ),
+          FilledButton.tonal(
+            // Carries the count, so the last thing read before the tap is the
+            // scope of what it does.
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.errorContainer,
+              foregroundColor: scheme.onErrorContainer,
+            ),
+            child: Text(l10n.storage_confirmAction(count)),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Widget _note(String text, IconData icon, Color bg, Color fg) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: fg),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(text, style: TextStyle(fontSize: 13, color: fg)),
+        ),
+      ],
+    ),
+  );
 
   static String _mb(int bytes) =>
       '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';

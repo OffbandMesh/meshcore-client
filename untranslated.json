@@ -273,6 +273,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -550,6 +556,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -827,6 +839,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -1104,6 +1122,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -1381,6 +1405,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -1658,6 +1688,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -1935,6 +1971,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -2212,6 +2254,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -2489,6 +2537,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -2766,6 +2820,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -3043,6 +3103,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -3320,6 +3386,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -3597,6 +3669,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -3874,6 +3952,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -4151,6 +4235,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -4428,6 +4518,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ],
 
@@ -4705,6 +4801,12 @@
     "storage_resultNothing",
     "storage_resultCleared",
     "storage_resultRefused",
+    "storage_confirmTitle",
+    "storage_confirmBody",
+    "storage_confirmSafe",
+    "storage_confirmIrreversible",
+    "storage_confirmKeptBack",
+    "storage_confirmAction",
     "storage_resultFailed"
   ]
 }

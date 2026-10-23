@@ -5455,6 +5455,32 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get storage_confirmTitle => 'Clear stale history?';
+
+  @override
+  String storage_confirmBody(int count, String size) {
+    return 'This removes $count old copies of history that has already moved to the new format, freeing about $size.';
+  }
+
+  @override
+  String storage_confirmSafe(int count) {
+    return 'Your messages are not affected. All $count stay.';
+  }
+
+  @override
+  String get storage_confirmIrreversible => 'This cannot be undone.';
+
+  @override
+  String storage_confirmKeptBack(int count) {
+    return '$count will be kept back because its messages could not be verified. This cannot be undone.';
+  }
+
+  @override
+  String storage_confirmAction(int count) {
+    return 'Clear $count copies';
+  }
+
+  @override
   String get storage_resultFailed =>
       'Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.';
 }

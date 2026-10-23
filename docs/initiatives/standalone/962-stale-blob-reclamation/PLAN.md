@@ -64,8 +64,10 @@
 
 | Task | Pts |
 |---|---|
+| **B0 · Mock-ups FIRST, owner-approved before any of it is built.** Every state of every new surface, as a committed HTML file beside this plan, in the format the firmware initiative uses: numbered variants, real chrome and tokens, example values from the owner's own install, and the behaviour to build as bullets under each. **Added 2026-10-23, after this Epic's UI was built and installed on both his machines without him ever seeing the design.** The plan had no such step, which is why that happened. | 2 |
 | **B1 · The action** in Settings, showing database size before and after and how many keys were cleared, with the same re-verify and refusal path as the sweep. Per decision 4 it **reports keys it refused** in the result, not just the log: "cleared 12, kept 1 that failed verification". | 3 |
-| **B2 · Widget tests:** the action with nothing eligible, with eligible keys, and with a key whose re-verify fails (which must report a refusal rather than silence). | 3 |
+| **B1a · A confirmation stating the scope** before anything is deleted: how many copies, roughly how much space, how many messages are *not* affected, and that it cannot be undone. Needs a **preview pass** in the sweep, verifying every eligible key and totalling it without deleting, so the numbers are real rather than estimated. Verification then runs twice for a confirmed clear, once to preview and once under the key lock. That is the price of saying what will go before it goes. Owner-required 2026-10-23. | 3 |
+| **B2 · Widget tests:** the action with nothing eligible, with eligible keys, and with a key whose re-verify fails (which must report a refusal rather than silence). Plus the confirmation: it states the scope, Cancel deletes nothing and leaves the action usable, a forecast refusal is shown before the press, and nothing eligible opens no dialog at all. | 3 |
 | **B3 · Epic verification** | 1 |
 
 ### Epic C: Integration Testing
@@ -155,6 +157,14 @@ Owner, 2026-10-22: *"X = 30, sweep once per launch, timestamps in separate blob,
 | 4 | If a key's re-verify fails, does the user hear about it? | **The manual action reports it. The automatic sweep stays log-only.** | The user pressed a button, so "cleared 12 keys, kept 1 that failed verification" is the honest result. Silence is how #952 went unnoticed. The automatic sweep has no one watching, so a log line is the right place for it. |
 
 **30 days is a named constant, not a literal scattered through the sweep**, so changing it later is one edit and the tests can set it directly rather than manipulating clocks.
+
+### Added 2026-10-23, after the mock-up review
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 5 | Does the manual action confirm before deleting? | **Yes, stating the scope**: how many copies, roughly how much space, how many messages are not affected, and that it cannot be undone. | It deletes and cannot be undone. See B1a; it needs a preview pass, and the mock-up's variants 8 to 10 are the approved shape. |
+| 6 | "Compact" or "Clear Stale History"? | **Clear Stale History Now** | Owner's reason, and the better argument: the name generalises, so the same action can later cover clearing stale history for other reasons, such as the retention limit in #963. "Compact" describes `VACUUM`, which is an implementation detail. |
+| 7 | Does an explicit press clear a key that has no timestamp yet? | **Yes.** The automatic sweep still refuses. | Found while building the preview. The "skip anything stamped this pass" guard exists so installing an update never deletes on sight, and it was being applied to the button too. Every install that migrated before #962 has no stamps, so the button would have reported "nothing to clear" against real reclaimable blobs. The owner's install was exactly that: 47 migrated keys, none stamped. `eligibleByAge` is now the one rule both paths share. |
 
 ## 10. Carried-in work
 

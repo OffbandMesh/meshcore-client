@@ -350,6 +350,18 @@ class BlobStore {
   /// through hash-identical, with the row count unchanged.
   Future<void> vacuum() => _db.customStatement('VACUUM');
 
+  /// Every stored message, across every key.
+  ///
+  /// For the clear-confirmation dialog, which has to say what is NOT being
+  /// deleted (#962).
+  Future<int> totalMessageRows() async {
+    final count = _db.messageRecords.mergeKey.count();
+    final row = await (_db.selectOnly(
+      _db.messageRecords,
+    )..addColumns([count])).getSingle();
+    return row.read(count) ?? 0;
+  }
+
   /// How many messages are stored under [storeKey].
   Future<int> messageRowCount(String storeKey) async {
     final count = _db.messageRecords.mergeKey.count();
