@@ -220,6 +220,84 @@ class BlobStore {
     return rows.map((r) => r.read(key)!).toSet();
   }
 
+  /// Which of [storeKey]'s blob records have no row, or **null** when that
+  /// cannot be determined (#962).
+  ///
+  /// The migration gate's readback check, as a question anyone can ask without
+  /// migrating anything. The sweep asks it again immediately before deleting a
+  /// blob rather than trusting the marker, which is the difference between
+  /// "we recorded that this migrated" and "we just confirmed it".
+  ///
+  /// Empty means every blob record is present as a row and the blob is
+  /// genuinely redundant. **Null means the question could not be answered** -
+  /// the blob would not decode - and a caller must treat that as a refusal,
+  /// never as "nothing is missing". Those two are deliberately different
+  /// values: conflating them is how a sweep would delete the one copy of an
+  /// unreadable history.
+  Future<List<String>?> missingFromRows(
+    String storeKey,
+    BlobToRowsCallback toRows,
+  ) async {
+    final blob = await readWithPrefsFallback(storeKey);
+    if (blob == null || blob.isEmpty) return const [];
+
+    final List<MessageRowInput> rows;
+    try {
+      rows = await compute(toRows, blob);
+    } catch (e) {
+      appLogger.error(
+        'Cannot verify $storeKey against its rows: its ${blob.length} char '
+        'blob will not decode ($e). Treating this as unverifiable; the blob '
+        'is kept.',
+        tag: 'Storage',
+      );
+      return null;
+    }
+
+    return _absentFrom(
+      rows.map((r) => r.mergeKey),
+      await messageMergeKeys(storeKey),
+    );
+  }
+
+  /// The one place the "no blob record is missing from rows" rule lives.
+  ///
+  /// Both the migration gate and the sweep decide by this. The gate cannot
+  /// just call [missingFromRows], because it has already decoded the blob and
+  /// a second `compute` over multiple megabytes on the migration path would
+  /// cost more than the duplication saves. Sharing the comparison keeps the
+  /// RULE single even though the decode is not.
+  static List<String> _absentFrom(
+    Iterable<String> wanted,
+    Set<String> stored,
+  ) => wanted.where((k) => !stored.contains(k)).toSet().toList();
+
+  /// The database's size in bytes, from SQLite itself.
+  ///
+  /// `page_count * page_size` rather than the file length, so it works for an
+  /// in-memory database in tests and does not need the file path. It counts
+  /// free pages, which is the point: it is what shows that a `DELETE` alone
+  /// reclaims nothing.
+  Future<int> databaseSizeBytes() async {
+    Future<int> pragma(String name) async {
+      final row = await _db.customSelect('PRAGMA $name').getSingle();
+      return row.data.values.first as int;
+    }
+
+    return (await pragma('page_count')) * (await pragma('page_size'));
+  }
+
+  /// Rebuilds the database, returning free pages to the filesystem.
+  ///
+  /// Required: deleting rows marks pages free for reuse and does not shrink
+  /// anything. Measured on the owner's database, deleting all 40 migrated
+  /// blobs moved the file from 74,350,592 bytes to 74,350,592 bytes.
+  ///
+  /// It removes nothing of its own. Verified against a copy of a real
+  /// database: 291 kept keys including all 98 unmigrated history blobs came
+  /// through hash-identical, with the row count unchanged.
+  Future<void> vacuum() => _db.customStatement('VACUUM');
+
   /// How many messages are stored under [storeKey].
   Future<int> messageRowCount(String storeKey) async {
     final count = _db.messageRecords.mergeKey.count();
@@ -295,6 +373,7 @@ class BlobStore {
       keys.add(storeKey);
       await write(migratedMarkerKey, jsonEncode(keys.toList()));
     });
+    await _stampMigratedAt(storeKey);
   }
 
   /// Whether [storeKey] reads from rows. False means its blob is still the
@@ -303,7 +382,86 @@ class BlobStore {
       (await _loadMigratedKeys()).contains(storeKey);
 
   @visibleForTesting
-  void resetMigratedKeyCache() => _migratedKeys = null;
+  void resetMigratedKeyCache() {
+    _migratedKeys = null;
+    _migratedAt = null;
+  }
+
+  /// When each migrated key migrated, as epoch milliseconds (#962).
+  ///
+  /// Deliberately a SECOND blob rather than reshaping [migratedMarkerKey] into
+  /// a map. That marker is read on every save and every load through
+  /// [_loadMigratedKeys]'s cache, so changing its shape would put a migration
+  /// of its own on the hottest storage path. These timestamps are read only by
+  /// the once-per-launch sweep, which is cold. Owner decision 2026-10-22.
+  static const String migratedAtKey = '__msgrows_migrated_at';
+
+  Map<String, int>? _migratedAt;
+
+  Future<Map<String, int>> _loadMigratedAt() async {
+    if (_migratedAt != null) return _migratedAt!;
+    final raw = await read(migratedAtKey);
+    if (raw == null || raw.isEmpty) return _migratedAt = <String, int>{};
+    try {
+      return _migratedAt = (jsonDecode(raw) as Map<String, dynamic>).map(
+        (k, v) => MapEntry(k, v as int),
+      );
+    } catch (e) {
+      // Same safe direction as the marker: an unreadable file means no key has
+      // a known migration time, so nothing is old enough to sweep and every
+      // blob stays. Re-stamped on the next pass.
+      appLogger.error(
+        'Could not decode the row-migration timestamps, so no blob will be '
+        'treated as stale (every blob is intact): $e',
+        tag: 'Storage',
+      );
+      return _migratedAt = <String, int>{};
+    }
+  }
+
+  Future<void> _stampMigratedAt(String storeKey, [DateTime? at]) async {
+    await synchronized(migratedAtKey, () async {
+      final stamps = await _loadMigratedAt();
+      if (at == null && stamps.containsKey(storeKey)) return;
+      stamps[storeKey] = (at ?? DateTime.now()).millisecondsSinceEpoch;
+      await write(migratedAtKey, jsonEncode(stamps));
+    });
+  }
+
+  /// When [storeKey] migrated to rows, or null if it has not or is unstamped.
+  Future<DateTime?> messageRowsMigratedAt(String storeKey) async {
+    final ms = (await _loadMigratedAt())[storeKey];
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Stamps any already-migrated key that has no timestamp, with [now].
+  ///
+  /// The backfill for installs that migrated before #962 shipped. Such a key
+  /// is stamped on first sight rather than treated as eligible, so updating
+  /// the app never deletes a blob on the spot: every key gets the full window
+  /// measured from when we first knew about it. Returns the keys stamped.
+  Future<List<String>> backfillMigratedAt({DateTime? now}) async {
+    final marked = await _loadMigratedKeys();
+    final stamps = await _loadMigratedAt();
+    final missing = marked.where((k) => !stamps.containsKey(k)).toList()
+      ..sort();
+    for (final k in missing) {
+      await _stampMigratedAt(k, now ?? DateTime.now());
+    }
+    if (missing.isNotEmpty) {
+      appLogger.info(
+        'Stamped ${missing.length} already-migrated key(s) with a migration '
+        'time for the first time. Each starts its stale window from now, so '
+        'nothing is swept on this launch.',
+        tag: 'Storage',
+      );
+    }
+    return missing;
+  }
+
+  @visibleForTesting
+  Future<void> setMessageRowsMigratedAtForTest(String storeKey, DateTime at) =>
+      _stampMigratedAt(storeKey, at);
 
   /// Moves [storeKey]'s blob into rows, once, and reports whether the key is
   /// now on rows (#920).
@@ -418,9 +576,7 @@ class BlobStore {
       }
 
       final storedKeys = await messageMergeKeys(storeKey);
-      final missing = deduped.keys
-          .where((k) => !storedKeys.contains(k))
-          .toList();
+      final missing = _absentFrom(deduped.keys, storedKeys);
       if (missing.isNotEmpty) {
         appLogger.error(
           'Row migration of $storeKey REFUSED: ${missing.length} of the '

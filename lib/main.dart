@@ -32,6 +32,7 @@ import 'services/observer_config_service.dart';
 import 'services/block_service.dart';
 import 'services/window_geometry_service.dart';
 import 'services/store_consolidation_service.dart';
+import 'services/stale_history_sweep.dart';
 import 'services/storage_health_service.dart';
 import 'services/radio_preset_service.dart';
 import 'storage/drift/blob_store.dart';
@@ -184,6 +185,38 @@ void main() async {
   // executor.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(AppExitInfoService.instance.collect());
+
+    // Reclaim the stale pre-migration history blobs (#962), once per launch.
+    //
+    // Same shape and the same reasoning as the collector above: after the
+    // first frame and not awaited, because storage hygiene must never be on
+    // the path to a usable screen. It is a no-op on almost every launch, since
+    // a key is swept once and then has no blob left to consider, so the
+    // VACUUM inside it is rare rather than per-launch.
+    //
+    // Caught HERE rather than inside the sweep. Nothing about reclaiming disk
+    // space is worth a broken start, but the manual action (#966) needs a
+    // failure it can report to the user, so `run` stays able to throw and this
+    // fire-and-forget call site is what absorbs it.
+    unawaited(
+      StaleHistorySweep(BlobStore.instance).run().catchError((
+        Object e,
+        StackTrace s,
+      ) {
+        appLogger.error(
+          'The startup stale-history sweep failed and was skipped. No blob is '
+          'deleted on this path unless it was verified first, so the history '
+          'is intact: $e\n$s',
+          tag: 'Storage',
+        );
+        return const StaleHistoryOutcome(
+          cleared: [],
+          refused: [],
+          bytesBefore: 0,
+          bytesAfter: 0,
+        );
+      }),
+    );
   });
 }
 
