@@ -16,14 +16,18 @@ List<String> forbiddenImports(String source) => [
     if (_forbidden(m.group(1)!)) m.group(1)!,
 ];
 
-bool _forbidden(String uri) =>
-    uri.contains('fake_radio') ||
-    uri.contains('/test/') ||
-    uri.startsWith('test/') ||
-    uri.contains('../test') ||
-    uri.contains('/tool/') ||
-    uri.startsWith('tool/') ||
-    uri.contains('../tool');
+bool _forbidden(String raw) {
+  // Windows and macOS resolve paths without regard to case, and a Windows
+  // path may use backslashes, so compare a folded form.
+  final uri = raw.toLowerCase().replaceAll(r'\', '/');
+  return uri.contains('fake_radio') ||
+      uri.contains('/test/') ||
+      uri.startsWith('test/') ||
+      uri.contains('../test') ||
+      uri.contains('/tool/') ||
+      uri.startsWith('tool/') ||
+      uri.contains('../tool');
+}
 
 void main() {
   test('nothing under lib/ imports the fake radio, test/ or tool/', () {
@@ -50,8 +54,10 @@ import 'package:meshcore_open/x/fake_radio_runner.dart';
 export '../tool/fake_radio.dart';
 part 'test/thing.dart';
 import "../services/storage_service.dart";
+import '../../Test/Support/Helpers.dart';
+import '..\\..\\test\\support\\helpers.dart';
 '''),
-      hasLength(4),
+      hasLength(6),
     );
   });
 }

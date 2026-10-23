@@ -27,7 +27,9 @@ class FakeRadioRunner {
   }) async {
     final server = await FakeRadioTcpServer.start(
       radio,
-      address: address ?? InternetAddress.anyIPv4,
+      // Loopback unless asked: a fake radio need not be reachable from the
+      // network.
+      address: address ?? InternetAddress.loopbackIPv4,
       port: port,
     );
     final ticker = Timer.periodic(tick, (_) => radio.clock.advance(tick));

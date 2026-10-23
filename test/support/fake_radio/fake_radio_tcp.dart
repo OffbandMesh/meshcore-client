@@ -14,6 +14,10 @@ import 'fake_radio.dart';
 const int _appToRadioStart = 0x3c;
 const int _radioToAppStart = 0x3e;
 
+/// `MAX_FRAME_SIZE` (src/helpers/BaseSerialInterface.h:5 at
+/// offband-v1.5.0-beta7).
+const int maxFrameSize = 176;
+
 /// The fake radio on a TCP port, for the client's real `connectTcp` path and
 /// for the desktop app (#768, #780).
 class FakeRadioTcpServer {
@@ -74,8 +78,13 @@ class FakeRadioTcpServer {
           if (buffer.length < 3) return;
           final len = buffer[1] | (buffer[2] << 8);
           if (buffer.length < 3 + len) return;
-          final payload = Uint8List.fromList(buffer.sublist(3, 3 + len));
+          // ArduinoSerialInterface::checkRecvFrame: a zero length is skipped,
+          // and a frame over MAX_FRAME_SIZE is read to its end, then cut.
+          final payload = Uint8List.fromList(
+            buffer.sublist(3, 3 + (len > maxFrameSize ? maxFrameSize : len)),
+          );
           buffer.removeRange(0, 3 + len);
+          if (len == 0) continue;
           for (final reply in radio.handle(payload)) {
             socket.add(_wrap(reply));
           }
