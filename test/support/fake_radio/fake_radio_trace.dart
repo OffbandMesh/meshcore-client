@@ -224,8 +224,10 @@ class FakeRadioTrace {
       ...sent,
       for (var i = sent.length; i < total; i++)
         FakeContact(
+          // Not 0x00 or 0xFF first: firmware treats those as reserved id
+          // hashes (companion-v1.18.0 MyMesh.cpp:951).
           publicKey: Uint8List(fwPubKeySize)
-            ..[0] = 0xFF
+            ..[0] = 0x5A
             ..[1] = i & 0xFF,
           name: 'Unsent ${i - sent.length + 1}',
           lastmod: 0,

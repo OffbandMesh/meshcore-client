@@ -199,6 +199,14 @@ void main() {
         (915.8, '915.7999877'),
         (-3.25, '-3.25'),
         (0.0, '0.0'),
+        // Edges: too small (denormal included) or too large prints "0".
+        (1e-40, '0'),
+        (1e-8, '0'),
+        (1e-7, '0'),
+        (3e9, '0'),
+        (0.001, '0.0009999'),
+        (0.1, '0.0999999'),
+        (-0.5, '-0.5'),
       ];
       for (final (value, text) in firmware) {
         expect(FakeRemoteNode.ftoa(value), text, reason: '$value');

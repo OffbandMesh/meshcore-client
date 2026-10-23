@@ -1,12 +1,12 @@
 # Feature #755: outcomes
 
-Written from what happened, including what failed. Plan: [PLAN.md](PLAN.md). Dates are 2026-10-04 to 2026-10-20.
+Written from what happened, including what failed. Plan: [PLAN.md](PLAN.md). Dates are 2026-10-04 to 2026-10-23.
 
 ## In plain language
 
 The app's tests can now connect to a radio that isn't there. A fake MeshCore companion radio, written in Dart, answers the same frames a real one does, copied from the firmware source. It plays stock MeshCore or Offband firmware. Every PR's CI connects the real connector to it under both, and covers connect, sync, messages, acks and retries, Companion presets, and remote presets on a repeater, room server and sensor. CI also fails when the client's protocol codes disagree with the firmware's.
 
-To check the fake against real firmware, two real radios were recorded: a Heltec V4 on stock MeshCore 1.18.0, and a RAK4631 on Offband 1.5.0-beta7. A fake loaded from each recording gives every reply that radio gave, byte for byte. The recordings were anonymized before they were committed.
+To check the fake against real firmware, two real radios were recorded: a Heltec V4 on stock MeshCore 1.18.0, and a RAK4631 on Offband 1.5.0-beta7. A fake loaded from each recording gives every reply that radio gave, byte for byte, with one exception: leftover bytes after the NUL that ends a channel name are not compared. The recordings were anonymized before they were committed, though the first version missed two things (see What went wrong).
 
 The same fake runs as a program on a PC (`dart run tool/fake_radio.dart`), so the desktop app can connect to it over TCP with no radio attached. The owner has not yet run the app against it, which is the remaining half of D1.
 
@@ -26,7 +26,14 @@ The same fake runs as a program on a PC (`dart run tool/fake_radio.dart`), so th
   - Stock: Heltec V4, `v1.18.0-81dbae5`, code 14, 82-byte DEVICE_INFO, 40 channels, 350 contacts. Replay: no differences.
   - Offband: RAK4631, `1.5.0-1.17.0`, code 22, 87-byte DEVICE_INFO, caps `0x22`, caps2 `0x0e`. Replay: no differences after the seeding fix below.
   - Each pinned profile matches what its radio reports: version code, version string (stock appends the commit, `81dbae5`, which matches the pinned manifest's commit), DEVICE_INFO length, and every capability bit the profile sets.
-- **Anonymization:** 1405 (stock) and 1385 (Offband) real keys, names, positions and channel secrets were searched for in the fixtures. None was found; the only matches were all-zero fields. The same search finds all 348 real contact keys in the raw capture, so the check can fail.
+- **Anonymization:** every real key, name, position, channel secret, path fragment (3 bytes or more) and contact advert time was searched for in the fixtures. The counts are stock / Offband:
+  - keys 351 / 349;
+  - names 365 / 365;
+  - positions 309 / 285;
+  - advert times 687 / 545.
+
+  None was found. The only match was the all-zero secret of an empty channel slot. The same search finds every one of them in the raw captures, so the check can fail.
+- **Gemini adversarial gate** (`llm-consult.py`, `gemini-2.5-pro`), one review per Epic, with the firmware source at the pinned tags. A: 8 findings, B: 6, C: 7, D: 9. Each was checked against the code and firmware before acting. Fixed or rejected with a reason in each Epic's PR body.
 - **Determinism:** same seed, same result over 20 connects (A6). After its flake fix, the TCP connect test passed five full clean runs.
 - **Acceptance bar (PLAN §6):** the handshake reaches `connected` under both profiles and both adapters; the stock profile sees no Offband feature or command; the manifest check fails on a doctored constant; a dropped ack is retried; a remote `tempradio` goes last; nothing under `lib/` imports the fake (and the guard catches each way it could).
 - **#748 requirement:** remote preset apply checks that no error text appears on a good save, and that the firmware's error text comes back on a refused one (`connector_scenarios_test.dart:264-297`).
@@ -45,6 +52,13 @@ Things the fake radio work turned up in the client or firmware. None is fixed in
 
 ## What went wrong
 
+- **The first fixtures were not fully anonymized, and they are public.** Pushed with #942 on 2026-10-20 and still reachable in that PR's history, they held:
+  - 13 bytes of real path data that firmware leaves past the end of a contact's path. Those are fragments of real repeaters' key prefixes; the anonymizer rewrote only the bytes inside the path.
+  - Every contact's real advert times. A public observer's log could match those back to the real nodes, and so to the owner's region.
+
+  Found by the Gemini review. The anonymizer now rewrites every nonzero path byte and replaces advert times. It also refuses any reply type or custom variable it does not know, and replaces GPS coordinates in the Offband GPS status text. Both fixtures were regenerated and re-checked.
+- **The Gemini adversarial gate was skipped on all four Epics.** `/pushpr` makes it required; every PR went up without it. Run on 2026-10-22, before the rebased stack was pushed.
+- **Citadel tasks D2 and D3 were closed before CI was green,** which `/pushpr` forbids. Reopened.
 - **The fake's stock remote node used Offband's number format.** B3 copied `get radio` from Offband's `CommonCLI` for both profiles; stock formats the frequency differently (finding 3). It came out while checking the 1.18.0 re-pin. Fixed, with the Dart port checked against the firmware function compiled with g++.
 - **The capture script filed Offband replies as pushes.** It treated every code from `0x80` up as a push, and Offband replies are `0xC0` to `0xCF`. The end-to-end test that runs the script against the runner caught it before any real capture.
 - **The first real captures misfiled answers.** A radio answers slowly right after the port opens, and one answered a step late, so replies landed under the next request. The script now waits for the first answer before timing anything, and waits up to 5 seconds per step. Both radios were recaptured clean. The conformance test checks one answer per request, because a misfiled capture can still replay clean.
