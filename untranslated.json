@@ -168,6 +168,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -262,7 +264,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "de": [
@@ -434,6 +445,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -528,7 +541,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "es": [
@@ -700,6 +722,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -794,7 +818,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "fr": [
@@ -966,6 +999,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -1060,7 +1095,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "hu": [
@@ -1232,6 +1276,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -1326,7 +1372,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "it": [
@@ -1498,6 +1553,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -1592,7 +1649,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "ja": [
@@ -1764,6 +1830,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -1858,7 +1926,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "ko": [
@@ -2030,6 +2107,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -2124,7 +2203,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "nl": [
@@ -2296,6 +2384,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -2390,7 +2480,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "pl": [
@@ -2562,6 +2661,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -2656,7 +2757,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "pt": [
@@ -2828,6 +2938,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -2922,7 +3034,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "ru": [
@@ -3094,6 +3215,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -3188,7 +3311,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "sk": [
@@ -3360,6 +3492,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -3454,7 +3588,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "sl": [
@@ -3626,6 +3769,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -3720,7 +3865,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "sv": [
@@ -3892,6 +4046,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -3986,7 +4142,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "uk": [
@@ -4158,6 +4323,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -4252,7 +4419,16 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ],
 
   "zh": [
@@ -4424,6 +4600,8 @@
     "block_settingsTitle",
     "block_settingsSubtitle",
     "block_none",
+    "block_noRadio",
+    "block_noRadioHint",
     "block_keysSection",
     "block_namesSection",
     "block_namesHint",
@@ -4518,6 +4696,15 @@
     "setRegionScope_save",
     "setRegionScope_searchRepeaters",
     "setRegionScope_pathNote",
-    "setRegionScope_noPath"
+    "setRegionScope_noPath",
+    "storage_title",
+    "storage_databaseSize",
+    "storage_staleHint",
+    "storage_clearStaleNow",
+    "storage_working",
+    "storage_resultNothing",
+    "storage_resultCleared",
+    "storage_resultRefused",
+    "storage_resultFailed"
   ]
 }

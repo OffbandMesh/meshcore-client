@@ -11,11 +11,12 @@ import '../../services/app_settings_service.dart';
 import '../../services/translation_service.dart';
 import '../../helpers/settings_persist.dart';
 import '../../helpers/snack_bar_builder.dart';
+import '../../widgets/storage_reclaim_card.dart';
 import '../map_cache_screen.dart';
 
 /// Embeddable view (no Scaffold) for the App Settings shell pane.
 ///
-/// Renders appearance, translation, battery, map, and Cyr2Lat cards.
+/// Renders appearance, translation, battery, map, Cyr2Lat and storage cards.
 /// Notifications and message-handling settings live in [MessageSettingsView];
 /// app debug logging lives in the Debug category on the settings screen.
 class AppSettingsView extends StatelessWidget {
@@ -44,6 +45,10 @@ class AppSettingsView extends StatelessWidget {
                 _buildMapSettingsCard(context, settingsService),
                 const SizedBox(height: 16),
                 _buildCyr2LatCard(context, settingsService),
+                const SizedBox(height: 16),
+                // #962. Its own widget rather than another card in this file,
+                // which is already past a thousand lines.
+                const StorageReclaimCard(),
               ],
             );
           },

@@ -3297,5 +3297,47 @@
   "setRegionScope_save": "Save",
   "setRegionScope_searchRepeaters": "Search repeaters",
   "setRegionScope_pathNote": "You can only discover regions from a repeater you have a stored path to.",
-  "setRegionScope_noPath": "No stored path"
+  "setRegionScope_noPath": "No stored path",
+  "storage_title": "Storage",
+  "storage_databaseSize": "Message database: {size}",
+  "@storage_databaseSize": {
+    "description": "Current size of the message database on this device (#962).",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_staleHint": "When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.",
+  "@storage_staleHint": {
+    "description": "Explains what the Clear Stale History action does (#962)."
+  },
+  "storage_clearStaleNow": "Clear Stale History Now",
+  "storage_working": "Clearing...",
+  "storage_resultNothing": "Nothing to clear.",
+  "storage_resultCleared": "Cleared {count} old copies, {size} returned.",
+  "@storage_resultCleared": {
+    "description": "Result of a successful stale-history clear (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_resultRefused": "Kept {count} that could not be verified. Your messages are intact; nothing was deleted for those.",
+  "@storage_resultRefused": {
+    "description": "Reported when the clear kept a copy back because its messages could not be verified against the new format (#962, owner decision: the button reports refusals rather than only logging them).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_resultFailed": "Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.",
+  "@storage_resultFailed": {
+    "description": "Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962)."
+  }
 }

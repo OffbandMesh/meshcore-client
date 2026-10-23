@@ -9177,6 +9177,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No stored path'**
   String get setRegionScope_noPath;
+
+  /// No description provided for @storage_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get storage_title;
+
+  /// Current size of the message database on this device (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Message database: {size}'**
+  String storage_databaseSize(String size);
+
+  /// Explains what the Clear Stale History action does (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.'**
+  String get storage_staleHint;
+
+  /// No description provided for @storage_clearStaleNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Stale History Now'**
+  String get storage_clearStaleNow;
+
+  /// No description provided for @storage_working.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing...'**
+  String get storage_working;
+
+  /// No description provided for @storage_resultNothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to clear.'**
+  String get storage_resultNothing;
+
+  /// Result of a successful stale-history clear (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared {count} old copies, {size} returned.'**
+  String storage_resultCleared(int count, String size);
+
+  /// Reported when the clear kept a copy back because its messages could not be verified against the new format (#962, owner decision: the button reports refusals rather than only logging them).
+  ///
+  /// In en, this message translates to:
+  /// **'Kept {count} that could not be verified. Your messages are intact; nothing was deleted for those.'**
+  String storage_resultRefused(int count);
+
+  /// Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.'**
+  String get storage_resultFailed;
 }
 
 class _AppLocalizationsDelegate

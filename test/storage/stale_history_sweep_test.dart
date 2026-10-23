@@ -369,6 +369,50 @@ void main() {
     });
   });
 
+  group('what the manual action relies on (#966)', () {
+    test('olderThan zero makes a key migrated seconds ago eligible', () async {
+      // The button passes Duration.zero, which is the whole point of it: no
+      // waiting 30 days. Proven here under plain `test()` rather than in the
+      // widget test, because the sweep uses `compute` and an isolate
+      // deadlocks pumpAndSettle in flutter_test's fake-async zone. The widget
+      // test injects the sweep for that reason, so this is what keeps the
+      // semantic it injects honest.
+      await blobs.write(key, bigBlobWith(20));
+      expect(await blobs.ensureMessageRowsMigrated(key, toRows), isTrue);
+
+      // The default window leaves it alone.
+      expect((await StaleHistorySweep(blobs).run()).cleared, isEmpty);
+      expect(await blobs.read(key), isNotNull);
+
+      // Duration.zero does not.
+      final outcome = await StaleHistorySweep(
+        blobs,
+      ).run(olderThan: Duration.zero);
+
+      expect(outcome.cleared, [key]);
+      expect(await blobs.read(key), isNull);
+      expect(await blobs.messageRowCount(key), 20);
+    });
+
+    test('olderThan zero still refuses an unverifiable key', () async {
+      // Skipping the wait must not skip the safety.
+      await blobs.write(key, bigBlobWith(20));
+      await blobs.ensureMessageRowsMigrated(key, toRows);
+      await blobs.deleteMessageRow(
+        key,
+        (await blobs.messageMergeKeys(key)).first,
+      );
+
+      final outcome = await StaleHistorySweep(
+        blobs,
+      ).run(olderThan: Duration.zero);
+
+      expect(outcome.cleared, isEmpty);
+      expect(outcome.refused, [key]);
+      expect(await blobs.read(key), isNotNull);
+    });
+  });
+
   group('a direct-message key sweeps too', () {
     test('messages_ uses the DM converter and is cleared', () async {
       const dmKey = 'messages_aaaaaaaaaacafebabe';
