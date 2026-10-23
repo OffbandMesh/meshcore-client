@@ -10,10 +10,10 @@
 
 ## At a glance
 
-- **What:** each migrated message key gets a timestamp; X days later its stale blob is deleted, with a Settings action to do it immediately.
+- **What:** each migrated message key gets a timestamp; **30 days** later its stale blob is deleted, with a Settings action to do it immediately.
 - **Why now:** schema 2 has not shipped. Every install that takes it will hold its message history twice, and the fix can be in place before anyone receives it.
 - **How:** Epic A writes the timestamps and the sweep, Epic B the manual action, Epic C the owner's hardware check.
-- **Done when:** a key migrated more than X days ago has no blob, the file has actually shrunk, and a key whose re-verify fails still has its blob.
+- **Done when:** a key migrated more than 30 days ago has no blob, the file has actually shrunk, and a key whose re-verify fails still has its blob.
 
 ## 1. Diagnosis
 
@@ -37,7 +37,7 @@
 
 **In:**
 - A per-key migration timestamp, including a backfill for keys already migrated when this ships.
-- An automatic sweep that deletes a stale blob once its key is older than X, re-verifying the key immediately before each delete rather than trusting the marker.
+- An automatic sweep, **once per launch**, that deletes a stale blob once its key is older than 30 days, re-verifying the key immediately before each delete rather than trusting the marker.
 - One `VACUUM`, only after a sweep that actually deleted something.
 - A Settings action, "Clear Stale History Now", reporting bytes before and after.
 
@@ -56,7 +56,7 @@
 |---|---|
 | **A1 · Reproduce the diagnosis as failing tests:** a key migrated long ago still has its blob; the marker carries no timestamp; `DELETE` without `VACUUM` leaves the file size unchanged. Red before anything is built. | 3 |
 | **A2 · Per-key timestamps:** a `__msgrows_migrated_at` blob mapping key to epoch ms, written when a key is marked. Pre-existing migrated keys are **stamped on first sight**, not treated as eligible, so no blob is deleted the moment a user updates. | 3 |
-| **A3 · The sweep:** for each migrated message-history key older than X, re-run the superset check (every blob record present as a row) and delete the blob **only** on a pass. Restricted to `channel_messages_*` and `messages_*`. | 4 |
+| **A3 · The sweep:** for each migrated message-history key older than the 30-day constant, re-run the superset check (every blob record present as a row) and delete the blob **only** on a pass. Restricted to `channel_messages_*` and `messages_*`. Wired to run **once per launch**, after startup settles, never mid-session. | 4 |
 | **A4 · One `VACUUM`,** only if the sweep deleted something, with the reclaimed byte count logged. | 3 |
 | **A5 · Epic verification:** the named command, plus the sweep run against a copy of a real database. | 1 |
 
@@ -64,7 +64,7 @@
 
 | Task | Pts |
 |---|---|
-| **B1 · The action** in Settings, showing database size before and after and how many keys were cleared, with the same re-verify and refusal path as the sweep. | 3 |
+| **B1 · The action** in Settings, showing database size before and after and how many keys were cleared, with the same re-verify and refusal path as the sweep. Per decision 4 it **reports keys it refused** in the result, not just the log: "cleared 12, kept 1 that failed verification". | 3 |
 | **B2 · Widget tests:** the action with nothing eligible, with eligible keys, and with a key whose re-verify fails (which must report a refusal rather than silence). | 3 |
 | **B3 · Epic verification** | 1 |
 
@@ -114,7 +114,7 @@ A and B both touch `blob_store.dart`; B also touches the Settings screen and ARB
 |---|---|---|
 | Sweep: a key's re-verify finds a blob record with no row | whether the rows really hold this key's history | **stop** — keep the blob, log which records are missing, never delete, do not retry in a loop |
 | Sweep: the blob will not decode during re-verify | what the blob contains | **stop** — keep it, log it |
-| Sweep: a migrated key has no timestamp | when it migrated | **stop** deleting — stamp it now and let it age X |
+| Sweep: a migrated key has no timestamp | when it migrated | **stop** deleting — stamp it now and let it age the full 30 days |
 | Sweep: the key is not `channel_messages_*` or `messages_*` | whether a row equivalent exists | **stop** — out of scope, never considered |
 | `VACUUM` fails, e.g. no temporary space | whether the file can be compacted | **proceeds**, logging the failure. Not fail-open on data: the deletes already happened and are correct, and `VACUUM` only affects file size. The next sweep retries it. |
 
@@ -124,9 +124,9 @@ No fail-open branch touches data. The one branch that proceeds affects file size
 
 - **Named command:** `flutter test test/storage/ test/screens/` plus `flutter analyze`
 - **Acceptance bar:**
-  - A key stamped older than X, whose rows hold every blob record, loses its blob; the file shrinks after `VACUUM`.
-  - A key stamped older than X with **one** blob record missing from rows **keeps** its blob, and the refusal names the missing records. This gate must be proved able to fail.
-  - A key stamped inside X keeps its blob.
+  - A key stamped older than 30 days, whose rows hold every blob record, loses its blob; the file shrinks after `VACUUM`.
+  - A key stamped older than 30 days with **one** blob record missing from rows **keeps** its blob, and the refusal names the missing records. This gate must be proved able to fail.
+  - A key stamped inside 30 days keeps its blob, including at 29 days, so the boundary is tested and not just the middle of each range.
   - A migrated key with no timestamp is stamped, not deleted.
   - `contacts`, `discovered_contacts` and `path_history_` keys are never considered, asserted by name.
   - An unmigrated history key keeps its blob.
@@ -135,20 +135,24 @@ No fail-open branch touches data. The one branch that proceeds affects file size
 
 ## 8. Done when
 
-- No key migrated more than X days ago retains a message-history blob.
+- No key migrated more than 30 days ago retains a message-history blob.
 - The database file is measurably smaller, verified by reading the live file, not by trusting a log line.
 - Row count is unchanged across the whole sweep.
 - A key whose re-verify fails still has its blob, and said so.
 - The Settings action reports a real before and after on the owner's install, on both platforms.
 
-## 9. Your choices
+## 9. Decisions
 
-| # | Question | Option A | Option B | Rec. | Your choice |
-|---|---|---|---|---|---|
-| 1 | How long is X? | **30 days** | 14 days | ⭐ A — one full month of use, and it matches the monthly granularity of the Play installs and crash reports you read, so a migration problem has a reporting cycle to surface in before the snapshot goes. 14 halves the double-storage window but also halves the time to notice. | |
-| 2 | When does the automatic sweep run? | **Once per launch, after startup settles** | Opportunistically, whenever a key migrates | ⭐ A — predictable, one `VACUUM` per launch at most, and easy to reason about. B spreads the work but can fire a `VACUUM` mid-session while you are using the app. | |
-| 3 | Where do the timestamps live? | **A separate `__msgrows_migrated_at` blob** | Convert `__msgrows_migrated` from an array to a map | ⭐ A — the existing marker is read on every save and load through a cached hot path; changing its shape risks that path and needs its own migration. The timestamps are only read by a cold once-per-launch sweep. | |
-| 4 | If a key's re-verify fails, does the user hear about it? | **Log only** | Surface it in the Settings action's result | ⭐ B — for the manual action specifically. You pressed a button; "cleared 12 keys, kept 1 that failed verification" is the honest result, and silence there is how #952 went unnoticed for days. The automatic sweep stays log-only. | |
+Owner, 2026-10-22: *"X = 30, sweep once per launch, timestamps in separate blob, button reports refusals, agreed."* All four as recommended.
+
+| # | Question | Decision | Why |
+|---|---|---|---|
+| 1 | How long is X? | **30 days** | One full month of real use, and it matches the monthly granularity of the Play installs and crash reports the owner reads, so a migration problem gets a reporting cycle to surface in before the snapshot goes. 14 would have halved the double-storage window and also halved the time to notice. |
+| 2 | When does the automatic sweep run? | **Once per launch**, after startup settles | Predictable, at most one `VACUUM` per launch, and it cannot fire mid-session while the app is in use. |
+| 3 | Where do the timestamps live? | **A separate `__msgrows_migrated_at` blob** | `__msgrows_migrated` is read on every save and load through a cached hot path; reshaping it would risk that path and need its own migration. The timestamps are read only by the cold once-per-launch sweep. |
+| 4 | If a key's re-verify fails, does the user hear about it? | **The manual action reports it. The automatic sweep stays log-only.** | The user pressed a button, so "cleared 12 keys, kept 1 that failed verification" is the honest result. Silence is how #952 went unnoticed. The automatic sweep has no one watching, so a log line is the right place for it. |
+
+**30 days is a named constant, not a literal scattered through the sweep**, so changing it later is one edit and the tests can set it directly rather than manipulating clocks.
 
 ## 10. Carried-in work
 
