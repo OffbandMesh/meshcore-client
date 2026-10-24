@@ -152,6 +152,17 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/storage/contact_settings_store.dart',
   ),
   StorageSurface(
+    'contact_customname_',
+    verdict: ScopingVerdict.perRadio,
+    reason:
+        'prefix + device key + contact key, via keyForCustomName. The user\'s '
+        'own label for a contact (#750). Per-radio for the same reason as its '
+        'neighbour in this store. Deliberately NOT in contact_store: that '
+        'record is rebuilt from radio contact-sync data, where no custom name '
+        'exists, so a save after a sync would wipe the rename',
+    owner: 'lib/storage/contact_settings_store.dart',
+  ),
+  StorageSurface(
     'block_keys_v1',
     verdict: ScopingVerdict.perRadio,
     reason:
