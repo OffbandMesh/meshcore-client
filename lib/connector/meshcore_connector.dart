@@ -412,6 +412,7 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? _deviceUiErrorSurface;
   DeviceUiSurface? _pendingDeviceUiWrite;
   GpsModeState? _gpsModeState;
+  final Map<int, ChannelTune> _channelTunes = {};
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -902,6 +903,12 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Last GPS state the radio reported, or null if not read yet.
   GpsModeState? get gpsModeState => _gpsModeState;
 
+  /// Whether this radio answers the `0xC5` channel-tune sub-codes (#971).
+  bool get supportsChannelTune => firmwareSupportsChannelTune(_offbandCaps2);
+
+  /// The tune the radio reported for [channel], or null if not read yet.
+  ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
+
   /// Which surface [deviceUiError] belongs to, so a screen shows only its own.
   /// Null when the error could not be attributed to an outstanding write.
   DeviceUiSurface? get deviceUiErrorSurface => _deviceUiErrorSurface;
@@ -1043,6 +1050,40 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildNotifyScopeSetFrame(scope));
   }
 
+  /// Ask the radio which tune [channel] plays (#971).
+  Future<void> requestChannelTune(int channel) async {
+    if (!_deviceUiGateOpen('chtune GET', advertised: supportsChannelTune)) {
+      return;
+    }
+    _appDebugLogService?.info(
+      'chtune GET -> [0xC5][0x0B][$channel]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelTuneGetFrame(channel));
+  }
+
+  /// Set which tune [channel] plays. Local state follows the device's re-read
+  /// reply, never the request, so a refused choice is never shown as saved.
+  Future<void> setChannelTune(int channel, ChannelTune tune) async {
+    if (!_deviceUiGateOpen('chtune SET', advertised: supportsChannelTune)) {
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.channelTune;
+    _appDebugLogService?.info(
+      'chtune SET -> ch=$channel stored=${tune.stored} '
+      '(${tune.inherits
+          ? 'inherit'
+          : tune.isSilent
+          ? 'silent'
+          : 'tune ${tune.tuneId}'}) '
+      '[0xC5][0x0C]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelTuneSetFrame(channel, tune));
+  }
+
   /// Ask the radio how GPS is running (#969).
   Future<void> requestGpsMode() async {
     if (!_deviceUiGateOpen('gps GET', advertised: supportsGpsMode)) return;
@@ -1099,6 +1140,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = null;
     _gpsModeState = null;
+    _channelTunes.clear();
   }
 
   void _reconcileDeviceUi() {
@@ -1129,6 +1171,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleGpsModeReply(gps);
       return;
     }
+    final tune = parseChannelTuneReply(frame);
+    if (tune != null) {
+      _handleChannelTuneReply(tune);
+      return;
+    }
     _appDebugLogService?.warn(
       '0xC5 reply not understood (sub=0x'
       '${frame.length > 1 ? frame[1].toRadixString(16).padLeft(2, '0') : '??'}, '
@@ -1157,6 +1204,26 @@ class MeshCoreConnector extends ChangeNotifier {
     };
     _appDebugLogService?.warn(
       '$what refused: $_deviceUiError',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleChannelTuneReply(OffbandUiReply reply) {
+    final t = reply.channelTune;
+    if (t == null) {
+      // Not reachable today: parseChannelTuneReply always carries a value.
+      _appDebugLogService?.warn('chtune reply with no value', tag: 'DeviceUI');
+      return;
+    }
+    final isWrite = reply.sub == offbandUiChannelTuneSet;
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.channelTune) {
+      _pendingDeviceUiWrite = null;
+    }
+    _channelTunes[t.channel] = t.tune;
+    _appDebugLogService?.info(
+      'chtune reply: ch=${t.channel} stored=${t.tune.stored} '
+      '(${isWrite ? 'write confirmed' : 'read'})',
       tag: 'DeviceUI',
     );
     notifyListeners();

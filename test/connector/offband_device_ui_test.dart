@@ -352,6 +352,101 @@ void main() {
     });
   });
 
+  // #971: per-channel tune over 0xC5 0x0B / 0x0C (meshcore-firmware#1789).
+  // Stored byte: 0 = inherit the global channel tune, else tune id + 1, and
+  // tune id 0 is Silent. Inherit and Silent must never collapse.
+  group('channel tune encoding', () {
+    test('inherit is stored as 0', () {
+      expect(const ChannelTune.inherit().stored, equals(0));
+      expect(const ChannelTune.inherit().inherits, isTrue);
+      expect(const ChannelTune.inherit().tuneId, isNull);
+    });
+
+    test('Silent is tune id 0, stored as 1, and is not inherit', () {
+      final silent = ChannelTune.tune(0);
+      expect(silent.stored, equals(1));
+      expect(silent.isSilent, isTrue);
+      expect(silent.inherits, isFalse);
+      expect(silent, isNot(equals(const ChannelTune.inherit())));
+    });
+
+    test('a tune id round-trips through the stored byte', () {
+      for (final id in [0, 1, 7, 40, 254]) {
+        final t = ChannelTune.tune(id);
+        expect(t.stored, equals(id + 1));
+        expect(ChannelTune.fromStored(t.stored).tuneId, equals(id));
+      }
+      expect(ChannelTune.fromStored(0).inherits, isTrue);
+    });
+
+    test('a tune id that cannot fit the byte is refused', () {
+      expect(() => ChannelTune.tune(255), throwsArgumentError);
+      expect(() => ChannelTune.tune(-1), throwsArgumentError);
+    });
+  });
+
+  group('channel tune frames', () {
+    test('get and set encode as documented', () {
+      expect(buildChannelTuneGetFrame(3), equals([0xC5, 0x0B, 0x03]));
+      expect(
+        buildChannelTuneSetFrame(3, const ChannelTune.inherit()),
+        equals([0xC5, 0x0C, 0x03, 0x00]),
+      );
+      expect(
+        buildChannelTuneSetFrame(3, ChannelTune.tune(0)),
+        equals([0xC5, 0x0C, 0x03, 0x01]),
+      );
+    });
+
+    test('a channel index outside a byte is refused', () {
+      expect(() => buildChannelTuneGetFrame(256), throwsArgumentError);
+      expect(() => buildChannelTuneGetFrame(-1), throwsArgumentError);
+    });
+  });
+
+  group('channel tune reply parse', () {
+    test('a GET reply gives the channel and its tune', () {
+      final r = parseChannelTuneReply(
+        Uint8List.fromList([0xC5, 0x0B, 0x02, 0x05]),
+      );
+      expect(r, isNotNull);
+      expect(r!.channelTune!.channel, equals(2));
+      expect(r.channelTune!.tune.tuneId, equals(4));
+    });
+
+    test('a SET reply is the re-read value, and keeps Silent distinct', () {
+      final silent = parseChannelTuneReply(
+        Uint8List.fromList([0xC5, 0x0C, 0x02, 0x01]),
+      )!;
+      final inherit = parseChannelTuneReply(
+        Uint8List.fromList([0xC5, 0x0C, 0x02, 0x00]),
+      )!;
+      expect(silent.sub, equals(0x0C));
+      expect(silent.channelTune!.tune.isSilent, isTrue);
+      expect(inherit.channelTune!.tune.inherits, isTrue);
+    });
+
+    test('a truncated reply yields null', () {
+      for (final f in [
+        <int>[0xC5, 0x0B],
+        <int>[0xC5, 0x0B, 0x02],
+      ]) {
+        expect(parseChannelTuneReply(Uint8List.fromList(f)), isNull);
+      }
+    });
+
+    test('GPS and scope sub-codes are not claimed', () {
+      expect(
+        parseChannelTuneReply(Uint8List.fromList([0xC5, 0x0D, 0, 0, 0, 0])),
+        isNull,
+      );
+      expect(
+        parseChannelTuneReply(Uint8List.fromList([0xC5, 0x01, 0x00, 0x00])),
+        isNull,
+      );
+    });
+  });
+
   group('long press is not assignable', () {
     test('no sequence models a long press', () {
       // Firmware reserves long press for CLI rescue and power off. Exposing it
