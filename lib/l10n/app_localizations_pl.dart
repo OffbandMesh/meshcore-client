@@ -624,6 +624,18 @@ class AppLocalizationsPl extends AppLocalizations {
       'Enter a whole number of seconds, 0 or more.';
 
   @override
+  String get settings_buttonActions => 'Button actions';
+
+  @override
+  String get settings_buttonActionsSubtitle => 'Assign what the button does';
+
+  @override
+  String get settings_buzzerTones => 'Buzzer and tones';
+
+  @override
+  String get settings_buzzerTonesSubtitle => 'When this radio beeps';
+
+  @override
   String get settings_contactSettings => 'Ustawienia kontaktów';
 
   @override

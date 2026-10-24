@@ -13,12 +13,21 @@ import '../../connector/offband_device_ui.dart';
 ///
 /// English-only for now, matching the serial-capture pane (#430); localization
 /// is a follow-up rather than a blocker on shipping the capability.
+///
+/// Shows one [part] at a time (#978): button actions open from Node Settings,
+/// the buzzer from Message Settings. They are separate features with separate
+/// bits, and boards with a buzzer and no button exist.
 class DeviceUiView extends StatefulWidget {
-  const DeviceUiView({super.key});
+  const DeviceUiView({super.key, required this.part});
+
+  final DeviceUiPart part;
 
   @override
   State<DeviceUiView> createState() => _DeviceUiViewState();
 }
+
+/// Which half of the device UI a [DeviceUiView] shows.
+enum DeviceUiPart { buttons, buzzer }
 
 class _DeviceUiViewState extends State<DeviceUiView> {
   @override
@@ -29,17 +38,34 @@ class _DeviceUiViewState extends State<DeviceUiView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final c = context.read<MeshCoreConnector>();
-      c.requestButtonMatrix();
-      c.requestNotifyScope();
+      switch (widget.part) {
+        case DeviceUiPart.buttons:
+          c.requestButtonMatrix();
+        case DeviceUiPart.buzzer:
+          c.requestNotifyScope();
+      }
     });
   }
+
+  /// An error is shown on the screen it belongs to. One that could not be
+  /// attributed to a write is shown on both halves rather than hidden.
+  bool _ownsError(DeviceUiSurface? surface) => switch (surface) {
+    null => true,
+    DeviceUiSurface.buttonMatrix => widget.part == DeviceUiPart.buttons,
+    DeviceUiSurface.notifyScope ||
+    DeviceUiSurface.channelTune => widget.part == DeviceUiPart.buzzer,
+    DeviceUiSurface.gpsMode => false,
+  };
 
   @override
   Widget build(BuildContext context) {
     return Consumer<MeshCoreConnector>(
       builder: (context, connector, _) {
-        final showButtons = connector.supportsButtonMatrix;
-        final showScope = connector.supportsNotifyScope;
+        final showButtons =
+            widget.part == DeviceUiPart.buttons &&
+            connector.supportsButtonMatrix;
+        final showScope =
+            widget.part == DeviceUiPart.buzzer && connector.supportsNotifyScope;
         // A radio advertising neither bit has no button and no buzzer to
         // configure, so it gets nothing. The tile that leads here is gated the
         // same way, so this is a belt-and-braces guard rather than a path a
@@ -82,7 +108,8 @@ class _DeviceUiViewState extends State<DeviceUiView> {
         }
         return ListView(
           children: [
-            if (connector.deviceUiError != null)
+            if (connector.deviceUiError != null &&
+                _ownsError(connector.deviceUiErrorSurface))
               _ErrorBanner(
                 message: connector.deviceUiError!,
                 onDismiss: connector.clearDeviceUiError,
@@ -98,7 +125,6 @@ class _DeviceUiViewState extends State<DeviceUiView> {
                 ),
               ),
               ..._scopeTiles(connector),
-              const Divider(height: 24),
             ],
             if (showButtons) ...[
               const _SectionHeader('Button actions'),

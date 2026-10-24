@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../connector/meshcore_connector.dart';
 import '../../l10n/l10n.dart';
 import '../../services/app_settings_service.dart';
 import '../../services/notification_service.dart';
 import '../../helpers/settings_persist.dart';
 import '../../helpers/snack_bar_builder.dart';
+import 'device_ui_view.dart';
 
 /// Embeddable view (no Scaffold) for the Message Settings shell pane.
 ///
-/// Renders notification toggles and message-handling settings. Both cards read
-/// and write only [AppSettingsService].
+/// Renders notification toggles and message-handling settings, which read and
+/// write only [AppSettingsService]. Between them, on a radio with a buzzer,
+/// sits the entry to the radio's own buzzer settings (#978).
 class MessageSettingsView extends StatelessWidget {
   const MessageSettingsView({super.key});
 
@@ -23,6 +26,7 @@ class MessageSettingsView extends StatelessWidget {
           children: [
             _buildNotificationsCard(context, settingsService),
             const SizedBox(height: 16),
+            const _RadioBuzzerEntry(),
             _buildMessagingCard(context, settingsService),
           ],
         );
@@ -400,6 +404,43 @@ class MessageSettingsView extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Entry to the radio's buzzer settings (#978), shown only where the radio
+/// advertises a buzzer (caps byte 2 `0x01`). Separate from the card above,
+/// which governs whether this PHONE notifies; this governs the radio.
+class _RadioBuzzerEntry extends StatelessWidget {
+  const _RadioBuzzerEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final connector = context.watch<MeshCoreConnector>();
+    if (!connector.supportsNotifyScope) return const SizedBox.shrink();
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: ListTile(
+          leading: const Icon(Icons.volume_up_outlined),
+          title: Text(l10n.settings_buzzerTones),
+          subtitle: Text(l10n.settings_buzzerTonesSubtitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(
+                  title: Text(l10n.settings_buzzerTones),
+                  centerTitle: true,
+                ),
+                body: const DeviceUiView(part: DeviceUiPart.buzzer),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
