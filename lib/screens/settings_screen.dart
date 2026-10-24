@@ -430,23 +430,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _editNodeName(context, connector),
               ),
               // Location and the GPS toggle moved to their own category (#977).
-              // Button and buzzer: device UI config (#474/#475). Owner-placed
-              // under Node Settings, directly above the public key.
+              // Button actions (#474), directly above the public key. The
+              // buzzer moved to Message Settings (#978): boards with a buzzer
+              // and no button exist, so the two are separate entries on
+              // separate bits.
               //
-              // Gated STRICTLY on the capability bits. A radio without the
-              // hardware has no button to configure, so it gets no tile, no
-              // screen and no command. This is the negative test in #474:
-              // "A device that does not advertise the bit shows no screen and
-              // the client emits no command."
-              if (connector.supportsButtonMatrix ||
-                  connector.supportsNotifyScope) ...[
+              // Gated STRICTLY on the capability bit. A radio without a button
+              // gets no tile, no screen and no command. This is the negative
+              // test in #474: "A device that does not advertise the bit shows
+              // no screen and the client emits no command."
+              if (connector.supportsButtonMatrix) ...[
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked_outlined),
-                  title: const Text('Button and buzzer'),
-                  subtitle: const Text(
-                    'Assign button actions and set when this radio beeps',
-                  ),
+                  title: Text(l10n.settings_buttonActions),
+                  subtitle: Text(l10n.settings_buttonActionsSubtitle),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.push(
@@ -454,10 +452,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       MaterialPageRoute(
                         builder: (context) => Scaffold(
                           appBar: AppBar(
-                            title: const Text('Button and buzzer'),
+                            title: Text(l10n.settings_buttonActions),
                             centerTitle: true,
                           ),
-                          body: const DeviceUiView(),
+                          body: const DeviceUiView(part: DeviceUiPart.buttons),
                         ),
                       ),
                     );

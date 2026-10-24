@@ -1162,6 +1162,30 @@ abstract class AppLocalizations {
   /// **'Enter a whole number of seconds, 0 or more.'**
   String get settings_gpsSleepInvalid;
 
+  /// No description provided for @settings_buttonActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Button actions'**
+  String get settings_buttonActions;
+
+  /// No description provided for @settings_buttonActionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign what the button does'**
+  String get settings_buttonActionsSubtitle;
+
+  /// No description provided for @settings_buzzerTones.
+  ///
+  /// In en, this message translates to:
+  /// **'Buzzer and tones'**
+  String get settings_buzzerTones;
+
+  /// No description provided for @settings_buzzerTonesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When this radio beeps'**
+  String get settings_buzzerTonesSubtitle;
+
   /// No description provided for @settings_contactSettings.
   ///
   /// In en, this message translates to:
