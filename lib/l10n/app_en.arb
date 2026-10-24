@@ -275,6 +275,55 @@
       }
     }
   },
+  "settings_gpsModeLabel": "GPS",
+  "settings_gpsModeOff": "Off",
+  "settings_gpsModeOn": "On",
+  "settings_gpsModePowerSave": "Power save",
+  "settings_gpsActivityOff": "GPS is off",
+  "settings_gpsActivityOn": "GPS is on",
+  "settings_gpsActivitySearching": "Searching for a fix",
+  "settings_gpsActivitySleeping": "Sleeping between fixes",
+  "settings_gpsActivityBackedOff": "Backed off",
+  "settings_gpsOffDetail": "Showing the last stored position",
+  "settings_gpsNextTryMinutes": "{minutes, plural, =1{Next try in 1 min} other{Next try in {minutes} min}}",
+  "@settings_gpsNextTryMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsNextTrySeconds": "Next try in {seconds} s",
+  "@settings_gpsNextTrySeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsLastFixMinutes": "{minutes, plural, =0{Last fix just now} =1{Last fix 1 min ago} other{Last fix {minutes} min ago}}",
+  "@settings_gpsLastFixMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsSatellites": "{count, plural, =1{1 satellite} other{{count} satellites}}",
+  "@settings_gpsSatellites": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsQuery": "Query",
+  "settings_gpsReading": "Reading GPS settings…",
+  "settings_gpsSleepTitle": "Sleep between fix attempts",
+  "settings_gpsSleepDefault": "Firmware default, minimum 5 minutes",
+  "settings_gpsSleepFieldLabel": "Seconds between attempts",
+  "settings_gpsSleepFieldHint": "0 for the firmware default. The radio raises anything under 300 to 300.",
+  "settings_gpsSleepInvalid": "Enter a whole number of seconds, 0 or more.",
   "settings_contactSettings": "Contact Settings",
   "settings_contactSettingsSubtitle": "Settings for how contacts are added.",
   "settings_privacyMode": "Privacy Mode",
