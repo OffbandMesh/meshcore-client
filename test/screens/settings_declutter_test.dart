@@ -64,6 +64,9 @@ void main() {
   }
 
   Future<void> openPane(WidgetTester tester, String categoryTitle) async {
+    // The category list is built lazily, so a category below the fold does not
+    // exist until scrolled to. #977 added Location, which pushed Debug past it.
+    await tester.scrollUntilVisible(find.text(categoryTitle), 200);
     await tester.tap(find.text(categoryTitle));
     await tester.pumpAndSettle();
   }

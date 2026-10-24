@@ -81,6 +81,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // The category list is built lazily, so a category below the fold does not
+    // exist until scrolled to. #977 added Location, which pushed Debug past it.
+    await tester.scrollUntilVisible(find.text('Debug'), 200);
     await tester.tap(find.text('Debug'));
     await tester.pumpAndSettle();
   }

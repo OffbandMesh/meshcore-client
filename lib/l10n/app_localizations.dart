@@ -1000,6 +1000,42 @@ abstract class AppLocalizations {
   /// **'Longitude'**
   String get settings_longitude;
 
+  /// No description provided for @settings_locationCategorySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS, coordinates, and reporting'**
+  String get settings_locationCategorySubtitle;
+
+  /// No description provided for @settings_locationCoordinates.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates'**
+  String get settings_locationCoordinates;
+
+  /// No description provided for @settings_locationNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settings_locationNotSet;
+
+  /// No description provided for @settings_locationReportInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Position reporting interval'**
+  String get settings_locationReportInterval;
+
+  /// No description provided for @settings_locationEveryMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{Every minute} other{Every {minutes} minutes}}'**
+  String settings_locationEveryMinutes(int minutes);
+
+  /// No description provided for @settings_locationEverySeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {seconds} seconds'**
+  String settings_locationEverySeconds(int seconds);
+
   /// No description provided for @settings_contactSettings.
   ///
   /// In en, this message translates to:
