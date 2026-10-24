@@ -118,7 +118,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 </defs></svg>
 
 <h1>Location screen and settings restructure (client #969, epic #975)</h1>
-<p class="lede">Material 3 blue seed, light, drawn at 390&times;844 against the real widgets: <code>SettingsShell</code> renders each category as a <code>ListTile</code> with a leading <code>Icon</code>, a subtitle and a trailing chevron under a centred <code>AppBar</code>, and detail panes are <code>Card</code>s of <code>ListTile</code>s split by <code>Divider(height: 1)</code>. Icon choices match <code>settings_screen.dart</code>; they are drawn here as inline SVG so this file needs no network to render. Values are examples; <b>the bullets are the behavior to build</b>. Wire transport for GPS mode is Route A, firmware <code>0xC7</code>, blocked on meshcore-firmware#1789. <span class="flag">Owner-approved 2026-10-23</span> <b>Approved as drawn:</b> one three-way GPS control above the coordinates, one consolidated status row between them, Location as a top-level category under Radio Settings, Radio stats unchanged for now, and button and buzzer split across Node Settings and Message Settings.</p>
+<p class="lede">Material 3 blue seed, light, drawn at 390&times;844 against the real widgets: <code>SettingsShell</code> renders each category as a <code>ListTile</code> with a leading <code>Icon</code>, a subtitle and a trailing chevron under a centred <code>AppBar</code>, and detail panes are <code>Card</code>s of <code>ListTile</code>s split by <code>Divider(height: 1)</code>. Icon choices match <code>settings_screen.dart</code>; they are drawn here as inline SVG so this file needs no network to render. Values are examples; <b>the bullets are the behavior to build</b>. GPS mode rides firmware <code>0xC5</code> sub-codes <code>0x0D</code> / <code>0x0E</code>, gated on caps byte 2 <code>0x20</code> (meshcore-firmware#1789). <span class="flag">Owner-approved 2026-10-23</span> <b>Approved as drawn:</b> one three-way GPS control above the coordinates, one consolidated status row between them, Location as a top-level category under Radio Settings, Radio stats unchanged for now, and button and buzzer split across Node Settings and Message Settings. <b>Corrected 2026-10-24:</b> wire facts only (the command is <code>0xC5</code>, not a new <code>0xC7</code>; the buzzer-only example boards; the sleep-interval floor). The design is unchanged.</p>
 
 <h3>The Location screen, one control and three states</h3><div class="grid">
 
@@ -168,7 +168,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 <div class="dv"></div>
 <div class="tile two"><span class="lead ic-am"><svg class="ic"><use href="#i-pause"/></svg></span><div class="txt"><div class="ti">Backed off</div><div class="ts">Next try in 48 min, last fix 2 min ago</div></div><span class="btn">Query</span></div>
 <div class="dv"></div>
-<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-hour"/></svg></span><div class="txt"><div class="ti">Sleep between fix attempts</div><div class="ts">Firmware default</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile two"><span class="lead"><svg class="ic"><use href="#i-hour"/></svg></span><div class="txt"><div class="ti">Sleep between fix attempts</div><div class="ts">Firmware default, minimum 5 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
 </div>
 <div class="mcard">
 <div class="tile two"><span class="lead"><svg class="ic"><use href="#i-pin"/></svg></span><div class="txt"><div class="ti">Coordinates</div><div class="ts">39.103118, -84.512020</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
@@ -176,7 +176,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 <div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
 </div>
 </div></div></div>
-<ul><li>Power save writes <code>gps.en = 1</code> and <code>gps.mode = 2</code>.</li><li><b>Backed off must be named.</b> Otherwise a user sees no fix and reads a working radio as broken. The firmware models five activity states and expects this to be the common one at an event.</li><li><b>0 is a legal value</b> meaning firmware default, so the reporting-interval rule that rejects anything under 60 must not be copied onto this field.</li><li>No tuned default is offered: every measured indoor attempt at 30 minutes and beyond failed to acquire (firmware #1553).</li></ul></div>
+<ul><li>Power save writes <code>gps.en = 1</code> and <code>gps.mode = 2</code>.</li><li><b>Backed off must be named.</b> Otherwise a user sees no fix and reads a working radio as broken. The firmware models five activity states and expects this to be the common one at an event.</li><li><b>0 is a legal value</b> meaning firmware default, so the reporting-interval rule that rejects anything under 60 must not be copied onto this field.</li><li>The radio raises 1 to 299 s to 300, because one fix attempt can run 180 s. The row shows the stored value from the reply, never what was typed.</li><li>No tuned default is offered: every measured indoor attempt at 30 minutes and beyond failed to acquire (firmware #1553).</li></ul></div>
 
 <div class="card"><h2><span class="n">4</span>A build that cannot do Power save</h2><p>Most variants do not compile the duty cycle. The third option is absent rather than offered and ignored.</p>
 <div class="dev d-loc"><div class="scr s-loc">
@@ -194,7 +194,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 <div class="tile two"><span class="lead"><svg class="ic"><use href="#i-clock"/></svg></span><div class="txt"><div class="ti">Position reporting interval</div><div class="ts">Every 15 minutes</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
 </div>
 </div></div></div>
-<ul><li><code>OFFBAND_GPS_POWER_SAVE</code> is opt-in per variant and today is set <b>only on the QCC badge</b>.</li><li>The device guards its own screen with <code>gpsPowerSaveAvailable()</code> so it never offers a mode nothing drives. The client needs the same signal.</li><li><b>Open with firmware:</b> that signal must be separate from the <code>0xC7</code> capability bit, or a radio speaking 0xC7 without the duty cycle would be offered Power save and simply stay on.</li></ul></div>
+<ul><li><code>OFFBAND_GPS_POWER_SAVE</code> is opt-in per variant and today is set <b>only on the QCC badge</b>.</li><li>The device guards its own screen with <code>gpsPowerSaveAvailable()</code> so it never offers a mode nothing drives. The client needs the same signal.</li><li>Firmware sends it as <code>ps_ok</code> in every GPS reply, so Power save is hidden per radio rather than per firmware version. The caps bit <code>0x20</code> alone would not do: a radio can speak the GPS sub-codes without the duty cycle.</li></ul></div>
 
 </div>
 
@@ -237,7 +237,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 </div>
 <ul><li>Location sits directly under Radio Settings and becomes the single home for GPS. The duplicate enable toggle in Node Settings goes away.</li><li>Radio stats stays for now by owner decision, to be revisited (#980). It is also reachable from the app-bar icon.</li><li>Category order otherwise unchanged; Observer still appears conditionally and is not drawn here.</li></ul></div>
 
-<div class="card" style="width:688px"><h2><span class="n">6</span>Button and buzzer split across two panes</h2><p>One screen today, gated on button matrix or notify scope together. Hardware like the T1000-E has a buzzer and no button, so they are not one feature.</p>
+<div class="card" style="width:688px"><h2><span class="n">6</span>Button and buzzer split across two panes</h2><p>One entry today, shown on button matrix or notify scope together. Boards such as the M5Stack Unit C6L, ThinkNode M9 and Wio Tracker L1 e-ink have a buzzer and no button, so they are not one feature.</p>
 <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
 
 <div><div class="sub">Node Settings keeps the button</div>
@@ -261,7 +261,7 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 </div></div></div>
 
 </div>
-<ul><li>Button actions stay under Node Settings. Buzzer and tones move beside Notifications, which Message Settings already advertises in its subtitle.</li><li>Split apart, each half needs its own capability gate: a buzzer-only radio must show tones and hide button actions.</li><li><b>Open with firmware:</b> whether the existing <code>0xC5</code> bits can already answer "buzzer but no button", or whether that needs bit allocation.</li></ul></div>
+<ul><li>Button actions stay under Node Settings. Buzzer and tones move beside Notifications, which Message Settings already advertises in its subtitle.</li><li>Split apart, each half needs its own capability gate: a buzzer-only radio must show tones and hide button actions.</li><li>Gates: Button actions on caps byte 2 <code>0x02</code>, Buzzer and tones on <code>0x01</code>. Firmware already sets the two independently, and the screen already shows each half from its own bit; what changes is the entry and where it lives.</li></ul></div>
 
 </div>
 
@@ -273,8 +273,8 @@ code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
 <div><h4>Deferred, tracked separately</h4><p>GPS fix state in the Channels and Contacts headers is #974; it lands in the same shared app-bar widget as epic #613, so it must follow #614 rather than run beside it. Where Radio stats lives is #980.</p></div>
 </div>
 <div class="why red" style="margin-top:18px">
-<div><h4>The save reply must echo what was stored</h4><p>The client renders the device's answer, never its own assumption. Choosing Off does not change the stored mode byte, so a client modelling its own write would show the wrong mode. Clamping has the same shape: the reporting interval is already constrained to 0 through 86400, so the user must see the clamped value, not what they typed. Requested from firmware as part of 0xC7.</p></div>
-<div><h4>Power save is hidden where the build cannot drive it</h4><p><code>OFFBAND_GPS_POWER_SAVE</code> is per variant and currently only on the QCC badge. Without a signal separate from the 0xC7 capability bit, the client would offer a mode that does nothing. Requested from firmware.</p></div>
+<div><h4>The save reply must echo what was stored</h4><p>The client renders the device's answer, never its own assumption. Choosing Off does not change the stored mode byte, so a client modelling its own write would show the wrong mode. Clamping has the same shape: the reporting interval is already constrained to 0 through 86400, so the user must see the clamped value, not what they typed. Delivered: the <code>0xC5</code> GPS reply carries the stored values after every write.</p></div>
+<div><h4>Power save is hidden where the build cannot drive it</h4><p><code>OFFBAND_GPS_POWER_SAVE</code> is per variant and currently only on the QCC badge. The GPS reply's <code>ps_ok</code> byte says whether this radio can run it; without that, the client would offer a mode that does nothing.</p></div>
 </div>
 
 </body></html>
