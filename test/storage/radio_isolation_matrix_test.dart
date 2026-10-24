@@ -57,7 +57,7 @@ void main() {
 
   Contact contact(String name) => Contact(
     publicKey: Uint8List.fromList(List.filled(32, 7)),
-    name: name,
+    receivedName: name,
     type: 1,
     pathLength: 0,
     path: Uint8List(0),
