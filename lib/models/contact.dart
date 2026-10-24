@@ -317,8 +317,13 @@ class Contact {
   ///
   /// Note this shares only the identity. It carries no path and no advert, so
   /// the receiving side gets an unverified stub exactly as we do.
+  /// Shares [receivedName], never `.name`. A share payload becomes the
+  /// RECEIVED name on every device that imports it, so sending a custom name
+  /// would push one user's private label out as another operator's ground
+  /// truth, overwriting a signed advert name. Worse than sending it to our own
+  /// radio, because it propagates. (#750, found by the pre-PR review)
   String toShareUri() =>
-      buildShareUri(publicKeyHex: publicKeyHex, name: name, type: type);
+      buildShareUri(publicKeyHex: publicKeyHex, name: receivedName, type: type);
 
   /// Builds the reference-app contact share URI from raw parts.
   ///
@@ -355,8 +360,12 @@ class Contact {
   ///
   /// Use the URI form for a QR, a DM, or an out-of-band paste. Use this for a
   /// channel.
-  String toChannelShare() =>
-      buildChannelShare(publicKeyHex: publicKeyHex, name: name, type: type);
+  /// Shares [receivedName], never `.name`. Same reason as [toShareUri]. (#750)
+  String toChannelShare() => buildChannelShare(
+    publicKeyHex: publicKeyHex,
+    name: receivedName,
+    type: type,
+  );
 
   /// Builds the compact channel share from raw parts, so this device can share
   /// its OWN identity without constructing a [Contact]. (#611)
