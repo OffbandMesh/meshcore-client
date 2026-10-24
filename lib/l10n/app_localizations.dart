@@ -1036,6 +1036,132 @@ abstract class AppLocalizations {
   /// **'Every {seconds} seconds'**
   String settings_locationEverySeconds(int seconds);
 
+  /// No description provided for @settings_gpsModeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS'**
+  String get settings_gpsModeLabel;
+
+  /// No description provided for @settings_gpsModeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settings_gpsModeOff;
+
+  /// No description provided for @settings_gpsModeOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get settings_gpsModeOn;
+
+  /// No description provided for @settings_gpsModePowerSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Power save'**
+  String get settings_gpsModePowerSave;
+
+  /// No description provided for @settings_gpsActivityOff.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is off'**
+  String get settings_gpsActivityOff;
+
+  /// No description provided for @settings_gpsActivityOn.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is on'**
+  String get settings_gpsActivityOn;
+
+  /// No description provided for @settings_gpsActivitySearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for a fix'**
+  String get settings_gpsActivitySearching;
+
+  /// No description provided for @settings_gpsActivitySleeping.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleeping between fixes'**
+  String get settings_gpsActivitySleeping;
+
+  /// No description provided for @settings_gpsActivityBackedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed off'**
+  String get settings_gpsActivityBackedOff;
+
+  /// No description provided for @settings_gpsOffDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the last stored position'**
+  String get settings_gpsOffDetail;
+
+  /// No description provided for @settings_gpsNextTryMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{Next try in 1 min} other{Next try in {minutes} min}}'**
+  String settings_gpsNextTryMinutes(int minutes);
+
+  /// No description provided for @settings_gpsNextTrySeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Next try in {seconds} s'**
+  String settings_gpsNextTrySeconds(int seconds);
+
+  /// No description provided for @settings_gpsLastFixMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =0{Last fix just now} =1{Last fix 1 min ago} other{Last fix {minutes} min ago}}'**
+  String settings_gpsLastFixMinutes(int minutes);
+
+  /// No description provided for @settings_gpsSatellites.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 satellite} other{{count} satellites}}'**
+  String settings_gpsSatellites(int count);
+
+  /// No description provided for @settings_gpsQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Query'**
+  String get settings_gpsQuery;
+
+  /// No description provided for @settings_gpsReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading GPS settings…'**
+  String get settings_gpsReading;
+
+  /// No description provided for @settings_gpsSleepTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep between fix attempts'**
+  String get settings_gpsSleepTitle;
+
+  /// No description provided for @settings_gpsSleepDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware default, minimum 5 minutes'**
+  String get settings_gpsSleepDefault;
+
+  /// No description provided for @settings_gpsSleepFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds between attempts'**
+  String get settings_gpsSleepFieldLabel;
+
+  /// No description provided for @settings_gpsSleepFieldHint.
+  ///
+  /// In en, this message translates to:
+  /// **'0 for the firmware default. The radio raises anything under 300 to 300.'**
+  String get settings_gpsSleepFieldHint;
+
+  /// No description provided for @settings_gpsSleepInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of seconds, 0 or more.'**
+  String get settings_gpsSleepInvalid;
+
   /// No description provided for @settings_contactSettings.
   ///
   /// In en, this message translates to:

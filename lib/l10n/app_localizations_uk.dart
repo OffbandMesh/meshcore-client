@@ -526,6 +526,98 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get settings_gpsModeLabel => 'GPS';
+
+  @override
+  String get settings_gpsModeOff => 'Off';
+
+  @override
+  String get settings_gpsModeOn => 'On';
+
+  @override
+  String get settings_gpsModePowerSave => 'Power save';
+
+  @override
+  String get settings_gpsActivityOff => 'GPS is off';
+
+  @override
+  String get settings_gpsActivityOn => 'GPS is on';
+
+  @override
+  String get settings_gpsActivitySearching => 'Searching for a fix';
+
+  @override
+  String get settings_gpsActivitySleeping => 'Sleeping between fixes';
+
+  @override
+  String get settings_gpsActivityBackedOff => 'Backed off';
+
+  @override
+  String get settings_gpsOffDetail => 'Showing the last stored position';
+
+  @override
+  String settings_gpsNextTryMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Next try in $minutes min',
+      one: 'Next try in 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_gpsNextTrySeconds(int seconds) {
+    return 'Next try in $seconds s';
+  }
+
+  @override
+  String settings_gpsLastFixMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Last fix $minutes min ago',
+      one: 'Last fix 1 min ago',
+      zero: 'Last fix just now',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_gpsSatellites(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count satellites',
+      one: '1 satellite',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settings_gpsQuery => 'Query';
+
+  @override
+  String get settings_gpsReading => 'Reading GPS settings…';
+
+  @override
+  String get settings_gpsSleepTitle => 'Sleep between fix attempts';
+
+  @override
+  String get settings_gpsSleepDefault => 'Firmware default, minimum 5 minutes';
+
+  @override
+  String get settings_gpsSleepFieldLabel => 'Seconds between attempts';
+
+  @override
+  String get settings_gpsSleepFieldHint =>
+      '0 for the firmware default. The radio raises anything under 300 to 300.';
+
+  @override
+  String get settings_gpsSleepInvalid =>
+      'Enter a whole number of seconds, 0 or more.';
+
+  @override
   String get settings_contactSettings => 'Налаштування контактів';
 
   @override

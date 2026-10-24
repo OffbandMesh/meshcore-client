@@ -602,6 +602,26 @@ bool firmwareSupportsButtonMatrix(int? offbandCaps2) =>
 bool firmwareSupportsNotifyScope(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2NotifyScope) != 0;
 
+/// Per-channel tune over `0xC5` sub-codes 0x0B / 0x0C (#971). Firmware sets it
+/// where `PIN_BUZZER` is defined (meshcore-firmware#1789).
+const int offbandCap2ChannelTune = 0x10;
+
+/// GPS mode and Power-save interval over `0xC5` sub-codes 0x0D / 0x0E (#969).
+/// Firmware sets it where `ENV_INCLUDE_GPS == 1` (meshcore-firmware#1789).
+///
+/// It says the radio speaks the GPS sub-codes, NOT that it can run Power save:
+/// the duty cycle is compiled per variant, and every GPS reply carries `ps_ok`
+/// for that. Never offer Power save from this bit alone.
+const int offbandCap2GpsMode = 0x20;
+
+/// True iff this radio answers the `0xC5` channel-tune sub-codes (#971).
+bool firmwareSupportsChannelTune(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2ChannelTune) != 0;
+
+/// True iff this radio answers the `0xC5` GPS-mode sub-codes (#969).
+bool firmwareSupportsGpsMode(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2GpsMode) != 0;
+
 bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
     (offbandCaps & offbandCapCaplog) != 0 &&

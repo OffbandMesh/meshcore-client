@@ -409,6 +409,9 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
   String? _deviceUiError;
+  DeviceUiSurface? _deviceUiErrorSurface;
+  DeviceUiSurface? _pendingDeviceUiWrite;
+  GpsModeState? _gpsModeState;
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -892,6 +895,17 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Whether this radio exposes a settable device notification scope (#475).
   bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
 
+  /// Whether this radio answers the `0xC5` GPS-mode sub-codes (#969). Says
+  /// nothing about Power save, which [GpsModeState.powerSaveAvailable] answers.
+  bool get supportsGpsMode => firmwareSupportsGpsMode(_offbandCaps2);
+
+  /// Last GPS state the radio reported, or null if not read yet.
+  GpsModeState? get gpsModeState => _gpsModeState;
+
+  /// Which surface [deviceUiError] belongs to, so a screen shows only its own.
+  /// Null when the error could not be attributed to an outstanding write.
+  DeviceUiSurface? get deviceUiErrorSurface => _deviceUiErrorSurface;
+
   /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
   bool get supportsPktHash =>
       firmwareSupportsPktHash(_offbandCaps2, _firmwareVerCode);
@@ -926,6 +940,7 @@ class MeshCoreConnector extends ChangeNotifier {
   void clearDeviceUiError() {
     if (_deviceUiError == null) return;
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
     notifyListeners();
   }
 
@@ -991,6 +1006,8 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.buttonMatrix;
     _appDebugLogService?.info(
       'matrix SET -> ${sequence.label} = ${action.label} '
       '[0xC5][0x04][0x${sequence.code.toRadixString(16).padLeft(2, '0')}]'
@@ -1016,12 +1033,54 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.notifyScope;
     _appDebugLogService?.info(
       'scope SET -> ${scope.label} '
       '[0xC5][0x02][0x${scope.code.toRadixString(16).padLeft(2, '0')}]',
       tag: 'DeviceUI',
     );
     await sendFrame(buildNotifyScopeSetFrame(scope));
+  }
+
+  /// Ask the radio how GPS is running (#969).
+  Future<void> requestGpsMode() async {
+    if (!_deviceUiGateOpen('gps GET', advertised: supportsGpsMode)) return;
+    _appDebugLogService?.info('gps GET -> [0xC5][0x0D]', tag: 'DeviceUI');
+    await sendFrame(buildGpsModeGetFrame());
+  }
+
+  /// Set how GPS runs, and optionally the Power-save interval.
+  ///
+  /// The interval always travels with the mode on the wire, so when
+  /// [intervalSeconds] is omitted the radio's current interval is resent. That
+  /// needs a state read first: sending an interval the client does not know
+  /// would silently reset the user's, so without one this refuses, visibly.
+  /// As with the other surfaces, local state follows the device's reply only.
+  Future<void> setGpsMode(GpsMode mode, {int? intervalSeconds}) async {
+    if (!_deviceUiGateOpen('gps SET', advertised: supportsGpsMode)) return;
+    final interval = intervalSeconds ?? _gpsModeState?.intervalSeconds;
+    if (interval == null || interval < 0 || interval > 0xFFFFFFFF) {
+      _deviceUiErrorSurface = DeviceUiSurface.gpsMode;
+      _deviceUiError = interval == null
+          ? 'GPS settings have not been read from the radio yet. Try again.'
+          : 'That interval is out of range';
+      _appDebugLogService?.warn(
+        'gps SET suppressed: ${interval == null ? 'state not read, interval unknown' : 'interval $interval out of range'}',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.gpsMode;
+    _appDebugLogService?.info(
+      'gps SET -> mode=${mode.name} interval=${interval}s '
+      '[0xC5][0x0E][0x${mode.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildGpsModeSetFrame(mode, interval));
   }
 
   /// Re-read whatever headless-UI state this radio supports. Called after every
@@ -1037,11 +1096,15 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = null;
+    _gpsModeState = null;
   }
 
   void _reconcileDeviceUi() {
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
+    if (supportsGpsMode) requestGpsMode();
   }
 
   /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
@@ -1057,18 +1120,103 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     final scope = parseNotifyScopeReply(frame);
-    if (scope != null) _handleNotifyScopeReply(scope);
+    if (scope != null) {
+      _handleNotifyScopeReply(scope);
+      return;
+    }
+    final gps = parseGpsModeReply(frame);
+    if (gps != null) {
+      _handleGpsModeReply(gps);
+      return;
+    }
+    _appDebugLogService?.warn(
+      '0xC5 reply not understood (sub=0x'
+      '${frame.length > 1 ? frame[1].toRadixString(16).padLeft(2, '0') : '??'}, '
+      'len=${frame.length})',
+      tag: 'DeviceUI',
+    );
   }
 
-  void _handleButtonMatrixReply(OffbandUiReply reply) {
+  /// A `0x7F` refusal. The frame names no sub-code, so it is attributed to the
+  /// write outstanding when it arrived; a refusal with none is still shown and
+  /// logged, just not claimed by any one screen.
+  void _handleDeviceUiError(OffbandUiReply reply) {
+    final surface = _pendingDeviceUiWrite;
+    _pendingDeviceUiWrite = null;
+    _deviceUiErrorSurface = surface;
+    _deviceUiError =
+        surface == DeviceUiSurface.gpsMode && reply.errorCode != null
+        ? describeGpsError(reply.errorCode!)
+        : reply.errorMessage;
+    final what = switch (surface) {
+      DeviceUiSurface.buttonMatrix => 'Button config',
+      DeviceUiSurface.notifyScope => 'Notification scope',
+      DeviceUiSurface.gpsMode => 'GPS mode',
+      DeviceUiSurface.channelTune => 'Channel tune',
+      null => 'Device UI request',
+    };
+    _appDebugLogService?.warn(
+      '$what refused: $_deviceUiError',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleGpsModeReply(OffbandUiReply reply) {
     if (reply.isError) {
+      _deviceUiErrorSurface = DeviceUiSurface.gpsMode;
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
-        'Button config refused: ${reply.errorMessage}',
+        'GPS mode reply rejected: ${reply.errorMessage}',
         tag: 'DeviceUI',
       );
       notifyListeners();
       return;
+    }
+    final g = reply.gps;
+    if (g == null) {
+      // Not reachable today: parseGpsModeReply returns an error reply whenever
+      // it cannot build a state. Checked rather than asserted across files.
+      _appDebugLogService?.warn('gps reply with no state', tag: 'DeviceUI');
+      return;
+    }
+    final isWrite = reply.sub == offbandUiGpsSet;
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.gpsMode) {
+      _pendingDeviceUiWrite = null;
+    }
+    _gpsModeState = g;
+    _appDebugLogService?.info(
+      'gps reply: mode=${g.mode.name} '
+      'stored=0x${g.storedMode.toRadixString(16).padLeft(2, '0')} '
+      'ps_ok=${g.powerSaveAvailable ? 1 : 0} '
+      'activity=${g.activity?.name ?? 'unknown'} '
+      'interval=${g.intervalSeconds}s wait=${g.waitSeconds}s '
+      '(${isWrite ? 'write confirmed' : 'read'})',
+      tag: 'DeviceUI',
+    );
+    // The radio's gps_enabled is what this reply resolved, and the legacy
+    // `gps` custom var mirrors it. Keep the mirror honest so the 0xC1 poll
+    // follows a mode change made here, but never invent the var on a radio
+    // that did not report one.
+    final vars = _currentCustomVars;
+    if (vars != null && vars.containsKey('gps')) {
+      final enabled = g.mode == GpsMode.off ? '0' : '1';
+      if (vars['gps'] != enabled) {
+        vars['gps'] = enabled;
+        _reconcileGpsPolling();
+      }
+    }
+    notifyListeners();
+  }
+
+  void _handleButtonMatrixReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _handleDeviceUiError(reply);
+      return;
+    }
+    if (_pendingDeviceUiWrite == DeviceUiSurface.buttonMatrix &&
+        reply.sub == offbandUiMatrixSet) {
+      _pendingDeviceUiWrite = null;
     }
     if (reply.matrix != null) {
       final m = reply.matrix!;
@@ -1101,7 +1249,12 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _handleNotifyScopeReply(OffbandUiReply reply) {
+    if (_pendingDeviceUiWrite == DeviceUiSurface.notifyScope &&
+        reply.sub == offbandUiScopeSet) {
+      _pendingDeviceUiWrite = null;
+    }
     if (reply.isError) {
+      _deviceUiErrorSurface = DeviceUiSurface.notifyScope;
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
         'Notification scope refused: ${reply.errorMessage}',
