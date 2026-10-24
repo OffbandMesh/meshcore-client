@@ -152,12 +152,59 @@ void main() {
     });
   });
 
+  group('T36 sharing a renamed contact does not leak the label (#750)', () {
+    // Found by the pre-PR adversarial review, not by me, and not reachable by
+    // T14 because contact.dart was not in its watched list. A share payload
+    // becomes the RECEIVED name on every device that imports it, so this leak
+    // propagates to other operators rather than stopping at our own radio.
+    test(
+      '- the channel share carries the received name, not the custom one',
+      () {
+        final shared = _contact(customName: _custom).toChannelShare();
+
+        expect(shared, contains(_received));
+        expect(shared, isNot(contains(_custom)));
+      },
+    );
+
+    test('- the share URI carries the received name, not the custom one', () {
+      final shared = _contact(customName: _custom).toShareUri();
+
+      expect(shared, contains(Uri.encodeComponent(_received)));
+      expect(shared, isNot(contains(_custom)));
+    });
+
+    test('+ with no custom name both share formats are unchanged', () {
+      expect(_contact().toChannelShare(), contains(_received));
+      expect(_contact().toShareUri(), contains(Uri.encodeComponent(_received)));
+    });
+  });
+
   group('T14 source guard: no name-write site reads the display getter', () {
+    // KNOWN LIMIT, measured not assumed. This guard matches `name: <ident>.name`
+    // and therefore CANNOT see an intra-class read, where the getter is reached
+    // as bare `name` with an implicit `this`. That is exactly where the share
+    // leak T36 covers was living, inside contact.dart, and reverting the fix
+    // was confirmed to leave this guard green while T36 failed.
+    //
+    // Widening the regex to catch bare `name:` is not possible without flooding
+    // on legitimate parameter pass-through: the static build* helpers in
+    // contact.dart take a `name` parameter and forward it, which is correct.
+    //
+    // So: this guard covers CROSS-class reads. Intra-class reads are covered
+    // behaviourally, by T36 and T11. Do not add a site to contact.dart and
+    // assume this test is watching it.
     // The compiler cannot catch these: `.name` still resolves after the 750.1
     // rename, so a site that reads it compiles and silently sends or stores
     // the user's label. Nine sites were found by grep during 750.1; this test
     // fails if any of them regresses or a tenth appears.
     const watched = <String>[
+      // Added after the pre-PR review found the leak this list had missed:
+      // toShareUri and toChannelShare both read `.name`, and a share payload
+      // becomes the RECEIVED name on every device that imports it. The guard
+      // was only watching the radio and the stores, not the paths that send a
+      // name to other operators. (#750)
+      'lib/models/contact.dart',
       'lib/connector/meshcore_connector.dart',
       'lib/services/stock_config_import_service.dart',
       'lib/services/stock_config_export_service.dart',
