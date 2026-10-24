@@ -57,6 +57,11 @@ const int offbandUiScopeSet = 0x02;
 const int offbandUiMatrixGet = 0x03;
 const int offbandUiMatrixSet = 0x04;
 
+/// Per-channel tune (#971, meshcore-firmware#1789). Both reply
+/// `[0xC5][sub][ch][stored]`, the SET reply re-read after the write.
+const int offbandUiChannelTuneGet = 0x0B;
+const int offbandUiChannelTuneSet = 0x0C;
+
 /// GPS mode and Power-save interval (#969, meshcore-firmware#1789). Both reply
 /// with the same 14-byte state, the SET reply re-read after the write.
 const int offbandUiGpsGet = 0x0D;
@@ -257,6 +262,52 @@ class GpsModeState {
   });
 }
 
+/// A channel's tune choice, as the radio stores it (#971).
+///
+/// Stored byte 0 means no choice: inherit the global channel tune. Any other
+/// value is tune id + 1, and tune id 0 is Silent, a deliberate choice. Those
+/// two must never collapse into one "none", because the user cannot tell from
+/// the device which one they picked, so they are distinct values here and the
+/// byte is never built by hand.
+class ChannelTune {
+  const ChannelTune.inherit() : stored = 0;
+
+  const ChannelTune._(this.stored);
+
+  /// [tuneId] 0 is Silent. The stored byte is `tuneId + 1`, so 254 is the
+  /// highest id that fits.
+  factory ChannelTune.tune(int tuneId) {
+    if (tuneId < 0 || tuneId > 254) {
+      throw ArgumentError.value(tuneId, 'tuneId', 'must be 0 to 254');
+    }
+    return ChannelTune._(tuneId + 1);
+  }
+
+  factory ChannelTune.fromStored(int stored) => ChannelTune._(stored & 0xFF);
+
+  final int stored;
+
+  bool get inherits => stored == 0;
+  bool get isSilent => stored == 1;
+
+  /// Null when the channel inherits.
+  int? get tuneId => stored == 0 ? null : stored - 1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChannelTune && other.stored == stored;
+
+  @override
+  int get hashCode => stored.hashCode;
+}
+
+/// One channel's tune, as a `0xC5` 0x0B or 0x0C reply reports it.
+class ChannelTuneReply {
+  const ChannelTuneReply({required this.channel, required this.tune});
+  final int channel;
+  final ChannelTune tune;
+}
+
 /// The device's current button configuration, as reported by a GET.
 class ButtonMatrix {
   /// Sequence to action, only for sequences the device reported.
@@ -306,6 +357,27 @@ Uint8List buildNotifyScopeGetFrame() =>
 Uint8List buildNotifyScopeSetFrame(DeviceNotifyScope scope) =>
     Uint8List.fromList([cmdOffbandDeviceUi, offbandUiScopeSet, scope.code]);
 
+int _channelByte(int channel) {
+  if (channel < 0 || channel > 0xFF) {
+    throw ArgumentError.value(channel, 'channel', 'must be 0 to 255');
+  }
+  return channel;
+}
+
+Uint8List buildChannelTuneGetFrame(int channel) => Uint8List.fromList([
+  cmdOffbandDeviceUi,
+  offbandUiChannelTuneGet,
+  _channelByte(channel),
+]);
+
+Uint8List buildChannelTuneSetFrame(int channel, ChannelTune tune) =>
+    Uint8List.fromList([
+      cmdOffbandDeviceUi,
+      offbandUiChannelTuneSet,
+      _channelByte(channel),
+      tune.stored,
+    ]);
+
 Uint8List buildGpsModeGetFrame() =>
     Uint8List.fromList([cmdOffbandDeviceUi, offbandUiGpsGet]);
 
@@ -330,6 +402,7 @@ class OffbandUiReply {
   final ButtonAction? setAction;
   final DeviceNotifyScope? scope;
   final GpsModeState? gps;
+  final ChannelTuneReply? channelTune;
   final String? errorMessage;
 
   /// The raw reason byte of a `0x7F` error, so a surface can word it for its
@@ -344,6 +417,7 @@ class OffbandUiReply {
     this.setAction,
     this.scope,
     this.gps,
+    this.channelTune,
     this.errorMessage,
     this.errorCode,
   });
@@ -432,6 +506,26 @@ OffbandUiReply? parseNotifyScopeReply(Uint8List frame) {
     command: respCodeOffbandDeviceUi,
     sub: sub,
     scope: scope,
+  );
+}
+
+/// Parse a `0xC5` channel-tune reply (0x0B or 0x0C). Null if this is not one,
+/// or if it is truncated. Any stored byte is a valid value; which ones the
+/// badge's picker offers is the firmware's to enforce, and it refuses the rest.
+OffbandUiReply? parseChannelTuneReply(Uint8List frame) {
+  if (frame.length < 2 || frame[0] != respCodeOffbandDeviceUi) return null;
+  final sub = frame[1];
+  if (sub != offbandUiChannelTuneGet && sub != offbandUiChannelTuneSet) {
+    return null;
+  }
+  if (frame.length < 4) return null;
+  return OffbandUiReply(
+    command: respCodeOffbandDeviceUi,
+    sub: sub,
+    channelTune: ChannelTuneReply(
+      channel: frame[2],
+      tune: ChannelTune.fromStored(frame[3]),
+    ),
   );
 }
 
