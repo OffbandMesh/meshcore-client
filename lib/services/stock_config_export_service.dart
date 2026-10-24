@@ -230,7 +230,11 @@ StockChannel toStockChannel(Channel channel) =>
 StockContact toStockContact(Contact contact) {
   return StockContact(
     type: contact.type,
-    name: contact.name,
+    // receivedName, never `.name`. A stock config file is an interchange
+    // format other operators import, where a name reads as what the node
+    // calls itself. Exporting one user's private label would hand it to
+    // everyone who loads the file. (#750, T33)
+    name: contact.receivedName,
     publicKey: contact.publicKey,
     flags: contact.flags,
     latitude: contact.latitude ?? 0,

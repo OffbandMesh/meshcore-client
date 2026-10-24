@@ -52,7 +52,11 @@ class ContactDiscoveryStore {
   Map<String, dynamic> _toJson(Contact contact) {
     return {
       'publicKey': base64Encode(contact.publicKey),
-      'name': contact.name,
+      // The RECEIVED name, never `contact.name`. Same one-way data loss as
+      // `contact_store`: the getter would persist a user label into this key
+      // and the next load would read it back as what the node calls itself.
+      // (#750)
+      'name': contact.receivedName,
       'type': contact.type,
       'flags': contact.flags,
       'pathLength': contact.pathLength,
@@ -78,7 +82,8 @@ class ContactDiscoveryStore {
     final lastModifiedMs = json['lastModified'] as int?;
     return Contact(
       publicKey: Uint8List.fromList(base64Decode(json['publicKey'] as String)),
-      name: json['name'] as String? ?? 'Unknown',
+      // Fallback retained for the same reason as `contact_store`. (T31)
+      receivedName: json['name'] as String? ?? 'Unknown',
       type: json['type'] as int? ?? 0,
       flags: json['flags'] as int? ?? 0,
       pathLength: json['pathLength'] as int? ?? -1,

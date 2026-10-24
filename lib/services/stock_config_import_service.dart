@@ -308,6 +308,10 @@ class StockConfigImportService {
           hashWidth: path == null || path.hashWidth == 0 ? 1 : path.hashWidth,
           type: contact.type,
           flags: contact.flags,
+          // `contact` here is a StockContact parsed from an imported stock
+          // config file, not our Contact. It has no custom-name concept, and
+          // its name is what the file says the node calls itself, so this is
+          // already a received name. Allowlisted in the T14 guard. (#750)
           name: contact.name,
           lat: contact.latitude,
           lon: contact.longitude,

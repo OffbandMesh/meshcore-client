@@ -29,6 +29,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/blocked_badge.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/contact_filter_rail.dart';
+import '../widgets/contact_rename_dialog.dart';
 import '../widgets/contact_settings_dialog.dart';
 import '../widgets/path_selection_dialog.dart';
 import '../widgets/repeater_login_dialog.dart';
@@ -1310,8 +1311,25 @@ class _ContactsScreenState extends State<ContactsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Stock parity: any node can carry a custom name, and the node's
+            // own name stays underneath where the user can still see it. (#750)
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline),
+              title: Text(context.l10n.contact_rename),
+              subtitle: contact.customName == null
+                  ? null
+                  : Text(
+                      context.l10n.contact_nodeCallsItself(
+                        contact.receivedName,
+                      ),
+                    ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                showContactRenameDialog(context, contact);
+              },
+            ),
             // Same destination as the chat ellipsis -> Contact settings (#351).
-            // First item, so the destructive Block tile stays separated below.
+            // Kept above the destructive Block tile, which stays below.
             ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: Text(context.l10n.contact_settings),

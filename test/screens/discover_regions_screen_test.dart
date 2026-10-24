@@ -13,7 +13,7 @@ import 'package:meshcore_open/services/region_discovery_service.dart';
 
 Contact _repeater() => Contact(
   publicKey: Uint8List(32),
-  name: 'rpt-01',
+  receivedName: 'rpt-01',
   type: advTypeRepeater,
   pathLength: 0,
   path: Uint8List(0),

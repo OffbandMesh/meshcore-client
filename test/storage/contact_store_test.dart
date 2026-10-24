@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// wrote whatever was in memory over the stored contacts.
 Contact _contact(int keyByte, String name) => Contact(
   publicKey: Uint8List.fromList(List<int>.filled(32, keyByte)),
-  name: name,
+  receivedName: name,
   type: 1,
   pathLength: -1,
   path: Uint8List(0),
