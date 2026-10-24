@@ -497,6 +497,35 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settings_longitude => 'Lengtegraad';
 
   @override
+  String get settings_locationCategorySubtitle =>
+      'GPS, coordinates, and reporting';
+
+  @override
+  String get settings_locationCoordinates => 'Coordinates';
+
+  @override
+  String get settings_locationNotSet => 'Not set';
+
+  @override
+  String get settings_locationReportInterval => 'Position reporting interval';
+
+  @override
+  String settings_locationEveryMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Every $minutes minutes',
+      one: 'Every minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_locationEverySeconds(int seconds) {
+    return 'Every $seconds seconds';
+  }
+
+  @override
   String get settings_contactSettings => 'Contactinstellingen';
 
   @override

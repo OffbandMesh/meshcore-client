@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/utils/gpx_export.dart';
-import 'package:meshcore_open/widgets/elements_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
-import '../models/offband_gps_status.dart';
 import '../models/radio_preset.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
@@ -28,6 +26,7 @@ import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/device_ui_view.dart';
+import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
@@ -186,6 +185,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_radioSettings,
         subtitle: l10n.settings_radioSettingsSubtitle,
         builder: _radioRangePane,
+      ),
+      // #977: the single home for GPS, directly under Radio Settings.
+      SettingsCategory(
+        icon: Icons.location_on_outlined,
+        title: l10n.settings_location,
+        subtitle: l10n.settings_locationCategorySubtitle,
+        builder: (_) => const LocationView(),
       ),
       SettingsCategory(
         icon: Icons.sensors_outlined,
@@ -423,37 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _editNodeName(context, connector),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.location_on_outlined),
-                title: Text(l10n.settings_location),
-                subtitle: Text(l10n.settings_locationSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _editLocation(context, connector),
-              ),
-              if (connector.currentCustomVars?.containsKey('gps') ?? false) ...[
-                const Divider(height: 1),
-                SwitchListTile(
-                  secondary: const Icon(Icons.gps_fixed),
-                  title: Text(l10n.settings_locationGPSEnable),
-                  subtitle: Text(l10n.settings_locationGPSEnableSubtitle),
-                  value: connector.currentCustomVars?['gps'] == '1',
-                  onChanged: (value) async {
-                    try {
-                      await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
-                    } catch (_) {
-                      if (context.mounted) {
-                        showDismissibleSnackBar(
-                          context,
-                          content: const Text(
-                            'Could not update GPS setting. Please try again.',
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-              ],
+              // Location and the GPS toggle moved to their own category (#977).
               // Button and buzzer: device UI config (#474/#475). Owner-placed
               // under Node Settings, directly above the public key.
               //
@@ -1237,335 +1213,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildGpsQuerySection(
-    BuildContext context,
-    OffbandGpsStatus? status,
-    bool querying,
-    bool queriedOnce,
-    VoidCallback onRefresh,
-  ) {
-    final l10n = context.l10n;
-    final theme = Theme.of(context);
-
-    Widget row(String label, String value) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-
-    final children = <Widget>[
-      const SizedBox(height: 8),
-      const Divider(),
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              l10n.settings_gpsStatusTitle,
-              style: theme.textTheme.titleSmall,
-            ),
-          ),
-          if (querying)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: l10n.settings_gpsStatusRefresh,
-              onPressed: onRefresh,
-            ),
-        ],
-      ),
-    ];
-
-    if (status != null) {
-      final live = status.hasLiveFix;
-      final color = live ? Colors.green : Colors.orange;
-      children.add(
-        Row(
-          children: [
-            Icon(
-              live ? Icons.gps_fixed : Icons.gps_off,
-              size: 18,
-              color: color,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                live
-                    ? l10n.settings_gpsStatusLiveFix
-                    : l10n.settings_gpsStatusNoFix,
-                style: TextStyle(color: color, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      );
-      children.add(const SizedBox(height: 8));
-      final coords = (status.latitude != null && status.longitude != null)
-          ? '${status.latitude!.toStringAsFixed(6)}, '
-                '${status.longitude!.toStringAsFixed(6)}'
-          : '—';
-      children.add(row(l10n.settings_gpsStatusCoords, coords));
-      children.add(
-        row(l10n.settings_gpsStatusSats, status.satellites?.toString() ?? '—'),
-      );
-      children.add(
-        row(
-          l10n.settings_gpsStatusAltitude,
-          status.altitudeCm != null
-              ? '${(status.altitudeCm! / 100).toStringAsFixed(1)} m'
-              : '—',
-        ),
-      );
-      final t = status.timestampUtc?.toLocal();
-      final ml = MaterialLocalizations.of(context);
-      final timeStr = t == null
-          ? '—'
-          : '${ml.formatCompactDate(t)} '
-                '${ml.formatTimeOfDay(TimeOfDay.fromDateTime(t))}';
-      children.add(row(l10n.settings_gpsStatusTime, timeStr));
-    } else {
-      children.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            queriedOnce
-                ? l10n.settings_gpsStatusNoResponse
-                : l10n.settings_gpsStatusTapRefresh,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    );
-  }
-
-  void _editLocation(BuildContext context, MeshCoreConnector connector) {
-    final l10n = context.l10n;
-    final latController = TextEditingController();
-    final lonController = TextEditingController();
-    final intervalController = TextEditingController();
-    latController.text = connector.selfLatitude?.toStringAsFixed(6) ?? '';
-    lonController.text = connector.selfLongitude?.toStringAsFixed(6) ?? '';
-
-    // Safe access to custom vars - may be null before device responds
-    final customVars = connector.currentCustomVars ?? {};
-    final bool hasGPS = customVars.containsKey("gps");
-    bool isGPSEnabled = customVars["gps"] == "1";
-
-    // Read current interval or default to 900 (15 minutes)
-    final currentInterval =
-        int.tryParse(customVars["gps_interval"] ?? "") ?? 900;
-    intervalController.text = currentInterval.toString();
-
-    OffbandGpsStatus? gpsStatus = connector.offbandGpsStatus;
-    bool queryingGps = false;
-    bool queriedOnce = false;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(l10n.settings_location),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: latController,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_latitude,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: lonController,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_longitude,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-              ),
-              if (hasGPS) ...[
-                const SizedBox(height: 16),
-                TextField(
-                  controller: intervalController,
-                  decoration: InputDecoration(
-                    labelText: l10n.settings_locationIntervalSec,
-                    border: const OutlineInputBorder(),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: false,
-                    signed: false,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FeatureToggleRow(
-                  title: l10n.settings_locationGPSEnable,
-                  subtitle: l10n.settings_locationGPSEnableSubtitle,
-                  value: isGPSEnabled,
-                  onChanged: (value) async {
-                    setDialogState(() => isGPSEnabled = value);
-                    try {
-                      await connector.setCustomVar(value ? "gps:1" : "gps:0");
-                    } catch (_) {
-                      if (context.mounted) {
-                        showDismissibleSnackBar(
-                          context,
-                          content: const Text(
-                            'Could not update GPS setting. Please try again.',
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-                if (connector.supportsOffbandGps)
-                  _buildGpsQuerySection(
-                    context,
-                    gpsStatus,
-                    queryingGps,
-                    queriedOnce,
-                    () async {
-                      setDialogState(() => queryingGps = true);
-                      final s = await connector.requestOffbandGps();
-                      if (!dialogContext.mounted) return;
-                      setDialogState(() {
-                        queryingGps = false;
-                        queriedOnce = true;
-                        gpsStatus = s;
-                      });
-                    },
-                  ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.common_cancel),
-            ),
-            TextButton(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                Navigator.pop(context);
-
-                if (hasGPS) {
-                  final intervalText = intervalController.text.trim();
-                  if (intervalText.isEmpty) {
-                    return;
-                  }
-
-                  final interval = int.tryParse(intervalText);
-                  if (interval == null || interval < 60 || interval >= 86400) {
-                    if (!context.mounted) return;
-                    showDismissibleSnackBar(
-                      context,
-                      content: Text(l10n.settings_locationIntervalInvalid),
-                    );
-                    return;
-                  }
-
-                  try {
-                    await connector.setCustomVar("gps_interval:$interval");
-                    await connector.refreshDeviceInfo();
-                  } catch (_) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Could not update location. Please try again.',
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationUpdated),
-                  );
-                }
-
-                final latText = latController.text.trim();
-                final lonText = lonController.text.trim();
-                if (latText.isEmpty && lonText.isEmpty) {
-                  return;
-                }
-
-                final currentLat = connector.selfLatitude;
-                final currentLon = connector.selfLongitude;
-                final lat = latText.isNotEmpty
-                    ? double.tryParse(latText)
-                    : currentLat;
-                final lon = lonText.isNotEmpty
-                    ? double.tryParse(lonText)
-                    : currentLon;
-                if (lat == null || lon == null) {
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationBothRequired),
-                  );
-                  return;
-                }
-                if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationInvalid),
-                  );
-                  return;
-                }
-
-                try {
-                  await connector.setNodeLocation(lat: lat, lon: lon);
-                  await connector.refreshDeviceInfo();
-                } catch (_) {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Could not update location. Please try again.',
-                      ),
-                    ),
-                  );
-                  return;
-                }
-                if (!context.mounted) return;
-                showDismissibleSnackBar(
-                  context,
-                  content: Text(l10n.settings_locationUpdated),
-                );
-              },
-              child: Text(l10n.common_save),
-            ),
-          ],
-        ),
       ),
     );
   }
