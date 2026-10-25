@@ -51,13 +51,19 @@ class ChannelMessagePathScreen extends StatelessWidget {
         final primaryPath = !channelMessage && !message.isOutgoing
             ? Uint8List.fromList(primaryPathTmp.reversed.toList())
             : primaryPathTmp;
-        final hashWidth = connector.pathHashByteWidth;
+        // The packet's own declared width; the device-wide mode only covers
+        // legacy records with no stored path-len byte. Grouping a foreign
+        // packet's hashes by the local radio's mode contradicted the decoded
+        // hop count on this same screen, 19 vs 39 on one packet (#985).
+        final hashWidth = message.effectivePathHashWidth(
+          connector.pathHashByteWidth,
+        );
         final hops = _buildPathHops(primaryPath, connector, l10n, hashWidth);
         final hasHopDetails = primaryPath.isNotEmpty;
         // Observed = bytes we hold / this path's width. Claimed = the hop count
         // the path-len byte already carries; dividing it again halved it. (#309)
         final observedLabel = _formatObservedHops(
-          primaryPath.length ~/ message.pathHashSize,
+          primaryPath.length ~/ hashWidth,
           message.hopCount,
           l10n,
         );
@@ -78,9 +84,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
                       flipPathAround: true,
                       reversePathAround:
                           !(!channelMessage && !message.isOutgoing),
-                      pathHashByteWidth: context
-                          .read<MeshCoreConnector>()
-                          .pathHashByteWidth,
+                      pathHashByteWidth: hashWidth,
                     ),
                   ),
                 ),
@@ -183,7 +187,11 @@ class ChannelMessagePathScreen extends StatelessWidget {
 
   Widget _buildPathVariants(BuildContext context, List<Uint8List> variants) {
     final l10n = context.l10n;
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
+    // Variants are repeats of the same origin's packet, so the message's own
+    // width applies to them too (#985).
+    final hashWidth = message.effectivePathHashWidth(
+      context.read<MeshCoreConnector>().pathHashByteWidth,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -493,7 +501,9 @@ class _ChannelMessagePathMapScreenState
             : selectedPathTmp;
 
         final selectedIndex = _indexForPath(selectedPath, observedPaths);
-        final hashWidth = connector.pathHashByteWidth;
+        final hashWidth = widget.message.effectivePathHashWidth(
+          connector.pathHashByteWidth,
+        );
         final hops = _buildPathHops(
           selectedPath,
           connector,
@@ -653,7 +663,9 @@ class _ChannelMessagePathMapScreenState
     ValueChanged<int> onSelected,
   ) {
     final l10n = context.l10n;
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
+    final hashWidth = widget.message.effectivePathHashWidth(
+      context.read<MeshCoreConnector>().pathHashByteWidth,
+    );
     final selectedPath = paths[selectedIndex];
     final label = selectedPath.isPrimary
         ? l10n.channelPath_primaryPath(selectedIndex + 1)

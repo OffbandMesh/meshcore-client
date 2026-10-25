@@ -139,6 +139,23 @@ class ChannelMessage {
     return pathHashSizeBytes(pl);
   }
 
+  /// Hash width to group this message's path bytes with: the packet's own
+  /// declared width when a path-len byte was stored, else [deviceWidth], the
+  /// radio's device-wide mode, for legacy and flood-sentinel records. The
+  /// device-wide width belongs to the local radio, not to a packet that may
+  /// have originated under a different mode (#985).
+  int effectivePathHashWidth(int deviceWidth) {
+    final pl = pathLength;
+    if (pl == null || pl < 0) return deviceWidth < 1 ? 1 : deviceWidth;
+    return pathHashSizeBytes(pl);
+  }
+
+  /// The firmware path_len field is an unsigned packed byte. A signed read
+  /// turned every 3-byte-width value (>= 0x80) negative, which the flood
+  /// sentinel check then swallowed (#985). 0xFF is the firmware's
+  /// direct-route marker and maps to the -1 sentinel, as before.
+  static int _decodePathLenField(int raw) => raw == 0xFF ? -1 : raw;
+
   ChannelMessage copyWith({
     ChannelMessageStatus? status,
     List<Repeat>? repeats,
@@ -229,11 +246,11 @@ class ChannelMessage {
         isOutgoing = (reader.readByte() & 0x01) != 0;
         reader.skipBytes(1); // Skip reserved2
         channelIdx = reader.readByte();
-        pathLen = reader.readInt8();
+        pathLen = _decodePathLenField(reader.readByte());
         txtType = reader.readByte();
       } else {
         channelIdx = reader.readByte();
-        pathLen = reader.readInt8();
+        pathLen = _decodePathLenField(reader.readByte());
         txtType = reader.readByte();
       }
       final timestampRaw = reader.readUInt32LE();
