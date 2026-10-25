@@ -66,6 +66,8 @@ import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
 import '../storage/channel_region_scope_store.dart';
 import 'offband_device_ui.dart';
+import 'offband_screen_settings.dart';
+import 'offband_tones.dart';
 import 'caplog_reassembler.dart';
 
 class DirectRepeater {
@@ -413,6 +415,11 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? _pendingDeviceUiWrite;
   GpsModeState? _gpsModeState;
   final Map<int, ChannelTune> _channelTunes = {};
+  final Map<ToneEvent, EventToneState> _eventTones = {};
+  final Map<int, TuneSlotInfo> _tuneSlots = {};
+  ScreenSettingsState? _screenSettings;
+  bool _tuneSlotTransferActive = false;
+  final List<_DeviceUiWaiter> _deviceUiWaiters = [];
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -903,11 +910,29 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Last GPS state the radio reported, or null if not read yet.
   GpsModeState? get gpsModeState => _gpsModeState;
 
-  /// Whether this radio answers the `0xC5` channel-tune sub-codes (#971).
-  bool get supportsChannelTune => firmwareSupportsChannelTune(_offbandCaps2);
+  /// Whether this radio answers the `0xC5` tune sub-codes: custom slots,
+  /// channel tune, event tones and preview (caps byte 2 `0x10`).
+  bool get supportsTunes => firmwareSupportsTunes(_offbandCaps2);
+
+  /// Whether this radio answers the screen-settings sub-codes (#987).
+  bool get supportsScreenSettings =>
+      firmwareSupportsScreenSettings(_offbandCaps2);
 
   /// The tune the radio reported for [channel], or null if not read yet.
   ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
+
+  /// The tune the radio reported for [event], or null if not read yet.
+  EventToneState? eventTone(ToneEvent event) => _eventTones[event];
+
+  /// `SLOT_GET` replies read so far, by slot index.
+  Map<int, TuneSlotInfo> get tuneSlots => Map.unmodifiable(_tuneSlots);
+
+  /// The radio's screen and battery settings, or null if not read yet.
+  ScreenSettingsState? get screenSettings => _screenSettings;
+
+  /// True while a slot is being read or saved. One at a time: firmware takes
+  /// one push per slot, and a second would displace the first.
+  bool get tuneSlotTransferActive => _tuneSlotTransferActive;
 
   /// Which surface [deviceUiError] belongs to, so a screen shows only its own.
   /// Null when the error could not be attributed to an outstanding write.
@@ -1052,7 +1077,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Ask the radio which tune [channel] plays (#971).
   Future<void> requestChannelTune(int channel) async {
-    if (!_deviceUiGateOpen('chtune GET', advertised: supportsChannelTune)) {
+    if (!_deviceUiGateOpen('chtune GET', advertised: supportsTunes)) {
       return;
     }
     _appDebugLogService?.info(
@@ -1065,7 +1090,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Set which tune [channel] plays. Local state follows the device's re-read
   /// reply, never the request, so a refused choice is never shown as saved.
   Future<void> setChannelTune(int channel, ChannelTune tune) async {
-    if (!_deviceUiGateOpen('chtune SET', advertised: supportsChannelTune)) {
+    if (!_deviceUiGateOpen('chtune SET', advertised: supportsTunes)) {
       return;
     }
     _deviceUiError = null;
@@ -1124,6 +1149,283 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildGpsModeSetFrame(mode, interval));
   }
 
+  /// Send [frame] and wait for the reply [matches] accepts, or for a refusal
+  /// attributed to [surface]. Null on timeout.
+  ///
+  /// The multi-frame flows (slot read, slot save) and preview need the answer
+  /// before their next step; the single-frame settings do not, and keep the
+  /// fire-and-forget shape the rest of this command uses.
+  Future<OffbandUiReply?> _sendDeviceUiAndAwait(
+    Uint8List frame,
+    DeviceUiSurface surface,
+    bool Function(OffbandUiReply reply) matches, {
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final waiter = _DeviceUiWaiter(surface, matches);
+    _deviceUiWaiters.add(waiter);
+    _pendingDeviceUiWrite = surface;
+    try {
+      await sendFrame(frame);
+      return await waiter.completer.future.timeout(
+        timeout,
+        onTimeout: () => null,
+      );
+    } finally {
+      _deviceUiWaiters.remove(waiter);
+      // Answered or not, this request is no longer outstanding, so a later
+      // refusal must not be pinned on it.
+      if (_pendingDeviceUiWrite == surface) _pendingDeviceUiWrite = null;
+    }
+  }
+
+  /// Hand [reply] to the first waiter that wants it. A refusal carries no
+  /// sub-code, so it goes to the waiter on the surface it was attributed to.
+  void _offerDeviceUiReply(OffbandUiReply reply, {DeviceUiSurface? errorOn}) {
+    for (final w in _deviceUiWaiters) {
+      final wanted = reply.isError
+          ? errorOn != null && w.surface == errorOn
+          : w.matches(reply);
+      if (wanted && !w.completer.isCompleted) {
+        w.completer.complete(reply);
+        return;
+      }
+    }
+  }
+
+  void _setDeviceUiError(DeviceUiSurface surface, String message) {
+    _deviceUiErrorSurface = surface;
+    _deviceUiError = message;
+    _appDebugLogService?.warn('${surface.name}: $message', tag: 'DeviceUI');
+    notifyListeners();
+  }
+
+  /// Read all six event tones (#986).
+  Future<void> requestEventTones() async {
+    if (!_deviceUiGateOpen('evtone GET', advertised: supportsTunes)) return;
+    for (final event in ToneEvent.values) {
+      await sendFrame(buildEventToneGetFrame(event));
+    }
+  }
+
+  /// Set the tune [event] plays. The id must be one the picker offers; the
+  /// radio refuses the rest, and the row changes only on its re-read reply.
+  Future<void> setEventTone(ToneEvent event, int tuneId) async {
+    if (!_deviceUiGateOpen('evtone SET', advertised: supportsTunes)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.eventTone;
+    _appDebugLogService?.info(
+      'evtone SET -> ${event.label} = $tuneId [0xC5][0x10]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildEventToneSetFrame(event, tuneId));
+  }
+
+  /// Audition [tuneId] on the radio. Null when the radio did not answer, or
+  /// refused the id (the refusal is then shown like any other).
+  Future<TunePlayResult?> playTune(int tuneId) async {
+    if (!_deviceUiGateOpen('play', advertised: supportsTunes)) return null;
+    _appDebugLogService?.info('play -> $tuneId [0xC5][0x11]', tag: 'DeviceUI');
+    final reply = await _sendDeviceUiAndAwait(
+      buildTunePlayFrame(tuneId),
+      DeviceUiSurface.tunePlay,
+      (r) => r.tunePlay?.tuneId == tuneId,
+    );
+    final result = reply?.tunePlay?.result;
+    _appDebugLogService?.info(
+      'play reply: ${result?.name ?? (reply == null ? 'no answer' : 'refused')}',
+      tag: 'DeviceUI',
+    );
+    return result;
+  }
+
+  /// Read every slot's name and length (#970).
+  Future<void> requestTuneSlots() async {
+    if (!_deviceUiGateOpen('slot GET', advertised: supportsTunes)) return;
+    for (var slot = 0; slot < tuneSlotCount; slot++) {
+      await sendFrame(buildSlotGetFrame(slot));
+    }
+  }
+
+  /// A slot's whole stored tune, read in chunks, or null if the read failed.
+  /// [onProgress] reports bytes read so far.
+  Future<String?> readTuneSlot(
+    int slot, {
+    void Function(int bytesRead)? onProgress,
+  }) async {
+    if (!_deviceUiGateOpen('slot READ', advertised: supportsTunes)) {
+      return null;
+    }
+    if (_tuneSlotTransferActive) return null;
+    _tuneSlotTransferActive = true;
+    notifyListeners();
+    try {
+      final out = <int>[];
+      while (true) {
+        final offset = out.length;
+        final reply = await _sendDeviceUiAndAwait(
+          buildSlotReadFrame(slot, offset),
+          DeviceUiSurface.tuneSlot,
+          (r) => r.slotChunk?.slot == slot && r.slotChunk?.offset == offset,
+        );
+        final chunk = reply?.slotChunk;
+        if (chunk == null) {
+          if (reply == null) {
+            _setDeviceUiError(
+              DeviceUiSurface.tuneSlot,
+              'The radio did not answer while reading this tune.',
+            );
+          }
+          return null;
+        }
+        out.addAll(chunk.bytes);
+        onProgress?.call(out.length);
+        if (!chunk.more) break;
+        // A chunk that says more but carries nothing would loop forever.
+        if (chunk.bytes.isEmpty || out.length > maxSlotRtttl) {
+          _setDeviceUiError(
+            DeviceUiSurface.tuneSlot,
+            'The radio sent this tune in a shape the app cannot read.',
+          );
+          return null;
+        }
+      }
+      _appDebugLogService?.info(
+        'slot READ: slot=$slot ${out.length} bytes',
+        tag: 'DeviceUI',
+      );
+      return latin1.decode(out);
+    } finally {
+      _tuneSlotTransferActive = false;
+      notifyListeners();
+    }
+  }
+
+  /// Save [rtttl] to [slot] in chunks sized to the transport, then re-read the
+  /// slot. An empty [rtttl] clears it. True only when the radio committed it.
+  ///
+  /// The radio replaces a slot only on the final chunk, so a push that fails
+  /// partway leaves the old tune intact. A displaced push (`ERR_SLOT_OFFSET`)
+  /// restarts from 0 once; a second refusal stops and is shown.
+  Future<bool> saveTuneSlot(
+    int slot,
+    String rtttl, {
+    void Function(int bytesSent, int total)? onProgress,
+  }) async {
+    if (!_deviceUiGateOpen('slot SET', advertised: supportsTunes)) {
+      return false;
+    }
+    if (_tuneSlotTransferActive) return false;
+    final bytes = latin1.encode(rtttl);
+    if (bytes.length > maxSlotRtttl) {
+      _setDeviceUiError(
+        DeviceUiSurface.tuneSlot,
+        'A tune can be at most $maxSlotRtttl characters.',
+      );
+      return false;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _tuneSlotTransferActive = true;
+    notifyListeners();
+    try {
+      final chunkSize = math.max(1, effectiveMaxFrameSize - 5);
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final outcome = await _pushTuneSlot(slot, bytes, chunkSize, onProgress);
+        if (outcome == _SlotPush.committed) {
+          _deviceUiError = null;
+          _deviceUiErrorSurface = null;
+          await _sendDeviceUiAndAwait(
+            buildSlotGetFrame(slot),
+            DeviceUiSurface.tuneSlot,
+            (r) => r.tuneSlot?.slot == slot,
+          );
+          _appDebugLogService?.info(
+            'slot SET committed: slot=$slot ${bytes.length} bytes',
+            tag: 'DeviceUI',
+          );
+          return true;
+        }
+        if (outcome != _SlotPush.displaced) return false;
+      }
+      return false;
+    } finally {
+      _tuneSlotTransferActive = false;
+      notifyListeners();
+    }
+  }
+
+  Future<_SlotPush> _pushTuneSlot(
+    int slot,
+    List<int> bytes,
+    int chunkSize,
+    void Function(int bytesSent, int total)? onProgress,
+  ) async {
+    var offset = 0;
+    do {
+      final end = math.min(offset + chunkSize, bytes.length);
+      final more = end < bytes.length;
+      final reply = await _sendDeviceUiAndAwait(
+        buildSlotSetFrame(slot, offset, more, bytes.sublist(offset, end)),
+        DeviceUiSurface.tuneSlot,
+        (r) => r.slotAccepted?.slot == slot,
+      );
+      if (reply == null) {
+        _setDeviceUiError(
+          DeviceUiSurface.tuneSlot,
+          'The radio did not answer while saving this tune. Nothing was '
+          'changed.',
+        );
+        return _SlotPush.failed;
+      }
+      if (reply.isError) {
+        return reply.errorCode == ButtonConfigError.slotOffset.code
+            ? _SlotPush.displaced
+            : _SlotPush.failed;
+      }
+      // Mid-push the radio counts what it holds; anything but the end of this
+      // chunk means another push took over.
+      if (more && reply.slotAccepted!.accepted != end) {
+        return _SlotPush.displaced;
+      }
+      offset = end;
+      onProgress?.call(offset, bytes.length);
+    } while (offset < bytes.length);
+    return _SlotPush.committed;
+  }
+
+  /// Read the badge's screen and battery settings (#987).
+  Future<void> requestScreenSettings() async {
+    if (!_deviceUiGateOpen('screen GET', advertised: supportsScreenSettings)) {
+      return;
+    }
+    await sendFrame(buildScreenSettingsGetFrame());
+  }
+
+  Future<void> _sendScreenSet(String what, Uint8List frame) async {
+    if (!_deviceUiGateOpen(what, advertised: supportsScreenSettings)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.screenSettings;
+    _appDebugLogService?.info('$what -> $frame', tag: 'DeviceUI');
+    await sendFrame(frame);
+  }
+
+  Future<void> setTextSize(BadgeTextTarget target, BadgeTextSize size) =>
+      _sendScreenSet('text SET', buildTextSizeSetFrame(target, size));
+
+  /// [seconds] must be one of [screenOffSteps]; the radio refuses the rest.
+  Future<void> setScreenOff(int seconds) =>
+      _sendScreenSet('scroff SET', buildScreenOffSetFrame(seconds));
+
+  Future<void> setTimeZone(int index) =>
+      _sendScreenSet('tz SET', buildTimeZoneSetFrame(index));
+
+  /// Pin the radio's own current reading as 100%, or hand the full point back
+  /// to auto-learn. The radio refuses a reading that is not a full cell.
+  Future<void> setBatteryFull({required bool pin}) =>
+      _sendScreenSet('batt SET', buildBatteryFullSetFrame(pin: pin));
+
   /// Re-read whatever headless-UI state this radio supports. Called after every
   /// device-info reply so a scope changed by triple-press on the device is
   /// never displayed stale, and so frame-arrival order does not matter. (#475)
@@ -1141,12 +1443,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _pendingDeviceUiWrite = null;
     _gpsModeState = null;
     _channelTunes.clear();
+    _eventTones.clear();
+    _tuneSlots.clear();
+    _screenSettings = null;
   }
 
   void _reconcileDeviceUi() {
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
     if (supportsGpsMode) requestGpsMode();
+    // Node Settings names the battery full point in its Battery row.
+    if (supportsScreenSettings) requestScreenSettings();
   }
 
   /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
@@ -1176,6 +1483,16 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleChannelTuneReply(tune);
       return;
     }
+    final tunes = parseTuneReply(frame);
+    if (tunes != null) {
+      _handleTuneReply(tunes);
+      return;
+    }
+    final screen = parseScreenSettingsReply(frame);
+    if (screen != null) {
+      _handleScreenSettingsReply(screen);
+      return;
+    }
     _appDebugLogService?.warn(
       '0xC5 reply not understood (sub=0x'
       '${frame.length > 1 ? frame[1].toRadixString(16).padLeft(2, '0') : '??'}, '
@@ -1200,10 +1517,59 @@ class MeshCoreConnector extends ChangeNotifier {
       DeviceUiSurface.notifyScope => 'Notification scope',
       DeviceUiSurface.gpsMode => 'GPS mode',
       DeviceUiSurface.channelTune => 'Channel tune',
+      DeviceUiSurface.eventTone => 'Event tone',
+      DeviceUiSurface.tunePlay => 'Tune preview',
+      DeviceUiSurface.tuneSlot => 'Tune slot',
+      DeviceUiSurface.screenSettings => 'Screen settings',
       null => 'Device UI request',
     };
     _appDebugLogService?.warn(
-      '$what refused: $_deviceUiError',
+      '$what refused: $_deviceUiError'
+      '${reply.errorDetail == null ? '' : ' (detail ${reply.errorDetail})'}',
+      tag: 'DeviceUI',
+    );
+    _offerDeviceUiReply(reply, errorOn: surface);
+    notifyListeners();
+  }
+
+  void _handleTuneReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _setDeviceUiError(DeviceUiSurface.eventTone, reply.errorMessage!);
+      return;
+    }
+    if (_pendingDeviceUiWrite == DeviceUiSurface.eventTone &&
+        reply.sub == offbandUiEventToneSet) {
+      _pendingDeviceUiWrite = null;
+    }
+    final ev = reply.eventTone;
+    if (ev != null) {
+      _eventTones[ev.event] = ev.state;
+      _appDebugLogService?.info(
+        'evtone reply: ${ev.event.label} stored=${ev.state.stored} '
+        'effective=${ev.state.effective}',
+        tag: 'DeviceUI',
+      );
+    }
+    final slot = reply.tuneSlot;
+    if (slot != null && slot.slot >= 0 && slot.slot < tuneSlotCount) {
+      _tuneSlots[slot.slot] = slot.info;
+    }
+    _offerDeviceUiReply(reply);
+    notifyListeners();
+  }
+
+  void _handleScreenSettingsReply(OffbandUiReply reply) {
+    if (_pendingDeviceUiWrite == DeviceUiSurface.screenSettings &&
+        reply.sub != offbandUiScreenGet) {
+      _pendingDeviceUiWrite = null;
+    }
+    final s = reply.screen!;
+    _screenSettings = s;
+    _appDebugLogService?.info(
+      'screen reply: nav=${s.navText?.name} msg=${s.messageText?.name} '
+      'scroff=${s.screenOffStored}/${s.screenOffSeconds}s tz=${s.timeZone} '
+      'batt=${s.batteryFullStored}/${s.batteryFullMv}mV '
+      'pinned=${s.batteryPinned}',
       tag: 'DeviceUI',
     );
     notifyListeners();
@@ -10357,3 +10723,14 @@ class _PendingCommandAck {
 
   _PendingCommandAck({required this.commandCode, this.channelSendQueueId});
 }
+
+/// A `0xC5` request waiting for its reply.
+class _DeviceUiWaiter {
+  _DeviceUiWaiter(this.surface, this.matches);
+  final DeviceUiSurface surface;
+  final bool Function(OffbandUiReply reply) matches;
+  final Completer<OffbandUiReply?> completer = Completer();
+}
+
+/// How one pass of a slot push ended.
+enum _SlotPush { committed, displaced, failed }

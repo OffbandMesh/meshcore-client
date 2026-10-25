@@ -25,6 +25,8 @@ import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
+import 'settings/badge_battery_view.dart';
+import 'settings/badge_screen_view.dart';
 import 'settings/device_ui_view.dart';
 import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
@@ -410,6 +412,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _radioStatsPane(BuildContext context) =>
       const CompanionRadioStatsBody();
 
+  void _pushBadgePage(BuildContext context, String title, Widget body) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text(title), centerTitle: true),
+          body: body,
+        ),
+      ),
+    );
+  }
+
   Widget _identityPane(BuildContext context) {
     final l10n = context.l10n;
     final connector = context.watch<MeshCoreConnector>();
@@ -460,6 +474,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     );
                   },
+                ),
+              ],
+              // The badge's own screen and battery settings (#987), beside
+              // Button actions (owner decision 2026-10-25). Strictly on the
+              // 0x40 bit: no bit, no rows, no command.
+              if (connector.supportsScreenSettings) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.monitor),
+                  title: Text(l10n.settings_badgeScreen),
+                  subtitle: Text(l10n.settings_badgeScreenSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_badgeScreen,
+                    const BadgeScreenView(),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.battery_std),
+                  title: Text(l10n.settings_badgeBattery),
+                  subtitle: Text(
+                    connector.screenSettings == null
+                        ? l10n.settings_badgeBatteryReading
+                        : l10n.settings_badgeBatterySubtitle(
+                            connector.screenSettings!.batteryFullMv,
+                          ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_badgeBattery,
+                    const BadgeBatteryView(),
+                  ),
                 ),
               ],
               if (connector.selfPublicKey != null) ...[

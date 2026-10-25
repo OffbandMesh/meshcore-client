@@ -1174,6 +1174,36 @@ abstract class AppLocalizations {
   /// **'Assign what the button does'**
   String get settings_buttonActionsSubtitle;
 
+  /// No description provided for @settings_badgeScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen'**
+  String get settings_badgeScreen;
+
+  /// No description provided for @settings_badgeScreenSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text size, screen off, time zone'**
+  String get settings_badgeScreenSubtitle;
+
+  /// No description provided for @settings_badgeBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get settings_badgeBattery;
+
+  /// No description provided for @settings_badgeBatterySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'100% at {mv} mV'**
+  String settings_badgeBatterySubtitle(int mv);
+
+  /// No description provided for @settings_badgeBatteryReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading from the radio'**
+  String get settings_badgeBatteryReading;
+
   /// No description provided for @settings_buzzerTones.
   ///
   /// In en, this message translates to:

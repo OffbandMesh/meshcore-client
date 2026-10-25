@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../connector/meshcore_connector.dart';
 import '../../connector/offband_device_ui.dart';
+import '../../connector/offband_tones.dart';
+import '../../widgets/device_ui_error_banner.dart';
+import '../../widgets/radio_tone.dart';
+import 'tune_slot_editor_screen.dart';
 
 /// Settings for a headless device's physical UI: the button-action matrix
 /// (#474) and the device notification scope (#475).
@@ -43,6 +47,10 @@ class _DeviceUiViewState extends State<DeviceUiView> {
           c.requestButtonMatrix();
         case DeviceUiPart.buzzer:
           c.requestNotifyScope();
+          if (c.supportsTunes) {
+            c.requestEventTones();
+            c.requestTuneSlots();
+          }
       }
     });
   }
@@ -53,8 +61,11 @@ class _DeviceUiViewState extends State<DeviceUiView> {
     null => true,
     DeviceUiSurface.buttonMatrix => widget.part == DeviceUiPart.buttons,
     DeviceUiSurface.notifyScope ||
-    DeviceUiSurface.channelTune => widget.part == DeviceUiPart.buzzer,
-    DeviceUiSurface.gpsMode => false,
+    DeviceUiSurface.channelTune ||
+    DeviceUiSurface.eventTone ||
+    DeviceUiSurface.tunePlay ||
+    DeviceUiSurface.tuneSlot => widget.part == DeviceUiPart.buzzer,
+    DeviceUiSurface.gpsMode || DeviceUiSurface.screenSettings => false,
   };
 
   @override
@@ -110,7 +121,7 @@ class _DeviceUiViewState extends State<DeviceUiView> {
           children: [
             if (connector.deviceUiError != null &&
                 _ownsError(connector.deviceUiErrorSurface))
-              _ErrorBanner(
+              DeviceUiErrorBanner(
                 message: connector.deviceUiError!,
                 onDismiss: connector.clearDeviceUiError,
               ),
@@ -125,6 +136,25 @@ class _DeviceUiViewState extends State<DeviceUiView> {
                 ),
               ),
               ..._scopeTiles(connector),
+              // The badge's Tones screen, in its order: the scope gates every
+              // tone below it (#986, #970). Needs the tune engine, 0x10.
+              if (connector.supportsTunes) ...[
+                const _SectionHeader('Tones'),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text('What this radio plays for each event.'),
+                ),
+                ..._eventToneTiles(connector),
+                const _SectionHeader('Custom tunes'),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    'Eight tunes stored on this radio, in RTTTL. A saved tune '
+                    'can be picked for any event or channel.',
+                  ),
+                ),
+                ..._slotTiles(connector),
+              ],
             ],
             if (showButtons) ...[
               const _SectionHeader('Button actions'),
@@ -182,6 +212,111 @@ class _DeviceUiViewState extends State<DeviceUiView> {
         .toList();
   }
 
+  /// The six events, each naming the tune that plays. "(radio default)" marks
+  /// one nobody has chosen, so a choice and a default never look alike.
+  List<Widget> _eventToneTiles(MeshCoreConnector connector) {
+    return ToneEvent.values.map((event) {
+      final state = connector.eventTone(event);
+      if (state == null) {
+        return ListTile(
+          leading: const Icon(Icons.music_note_outlined),
+          title: Text(event.label),
+          subtitle: const Text('Reading from the radio'),
+        );
+      }
+      final name =
+          tuneLabel(state.effective, connector.tuneSlots) ??
+          'Tune ${state.effective}';
+      return ListTile(
+        leading: Icon(tuneIcon(state.effective)),
+        title: Text(event.label),
+        subtitle: Text(state.isRadioDefault ? '$name (radio default)' : name),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _pickEventTone(connector, event, state),
+      );
+    }).toList();
+  }
+
+  Future<void> _pickEventTone(
+    MeshCoreConnector connector,
+    ToneEvent event,
+    EventToneState state,
+  ) async {
+    // No Default row: firmware refuses 0xFF on an event, as the badge's own
+    // picker offers none (owner decision 2026-10-25).
+    final choice = await showTunePickerDialog(
+      context,
+      title: '${event.label} tone',
+      description: event == ToneEvent.dm
+          ? 'Plays for every direct message.'
+          : null,
+      current: state.effective,
+    );
+    if (choice is TuneIdChoice) await connector.setEventTone(event, choice.id);
+  }
+
+  /// All eight slots, as the badge lists them: an empty slot is where you go
+  /// to fill one, so it is a row too.
+  List<Widget> _slotTiles(MeshCoreConnector connector) {
+    return [
+      for (var slot = 0; slot < tuneSlotCount; slot++)
+        _slotTile(connector, slot, connector.tuneSlots[slot]),
+    ];
+  }
+
+  Widget _slotTile(MeshCoreConnector connector, int slot, TuneSlotInfo? info) {
+    final number = slot + 1;
+    if (info == null) {
+      return ListTile(
+        leading: const Icon(Icons.music_note_outlined),
+        title: Text('$number'),
+        subtitle: const Text('Reading from the radio'),
+      );
+    }
+    void open() => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TuneSlotEditorScreen(slot: slot, info: info),
+      ),
+    );
+    if (info.isEmpty) {
+      return ListTile(
+        leading: const Icon(Icons.add_circle_outline),
+        title: Text('$number (empty)'),
+        subtitle: const Text('Tap to add a tune'),
+        onTap: open,
+      );
+    }
+    final name = info.name.isEmpty ? 'Slot $number' : info.name;
+    return ListTile(
+      leading: const Icon(Icons.music_note_outlined),
+      title: Text('$number $name'),
+      subtitle: Text('${info.length} characters'),
+      trailing: IconButton(
+        icon: const Icon(Icons.play_circle_outline),
+        color: Theme.of(context).colorScheme.primary,
+        tooltip: 'Play on the radio',
+        onPressed: () => _play(connector, slotTuneId(slot)),
+      ),
+      onTap: open,
+    );
+  }
+
+  Future<void> _play(MeshCoreConnector connector, int id) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final note = describeTunePlay(await connector.playTune(id));
+    if (note == null) return;
+    // Stays until OK: an explanation the user cannot finish reading is not
+    // one.
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(note),
+        duration: const Duration(days: 1),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
+      ),
+    );
+  }
+
   List<Widget> _buttonTiles(MeshCoreConnector connector) {
     final matrix = connector.buttonMatrix;
     if (matrix == null) {
@@ -232,42 +367,4 @@ class _SectionHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
     child: Text(title, style: Theme.of(context).textTheme.titleMedium),
   );
-}
-
-/// Persistent error banner. Stays until dismissed rather than flashing, per the
-/// error-visibility rule: an error the user cannot finish reading is not a
-/// surfaced error.
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onDismiss});
-  final String message;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: scheme.onErrorContainer),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(color: scheme.onErrorContainer),
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.close, color: scheme.onErrorContainer),
-            onPressed: onDismiss,
-          ),
-        ],
-      ),
-    );
-  }
 }

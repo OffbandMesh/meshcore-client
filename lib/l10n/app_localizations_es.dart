@@ -625,6 +625,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settings_buttonActionsSubtitle => 'Assign what the button does';
 
   @override
+  String get settings_badgeScreen => 'Screen';
+
+  @override
+  String get settings_badgeScreenSubtitle => 'Text size, screen off, time zone';
+
+  @override
+  String get settings_badgeBattery => 'Battery';
+
+  @override
+  String settings_badgeBatterySubtitle(int mv) {
+    return '100% at $mv mV';
+  }
+
+  @override
+  String get settings_badgeBatteryReading => 'Reading from the radio';
+
+  @override
   String get settings_buzzerTones => 'Buzzer and tones';
 
   @override

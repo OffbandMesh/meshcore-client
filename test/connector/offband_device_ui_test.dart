@@ -211,13 +211,21 @@ void main() {
 
     test('the new bits collide with no allocated caps-byte-2 bit', () {
       // Firmware allocates 0x01 scope, 0x02 matrix, 0x04 indicators, 0x08
-      // packet hash (OffbandConfigProtocol.h on firmware-base).
+      // packet hash (OffbandConfigProtocol.h on firmware-base), and
+      // 3e788e2a adds 0x10 TUNES, 0x20 GPS mode, 0x40 SCREEN_SETTINGS.
       const allocated = 0x01 | 0x02 | 0x04 | 0x08;
-      expect(offbandCap2GpsMode & allocated, equals(0));
-      expect(offbandCap2ChannelTune & allocated, equals(0));
-      expect(offbandCap2GpsMode & offbandCap2ChannelTune, equals(0));
+      const added = [
+        offbandCap2Tunes,
+        offbandCap2GpsMode,
+        offbandCap2ScreenSettings,
+      ];
+      for (final bit in added) {
+        expect(bit & allocated, equals(0));
+        expect(added.where((b) => b & bit != 0).length, equals(1));
+      }
+      expect(offbandCap2Tunes, equals(0x10));
       expect(offbandCap2GpsMode, equals(0x20));
-      expect(offbandCap2ChannelTune, equals(0x10));
+      expect(offbandCap2ScreenSettings, equals(0x40));
     });
   });
 

@@ -31,6 +31,7 @@ import '../services/corescope_service.dart';
 import '../services/region_discovery_service.dart';
 import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_tone.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
@@ -473,6 +474,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             onSelected: (value) {
               if (value == 'notifications') {
                 showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'radioTone') {
+                final connector = context.read<MeshCoreConnector>();
+                requestChannelRadioTone(connector, _currentChannel.index);
+                showChannelRadioToneDialog(context, _currentChannel);
               } else if (value == 'clearChat') {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
                   _currentChannel.index,
@@ -502,6 +507,17 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   ],
                 ),
               ),
+              if (context.read<MeshCoreConnector>().supportsTunes)
+                const PopupMenuItem(
+                  value: 'radioTone',
+                  child: Row(
+                    children: [
+                      Icon(Icons.music_note_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Radio tone'),
+                    ],
+                  ),
+                ),
               if (context.read<MeshCoreConnector>().supportsRegionScope)
                 PopupMenuItem(
                   value: 'setRegionScope',

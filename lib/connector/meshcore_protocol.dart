@@ -602,9 +602,12 @@ bool firmwareSupportsButtonMatrix(int? offbandCaps2) =>
 bool firmwareSupportsNotifyScope(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2NotifyScope) != 0;
 
-/// Per-channel tune over `0xC5` sub-codes 0x0B / 0x0C (#971). Firmware sets it
-/// where `PIN_BUZZER` is defined (meshcore-firmware#1789).
-const int offbandCap2ChannelTune = 0x10;
+/// The tune system over `0xC5` (#970, #971, #986): custom slots (0x09, 0x0A,
+/// 0x12), channel tune (0x0B, 0x0C), event tones (0x0F, 0x10) and preview
+/// (0x11). Firmware sets it where the UI plays every sound through its tune
+/// engine, which needs a buzzer but is not implied by one, so a radio can
+/// advertise the scope bit without this (meshcore-firmware `3e788e2a`).
+const int offbandCap2Tunes = 0x10;
 
 /// GPS mode and Power-save interval over `0xC5` sub-codes 0x0D / 0x0E (#969).
 /// Firmware sets it where `ENV_INCLUDE_GPS == 1` (meshcore-firmware#1789).
@@ -614,9 +617,17 @@ const int offbandCap2ChannelTune = 0x10;
 /// for that. Never offer Power save from this bit alone.
 const int offbandCap2GpsMode = 0x20;
 
-/// True iff this radio answers the `0xC5` channel-tune sub-codes (#971).
-bool firmwareSupportsChannelTune(int? offbandCaps2) =>
-    offbandCaps2 != null && (offbandCaps2 & offbandCap2ChannelTune) != 0;
+/// The badge's own display and battery settings over `0xC5` 0x13 to 0x17
+/// (#987): text sizes, Screen off, time zone, battery full point.
+const int offbandCap2ScreenSettings = 0x40;
+
+/// True iff this radio answers the `0xC5` tune sub-codes.
+bool firmwareSupportsTunes(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2Tunes) != 0;
+
+/// True iff this radio answers the `0xC5` screen-settings sub-codes (#987).
+bool firmwareSupportsScreenSettings(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2ScreenSettings) != 0;
 
 /// True iff this radio answers the `0xC5` GPS-mode sub-codes (#969).
 bool firmwareSupportsGpsMode(int? offbandCaps2) =>

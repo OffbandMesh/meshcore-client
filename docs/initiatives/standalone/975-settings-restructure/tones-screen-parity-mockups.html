@@ -149,7 +149,7 @@ table.par{border-collapse:collapse;font-size:12.5px;max-width:1040px;width:100%;
 <tr><td>Channel's own tone, with Default</td><td><code>0x0B/0x0C</code> CHTUNE, <code>0x10</code></td><td class="new">codec built, no screen</td><td>"Radio tone" in the channel sheet (frame 7)</td></tr>
 <tr><td>Settings &rsaquo; Nav text, Message text</td><td><code>0x13</code> GET, <code>0x14</code> TEXT_SET, <code>0x40</code></td><td class="new">missing</td><td>Screen page (frame 8)</td></tr>
 <tr><td>Settings &rsaquo; Screen off (15 s, 30 s, 1 m, 2 m, 5 m)</td><td><code>0x15</code> SCROFF_SET, <code>0x40</code></td><td class="new">missing</td><td>Screen page (frame 8)</td></tr>
-<tr><td>Settings &rsaquo; Time zone (45 zones, "not set" shows ages)</td><td><code>0x16</code> TZ_SET, <code>0x40</code></td><td class="new">missing</td><td>zone list (frame 9)</td></tr>
+<tr><td>Settings &rsaquo; Time zone (40 zones plus "not set", which shows ages)</td><td><code>0x16</code> TZ_SET, <code>0x40</code></td><td class="new">missing</td><td>zone list (frame 9)</td></tr>
 <tr><td>Settings &rsaquo; Battery: 100% point, Set 100% here, Back to auto</td><td><code>0x17</code> BATT_SET, <code>0x40</code></td><td class="new">missing</td><td>Battery page (frames 10, 11)</td></tr>
 <tr><td>Settings &rsaquo; GPS</td><td><code>0x0D/0x0E</code>, <code>0x20</code></td><td class="ok">Location (#977)</td><td>unchanged</td></tr>
 <tr><td>Settings &rsaquo; Hibernate, Device pages</td><td>not settings (AmberForge 1350): an action and a navigation</td><td>n/a</td><td>n/a</td></tr>
@@ -301,7 +301,7 @@ table.par{border-collapse:collapse;font-size:12.5px;max-width:1040px;width:100%;
 </div></div>
 <ul><li>Every control is the <code>SCREEN_GET</code> reply; each change sends its SET and the controls redraw from the 14-byte re-read reply, never from the tap.</li><li>"Menus and lists" is the badge's Nav text, "Messages" its Message text (owner decision 4).</li><li>Screen off offers exactly the five steps firmware accepts. When <code>scr_stored</code> is 0 (compiled default), no segment is selected and the line reads "Board default: 1 m" from <code>scr_secs</code>; picking a step replaces it and there is no way back to 0, on the badge or here.</li></ul></div>
 
-<div class="card"><h2><span class="n">9</span>Time zone</h2><p>The badge's 45 zones, its "not set", and a suggestion: the badge suggests from GPS, the app from the phone.</p>
+<div class="card"><h2><span class="n">9</span>Time zone</h2><p>The badge's 40 zones, its "not set", and a suggestion: the badge suggests from GPS, the app from the phone.</p>
 <div class="dev"><div class="scr">
 <div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Time zone</span></div>
 <div class="srch"><svg class="ic"><use href="#i-search"/></svg>Search zones</div>

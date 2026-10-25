@@ -61,7 +61,7 @@ void main() {
     await connector.requestChannelTune(0);
     await connector.setChannelTune(0, ChannelTune.tune(0));
 
-    expect(connector.supportsChannelTune, isFalse);
+    expect(connector.supportsTunes, isFalse);
     expect(sentTune(), isFalse);
   });
 
