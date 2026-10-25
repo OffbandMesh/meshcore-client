@@ -178,10 +178,16 @@ class _TuneSlotEditorScreenState extends State<TuneSlotEditorScreen> {
     final scheme = Theme.of(context).colorScheme;
     final problem = rtttlProblem(_text);
     final emptyText = _text.isEmpty;
+    // Firmware's own words fit 21 badge columns and do not say that order is
+    // the problem, which it usually is for RTTTL from elsewhere. When the
+    // header is the only fault, say so and offer the fix.
+    final orderFix = emptyText ? null : fixRtttlDefaultsOrder(_text);
     final helper = emptyText
         ? (_saved == null ? '' : 'Type or paste an RTTTL tune')
         : problem == RtttlProblem.ok
         ? 'Plays as "${deriveSlotName(_text)}"'
+        : orderFix != null
+        ? 'The badge reads d=, o=, b= in that order, each once'
         : problem.text;
     final helperIsProblem = !emptyText && problem != RtttlProblem.ok;
     final savedHasTune = _saved != null && _saved!.isNotEmpty;
@@ -241,6 +247,11 @@ class _TuneSlotEditorScreenState extends State<TuneSlotEditorScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (orderFix != null)
+                  TextButton(
+                    onPressed: _busy ? null : () => _controller.text = orderFix,
+                    child: const Text('Fix order'),
+                  ),
                 TextButton(
                   onPressed: _busy || !savedHasTune ? null : _clear,
                   style: TextButton.styleFrom(foregroundColor: scheme.error),

@@ -309,6 +309,28 @@ void main() {
     });
   });
 
+  group('slot editor, defaults out of order', () {
+    testWidgets('says why and fixes it in one tap', (tester) async {
+      await openBuzzer(tester, _Radio());
+      await tapText(tester, '1 Mario');
+      await tester.enterText(
+        find.byType(TextField),
+        'Take On Me:o=5,d=8,b=160,b=160:f#,f#,e5',
+      );
+      await tester.pump();
+      expect(
+        find.text('The badge reads d=, o=, b= in that order, each once'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Fix order'));
+      await tester.pump();
+      expect(find.text('Take On Me:d=8,o=5,b=160:f#,f#,e5'), findsOneWidget);
+      expect(find.text('Plays as "Take On Me"'), findsOneWidget);
+      expect(find.text('Fix order'), findsNothing);
+    });
+  });
+
   group('Node Settings', () {
     testWidgets('Screen and Battery only with 0x40', (tester) async {
       await pump(tester, _Radio(screen: false), const SettingsScreen());
