@@ -4,7 +4,7 @@ import 'offband_device_ui.dart';
 
 /// The badge's own display and battery settings over `0xC5` (#987): both
 /// text sizes, Screen off, time zone and the battery full point. Gated on caps
-/// byte 2 `0x40` SCREEN_SETTINGS (meshcore-firmware `3e788e2a`).
+/// byte 2 `0x40` SCREEN_SETTINGS (meshcore-firmware `f3d30a88`).
 ///
 /// Every reply, GET or SET, is the whole set re-read after the write:
 /// `[0xC5][sub][nav][msg][scr_stored:2][scr_secs:2][tz][batt_stored:2]

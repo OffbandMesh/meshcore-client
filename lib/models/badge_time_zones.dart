@@ -1,5 +1,5 @@
 /// The badge's time zone table, a copy of firmware `src/helpers/TimeZones.h`
-/// at meshcore-firmware `3e788e2a` (#987).
+/// on meshcore-firmware `firmware-base` at `f3d30a88` (#987).
 ///
 /// The radio stores a zone as an index into this list, so the order is the
 /// contract. Firmware keeps it append-only ("Append only; never reorder"), so

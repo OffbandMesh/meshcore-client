@@ -1,5 +1,5 @@
 // #987: the badge's screen and battery settings over 0xC5 0x13 to 0x17, and
-// the time zone table, against meshcore-firmware 3e788e2a.
+// the time zone table, against meshcore-firmware f3d30a88.
 
 import 'dart:typed_data';
 

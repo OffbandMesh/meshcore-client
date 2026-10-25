@@ -1,5 +1,5 @@
 // #970, #986: the tune codec over 0xC5, against the contract in
-// meshcore-firmware 3e788e2a OffbandConfigProtocol.h, and the ports of its
+// meshcore-firmware f3d30a88 OffbandConfigProtocol.h, and the ports of its
 // RTTTL validator and slot-name rule.
 
 import 'dart:typed_data';

@@ -606,7 +606,7 @@ bool firmwareSupportsNotifyScope(int? offbandCaps2) =>
 /// 0x12), channel tune (0x0B, 0x0C), event tones (0x0F, 0x10) and preview
 /// (0x11). Firmware sets it where the UI plays every sound through its tune
 /// engine, which needs a buzzer but is not implied by one, so a radio can
-/// advertise the scope bit without this (meshcore-firmware `3e788e2a`).
+/// advertise the scope bit without this (meshcore-firmware `f3d30a88`).
 const int offbandCap2Tunes = 0x10;
 
 /// GPS mode and Power-save interval over `0xC5` sub-codes 0x0D / 0x0E (#969).

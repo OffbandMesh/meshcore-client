@@ -212,7 +212,7 @@ void main() {
     test('the new bits collide with no allocated caps-byte-2 bit', () {
       // Firmware allocates 0x01 scope, 0x02 matrix, 0x04 indicators, 0x08
       // packet hash (OffbandConfigProtocol.h on firmware-base), and
-      // 3e788e2a adds 0x10 TUNES, 0x20 GPS mode, 0x40 SCREEN_SETTINGS.
+      // f3d30a88 adds 0x10 TUNES, 0x20 GPS mode, 0x40 SCREEN_SETTINGS.
       const allocated = 0x01 | 0x02 | 0x04 | 0x08;
       const added = [
         offbandCap2Tunes,
