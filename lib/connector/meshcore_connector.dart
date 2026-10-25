@@ -9037,7 +9037,11 @@ class MeshCoreConnector extends ChangeNotifier {
             timestamp: DateTime.fromMillisecondsSinceEpoch(timestampRaw * 1000),
             isOutgoing: false,
             status: ChannelMessageStatus.sent,
-            pathLength: packet.isFlood ? packet.hopCount : 0,
+            // The raw packed byte (hop count low 6 bits, hash width high 2),
+            // same encoding fromFrame stores. Storing the stripped hop count
+            // here lost the width, so a 3-byte-hash path later decoded as
+            // width 1 and the byte length leaked in as the hop count (#985).
+            pathLength: packet.isFlood ? packet.pathLenRaw : 0,
             pathBytes: packet.pathBytes,
             channelIndex: channel.index,
             rxTime: DateTime.now(),
@@ -9878,10 +9882,9 @@ class MeshCoreConnector extends ChangeNotifier {
         existing.pathVariants,
         processedMessage.pathVariants,
       );
-      final mergedPathLength = _mergePathLength(
+      final mergedPathLength = mergePathLenRaw(
         existing.pathLength,
         processedMessage.pathLength,
-        mergedPathBytes.length,
       );
       final newRepeatCount = existing.repeatCount + 1;
       final promotedFromPending =
@@ -10018,18 +10021,6 @@ class MeshCoreConnector extends ChangeNotifier {
     if (existing.isEmpty) return incoming;
     if (incoming.length > existing.length) return incoming;
     return existing;
-  }
-
-  int? _mergePathLength(int? existing, int? incoming, int observedLength) {
-    if (existing == null) {
-      if (incoming == null) return observedLength > 0 ? observedLength : null;
-      return incoming >= observedLength ? incoming : observedLength;
-    }
-    if (incoming == null) {
-      return existing >= observedLength ? existing : observedLength;
-    }
-    final merged = existing >= incoming ? existing : incoming;
-    return merged >= observedLength ? merged : observedLength;
   }
 
   List<Uint8List> _mergePathVariants(
@@ -10744,8 +10735,6 @@ class _RawPacket {
 
   bool get isFlood =>
       routeType == _routeFlood || routeType == _routeTransportFlood;
-
-  int get hopCount => pathLenRaw & 63;
 }
 
 class _ParsedText {

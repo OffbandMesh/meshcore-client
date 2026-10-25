@@ -1133,6 +1133,19 @@ int pathHashSizeBytes(int pathLenRaw) => ((pathLenRaw >> 6) & 0x03) + 1;
 int pathByteLength(int pathLenRaw) =>
     pathHopCount(pathLenRaw) * pathHashSizeBytes(pathLenRaw);
 
+/// Merges two stored path-len values for repeats of one message: both are the
+/// raw packed byte (or the -1 flood sentinel / null when unknown), and the one
+/// with the higher decoded hop count wins. Never feed a path BYTE length in
+/// here: at 2/3-byte hash widths it is 2-3x the hop count and decodes as a
+/// bogus width-1 count, which is how a 13-hop message rendered as 39 (#985).
+int? mergePathLenRaw(int? existing, int? incoming) {
+  if (existing == null) return incoming;
+  if (incoming == null) return existing;
+  if (existing < 0) return incoming;
+  if (incoming < 0) return existing;
+  return pathHopCount(existing) >= pathHopCount(incoming) ? existing : incoming;
+}
+
 /// Packs a hop count and per-hop hash width into the firmware path-length byte.
 ///
 /// Mirrors firmware `Packet::setPathHashSizeAndCount`. Sending a bare hop count

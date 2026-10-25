@@ -942,7 +942,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   Widget _buildMessageBubble(ChannelMessage message, double textScale) {
     final settingsService = context.watch<AppSettingsService>();
     final enableTracing = settingsService.settings.enableMessageTracing;
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
+    // The packet's own hash width; device-wide mode only for legacy records
+    // with no stored path-len byte (#985).
+    final hashWidth = message.effectivePathHashWidth(
+      context.read<MeshCoreConnector>().pathHashByteWidth,
+    );
     final isOutgoing = message.isOutgoing;
     final gifUrl = GifHelper.resolveGifUrl(message.text);
     final gifReplyName = gifUrl != null
@@ -1783,8 +1787,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   /// truncated with … to fit the channel byte budget, fired directly. (#106)
   void _sendRouteReply(ChannelMessage message) {
     final connector = context.read<MeshCoreConnector>();
-    final w = connector.pathHashByteWidth;
-    final hops = message.pathBytes.length ~/ (w < 1 ? 1 : w);
+    final w = message.effectivePathHashWidth(connector.pathHashByteWidth);
+    // Same number the hop badge shows; byte division is only the fallback for
+    // records with no decodable path-len byte (#985).
+    final decodedHops = message.hopCount;
+    final hops = (decodedHops != null && decodedHops >= 0)
+        ? decodedHops
+        : message.pathBytes.length ~/ w;
     final prefix =
         '@[${message.senderName}] ↩ ${context.l10n.chat_hopsCount(hops)} · via ';
     final maxBytes = maxChannelMessageBytes(
