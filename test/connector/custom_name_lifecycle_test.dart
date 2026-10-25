@@ -89,6 +89,49 @@ void main() {
       );
     });
 
+    test(
+      'T37 - a custom name does not follow a switch to another radio',
+      () async {
+        // Owner decision on #750: custom names are per radio. The same node held
+        // by two radios must show radio B's (absent) label after a switch from
+        // radio A, never A's label carried over in memory.
+        const otherRadio = 'a1b2c3d4e5f60718';
+        await (ContactStore()..setPublicKeyHex = _radioKey).saveContacts([
+          _contact(),
+        ]);
+        await (ContactSettingsStore()..setPublicKeyHex = _radioKey)
+            .saveCustomName(_contact().publicKeyHex, _custom);
+        await (ContactStore()..setPublicKeyHex = otherRadio).saveContacts([
+          _contact(),
+        ]);
+
+        await connector.loadContactCacheForTest(_radioKey);
+        expect(connector.contactsForTest.single.name, _custom);
+
+        await connector.loadContactCacheForTest(otherRadio);
+
+        final loaded = connector.contactsForTest.single;
+        expect(loaded.customName, isNull);
+        expect(loaded.name, _received);
+        expect(connector.customNameFor(_contact().publicKeyHex), isNull);
+      },
+    );
+
+    test(
+      'T37b - disconnect drops the radio\'s custom names from memory',
+      () async {
+        // Between a disconnect and the next radio's hydrate, nothing may still
+        // answer with the previous radio's label.
+        connector.setContactSettingsKeyForTest(_radioKey);
+        connector.contactsForTest.add(_contact());
+        await connector.setContactCustomName(_contact().publicKeyHex, _custom);
+
+        await connector.disconnect();
+
+        expect(connector.customNameFor(_contact().publicKeyHex), isNull);
+      },
+    );
+
     test('T35b + a contact with no custom name hydrates unchanged', () async {
       final store = ContactStore()..setPublicKeyHex = _radioKey;
       await store.saveContacts([_contact()]);
