@@ -1,5 +1,8 @@
 import 'dart:typed_data';
 
+import 'offband_screen_settings.dart';
+import 'offband_tones.dart';
+
 /// Headless-device UI configuration: the button-action matrix (#474) and the
 /// device notification scope (#475).
 ///
@@ -83,7 +86,22 @@ enum ButtonConfigError {
   unknownSequence(0x02, 'This radio does not recognise that button sequence'),
   noBuzzer(0x03, 'This radio has no buzzer'),
   noGps(0x04, 'This radio has no GPS'),
-  malformed(0x05, 'The radio could not read the request');
+  malformed(0x05, 'The radio could not read the request'),
+  unsupportedIndicator(0x06, 'This radio has no display or LED to set'),
+  slotOffset(
+    0x07,
+    'The radio stopped accepting this tune partway through. Nothing was '
+    'changed. Try saving again.',
+  ),
+  batteryTooHigh(
+    0x08,
+    'The reading is higher than a full cell, so it was not used.',
+  ),
+  batteryNotCharged(
+    0x09,
+    'Not charged yet. Charge the radio fully, then set 100% again. Nothing '
+    'was changed.',
+  );
 
   const ButtonConfigError(this.code, this.message);
   final int code;
@@ -103,7 +121,16 @@ enum ButtonConfigError {
 /// Which `0xC5` surface a write targeted. The shared error frame
 /// `[0xC5][0x7F][reason]` names no sub-code, so the client attributes an error
 /// to the write it has outstanding, and each screen shows only its own.
-enum DeviceUiSurface { buttonMatrix, notifyScope, gpsMode, channelTune }
+enum DeviceUiSurface {
+  buttonMatrix,
+  notifyScope,
+  gpsMode,
+  channelTune,
+  eventTone,
+  tunePlay,
+  tuneSlot,
+  screenSettings,
+}
 
 /// The refusal reason for a GPS write. Reason 1 means Power save on a build
 /// that cannot run it (meshcore-firmware#1789); the rest read as for buttons.
@@ -403,11 +430,21 @@ class OffbandUiReply {
   final DeviceNotifyScope? scope;
   final GpsModeState? gps;
   final ChannelTuneReply? channelTune;
+  final EventToneReply? eventTone;
+  final TuneSlotReply? tuneSlot;
+  final TuneSlotAccepted? slotAccepted;
+  final TuneSlotChunk? slotChunk;
+  final TunePlayReply? tunePlay;
+  final ScreenSettingsState? screen;
   final String? errorMessage;
 
   /// The raw reason byte of a `0x7F` error, so a surface can word it for its
   /// own context. Null on every other reply.
   final int? errorCode;
+
+  /// The byte after the reason, when the error carries one: `ERR_SLOT_OFFSET`
+  /// sends the offset the radio expects next.
+  final int? errorDetail;
 
   const OffbandUiReply({
     required this.command,
@@ -418,8 +455,15 @@ class OffbandUiReply {
     this.scope,
     this.gps,
     this.channelTune,
+    this.eventTone,
+    this.tuneSlot,
+    this.slotAccepted,
+    this.slotChunk,
+    this.tunePlay,
+    this.screen,
     this.errorMessage,
     this.errorCode,
+    this.errorDetail,
   });
 
   bool get isError => errorMessage != null;
@@ -440,6 +484,7 @@ OffbandUiReply? parseButtonMatrixReply(Uint8List frame) {
       sub: sub,
       errorMessage: ButtonConfigError.describe(code),
       errorCode: code,
+      errorDetail: frame.length >= 4 ? frame[3] : null,
     );
   }
 

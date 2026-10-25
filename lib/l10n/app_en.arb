@@ -326,6 +326,18 @@
   "settings_gpsSleepInvalid": "Enter a whole number of seconds, 0 or more.",
   "settings_buttonActions": "Button actions",
   "settings_buttonActionsSubtitle": "Assign what the button does",
+  "settings_badgeScreen": "Screen",
+  "settings_badgeScreenSubtitle": "Text size, screen off, time zone",
+  "settings_badgeBattery": "Battery",
+  "settings_badgeBatterySubtitle": "100% at {mv} mV",
+  "@settings_badgeBatterySubtitle": {
+    "placeholders": {
+      "mv": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_badgeBatteryReading": "Reading from the radio",
   "settings_buzzerTones": "Buzzer and tones",
   "settings_buzzerTonesSubtitle": "When this radio beeps",
   "settings_contactSettings": "Contact Settings",
