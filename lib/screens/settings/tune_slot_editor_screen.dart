@@ -202,7 +202,15 @@ class _TuneSlotEditorScreenState extends State<TuneSlotEditorScreen> {
       // halfway, and the radio would keep the old tune.
       canPop: !_dirty && !_busy,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop || _busy) return;
+        if (didPop) return;
+        if (_busy) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Wait for the radio to finish, then go back.'),
+            ),
+          );
+          return;
+        }
         final navigator = Navigator.of(context);
         if (await _confirmDiscard()) navigator.pop();
       },

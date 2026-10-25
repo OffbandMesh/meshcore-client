@@ -1225,6 +1225,9 @@ class MeshCoreConnector extends ChangeNotifier {
   /// refused the id (the refusal is then shown like any other).
   Future<TunePlayResult?> playTune(int tuneId) async {
     if (!_deviceUiGateOpen('play', advertised: supportsTunes)) return null;
+    // A refusal names no sub-code, so a preview sent mid-transfer could take
+    // the transfer's refusal, or hand it one.
+    if (_tuneSlotTransferActive) return null;
     _appDebugLogService?.info('play -> $tuneId [0xC5][0x11]', tag: 'DeviceUI');
     final reply = await _sendDeviceUiAndAwait(
       buildTunePlayFrame(tuneId),
@@ -1387,6 +1390,14 @@ class MeshCoreConnector extends ChangeNotifier {
       // chunk means another push took over.
       if (more && reply.slotAccepted!.accepted != end) {
         return _SlotPush.displaced;
+      }
+      // A commit answers 0. Anything else is not a commit, whatever it is.
+      if (!more && reply.slotAccepted!.accepted != 0) {
+        _setDeviceUiError(
+          DeviceUiSurface.tuneSlot,
+          'The radio did not confirm saving this tune. Nothing was changed.',
+        );
+        return _SlotPush.failed;
       }
       offset = end;
       onProgress?.call(offset, bytes.length);

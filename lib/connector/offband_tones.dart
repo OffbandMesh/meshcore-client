@@ -5,7 +5,7 @@ import 'offband_device_ui.dart';
 /// The radio's tune system over `0xC5` (#970, #971, #986): the built-in tune
 /// table, the eight custom RTTTL slots, the six event tones and preview.
 ///
-/// Gated on caps byte 2 `0x10` TUNES (meshcore-firmware `3e788e2a`). The
+/// Gated on caps byte 2 `0x10` TUNES (meshcore-firmware `f3d30a88`). The
 /// contract lives in firmware's `OffbandConfigProtocol.h`; the tables and the
 /// validator below are ports of `Tunes.h` and `TuneSlots.h` at that commit.
 
@@ -336,7 +336,7 @@ bool _isDefaultsSep(int c) => c == 0x2C || c == 0x3A;
 
 const int _colon = 0x3A;
 
-/// Port of firmware `rtttlProblem()` (`Tunes.h`, `3e788e2a`), step for step.
+/// Port of firmware `rtttlProblem()` (`Tunes.h`, `f3d30a88`), step for step.
 RtttlProblem rtttlProblem(String rtttl) {
   final s = rtttl.codeUnits;
   if (s.isEmpty) return RtttlProblem.empty;

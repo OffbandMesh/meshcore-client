@@ -277,6 +277,29 @@ void main() {
       expect(sent.first, equals([0xC5, 0x0A, 3, 0, 0]));
     });
 
+    test('a final reply that is not 0 is not a commit', () async {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x10));
+      radio = (f) => f[1] == 0x0A
+          ? [
+              [0xC5, 0x0A, f[2], 5],
+            ]
+          : const [];
+      expect(await connector.saveTuneSlot(0, 'x:d=4:c'), isFalse);
+      expect(connector.deviceUiErrorSurface, DeviceUiSurface.tuneSlot);
+    });
+
+    test('no preview is sent while a slot transfer is running', () async {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x10));
+      sent.clear();
+      final read = connector.readTuneSlot(0);
+      await Future<void>.delayed(Duration.zero);
+      expect(connector.tuneSlotTransferActive, isTrue);
+      expect(await connector.playTune(3), isNull);
+      expect(sentSub({0x11}), isFalse);
+      connector.handleFrameForTest([0xC5, 0x12, 0, 0, 0]);
+      expect(await read, '');
+    });
+
     test('a tune over 240 characters is never sent', () async {
       connector.handleFrameForTest(deviceInfo(caps2: 0x10));
       sent.clear();
