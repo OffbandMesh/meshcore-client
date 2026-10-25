@@ -402,6 +402,43 @@ RtttlProblem rtttlProblem(String rtttl) {
   return RtttlProblem.ok;
 }
 
+/// The tune with its defaults rewritten into the order the badge's player
+/// reads them (d=, o=, b=, each once), or null when that is not the fix.
+///
+/// The player reads defaults positionally, so RTTTL from elsewhere that lists
+/// them in another order, or repeats one, is refused as a stray colon. This
+/// rewrites only the header between the first two colons, and only when every
+/// item there is a d=, o= or b= and a repeated key repeats the same value: two
+/// different tempos are a choice the app cannot make for the user. The result
+/// must pass [rtttlProblem], so a header fix never hides a second problem.
+String? fixRtttlDefaultsOrder(String rtttl) {
+  if (rtttlProblem(rtttl) == RtttlProblem.ok) return null;
+  final first = rtttl.indexOf(':');
+  if (first < 0) return null;
+  final second = rtttl.indexOf(':', first + 1);
+  if (second < 0) return null;
+  final values = <String, String>{};
+  for (final raw in rtttl.substring(first + 1, second).split(',')) {
+    final item = raw.trim();
+    final eq = item.indexOf('=');
+    if (eq != 1) return null;
+    final key = item[0];
+    final value = item.substring(2).trim();
+    if (!const {'d', 'o', 'b'}.contains(key) || value.isEmpty) return null;
+    final held = values[key];
+    if (held != null && held != value) return null;
+    values[key] = value;
+  }
+  final header = [
+    for (final k in const ['d', 'o', 'b'])
+      if (values[k] != null) '$k=${values[k]}',
+  ].join(',');
+  final fixed =
+      '${rtttl.substring(0, first)}:$header:${rtttl.substring(second + 1)}';
+  if (fixed == rtttl || rtttlProblem(fixed) != RtttlProblem.ok) return null;
+  return fixed;
+}
+
 /// Port of firmware `deriveSlotName()`: the text before the first colon,
 /// trimmed and cut to [maxSlotName]. Empty when there is no usable name.
 String deriveSlotName(String rtttl) {

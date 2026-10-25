@@ -129,6 +129,37 @@ void main() {
     });
   });
 
+  group('fixRtttlDefaultsOrder', () {
+    // The owner's tune, 2026-10-25: o= before d=, and b= twice.
+    const takeOnMe = 'Take On Me:o=5,d=8,b=160,b=160:f#,f#,f#,d,p,b4,p,e,p,e5';
+
+    test('the owner\'s tune is refused, and the fix plays', () {
+      expect(rtttlProblem(takeOnMe), RtttlProblem.strayColon);
+      final fixed = fixRtttlDefaultsOrder(takeOnMe);
+      expect(fixed, 'Take On Me:d=8,o=5,b=160:f#,f#,f#,d,p,b4,p,e,p,e5');
+      expect(rtttlProblem(fixed!), RtttlProblem.ok);
+    });
+
+    test('a valid tune needs no fix', () {
+      expect(fixRtttlDefaultsOrder('x:d=4,o=5,b=100:c'), isNull);
+    });
+
+    test('two different tempos are not the app\'s to choose', () {
+      expect(fixRtttlDefaultsOrder('x:o=5,b=160,b=200:c'), isNull);
+    });
+
+    test('a header fix never hides a second problem', () {
+      // Reordered, b=0 still divides by zero in the player.
+      expect(fixRtttlDefaultsOrder('x:o=5,d=8,b=0:c'), isNull);
+      // A key the player does not know is not a reorder.
+      expect(fixRtttlDefaultsOrder('x:o=5,l=8:c'), isNull);
+    });
+
+    test('spaces around the defaults are dropped', () {
+      expect(fixRtttlDefaultsOrder('x: o=5 , d=8 :c'), 'x:d=8,o=5:c');
+    });
+  });
+
   group('deriveSlotName', () {
     test('the text before the first colon, trimmed and capped at 12', () {
       expect(deriveSlotName('  Mario :d=4:c'), 'Mario');
