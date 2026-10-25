@@ -2426,6 +2426,9 @@ class MeshCoreConnector extends ChangeNotifier {
     // pass rather than rebuilt a second time. Without this a restart silently
     // loses every rename the user made, because contact_store does not hold
     // them on purpose. (#750, T35)
+    // Cleared first: custom names are per radio, so a switch must not carry the
+    // previous radio's labels onto contacts both radios hold. (#750, T37)
+    _customNames.clear();
     await _loadCustomNames(cached.map((c) => c.publicKeyHex));
     _contacts
       ..clear()
@@ -4172,6 +4175,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _deviceDisplayName = null;
     _deviceId = null;
     _contacts.clear();
+    _customNames.clear(); // per radio: none may outlive the link (#750, T37b)
     _discoveredContacts.clear();
     _conversations.clear();
     _loadedConversationKeys.clear();
