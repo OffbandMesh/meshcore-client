@@ -113,5 +113,36 @@ void main() {
 
       expect(logged('connect ignored: already'), isTrue);
     });
+
+    test(
+      'a connect started during a disconnect waits for it to finish',
+      () async {
+        // Owner test 2026-10-26: Stop, then connect to another radio 6 s later.
+        // The Stop disconnect was still releasing the T1000-E, the new connect
+        // started on top of it, and the disconnect's tail then wiped the new
+        // link's device and name (status stuck, frame size stuck at 20).
+        connector.beginAutoReconnectAttemptForTest();
+        final stopping = connector.stopAutoReconnect();
+
+        try {
+          await connector.connectTcp(host: '127.0.0.1', port: 9);
+        } catch (_) {}
+        await stopping;
+
+        final messages = log.entries.map((e) => e.message).toList();
+        final disconnectDone = messages.indexWhere(
+          (m) => m.startsWith('Disconnect complete'),
+        );
+        final tcpStart = messages.indexWhere(
+          (m) => m.startsWith('connectTcp: endpoint='),
+        );
+        expect(tcpStart, isNot(-1));
+        expect(
+          disconnectDone,
+          lessThan(tcpStart),
+          reason: 'the new connect must not start until the old link is down',
+        );
+      },
+    );
   });
 }
