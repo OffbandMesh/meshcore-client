@@ -772,6 +772,12 @@ abstract class AppLocalizations {
   /// **'{command}: no reply in {seconds} s. This radio may not allow remote CLI from you, or is unreachable. Not retried.'**
   String deviceCli_remoteNoReply(String command, String seconds);
 
+  /// Console row when the connected radio refuses to send a remote-CLI command because its firmware predates TXT_TYPE_CLI_COMMAND (#999). Nothing was transmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: not sent. Your radio\'s firmware doesn\'t support remote CLI.'**
+  String deviceCli_remoteUnsupported(String command);
+
   /// No description provided for @deviceCli_sendFailed.
   ///
   /// In en, this message translates to:

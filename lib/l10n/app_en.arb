@@ -223,6 +223,15 @@
       }
     }
   },
+  "deviceCli_remoteUnsupported": "{command}: not sent. Your radio's firmware doesn't support remote CLI.",
+  "@deviceCli_remoteUnsupported": {
+    "description": "Console row when the connected radio refuses to send a remote-CLI command because its firmware predates TXT_TYPE_CLI_COMMAND (#999). Nothing was transmitted.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
   "deviceCli_sendFailed": "Send failed: {error}",
   "@deviceCli_sendFailed": {
     "placeholders": {

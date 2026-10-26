@@ -18,6 +18,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../connector/device_population.dart';
 import '../connector/meshcore_connector.dart';
 import '../helpers/device_name_validator.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -91,6 +92,20 @@ class DeviceCliScreen extends StatefulWidget {
   /// screen takes ownership and disposes it.
   @visibleForTesting
   final CliConsoleTransport? transportOverride;
+
+  /// Whether to offer the remote console for [contact]. Two conditions, both
+  /// required: the target is a companion (repeaters and room servers have
+  /// their own CLI via the repeater hub), and the CONNECTED radio speaks the
+  /// 1.18 CLI. A pre-1.18 radio refuses to send a type-3 command
+  /// (companion-v1.17.1 accepts only plain and CLI_DATA in CMD_SEND_TXT_MSG;
+  /// 1.18.0 adds CLI_COMMAND), so offering the console there would only
+  /// produce failures. Type-3 send and the local CLI frame shipped together
+  /// in 1.18, so this reuses the local console's gate. A null classification
+  /// (disconnected, or not yet classified) offers nothing.
+  static bool offersRemoteConsole({
+    required Contact contact,
+    required Classification? classification,
+  }) => contact.isCompanion && (classification?.allowsCliFrame ?? false);
 
   @override
   State<DeviceCliScreen> createState() => _DeviceCliScreenState();
@@ -217,6 +232,14 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
         _isRemote
             ? context.l10n.deviceCli_remoteNoReply(command, e.secondsText)
             : context.l10n.deviceCli_noReply(command, e.secondsText),
+      );
+    } on CliConsoleUnsupported {
+      if (!mounted) return;
+      // The connected radio refused the send itself (pre-1.18 firmware), so
+      // nothing went out: say so now instead of waiting out a timeout that
+      // would blame the target.
+      entry = _ConsoleEntry.sendFailed(
+        context.l10n.deviceCli_remoteUnsupported(command),
       );
     } catch (e) {
       if (!mounted) return;

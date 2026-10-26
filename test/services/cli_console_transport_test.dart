@@ -239,6 +239,146 @@ void main() {
     });
   });
 
+  group('fail fast when the connected radio refuses the send (#999)', () {
+    // A pre-1.18 companion answers CMD_SEND_TXT_MSG carrying type 3 with
+    // ERR_CODE_UNSUPPORTED_CMD (companion-v1.17.1 MyMesh.cpp). The command
+    // never went out, so waiting out the mesh timeout would end in a row that
+    // blames the target.
+    final errUnsupported = Uint8List.fromList([
+      respCodeErr,
+      errCodeUnsupportedCmd,
+    ]);
+    // [RESP_CODE_SENT][is_flood][expected_ack x4][est timeout x4]. 1.18 sends a
+    // CLI command with no ack expected, so OUR send's SENT carries ack 0; a
+    // plain DM's SENT carries a real ack hash.
+    Uint8List sent(List<int> ack) =>
+        Uint8List.fromList([respCodeSent, 0, ...ack, 0x10, 0x27, 0, 0]);
+    final commandSent = sent([0, 0, 0, 0]);
+    final dmSent = sent([0xDE, 0xAD, 0xBE, 0xEF]);
+
+    Future<
+      ({
+        MeshCoreConnector connector,
+        Contact companion,
+        Future<CliReply> run,
+        String prefix,
+        RemoteCliTransport transport,
+      })
+    >
+    startRun() async {
+      final connector = MeshCoreConnector();
+      final companion = _companion();
+      final cliSent = Completer<Uint8List>();
+      connector.sendFrameOverrideForTest = (f) {
+        if (!cliSent.isCompleted && f.isNotEmpty && f[0] == cmdSendTxtMsg) {
+          cliSent.complete(f);
+        }
+      };
+      connector.setConnectedForTest();
+      connector.contactsForTest.add(companion);
+      final transport = RemoteCliTransport(connector, companion);
+      final run = transport.run('get radio');
+      final frame = await cliSent.future;
+      return (
+        connector: connector,
+        companion: companion,
+        run: run,
+        prefix: ascii.decode(frame.sublist(13, 16)),
+        transport: transport,
+      );
+    }
+
+    test('an unsupported-command error fails the command at once', () async {
+      final s = await startRun();
+      s.connector.handleFrameForTest(errUnsupported);
+      await expectLater(
+        s.run.timeout(const Duration(seconds: 1)),
+        throwsA(isA<CliConsoleUnsupported>()),
+      );
+      s.transport.dispose();
+    });
+
+    test('a different error code does not fail the command', () async {
+      final s = await startRun();
+      s.connector.handleFrameForTest(
+        Uint8List.fromList([respCodeErr, errCodeNotFound]),
+      );
+      s.connector.handleFrameForTest(
+        _replyFrame(
+          senderPrefix: s.companion.publicKey,
+          text: '${s.prefix}radio ok',
+        ),
+      );
+      expect((await s.run).text, 'radio ok');
+      s.transport.dispose();
+    });
+
+    test('an error after the radio accepted the send is not ours', () async {
+      final s = await startRun();
+      s.connector.handleFrameForTest(commandSent);
+      s.connector.handleFrameForTest(errUnsupported);
+      s.connector.handleFrameForTest(
+        _replyFrame(
+          senderPrefix: s.companion.publicKey,
+          text: '${s.prefix}radio ok',
+        ),
+      );
+      expect((await s.run).text, 'radio ok');
+      s.transport.dispose();
+    });
+
+    test('a DM\'s SENT does not close the window early', () async {
+      // An earlier in-flight DM's acknowledgement (real ack hash) must not be
+      // mistaken for ours, or a refusal after it would be missed.
+      final s = await startRun();
+      s.connector.handleFrameForTest(dmSent);
+      s.connector.handleFrameForTest(errUnsupported);
+      await expectLater(
+        s.run.timeout(const Duration(seconds: 1)),
+        throwsA(isA<CliConsoleUnsupported>()),
+      );
+      s.transport.dispose();
+    });
+
+    test('an error before the text frame is written is not ours', () async {
+      // The window arms only at the write. An unrelated refusal that lands
+      // while the path update is still in progress must not fail the command.
+      final connector = MeshCoreConnector();
+      final companion = _companion();
+      final cliSent = Completer<Uint8List>();
+      connector.sendFrameOverrideForTest = (f) {
+        if (!cliSent.isCompleted && f.isNotEmpty && f[0] == cmdSendTxtMsg) {
+          cliSent.complete(f);
+        }
+      };
+      connector.setConnectedForTest();
+      connector.contactsForTest.add(companion);
+      final transport = RemoteCliTransport(connector, companion);
+      final run = transport.run('get radio');
+      // run() has yielded inside the path update; nothing is armed yet.
+      connector.handleFrameForTest(errUnsupported);
+      final frame = await cliSent.future;
+      final prefix = ascii.decode(frame.sublist(13, 16));
+      connector.handleFrameForTest(
+        _replyFrame(
+          senderPrefix: companion.publicKey,
+          text: '${prefix}radio ok',
+        ),
+      );
+      expect((await run).text, 'radio ok');
+      transport.dispose();
+    });
+
+    test('dispose with a command in flight does not hang its run()', () async {
+      final s = await startRun();
+      s.transport.dispose();
+      await expectLater(
+        s.run.timeout(const Duration(seconds: 1)),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
   group('LocalCliTransport', () {
     test('a local timeout surfaces as CliConsoleTimeout', () async {
       final connector = MeshCoreConnector();

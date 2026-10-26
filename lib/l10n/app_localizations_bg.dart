@@ -374,6 +374,11 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String deviceCli_remoteUnsupported(String command) {
+    return '$command: not sent. Your radio\'s firmware doesn\'t support remote CLI.';
+  }
+
+  @override
   String deviceCli_sendFailed(String error) {
     return 'Send failed: $error';
   }
