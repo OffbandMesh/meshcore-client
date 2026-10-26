@@ -151,7 +151,7 @@ class FakeRadioTrace {
       customVars: vars == null ? const {} : _vars(vars),
       autoAddConfig: auto?[1] ?? 0,
       autoAddMaxHops: auto?[2] ?? 0,
-      contacts: [for (final c in _replies(fwRespContact)) _contact(c)],
+      contacts: _contacts(),
       channels: [
         for (final c in _replies(fwRespChannelInfo))
           FakeChannel(
@@ -207,6 +207,32 @@ class FakeRadioTrace {
     final nul = out.indexOf(0, 2);
     if (nul >= 0 && nul < 34) out.fillRange(nul, 34, 0);
     return out;
+  }
+
+  /// The recorded contacts, plus one stand-in for each contact the radio
+  /// counted but never sent. Firmware sends only `lastmod > since`
+  /// (MyMesh.cpp:2397 stock, :3868 Offband) while CONTACTS_START counts them
+  /// all, so a real radio can hold contacts with lastmod 0 that no capture
+  /// sees. The stand-ins have lastmod 0 too, so they stay unsent here as well.
+  List<FakeContact> _contacts() {
+    final sent = [for (final c in _replies(fwRespContact)) _contact(c)];
+    final start = _replies(fwRespContactsStart).firstOrNull;
+    final total = start == null
+        ? sent.length
+        : ByteData.sublistView(start).getUint32(1, Endian.little);
+    return [
+      ...sent,
+      for (var i = sent.length; i < total; i++)
+        FakeContact(
+          // Not 0x00 or 0xFF first: firmware treats those as reserved id
+          // hashes (companion-v1.18.0 MyMesh.cpp:951).
+          publicKey: Uint8List(fwPubKeySize)
+            ..[0] = 0x5A
+            ..[1] = i & 0xFF,
+          name: 'Unsent ${i - sent.length + 1}',
+          lastmod: 0,
+        ),
+    ];
   }
 
   static FakeContact _contact(Uint8List c) {

@@ -12,9 +12,11 @@ dart run tool/fake_radio.dart --profile offband --port 5000
 
 In the app on the same PC, connect over TCP to `127.0.0.1`, port `5000`. It listens only on this PC unless you add `--host 0.0.0.0`, which lets a phone on the same network connect to this PC's address.
 
+Use the Dart that comes with the Flutter SDK this repo builds with. An older Dart fails before the radio starts, with an error about native assets.
+
 | Option | Default | Meaning |
 |---|---|---|
-| `--profile` | `offband` | `offband` (pinned to `offband-v1.5.0-beta7`) or `stock` (MeshCore `companion-v1.17.1`) |
+| `--profile` | `offband` | `offband` (pinned to `offband-v1.5.0-beta7`) or `stock` (MeshCore `companion-v1.18.0`) |
 | `--port` | `5000` | TCP port |
 | `--host` | `127.0.0.1` | address to listen on; `0.0.0.0` for every network interface |
 | `--seed` | built-in | a seed file (below) or a captured trace |
@@ -72,10 +74,15 @@ Everything is optional except `format`, `format_version` and each entry's `name`
 
 ```bash
 pip install pyserial
-python tool/fake_radio/capture_trace.py --port COM12 --label "RAK4631 offband-v1.5.0-beta7" --out test/fake_radio/traces/offband-rak4631.json
+python tool/fake_radio/capture_trace.py --port COM12 --label "RAK4631 offband-v1.5.0-beta7" --out capture.json
+python tool/fake_radio/anonymize_trace.py capture.json test/fake_radio/traces/offband-v1.5.0-beta7-rak4631.json
 ```
 
 Close the app first: only one program can hold the serial port. The capture is read-only. `--drain-queue` also syncs queued messages, which removes them from the radio. Use `--no-dtr` for ESP32 boards with USB-Serial/JTAG (vendor ID 303A).
+
+**Never commit a raw capture.** It holds the radio's key and position and every contact's key, name and position, and every channel's secret. `anonymize_trace.py` replaces each of those with a numbered stand-in and leaves every other byte alone. Keep the raw capture out of the repo.
+
+The traces in `test/fake_radio/traces/` are real radios. `real_radio_conformance_test.dart` replays each into a fake seeded from it and fails on any reply that differs. To add a radio, capture it, anonymize it, put it there and add its expected firmware to the test.
 
 A trace works as a seed too: `--seed` with a trace file makes the fake hold what the recorded radio held.
 

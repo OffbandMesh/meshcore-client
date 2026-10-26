@@ -25,6 +25,7 @@
     "CMD_REBOOT": 19,
     "CMD_REMOVE_CONTACT": 15,
     "CMD_RESET_PATH": 13,
+    "CMD_RUN_CLI_COMMAND": 66,
     "CMD_SEND_ANON_REQ": 57,
     "CMD_SEND_BINARY_REQ": 50,
     "CMD_SEND_CHANNEL_DATA": 62,
@@ -68,11 +69,11 @@
     "ERR_CODE_UNSUPPORTED_CMD": 1
   },
   "firmware": {
-    "commit": "d92964352441e53b93e8667b802e04f6e072b39e",
-    "firmware_ver_code": 13,
-    "firmware_version": "v1.17.1",
+    "commit": "81dbae592ffad40b4212bc0b37e82b38da08f4bc",
+    "firmware_ver_code": 14,
+    "firmware_version": "v1.18.0",
     "flavor": "stock",
-    "ref": "companion-v1.17.1"
+    "ref": "companion-v1.18.0"
   },
   "format": "offband-protocol-manifest",
   "format_version": 1,
@@ -108,6 +109,7 @@
     "RESP_CODE_CHANNEL_INFO": 18,
     "RESP_CODE_CHANNEL_MSG_RECV": 8,
     "RESP_CODE_CHANNEL_MSG_RECV_V3": 17,
+    "RESP_CODE_CLI_REPLY": 29,
     "RESP_CODE_CONTACT": 3,
     "RESP_CODE_CONTACTS_START": 2,
     "RESP_CODE_CONTACT_MSG_RECV": 7,
