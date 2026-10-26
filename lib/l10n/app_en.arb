@@ -211,6 +211,18 @@
       }
     }
   },
+  "deviceCli_remoteNoReply": "{command}: no reply in {seconds} s. This radio may not allow remote CLI from you, or is unreachable. Not retried.",
+  "@deviceCli_remoteNoReply": {
+    "description": "Console row when a remote-CLI command to a companion times out (#891). A companion that has not granted remote CLI simply never replies, so this explains the silence and that the command was sent once, not retried.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
   "deviceCli_sendFailed": "Send failed: {error}",
   "@deviceCli_sendFailed": {
     "placeholders": {

@@ -19,11 +19,24 @@ import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
 import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/screens/device_cli_screen.dart';
+import 'package:meshcore_open/services/cli_console_transport.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Always times out, so the console's timeout row can be tested without
+/// driving a real mesh window (#891).
+class _TimeoutTransport implements CliConsoleTransport {
+  @override
+  Future<CliReply> run(String command, {Duration? timeout}) async {
+    throw CliConsoleTimeout(command: command, secondsText: '28.7');
+  }
+
+  @override
+  void dispose() {}
+}
 
 void main() {
   late OffbandDatabase db;
@@ -164,8 +177,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('no reply'), findsOneWidget);
+    expect(find.text('get gps diag: no reply in 0.1 s'), findsOneWidget);
     expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
+    // The local console never shows the remote permission hint (#891).
+    expect(find.textContaining('may not allow remote CLI'), findsNothing);
+    expect(find.textContaining('Not retried'), findsNothing);
   });
 
   testWidgets('a send failure renders the send-failed row', (tester) async {
@@ -305,6 +321,38 @@ void main() {
       expect(find.text('Remote CLI'), findsOneWidget);
       expect(find.text('Pocket Radio'), findsOneWidget);
       expect(find.text('Device CLI'), findsNothing);
+    });
+
+    testWidgets('a remote timeout explains the silence and the no-retry (#891)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider<MeshCoreConnector>.value(
+          value: connector,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: DeviceCliScreen(
+              remoteContact: companion(),
+              transportOverride: _TimeoutTransport(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await send(tester, 'get radio');
+      await tester.pumpAndSettle();
+
+      // The remote row explains the silence, not the bare local "no reply" row,
+      // with the command and the armed window interpolated.
+      expect(
+        find.text(
+          'get radio: no reply in 28.7 s. This radio may not allow remote CLI '
+          'from you, or is unreachable. Not retried.',
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

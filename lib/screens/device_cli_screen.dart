@@ -70,7 +70,12 @@ class _ConsoleEntry {
 }
 
 class DeviceCliScreen extends StatefulWidget {
-  const DeviceCliScreen({super.key, this.commandTimeout, this.remoteContact});
+  const DeviceCliScreen({
+    super.key,
+    this.commandTimeout,
+    this.remoteContact,
+    this.transportOverride,
+  });
 
   /// Per-command reply window; null uses the transport's default. Tests shrink
   /// it so a timeout row renders without a 10 s pump. The remote transport
@@ -80,6 +85,12 @@ class DeviceCliScreen extends StatefulWidget {
   /// When set, the console runs CLI on this remote contact over the mesh
   /// (type-3 for a companion, #999) instead of the connected device.
   final Contact? remoteContact;
+
+  /// Test seam: a transport to use instead of building one from
+  /// [remoteContact]. Lets a test drive a deterministic reply or timeout. The
+  /// screen takes ownership and disposes it.
+  @visibleForTesting
+  final CliConsoleTransport? transportOverride;
 
   @override
   State<DeviceCliScreen> createState() => _DeviceCliScreenState();
@@ -99,9 +110,11 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
   void initState() {
     super.initState();
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
-    _transport = widget.remoteContact == null
-        ? LocalCliTransport(connector)
-        : RemoteCliTransport(connector, widget.remoteContact!);
+    _transport =
+        widget.transportOverride ??
+        (widget.remoteContact == null
+            ? LocalCliTransport(connector)
+            : RemoteCliTransport(connector, widget.remoteContact!));
   }
 
   @override
@@ -194,8 +207,16 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
       );
     } on CliConsoleTimeout catch (e) {
       if (!mounted) return;
+      // A remote companion that has not granted us remote CLI simply never
+      // replies, so a timeout is as likely a permission answer as a lost
+      // packet. The remote row says so and notes we did not retry (#891); the
+      // local row keeps the plain frame-timeout wording. The permission hint
+      // assumes a companion target - the only remote entry (chat_screen) is
+      // companion-gated; a repeater target would need different wording.
       entry = _ConsoleEntry.timeout(
-        context.l10n.deviceCli_noReply(command, e.secondsText),
+        _isRemote
+            ? context.l10n.deviceCli_remoteNoReply(command, e.secondsText)
+            : context.l10n.deviceCli_noReply(command, e.secondsText),
       );
     } catch (e) {
       if (!mounted) return;

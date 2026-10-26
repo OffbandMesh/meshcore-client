@@ -766,6 +766,12 @@ abstract class AppLocalizations {
   /// **'{command}: no reply in {seconds} s'**
   String deviceCli_noReply(String command, String seconds);
 
+  /// Console row when a remote-CLI command to a companion times out (#891). A companion that has not granted remote CLI simply never replies, so this explains the silence and that the command was sent once, not retried.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: no reply in {seconds} s. This radio may not allow remote CLI from you, or is unreachable. Not retried.'**
+  String deviceCli_remoteNoReply(String command, String seconds);
+
   /// No description provided for @deviceCli_sendFailed.
   ///
   /// In en, this message translates to:
@@ -3171,12 +3177,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No messages yet'**
   String get chat_noMessages;
-
-  /// No description provided for @chat_remoteCliCommand.
-  ///
-  /// In en, this message translates to:
-  /// **'Command for your radio'**
-  String get chat_remoteCliCommand;
 
   /// No description provided for @chat_sendMessage.
   ///
