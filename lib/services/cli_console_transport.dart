@@ -37,6 +37,19 @@ class CliConsoleTimeout implements Exception {
   String toString() => 'CLI command timed out after $secondsText s';
 }
 
+/// The connected radio refused to send a remote CLI command at all: its
+/// firmware does not accept TXT_TYPE_CLI_COMMAND (pre-1.18 answers
+/// ERR_CODE_UNSUPPORTED_CMD). Distinct from [CliConsoleTimeout], which means
+/// the command went out and the target never answered.
+class CliConsoleUnsupported implements Exception {
+  const CliConsoleUnsupported({required this.command});
+
+  final String command;
+
+  @override
+  String toString() => 'The connected radio does not support remote CLI';
+}
+
 /// One CLI transport for the console: the connected device, or a remote contact.
 abstract class CliConsoleTransport {
   /// Runs [command] and completes with the correlated reply, or throws
@@ -92,8 +105,59 @@ class RemoteCliTransport implements CliConsoleTransport {
   StreamSubscription<Uint8List>? _sub;
   bool _disposed = false;
 
+  /// Rejection channel for the command in flight: completed with
+  /// [CliConsoleUnsupported] when the radio refuses the send outright.
+  ///
+  /// It only listens while [_armed]: from the moment the text frame is written
+  /// (the `onAttempt` hook fires after the path update and runs straight into
+  /// the frame write, with no yield in between) until the radio answers that
+  /// write. The firmware answers each CMD_SEND_TXT_MSG at once, in order: a
+  /// pre-1.18 radio with ERR_CODE_UNSUPPORTED_CMD for type 3; a 1.18 radio with
+  /// RESP_CODE_SENT carrying an expected-ack of 0, since a CLI command expects
+  /// no ack (companion-v1.18.0 CMD_SEND_TXT_MSG). A plain DM's SENT carries a
+  /// real ack hash, so it never closes the window.
+  ///
+  /// ERR_CODE_UNSUPPORTED_CMD is also the firmware's answer to any unknown
+  /// command. Arming at the write, rather than at [run], keeps an unrelated
+  /// refusal from failing a valid command. The residual exposure is one
+  /// landing inside our own send's round trip, on a radio where the connector
+  /// already withholds fork frames.
+  ///
+  /// One command at a time: a new [run] replaces the channel, and the replaced
+  /// command falls back to its timeout rather than risk misattribution.
+  Completer<CliReply>? _sendWindow;
+  String? _sendWindowCommand;
+  bool _armed = false;
+
   void _onFrame(Uint8List frame) {
     if (_disposed || frame.isEmpty) return;
+    if (frame[0] == respCodeSent) {
+      // [RESP_CODE_SENT][is_flood][expected_ack x4][est_timeout x4]. Only a
+      // command send's SENT (ack 0) answers ours.
+      if (_armed &&
+          frame.length >= 6 &&
+          frame[2] == 0 &&
+          frame[3] == 0 &&
+          frame[4] == 0 &&
+          frame[5] == 0) {
+        _armed = false;
+      }
+      return;
+    }
+    if (frame[0] == respCodeErr) {
+      final code = frame.length > 1 ? frame[1] : -1;
+      final window = _sendWindow;
+      if (_armed &&
+          code == errCodeUnsupportedCmd &&
+          window != null &&
+          !window.isCompleted) {
+        _armed = false;
+        window.completeError(
+          CliConsoleUnsupported(command: _sendWindowCommand ?? ''),
+        );
+      }
+      return;
+    }
     if (frame[0] != respCodeContactMsgRecv &&
         frame[0] != respCodeContactMsgRecvV3) {
       return;
@@ -134,12 +198,35 @@ class RemoteCliTransport implements CliConsoleTransport {
 
   @override
   Future<CliReply> run(String command, {Duration? timeout}) async {
+    final window = Completer<CliReply>();
+    _sendWindow = window;
+    _sendWindowCommand = command;
+    _armed = false;
+    try {
+      // Whichever lands first: the reply (or its timeout), or the radio
+      // refusing the send. Future.any keeps handlers on the loser, so its later
+      // timeout is absorbed rather than surfacing as an unhandled error.
+      return await Future.any([_send(command, window), window.future]);
+    } finally {
+      if (identical(_sendWindow, window)) {
+        _sendWindow = null;
+        _armed = false;
+      }
+    }
+  }
+
+  Future<CliReply> _send(String command, Completer<CliReply> window) async {
     // retries: 1 - one send, no auto-retry. See the file header.
     try {
       final text = await _service.sendCommand(
         _resolveTarget(),
         command,
         retries: 1,
+        // Fires after the path update, immediately before the text frame is
+        // written: arm the rejection window here, not earlier.
+        onAttempt: (_) {
+          if (identical(_sendWindow, window)) _armed = true;
+        },
       );
       // payloadLength drives CliReply.atReplyBound (the local 165-byte device
       // bound). A remote reply is a reassembled mesh message, so that bound is
@@ -160,6 +247,13 @@ class RemoteCliTransport implements CliConsoleTransport {
     _disposed = true;
     _sub?.cancel();
     _sub = null;
+    // Release a command still waiting, so its run() cannot hang.
+    final window = _sendWindow;
+    _sendWindow = null;
+    _armed = false;
+    if (window != null && !window.isCompleted) {
+      window.completeError(StateError('RemoteCliTransport disposed'));
+    }
     _service.dispose();
   }
 }

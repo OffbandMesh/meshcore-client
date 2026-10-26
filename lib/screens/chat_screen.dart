@@ -412,9 +412,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         ],
                       ),
                     ),
-                    // Remote CLI is a companion feature (#999): repeaters and
-                    // room servers have their own CLI via the repeater hub.
-                    if (widget.contact.isCompanion)
+                    // Remote CLI is a companion feature (#999), and the
+                    // connected radio must speak the 1.18 CLI to send it.
+                    if (DeviceCliScreen.offersRemoteConsole(
+                      contact: widget.contact,
+                      classification: connector.classification,
+                    ))
                       PopupMenuItem(
                         value: 'cliConsole',
                         child: Row(

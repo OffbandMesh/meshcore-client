@@ -38,6 +38,17 @@ class _TimeoutTransport implements CliConsoleTransport {
   void dispose() {}
 }
 
+/// The connected radio refuses the send outright (pre-1.18 firmware).
+class _UnsupportedTransport implements CliConsoleTransport {
+  @override
+  Future<CliReply> run(String command, {Duration? timeout}) async {
+    throw CliConsoleUnsupported(command: command);
+  }
+
+  @override
+  void dispose() {}
+}
+
 void main() {
   late OffbandDatabase db;
   late MeshCoreConnector connector;
@@ -353,6 +364,38 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('a refused send says nothing went out, not a timeout (#999)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider<MeshCoreConnector>.value(
+          value: connector,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: DeviceCliScreen(
+              remoteContact: companion(),
+              transportOverride: _UnsupportedTransport(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await send(tester, 'get radio');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          "get radio: not sent. Your radio's firmware doesn't support "
+          'remote CLI.',
+        ),
+        findsOneWidget,
+      );
+      // Not the #891 row, which would blame the target.
+      expect(find.textContaining('may not allow remote CLI'), findsNothing);
     });
   });
 }
