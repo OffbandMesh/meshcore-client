@@ -1,5 +1,9 @@
 {
   "bg": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -326,6 +330,10 @@
   ],
 
   "de": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -652,6 +660,10 @@
   ],
 
   "es": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -978,6 +990,10 @@
   ],
 
   "fr": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -1304,6 +1320,10 @@
   ],
 
   "hu": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -1630,6 +1650,10 @@
   ],
 
   "it": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -1956,6 +1980,10 @@
   ],
 
   "ja": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -2282,6 +2310,10 @@
   ],
 
   "ko": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -2608,6 +2640,10 @@
   ],
 
   "nl": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -2934,6 +2970,10 @@
   ],
 
   "pl": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -3260,6 +3300,10 @@
   ],
 
   "pt": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -3586,6 +3630,10 @@
   ],
 
   "ru": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -3912,6 +3960,10 @@
   ],
 
   "sk": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -4238,6 +4290,10 @@
   ],
 
   "sl": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -4564,6 +4620,10 @@
   ],
 
   "sv": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -4890,6 +4950,10 @@
   ],
 
   "uk": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",
@@ -5216,6 +5280,10 @@
   ],
 
   "zh": [
+    "common_stop",
+    "scanner_reconnecting",
+    "scanner_reconnectGaveUp",
+    "connectBusy",
     "scanner_connectFailedTransient",
     "scanner_connectFailedTimeout",
     "scanner_connectFailedGeneric",

@@ -274,6 +274,12 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get common_retry;
 
+  /// No description provided for @common_stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get common_stop;
+
   /// No description provided for @common_hide.
   ///
   /// In en, this message translates to:
@@ -591,6 +597,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not connected'**
   String get scanner_notConnected;
+
+  /// No description provided for @scanner_reconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to {deviceName} (attempt {attempt} of {maxAttempts})'**
+  String scanner_reconnecting(String deviceName, int attempt, int maxAttempts);
+
+  /// No description provided for @scanner_reconnectGaveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach {deviceName}'**
+  String scanner_reconnectGaveUp(String deviceName);
+
+  /// No description provided for @connectBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Busy with another connection. Try again in a moment.'**
+  String get connectBusy;
 
   /// No description provided for @scanner_connectedTo.
   ///
