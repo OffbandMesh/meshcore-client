@@ -10,7 +10,7 @@ From the repo root:
 dart run tool/fake_radio.dart --profile offband --port 5000
 ```
 
-In the app, connect over TCP to this PC's address (`127.0.0.1` on the same machine) and port `5000`.
+In the app on the same PC, connect over TCP to `127.0.0.1`, port `5000`. It listens only on this PC unless you add `--host 0.0.0.0`, which lets a phone on the same network connect to this PC's address.
 
 Use the Dart that comes with the Flutter SDK this repo builds with. An older Dart fails before the radio starts, with an error about native assets.
 
@@ -18,6 +18,7 @@ Use the Dart that comes with the Flutter SDK this repo builds with. An older Dar
 |---|---|---|
 | `--profile` | `offband` | `offband` (pinned to `offband-v1.5.0-beta7`) or `stock` (MeshCore `companion-v1.18.0`) |
 | `--port` | `5000` | TCP port |
+| `--host` | `127.0.0.1` | address to listen on; `0.0.0.0` for every network interface |
 | `--seed` | built-in | a seed file (below) or a captured trace |
 
 The radio's clock follows real time, so ACKs and remote-node replies arrive on their own.

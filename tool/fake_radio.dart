@@ -5,19 +5,22 @@
 //   dart run tool/fake_radio.dart --profile stock --seed my-mesh.json
 //   dart run tool/fake_radio.dart --seed test/fake_radio/traces/rak.json
 //
-// Then in the app: connect over TCP to this PC's address, port 5000. Seed
-// files and console commands: tool/fake_radio/README.md. Test code only: it
-// lives under test/ and tool/ and never ships in the app.
+// Then in the app on the same PC: connect over TCP to 127.0.0.1, port 5000.
+// For a phone on the network, add --host 0.0.0.0. Seed files and console
+// commands: tool/fake_radio/README.md. Test code only: it lives under test/
+// and tool/ and never ships in the app.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../test/support/fake_radio/fake_radio.dart';
 import '../test/support/fake_radio/fake_radio_runner.dart';
 
 Future<void> main(List<String> args) async {
   var profile = 'offband';
   var port = 5000;
+  var host = InternetAddress.loopbackIPv4;
   String? seed;
   for (var i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -25,22 +28,36 @@ Future<void> main(List<String> args) async {
         profile = args[++i];
       case '--port' when i + 1 < args.length:
         port = int.parse(args[++i]);
+      case '--host' when i + 1 < args.length:
+        host = InternetAddress(args[++i]);
       case '--seed' when i + 1 < args.length:
         seed = args[++i];
       default:
         stderr.writeln(
-          'usage: dart run tool/fake_radio.dart '
-          '[--profile offband|stock] [--port 5000] [--seed file.json]',
+          'usage: dart run tool/fake_radio.dart [--profile offband|stock] '
+          '[--port 5000] [--host 127.0.0.1] [--seed file.json]',
         );
         exit(64);
     }
   }
 
-  final radio = fakeRadioFromFile(seed, profile: profile);
-  final runner = await FakeRadioRunner.start(radio: radio, port: port);
+  final FakeRadio radio;
+  try {
+    radio = fakeRadioFromFile(seed, profile: profile);
+  } on Object catch (e) {
+    // A bad seed file: say what is wrong, not a stack trace.
+    stderr.writeln('can\'t use ${seed ?? 'the built-in seed'}: $e');
+    exit(65);
+  }
+  final runner = await FakeRadioRunner.start(
+    radio: radio,
+    address: host,
+    port: port,
+  );
   stdout.writeln(
-    'Fake radio "${radio.name}" (${radio.profile.name}) on port '
-    '${runner.server.port}. ${radio.contacts.length} contact(s), '
+    'Fake radio "${radio.name}" (${radio.profile.name}) on '
+    '${runner.server.host}:${runner.server.port}. '
+    '${radio.contacts.length} contact(s), '
     '${radio.channels.length} channel(s). Type "help" for commands.',
   );
 

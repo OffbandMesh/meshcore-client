@@ -209,7 +209,7 @@ void main() {
       addTearDown(proc.kill);
       final out = proc.stdout.transform(utf8.decoder).asBroadcastStream();
       await out
-          .firstWhere((l) => l.contains('on port $port'))
+          .firstWhere((l) => l.contains('on 127.0.0.1:$port'))
           .timeout(const Duration(seconds: 60));
 
       final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
@@ -229,6 +229,32 @@ void main() {
 
       proc.stdin.writeln('quit');
       expect(await proc.exitCode.timeout(const Duration(seconds: 20)), 0);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'a bad seed file stops the runner with a message, not a stack trace',
+    () async {
+      final root = Platform.environment['FLUTTER_ROOT'];
+      if (root == null) {
+        markTestSkipped('FLUTTER_ROOT not set: not under flutter test');
+        return;
+      }
+      final bad =
+          File('${Directory.systemTemp.createTempSync('seed').path}/b.json')
+            ..writeAsStringSync(
+              '{"format": "offband-fake-radio-seed", '
+              '"format_version": 1, "contacts": [{"name": "A", "key": "11a"}]}',
+            );
+      final result = await Process.run(
+        '$root/bin/dart${Platform.isWindows ? '.bat' : ''}',
+        ['run', 'tool/fake_radio.dart', '--seed', bad.path],
+        runInShell: Platform.isWindows,
+      );
+      expect(result.exitCode, 65, reason: '${result.stdout}${result.stderr}');
+      expect('${result.stderr}', contains("can't use ${bad.path}"));
+      expect('${result.stderr}', isNot(contains('#0 ')));
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

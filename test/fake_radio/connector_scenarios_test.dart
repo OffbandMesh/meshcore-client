@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
@@ -201,10 +202,7 @@ void main() {
           Future<List<String>> apply({required bool temporary}) async {
             final node = nodes[label]!;
             final target = contact(label);
-            await connector.sendFrame(
-              buildSendLoginFrame(target.publicKey, node.adminPassword),
-            );
-            await _until(radio, () => radio.hasAdminSession(node), 'login');
+            await _login(connector, radio, target, node.adminPassword);
             // Built as repeater_settings_screen.dart builds a preset save.
             final pending = [
               temporary
@@ -268,10 +266,7 @@ void main() {
           test('a bad value comes back as the firmware error (#748)', () async {
             final node = nodes[label]!;
             final target = contact(label);
-            await connector.sendFrame(
-              buildSendLoginFrame(target.publicKey, node.adminPassword),
-            );
-            await _until(radio, () => radio.hasAdminSession(node), 'login');
+            await _login(connector, radio, target, node.adminPassword);
             final service = RepeaterCommandService(connector);
             addTearDown(service.dispose);
             final sub = connector.receivedFrames.listen((frame) {
@@ -313,6 +308,31 @@ void main() {
         });
       }
     });
+  }
+}
+
+/// Logs in to [target] the way the app does, and waits until the CLIENT has
+/// received LOGIN_SUCCESS for that node, not just until the fake holds a
+/// session (MyMesh.cpp:1153: code, permissions, then the 6-byte key prefix).
+Future<void> _login(
+  MeshCoreConnector connector,
+  FakeRadio radio,
+  Contact target,
+  String password,
+) async {
+  var confirmed = false;
+  final sub = connector.receivedFrames.listen((f) {
+    if (f.length >= 8 &&
+        f[0] == pushCodeLoginSuccess &&
+        listEquals(f.sublist(2, 8), target.publicKey.sublist(0, 6))) {
+      confirmed = true;
+    }
+  });
+  try {
+    await connector.sendFrame(buildSendLoginFrame(target.publicKey, password));
+    await _until(radio, () => confirmed, 'LOGIN_SUCCESS at the client');
+  } finally {
+    await sub.cancel();
   }
 }
 

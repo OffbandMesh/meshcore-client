@@ -102,6 +102,26 @@ void main() {
       expect(_compare(client, offband).unknown, isEmpty);
     });
 
+    test('no two names reduce to the same comparison key', () {
+      // `_key` drops case and underscores. If two names collapsed together,
+      // one of them would never be compared.
+      List<String> collisions(Iterable<String> names) {
+        final seen = <String, String>{};
+        return [
+          for (final n in names)
+            if (seen.putIfAbsent(_key(n), () => n) != n)
+              '$n and ${seen[_key(n)]}',
+        ];
+      }
+
+      expect(collisions(client.keys), isEmpty);
+      expect(
+        collisions([for (final s in _sections) ...offband.section(s).keys]),
+        isEmpty,
+      );
+      expect(collisions(['CMD_FOO_BAR', 'cmdFooBar']), hasLength(1));
+    });
+
     test('a deliberately wrong constant is caught', () {
       final doctored = Map<String, int>.of(client)
         ..['offbandCapCaplog'] = 0x08

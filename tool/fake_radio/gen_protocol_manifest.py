@@ -39,8 +39,36 @@ def show(repo, ref, path):
     return out.stdout
 
 
+PROTOCOL = re.compile(r"(CMD_|RESP_CODE_|PUSH_CODE_|ERR_CODE_|OFFBAND_)")
+
+
+def conditional_definitions(text):
+    """Protocol definitions inside #if/#ifdef/#ifndef. Reading source with
+    regexes can't tell which branch a build takes, so the manifest would be
+    wrong for some build; refuse instead of guessing."""
+    depth, found = 0, []
+    for n, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if re.match(r"#\s*if", s):
+            depth += 1
+        elif re.match(r"#\s*endif", s):
+            depth -= 1
+        elif depth > 0:
+            m = DEFINE.match(s) or CONSTEXPR.match(s)
+            if m and PROTOCOL.match(m.group(1)):
+                found.append(f"line {n}: {m.group(1)}")
+    return found
+
+
 def pick(pairs, prefix):
-    return {name: int(value, 0) for name, value in pairs if name.startswith(prefix)}
+    out = {}
+    for name, value in pairs:
+        if not name.startswith(prefix):
+            continue
+        if name in out and out[name] != int(value, 0):
+            sys.exit(f"{name} is defined twice with different values")
+        out[name] = int(value, 0)
+    return out
 
 
 def main():
@@ -67,6 +95,12 @@ def main():
         if offband is None:
             sys.exit("offband flavor but OffbandConfigProtocol.h is missing")
         pairs += CONSTEXPR.findall(offband) + DEFINE.findall(offband)
+    for name, text in [("MyMesh.cpp", source)] + (
+        [("OffbandConfigProtocol.h", offband)] if args.flavor == "offband" else []
+    ):
+        found = conditional_definitions(text)
+        if found:
+            sys.exit(f"{name} defines protocol codes inside #if: {', '.join(found)}")
 
     commands = pick(pairs, "CMD_")
     responses = pick(pairs, "RESP_CODE_")
