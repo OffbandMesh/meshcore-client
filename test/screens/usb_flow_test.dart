@@ -18,6 +18,12 @@ class _FakeMeshCoreConnector extends MeshCoreConnector {
   final MeshCoreConnectionState initialState;
   final List<String> _ports;
 
+  MeshCoreTransportType fakeTransport = MeshCoreTransportType.usb;
+  bool fakeAutoReconnecting = false;
+  bool fakeGaveUp = false;
+  int stopCalls = 0;
+  int retryCalls = 0;
+
   String? requestPortLabel;
   String? fallbackDeviceName;
   int connectUsbCalls = 0;
@@ -32,7 +38,25 @@ class _FakeMeshCoreConnector extends MeshCoreConnector {
   MeshCoreConnectionState get state => initialState;
 
   @override
-  MeshCoreTransportType get activeTransport => MeshCoreTransportType.usb;
+  MeshCoreTransportType get activeTransport => fakeTransport;
+
+  @override
+  bool get isAutoReconnecting => fakeAutoReconnecting;
+
+  @override
+  bool get autoReconnectGaveUp => fakeGaveUp;
+
+  @override
+  int get autoReconnectAttempt => 2;
+
+  @override
+  String? get autoReconnectTargetName => 'T1000-E';
+
+  @override
+  Future<void> stopAutoReconnect() async => stopCalls += 1;
+
+  @override
+  Future<void> retryLastDevice() async => retryCalls += 1;
 
   @override
   String? get activeUsbPort => fakeActiveUsbPort;
@@ -145,6 +169,78 @@ void main() {
 
     expect(connector.connectUsbCalls, 1);
     expect(connector.lastConnectPortName, 'COM6');
+  });
+
+  testWidgets(
+    'UsbScreen connects while a BLE auto-reconnect holds the state (#997)',
+    (tester) async {
+      // The 2026-10-25 log: a USB tap during the retry loop was dropped
+      // silently, for 74 minutes, until the app was restarted.
+      final connector =
+          _FakeMeshCoreConnector(
+              initialState: MeshCoreConnectionState.connecting,
+              ports: <String>['COM13 - USB Serial Device (COM13)'],
+            )
+            ..fakeTransport = MeshCoreTransportType.bluetooth
+            ..fakeAutoReconnecting = true;
+
+      await tester.pumpWidget(
+        _buildTestApp(connector: connector, child: const UsbScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pump();
+
+      expect(connector.connectUsbCalls, 1);
+      expect(connector.lastConnectPortName, 'COM13');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 60));
+    },
+  );
+
+  testWidgets('ScannerScreen shows the retry and a Stop that ends it (#997)', (
+    tester,
+  ) async {
+    final connector =
+        _FakeMeshCoreConnector(initialState: MeshCoreConnectionState.connecting)
+          ..fakeTransport = MeshCoreTransportType.bluetooth
+          ..fakeAutoReconnecting = true;
+
+    await tester.pumpWidget(
+      _buildTestApp(connector: connector, child: const ScannerScreen()),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('attempt 2 of 5'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Stop'));
+    await tester.pump();
+    expect(connector.stopCalls, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 60));
+  });
+
+  testWidgets('ScannerScreen offers Retry once the retry gave up (#997)', (
+    tester,
+  ) async {
+    final connector = _FakeMeshCoreConnector()
+      ..fakeTransport = MeshCoreTransportType.bluetooth
+      ..fakeGaveUp = true;
+
+    await tester.pumpWidget(
+      _buildTestApp(connector: connector, child: const ScannerScreen()),
+    );
+    await tester.pump();
+
+    expect(find.textContaining("Couldn't reach T1000-E"), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+    await tester.pump();
+    expect(connector.retryCalls, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 60));
   });
 
   testWidgets('ScannerScreen USB action reflects platform support', (

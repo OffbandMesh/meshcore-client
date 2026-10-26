@@ -46,6 +46,7 @@ import '../services/queue_sync_file_log_stub.dart'
     if (dart.library.io) '../services/queue_sync_file_log_io.dart';
 import 'meshcore_connector_usb.dart';
 import 'meshcore_connector_tcp.dart';
+import 'reconnect_policy.dart';
 import '../storage/channel_message_store.dart';
 import '../storage/channel_order_store.dart';
 import '../storage/channel_settings_store.dart';
@@ -348,7 +349,19 @@ class MeshCoreConnector extends ChangeNotifier {
   int _radioStatsPollRefCount = 0;
   final ValueNotifier<CompanionRadioStats?> radioStatsNotifier =
       ValueNotifier<CompanionRadioStats?>(null);
-  int _reconnectAttempts = 0;
+  final ReconnectPolicy _reconnectPolicy = ReconnectPolicy();
+
+  /// True while the BLE connect in flight was started by the automatic retry,
+  /// not by the user. A user connect may abandon it; it may not abandon a
+  /// user's. (#997)
+  bool _autoReconnectInFlight = false;
+
+  /// True once the retry budget ran out, until the user connects again. (#997)
+  bool _autoReconnectGaveUp = false;
+
+  /// Bumped whenever a BLE connect starts or is abandoned. An attempt that
+  /// finds it changed has been superseded and must stop touching shared state.
+  int _connectGeneration = 0;
   bool _notifyListenersDirty = false;
   static const Duration _notifyListenersDebounce = Duration(milliseconds: 50);
 
@@ -742,6 +755,16 @@ class MeshCoreConnector extends ChangeNotifier {
       _activeTransport == MeshCoreTransportType.usb;
   bool get isAutoReconnectScheduled =>
       _shouldAutoReconnect && (_reconnectTimer?.isActive ?? false);
+
+  /// An automatic retry is scheduled or in flight. (#997)
+  bool get isAutoReconnecting =>
+      _autoReconnectInFlight || isAutoReconnectScheduled;
+  int get autoReconnectAttempt => _reconnectPolicy.attempts;
+  int get autoReconnectMaxAttempts => _reconnectPolicy.maxAttempts;
+  bool get autoReconnectGaveUp => _autoReconnectGaveUp;
+
+  /// The radio the automatic retry is aimed at, for the status bar.
+  String? get autoReconnectTargetName => _lastDeviceDisplayName;
   String? get activeTcpEndpoint => _tcpConnector.activeEndpoint;
   bool get isTcpTransportConnected =>
       _state == MeshCoreConnectionState.connected &&
@@ -3006,6 +3029,9 @@ class MeshCoreConnector extends ChangeNotifier {
     required String portName,
     int baudRate = 115200,
   }) async {
+    if (_autoReconnectInFlight) {
+      await _abandonAutoReconnect('USB connect to $portName started');
+    }
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -3092,6 +3118,9 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> connectTcp({required String host, required int port}) async {
+    if (_autoReconnectInFlight) {
+      await _abandonAutoReconnect('TCP connect to $host:$port started');
+    }
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -3234,15 +3263,38 @@ class MeshCoreConnector extends ChangeNotifier {
     BluetoothDevice device, {
     String? displayName,
     Future<String?> Function()? linuxPairingPinProvider,
+  }) => _connectBle(
+    device,
+    displayName: displayName,
+    linuxPairingPinProvider: linuxPairingPinProvider,
+    auto: false,
+  );
+
+  Future<void> _connectBle(
+    BluetoothDevice device, {
+    String? displayName,
+    Future<String?> Function()? linuxPairingPinProvider,
+    required bool auto,
   }) async {
+    if (!auto && _autoReconnectInFlight) {
+      await _abandonAutoReconnect(
+        'Connect to ${displayName ?? device.remoteId} started',
+      );
+    }
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
+      _appDebugLogService?.warn(
+        'connect ignored: already $_state',
+        tag: 'BLE Connect',
+      );
       return;
     }
 
+    final generation = _beginConnectAttempt(auto: auto);
     _activeTransport = MeshCoreTransportType.bluetooth;
 
     await stopScan();
+    if (generation != _connectGeneration) return;
     _setState(MeshCoreConnectionState.connecting);
     _device = device;
     _deviceId = device.remoteId.toString();
@@ -3256,7 +3308,6 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceDisplayName = _deviceDisplayName;
     _manualDisconnect = false;
     _bleReleaseUnconfirmed = false;
-    _cancelReconnectTimer();
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
       _resetConnectionHandshakeState();
@@ -3276,6 +3327,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _notifySubscription = null;
       await _mtuSubscription?.cancel();
       _mtuSubscription = null;
+      _throwIfSuperseded(generation);
       _connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected && isConnected) {
           _handleDisconnection();
@@ -3468,6 +3520,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // message byte budget recover from the 20-byte floor once the real value
       // is known (#592).
       await _mtuSubscription?.cancel();
+      _throwIfSuperseded(generation);
       _mtuSubscription = device.mtu.listen((mtu) {
         _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
         _logComposerBudget('mtu');
@@ -3502,6 +3555,7 @@ class MeshCoreConnector extends ChangeNotifier {
         }
       }
 
+      _throwIfSuperseded(generation);
       BluetoothService? uartService;
       for (var service in services) {
         if (service.uuid.toString().toLowerCase() == MeshCoreUuids.service) {
@@ -3573,6 +3627,7 @@ class MeshCoreConnector extends ChangeNotifier {
           }
         }
       }
+      _throwIfSuperseded(generation);
       _notifySubscription = _txCharacteristic!.onValueReceived.listen(
         _handleFrame,
         onError: (error, stackTrace) {
@@ -3581,6 +3636,8 @@ class MeshCoreConnector extends ChangeNotifier {
         },
       );
 
+      _autoReconnectInFlight = false;
+      _cancelReconnectTimer();
       _setState(MeshCoreConnectionState.connected);
       if (_shouldGateInitialChannelSync) {
         _hasReceivedDeviceInfo = false;
@@ -3588,6 +3645,16 @@ class MeshCoreConnector extends ChangeNotifier {
       }
       await _startBleInitialSync();
     } catch (e) {
+      if (e is _ConnectSuperseded || generation != _connectGeneration) {
+        // Stop, or a newer connect, took over. Whoever did that already tore
+        // this attempt down; touching state now would clobber theirs. (#997)
+        _appDebugLogService?.info(
+          'Connect to ${_deviceDisplayName ?? device.remoteId} abandoned: '
+          'superseded',
+          tag: 'BLE Connect',
+        );
+        return;
+      }
       _appDebugLogService?.error('Connection error: $e', tag: 'BLE Connect');
       final errorText = e.toString();
       final lowerErrorText = errorText.toLowerCase();
@@ -3964,6 +4031,26 @@ class MeshCoreConnector extends ChangeNotifier {
   void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
 
   @visibleForTesting
+  void setAppDebugLogServiceForTest(AppDebugLogService service) =>
+      _appDebugLogService = service;
+
+  /// The state a BLE link leaves behind: a radio to go back to. (#997)
+  @visibleForTesting
+  void primeAutoReconnectForTest(String deviceId) {
+    _lastDeviceId = deviceId;
+    _lastDeviceDisplayName = deviceId;
+    _activeTransport = MeshCoreTransportType.bluetooth;
+    _manualDisconnect = false;
+  }
+
+  /// Starts an automatic attempt through the real bookkeeping, without BLE.
+  @visibleForTesting
+  void beginAutoReconnectAttemptForTest() {
+    _beginConnectAttempt(auto: true);
+    _setState(MeshCoreConnectionState.connecting);
+  }
+
+  @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
 
   @visibleForTesting
@@ -4043,25 +4130,57 @@ class MeshCoreConnector extends ChangeNotifier {
       (_activeTransport == MeshCoreTransportType.bluetooth &&
           PlatformInfo.isWeb);
 
+  /// Cancels a scheduled retry and starts a fresh retry budget. Only for a
+  /// user action or a successful connect, never for an automatic attempt:
+  /// that reset is what kept the delay at 1 s for hours (#995).
   void _cancelReconnectTimer() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _reconnectAttempts = 0;
+    _reconnectPolicy.reset();
+    _autoReconnectGaveUp = false;
   }
 
-  int _nextReconnectDelayMs() {
-    final attempt = _reconnectAttempts < 6 ? _reconnectAttempts : 6;
-    _reconnectAttempts += 1;
-    final delayMs = 1000 * (1 << attempt);
-    return delayMs > 30000 ? 30000 : delayMs;
+  /// Bookkeeping at the start of every BLE connect. Returns the attempt's
+  /// generation, which it checks after each await. (#997)
+  int _beginConnectAttempt({required bool auto}) {
+    _autoReconnectInFlight = auto;
+    if (auto) {
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+    } else {
+      _cancelReconnectTimer();
+    }
+    return ++_connectGeneration;
+  }
+
+  /// Called after each await in a BLE connect that precedes a write to shared
+  /// connection state, so an abandoned attempt stops before it writes.
+  void _throwIfSuperseded(int generation) {
+    if (generation != _connectGeneration) throw const _ConnectSuperseded();
   }
 
   void _scheduleReconnect() {
     if (!_shouldAutoReconnect) return;
     if (_reconnectTimer?.isActive == true) return;
 
-    final delayMs = _nextReconnectDelayMs();
-    _reconnectTimer = Timer(Duration(milliseconds: delayMs), () async {
+    final target = _lastDeviceDisplayName ?? _lastDeviceId;
+    final delay = _reconnectPolicy.nextDelay(DateTime.now());
+    if (delay == null) {
+      _autoReconnectGaveUp = true;
+      _appDebugLogService?.warn(
+        'Auto-reconnect stopped: $target not reached after '
+        '${_reconnectPolicy.attempts} attempt(s)',
+        tag: 'Connection',
+      );
+      notifyListeners();
+      return;
+    }
+    _appDebugLogService?.info(
+      'Auto-reconnect attempt ${_reconnectPolicy.attempts} of '
+      '${_reconnectPolicy.maxAttempts} to $target in ${delay.inSeconds}s',
+      tag: 'Connection',
+    );
+    _reconnectTimer = Timer(delay, () async {
       if (!_shouldAutoReconnect) return;
       if (_state == MeshCoreConnectionState.connecting ||
           _state == MeshCoreConnectionState.connected) {
@@ -4076,11 +4195,52 @@ class MeshCoreConnector extends ChangeNotifier {
       if (device == null) return;
 
       try {
-        await connect(device, displayName: _lastDeviceDisplayName);
+        await _connectBle(
+          device,
+          displayName: _lastDeviceDisplayName,
+          auto: true,
+        );
       } catch (_) {
-        _scheduleReconnect();
+        // A failed attempt has already scheduled the next one, through
+        // disconnect(manual: false), or spent the budget.
       }
     });
+    notifyListeners();
+  }
+
+  /// Ends an automatic retry, in flight or scheduled, so the user can act.
+  /// The attempt in flight sees its generation change and stops. (#997)
+  Future<void> _abandonAutoReconnect(String reason) async {
+    _appDebugLogService?.info(
+      '$reason: abandoning automatic reconnect',
+      tag: 'Connection',
+    );
+    _connectGeneration++;
+    final wasInFlight = _autoReconnectInFlight;
+    _autoReconnectInFlight = false;
+    if (wasInFlight) {
+      await disconnect(manual: true);
+    } else {
+      _manualDisconnect = true;
+      _cancelReconnectTimer();
+      notifyListeners();
+    }
+  }
+
+  /// The status bar's Stop button: end an automatic retry now. (#997)
+  Future<void> stopAutoReconnect() async {
+    if (!isAutoReconnecting && !_autoReconnectGaveUp) return;
+    await _abandonAutoReconnect('Stop pressed');
+  }
+
+  /// The status bar's Retry button after the retry gave up: a user connect to
+  /// the same radio, with a fresh budget. (#997)
+  Future<void> retryLastDevice() async {
+    final device =
+        _lastDevice ??
+        (_lastDeviceId == null ? null : BluetoothDevice.fromId(_lastDeviceId!));
+    if (device == null) return;
+    await connect(device, displayName: _lastDeviceDisplayName);
   }
 
   Future<void> disconnect({
@@ -4088,6 +4248,7 @@ class MeshCoreConnector extends ChangeNotifier {
     bool skipBleDeviceDisconnect = false,
   }) async {
     if (_state == MeshCoreConnectionState.disconnecting) return;
+    _autoReconnectInFlight = false;
     final transportAtDisconnect = _activeTransport;
     final transportLabel = switch (transportAtDisconnect) {
       MeshCoreTransportType.bluetooth => 'BLE',
@@ -10890,3 +11051,8 @@ class _DeviceUiWaiter {
 
 /// How one pass of a slot push ended.
 enum _SlotPush { committed, displaced, failed }
+
+/// A BLE connect that Stop or a newer connect took over (#997).
+class _ConnectSuperseded implements Exception {
+  const _ConnectSuperseded();
+}

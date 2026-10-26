@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../services/app_settings_service.dart';
+import '../utils/app_logger.dart';
 import '../utils/platform_info.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -244,9 +245,17 @@ class _TcpScreenState extends State<TcpScreen> {
   }
 
   Future<void> _connectTcp() async {
-    if (_connector.state == MeshCoreConnectionState.connecting ||
-        _connector.state == MeshCoreConnectionState.connected ||
-        _connector.state == MeshCoreConnectionState.disconnecting) {
+    // An automatic BLE retry yields to this connect (#997). Anything else
+    // that holds the connection is said out loud, never dropped silently.
+    if (!_connector.isAutoReconnecting &&
+        (_connector.state == MeshCoreConnectionState.connecting ||
+            _connector.state == MeshCoreConnectionState.connected ||
+            _connector.state == MeshCoreConnectionState.disconnecting)) {
+      appLogger.warn(
+        'TCP connect ignored: connection is ${_connector.state}',
+        tag: 'TcpScreen',
+      );
+      showDismissibleSnackBar(context, content: Text(context.l10n.connectBusy));
       return;
     }
 

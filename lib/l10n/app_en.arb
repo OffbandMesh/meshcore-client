@@ -24,6 +24,7 @@
   "common_share": "Share",
   "common_copy": "Copy",
   "common_retry": "Retry",
+  "common_stop": "Stop",
   "common_hide": "Hide",
   "common_remove": "Remove",
   "common_enable": "Enable",
@@ -112,6 +113,29 @@
   "scanner_connecting": "Connecting...",
   "scanner_disconnecting": "Disconnecting...",
   "scanner_notConnected": "Not connected",
+  "scanner_reconnecting": "Reconnecting to {deviceName} (attempt {attempt} of {maxAttempts})",
+  "@scanner_reconnecting": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "attempt": {
+        "type": "int"
+      },
+      "maxAttempts": {
+        "type": "int"
+      }
+    }
+  },
+  "scanner_reconnectGaveUp": "Couldn't reach {deviceName}",
+  "@scanner_reconnectGaveUp": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectBusy": "Busy with another connection. Try again in a moment.",
   "scanner_connectedTo": "Connected to {deviceName}",
   "@scanner_connectedTo": {
     "placeholders": {

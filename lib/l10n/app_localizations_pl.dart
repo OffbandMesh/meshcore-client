@@ -81,6 +81,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get common_retry => 'Ponów';
 
   @override
+  String get common_stop => 'Stop';
+
+  @override
   String get common_hide => 'Ukryj';
 
   @override
@@ -263,6 +266,20 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get scanner_notConnected => 'Nie połączono';
+
+  @override
+  String scanner_reconnecting(String deviceName, int attempt, int maxAttempts) {
+    return 'Reconnecting to $deviceName (attempt $attempt of $maxAttempts)';
+  }
+
+  @override
+  String scanner_reconnectGaveUp(String deviceName) {
+    return 'Couldn\'t reach $deviceName';
+  }
+
+  @override
+  String get connectBusy =>
+      'Busy with another connection. Try again in a moment.';
 
   @override
   String scanner_connectedTo(String deviceName) {
