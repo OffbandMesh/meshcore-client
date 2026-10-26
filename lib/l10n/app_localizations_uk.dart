@@ -348,6 +348,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceCli_title => 'Device CLI';
 
   @override
+  String get deviceCli_remoteTitle => 'Remote CLI';
+
+  @override
   String get deviceCli_entrySubtitle => 'Run commands on the connected radio';
 
   @override
@@ -1534,6 +1537,9 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get contact_remoteCliSubtitle =>
       'Let this contact run CLI commands on your radio';
+
+  @override
+  String get contact_cliConsole => 'CLI console';
 
   @override
   String get channels_title => 'Канали';

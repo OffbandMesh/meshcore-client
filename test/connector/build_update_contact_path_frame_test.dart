@@ -263,7 +263,7 @@ void main() {
     test('Contact.remoteCliAllowed reflects the 0x10 bit', () {
       Contact withFlags(int flags) => Contact(
         publicKey: Uint8List(32),
-        name: 'X',
+        receivedName: 'X',
         type: 1,
         pathLength: 0,
         path: Uint8List(0),

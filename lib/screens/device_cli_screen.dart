@@ -1,17 +1,19 @@
-// Device CLI console (#883, interop plan F2/E2.1) - the local-device
-// counterpart of RepeaterCliScreen, built to the owner-approved mockup on
-// issue #883. Same console pattern, minus everything mesh-specific: no
-// path/flood selection, no retries - one frame-66 send per command with a
-// frame-level timeout surfaced as its own transcript row.
+// CLI console (#883 local, #999 remote; interop plan F2/E2.1 + F3/E3.1). The
+// local-device counterpart of RepeaterCliScreen, built to the owner-approved
+// mockup on #883, and - with a [remoteContact] - the surface for remote CLI to
+// a companion over the mesh. One console, one transcript; the transport
+// ([CliConsoleTransport]) is what differs (local frame 66/29 vs remote TXT
+// type-3). Same pattern, minus path/flood selection and retries: one send per
+// command, a timeout surfaced as its own transcript row.
 //
 // Secrecy rule (W3/F4, applied here from day one): a reply to a command that
 // names a secret (anything containing "pwd"/"password") renders masked and is
 // only recoverable via long-press-to-copy; its cleartext never enters the
 // widget tree as selectable text and is never logged by this screen.
 //
-// Population gating is NOT here: offering this screen only where the
-// classifier allows frame 66 is #884 (entry point + gate). Until #884 lands,
-// nothing navigates to this screen.
+// Population gating is NOT here: offering the local console only where the
+// classifier allows frame 66 is #884; offering the remote console only on a
+// companion contact is the entry point in chat_screen (#999).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,7 +22,8 @@ import '../connector/meshcore_connector.dart';
 import '../helpers/device_name_validator.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../l10n/l10n.dart';
-import '../services/local_cli_service.dart';
+import '../models/contact.dart';
+import '../services/cli_console_transport.dart';
 
 enum _EntryKind { command, reply, timeout, sendFailed }
 
@@ -67,11 +70,16 @@ class _ConsoleEntry {
 }
 
 class DeviceCliScreen extends StatefulWidget {
-  const DeviceCliScreen({super.key, this.commandTimeout});
+  const DeviceCliScreen({super.key, this.commandTimeout, this.remoteContact});
 
-  /// Per-command reply window; null uses [LocalCliService.defaultTimeout].
-  /// Tests shrink it so a timeout row renders without a 10 s pump.
+  /// Per-command reply window; null uses the transport's default. Tests shrink
+  /// it so a timeout row renders without a 10 s pump. The remote transport
+  /// computes its own mesh window and ignores this.
   final Duration? commandTimeout;
+
+  /// When set, the console runs CLI on this remote contact over the mesh
+  /// (type-3 for a companion, #999) instead of the connected device.
+  final Contact? remoteContact;
 
   @override
   State<DeviceCliScreen> createState() => _DeviceCliScreenState();
@@ -83,18 +91,22 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<_ConsoleEntry> _entries = [];
   int _historyIndex = -1;
-  LocalCliService? _cliService;
+  CliConsoleTransport? _transport;
+
+  bool get _isRemote => widget.remoteContact != null;
 
   @override
   void initState() {
     super.initState();
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
-    _cliService = LocalCliService(connector);
+    _transport = widget.remoteContact == null
+        ? LocalCliTransport(connector)
+        : RemoteCliTransport(connector, widget.remoteContact!);
   }
 
   @override
   void dispose() {
-    _cliService?.dispose();
+    _transport?.dispose();
     _commandController.dispose();
     _commandFocusNode.dispose();
     _scrollController.dispose();
@@ -131,8 +143,8 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
   Future<void> _sendCommand() async {
     final command = _commandController.text.trim();
     if (command.isEmpty) return;
-    final service = _cliService;
-    if (service == null) return;
+    final transport = _transport;
+    if (transport == null) return;
 
     // Mirror the firmware's `set name` character rejection locally: show the
     // typed command and a rejection row, and never send the frame (#885).
@@ -168,7 +180,10 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
     final stopwatch = Stopwatch()..start();
     _ConsoleEntry entry;
     try {
-      final reply = await service.run(command, timeout: widget.commandTimeout);
+      final reply = await transport.run(
+        command,
+        timeout: widget.commandTimeout,
+      );
       stopwatch.stop();
       entry = _ConsoleEntry.reply(
         reply.text,
@@ -177,7 +192,7 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
         secret: secret,
         isError: looksLikeErrorReply(reply.text),
       );
-    } on LocalCliTimeout catch (e) {
+    } on CliConsoleTimeout catch (e) {
       if (!mounted) return;
       entry = _ConsoleEntry.timeout(
         context.l10n.deviceCli_noReply(command, e.secondsText),
@@ -257,12 +272,20 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final connector = context.watch<MeshCoreConnector>();
-    final name = connector.selfName;
-    final version = connector.firmwareVersion;
-    final subtitle = [
-      if (name != null && name.isNotEmpty) name,
-      if (version != null && version.isNotEmpty) '($version)',
-    ].join(' ');
+    final String title;
+    final String subtitle;
+    if (_isRemote) {
+      title = l10n.deviceCli_remoteTitle;
+      subtitle = widget.remoteContact!.name;
+    } else {
+      title = l10n.deviceCli_title;
+      final name = connector.selfName;
+      final version = connector.firmwareVersion;
+      subtitle = [
+        if (name != null && name.isNotEmpty) name,
+        if (version != null && version.isNotEmpty) '($version)',
+      ].join(' ');
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -270,7 +293,7 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(l10n.deviceCli_title),
+            Text(title),
             if (subtitle.isNotEmpty)
               Text(
                 subtitle,

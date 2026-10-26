@@ -49,7 +49,7 @@ void main() {
     connector.contactsForTest.add(
       Contact(
         publicKey: pubKey,
-        name: 'Sender',
+        receivedName: 'Sender',
         type: advTypeChat,
         pathLength: 0,
         path: Uint8List(0),
@@ -89,5 +89,49 @@ void main() {
     expect(msg, isNotNull);
     expect(msg!.isCli, isFalse);
     expect(msg.isCliCommand, isFalse);
+  });
+
+  group('CLI traffic stays out of the chat thread (#999)', () {
+    // CLI and chat are separate surfaces: a CLI reply (type-1) or an inbound
+    // CLI command (type-3) is the CLI console's concern, correlated via the
+    // receivedFrames listener. It must never land in the contact's
+    // conversation. The console is tested in cli_console_transport_test.
+    setUp(() {
+      // The incoming-message path bails without a self identity; set one
+      // distinct from the sender so nothing is mistaken for an echo of self.
+      connector.setSelfPublicKeyForTest(
+        Uint8List.fromList(List<int>.filled(32, 0xAA)),
+      );
+    });
+
+    Iterable<dynamic> allMessages() =>
+        connector.conversationsForTest.values.expand((m) => m);
+
+    test('a type-1 CLI reply does not enter the conversation', () async {
+      connector.handleFrameForTest(
+        _frame(txtType: txtTypeCliData, pubKey: pubKey, text: 'A1|radio ok'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(allMessages(), isEmpty);
+    });
+
+    test(
+      'an inbound type-3 CLI command does not enter the conversation',
+      () async {
+        connector.handleFrameForTest(
+          _frame(txtType: txtTypeCliCommand, pubKey: pubKey, text: 'reboot'),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(allMessages(), isEmpty);
+      },
+    );
+
+    test('a plain message does enter the conversation', () async {
+      connector.handleFrameForTest(
+        _frame(txtType: txtTypePlain, pubKey: pubKey, text: 'hi there'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(allMessages(), isNotEmpty);
+    });
   });
 }

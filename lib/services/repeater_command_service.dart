@@ -90,6 +90,13 @@ class RepeaterCommandService {
   /// them in front of users (#589).
   void Function(UnmatchedRepeaterResponse)? onUnmatchedResponse;
 
+  /// When set, the late/unmatched log withholds the reply text and the command
+  /// string, logging only lengths. The remote CLI console sets this so a
+  /// slow `get wifi.pwd` reply never writes the password to the app log, the
+  /// same guarantee [LocalCliService] gives (#999 review). Default false keeps
+  /// the repeater path's existing diagnostics.
+  bool redactUnmatchedReplyText = false;
+
   RepeaterCommandService(this._connector);
 
   /// Send a CLI command to a contact (a repeater/room server OR a companion)
@@ -255,16 +262,25 @@ class RepeaterCommandService {
         : DateTime.now().difference(expired.expiredAt);
 
     if (expired != null) {
+      final commandText = redactUnmatchedReplyText
+          ? '(withheld)'
+          : '"${expired.command}"';
+      final payloadText = redactUnmatchedReplyText
+          ? '${responsePayload.length} chars, text withheld'
+          : responsePayload;
       appLogger.warn(
-        'Late reply to "${expired.command}" from $repeaterKey arrived '
+        'Late reply to $commandText from $repeaterKey arrived '
         '${sinceTimeout!.inMilliseconds}ms after its window closed: '
-        '$responsePayload',
+        '$payloadText',
         tag: 'RepeaterCommand',
       );
     } else {
+      final payloadText = redactUnmatchedReplyText
+          ? '${responsePayload.length} chars, text withheld'
+          : responsePayload;
       appLogger.warn(
         'Reply from $repeaterKey matched no pending or recently expired '
-        'command (prefix: ${prefix ?? 'none'}): $responsePayload',
+        'command (prefix: ${prefix ?? 'none'}): $payloadText',
         tag: 'RepeaterCommand',
       );
     }

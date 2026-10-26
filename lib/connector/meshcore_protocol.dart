@@ -1048,7 +1048,17 @@ const int msgTextOffset = 38;
 class ParsedContactText {
   final Uint8List senderPrefix;
   final String text;
-  const ParsedContactText({required this.senderPrefix, required this.text});
+
+  /// The raw TXT type byte (plain 0, CLI_DATA 1, signed 2, CLI_COMMAND 3).
+  /// Some layouts carry it shifted left by 2; compare with both the raw value
+  /// and `txtType >> 2`, as the receive path does.
+  final int txtType;
+
+  const ParsedContactText({
+    required this.senderPrefix,
+    required this.text,
+    required this.txtType,
+  });
 }
 
 ParsedContactText? parseContactMessageText(Uint8List frame) {
@@ -1081,7 +1091,11 @@ ParsedContactText? parseContactMessageText(Uint8List frame) {
     final text = message.readCString();
     if (text.isEmpty) return null;
 
-    return ParsedContactText(senderPrefix: senderPrefix, text: text);
+    return ParsedContactText(
+      senderPrefix: senderPrefix,
+      text: text,
+      txtType: textType,
+    );
   } catch (e) {
     debugPrint('Error parsing contact message text: $e');
     return null;
