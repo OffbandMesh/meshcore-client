@@ -16,6 +16,7 @@ class FakeRadioProfile {
     this.ledEnabled = 0,
     this.displayMode = 0,
     this.gpsStatusText = 'detected=0',
+    this.deviceInfoTailBytes = 5,
   });
 
   /// A companion build of [manifest]'s firmware.
@@ -69,4 +70,8 @@ class FakeRadioProfile {
   /// What `sensors.getGpsStatusText` adds after `enabled=N ` in the 0xC1
   /// reply. Board-specific in firmware; a seed value here.
   final String gpsStatusText;
+
+  /// How many Offband bytes follow path_hash_mode in DEVICE_INFO (5 on code
+  /// 21+; fewer on older builds). A trace sets it from what it recorded.
+  final int deviceInfoTailBytes;
 }
