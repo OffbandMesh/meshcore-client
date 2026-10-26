@@ -3032,6 +3032,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_autoReconnectInFlight) {
       await _abandonAutoReconnect('USB connect to $portName started');
     }
+    await _awaitDisconnectInFlight('USB connect to $portName');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -3121,6 +3122,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_autoReconnectInFlight) {
       await _abandonAutoReconnect('TCP connect to $host:$port started');
     }
+    await _awaitDisconnectInFlight('TCP connect to $host:$port');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -3276,11 +3278,11 @@ class MeshCoreConnector extends ChangeNotifier {
     Future<String?> Function()? linuxPairingPinProvider,
     required bool auto,
   }) async {
+    final attemptLabel = displayName ?? device.remoteId.toString();
     if (!auto && _autoReconnectInFlight) {
-      await _abandonAutoReconnect(
-        'Connect to ${displayName ?? device.remoteId} started',
-      );
+      await _abandonAutoReconnect('Connect to $attemptLabel started');
     }
+    await _awaitDisconnectInFlight('Connect to $attemptLabel');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -3648,9 +3650,10 @@ class MeshCoreConnector extends ChangeNotifier {
       if (e is _ConnectSuperseded || generation != _connectGeneration) {
         // Stop, or a newer connect, took over. Whoever did that already tore
         // this attempt down; touching state now would clobber theirs. (#997)
+        // attemptLabel, not _deviceDisplayName: by now a newer connect may
+        // have overwritten that with its own radio's name.
         _appDebugLogService?.info(
-          'Connect to ${_deviceDisplayName ?? device.remoteId} abandoned: '
-          'superseded',
+          'Connect to $attemptLabel abandoned: superseded',
           tag: 'BLE Connect',
         );
         return;
@@ -4243,9 +4246,48 @@ class MeshCoreConnector extends ChangeNotifier {
     await connect(device, displayName: _lastDeviceDisplayName);
   }
 
+  /// The disconnect in progress, if any. A connect waits for it, and a second
+  /// disconnect joins it, because its tail clears the device, name and state
+  /// and would wipe a connection started on top of it. (#997)
+  Future<void>? _disconnectInFlight;
+
   Future<void> disconnect({
     bool manual = true,
     bool skipBleDeviceDisconnect = false,
+  }) {
+    final inFlight = _disconnectInFlight;
+    if (inFlight != null) {
+      if (manual) {
+        // The running disconnect may be an automatic one that is about to
+        // schedule a retry; a manual caller means no retry.
+        _manualDisconnect = true;
+        _cancelReconnectTimer();
+      }
+      return inFlight;
+    }
+    final running = _disconnect(
+      manual: manual,
+      skipBleDeviceDisconnect: skipBleDeviceDisconnect,
+    );
+    _disconnectInFlight = running;
+    return running.whenComplete(() {
+      if (identical(_disconnectInFlight, running)) _disconnectInFlight = null;
+    });
+  }
+
+  Future<void> _awaitDisconnectInFlight(String what) async {
+    final inFlight = _disconnectInFlight;
+    if (inFlight == null) return;
+    _appDebugLogService?.info(
+      '$what waiting for the previous disconnect to finish',
+      tag: 'Connection',
+    );
+    await inFlight;
+  }
+
+  Future<void> _disconnect({
+    required bool manual,
+    required bool skipBleDeviceDisconnect,
   }) async {
     if (_state == MeshCoreConnectionState.disconnecting) return;
     _autoReconnectInFlight = false;
