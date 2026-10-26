@@ -369,6 +369,11 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String deviceCli_remoteNoReply(String command, String seconds) {
+    return '$command: no reply in $seconds s. This radio may not allow remote CLI from you, or is unreachable. Not retried.';
+  }
+
+  @override
   String deviceCli_sendFailed(String error) {
     return 'Send failed: $error';
   }
@@ -1777,9 +1782,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get chat_noMessages => 'Няма съобщения.';
-
-  @override
-  String get chat_remoteCliCommand => 'Command for your radio';
 
   @override
   String get chat_sendMessage => 'Изпратете съобщение';
