@@ -15,7 +15,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/cli_command_codec.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
+import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/screens/device_cli_screen.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
@@ -263,5 +265,46 @@ void main() {
 
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller?.text, 'get radio');
+  });
+
+  group('remote companion target (#999)', () {
+    Contact companion() => Contact(
+      publicKey: Uint8List.fromList(List<int>.generate(32, (i) => i + 1)),
+      receivedName: 'Pocket Radio',
+      type: advTypeChat,
+      pathLength: 0,
+      path: Uint8List(0),
+      lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+
+    Future<void> pumpRemote(WidgetTester tester, Contact target) async {
+      connector.contactsForTest.add(target);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<MeshCoreConnector>.value(
+          value: connector,
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: DeviceCliScreen(remoteContact: target),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('titles with the remote variant and the contact name', (
+      tester,
+    ) async {
+      await pumpRemote(tester, companion());
+
+      // Remote mode titles "Remote CLI" with the contact as the subtitle,
+      // rather than the local "Device CLI" + self name/version. The send and
+      // reply correlation over the mesh are covered in
+      // cli_console_transport_test; the entry-point gating in
+      // contact_is_companion_test.
+      expect(find.text('Remote CLI'), findsOneWidget);
+      expect(find.text('Pocket Radio'), findsOneWidget);
+      expect(find.text('Device CLI'), findsNothing);
+    });
   });
 }

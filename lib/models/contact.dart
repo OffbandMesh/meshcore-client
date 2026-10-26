@@ -123,6 +123,11 @@ class Contact {
 
   bool get isFavorite => (flags & contactFlagFavorite) != 0;
 
+  /// A chat node (phone/radio companion), as opposed to a repeater, room
+  /// server or sensor. Remote CLI (#999) targets companions; repeaters and
+  /// room servers have their own CLI via the repeater hub.
+  bool get isCompanion => type == advTypeChat;
+
   Contact copyWith({
     Uint8List? publicKey,
     String? receivedName,

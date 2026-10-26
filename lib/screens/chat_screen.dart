@@ -38,6 +38,7 @@ import '../widgets/elements_ui.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
 import 'channel_message_path_screen.dart';
+import 'device_cli_screen.dart';
 import 'map_screen.dart';
 import '../utils/emoji_utils.dart';
 import '../widgets/emoji_picker.dart';
@@ -353,6 +354,15 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     );
                   }
+                  if (value == 'cliConsole') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            DeviceCliScreen(remoteContact: widget.contact),
+                      ),
+                    );
+                  }
                   if (value == 'clearChat') {
                     connector.clearMessagesForContact(widget.contact);
                   }
@@ -402,6 +412,19 @@ class _ChatScreenState extends State<ChatScreen> {
                         ],
                       ),
                     ),
+                    // Remote CLI is a companion feature (#999): repeaters and
+                    // room servers have their own CLI via the repeater hub.
+                    if (widget.contact.isCompanion)
+                      PopupMenuItem(
+                        value: 'cliConsole',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.terminal, size: 20),
+                            const SizedBox(width: 12),
+                            Text(context.l10n.contact_cliConsole),
+                          ],
+                        ),
+                      ),
                     PopupMenuItem(
                       value: 'clearChat',
                       child: Row(
@@ -1821,24 +1844,6 @@ class _MessageBubble extends StatelessWidget {
                             ),
                           ),
                           if (gifUrl == null) const SizedBox(height: 4),
-                        ],
-                        if (message.isCliCommand) ...[
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.terminal, size: 13, color: metaColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                context.l10n.chat_remoteCliCommand,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontStyle: FontStyle.italic,
-                                  color: metaColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
                         ],
                         if (poi != null)
                           _buildPoiMessage(

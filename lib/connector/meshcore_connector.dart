@@ -3252,6 +3252,11 @@ class MeshCoreConnector extends ChangeNotifier {
         (activeTransport != MeshCoreTransportType.tcp || !tcpManagerConnected);
   }
 
+  /// Sets the self public key so tests can drive the incoming-message path,
+  /// which bails when no self identity is known.
+  @visibleForTesting
+  void setSelfPublicKeyForTest(Uint8List key) => _selfPublicKey = key;
+
   @visibleForTesting
   static bool shouldResetStateAfterTcpConnectAbort({
     required MeshCoreConnectionState state,
@@ -8738,6 +8743,16 @@ class MeshCoreConnector extends ChangeNotifier {
       // notification, no lastMessage bump. Adverts still flow for name self-heal.
       if (!message.isOutgoing &&
           (_blockService?.isBlocked(message.senderKeyHex) ?? false)) {
+        _handleQueuedMessageReceived();
+        return;
+      }
+
+      // CLI traffic stays in the CLI console only. A CLI reply (type-1) or an
+      // inbound CLI command (type-3) is correlated by the console through the
+      // receivedFrames listener; it must never enter the chat thread, bump the
+      // contact's last-message, or raise unread. CLI and chat are separate
+      // surfaces - drop CLI out of the message pipeline here (#999).
+      if (message.isCli || message.isCliCommand) {
         _handleQueuedMessageReceived();
         return;
       }

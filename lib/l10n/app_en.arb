@@ -184,6 +184,10 @@
   "device_quickSwitch": "Quick switch",
   "device_meshcore": "MeshCore",
   "deviceCli_title": "Device CLI",
+  "deviceCli_remoteTitle": "Remote CLI",
+  "@deviceCli_remoteTitle": {
+    "description": "Title of the CLI console when it targets a remote companion contact (#999); the contact's name is the subtitle."
+  },
   "deviceCli_entrySubtitle": "Run commands on the connected radio",
   "deviceCli_nameRejected": "Not sent - name can't contain: {chars}",
   "@deviceCli_nameRejected": {
@@ -795,6 +799,10 @@
   "contact_teleEnvSubtitle": "Allow sharing environment sensor data",
   "contact_remoteCli": "Remote CLI",
   "contact_remoteCliSubtitle": "Let this contact run CLI commands on your radio",
+  "contact_cliConsole": "CLI console",
+  "@contact_cliConsole": {
+    "description": "Chat app-bar menu action on a companion contact that opens the remote CLI console targeting that contact (#999)."
+  },
   "channels_title": "Channels",
   "channels_noChannelsConfigured": "No channels configured",
   "channels_addPublicChannel": "Add Public Channel",
@@ -930,7 +938,6 @@
   "channels_enterHashtag": "Enter hashtag",
   "channels_hashtagHint": "e.g. #team",
   "chat_noMessages": "No messages yet",
-  "chat_remoteCliCommand": "Command for your radio",
   "chat_sendMessage": "Send message",
   "chat_sendMessageTo": "Send a message to {contactName}",
   "@chat_sendMessageTo": {

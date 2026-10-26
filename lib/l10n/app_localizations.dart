@@ -730,6 +730,12 @@ abstract class AppLocalizations {
   /// **'Device CLI'**
   String get deviceCli_title;
 
+  /// Title of the CLI console when it targets a remote companion contact (#999); the contact's name is the subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CLI'**
+  String get deviceCli_remoteTitle;
+
   /// No description provided for @deviceCli_entrySubtitle.
   ///
   /// In en, this message translates to:
@@ -2757,6 +2763,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Let this contact run CLI commands on your radio'**
   String get contact_remoteCliSubtitle;
+
+  /// Chat app-bar menu action on a companion contact that opens the remote CLI console targeting that contact (#999).
+  ///
+  /// In en, this message translates to:
+  /// **'CLI console'**
+  String get contact_cliConsole;
 
   /// No description provided for @channels_title.
   ///
