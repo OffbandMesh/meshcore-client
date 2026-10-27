@@ -237,42 +237,51 @@ class AppSettingsService extends ChangeNotifier {
     await updateSettings(_settings.copyWith(unitSystem: value));
   }
 
-  /// Per-channel notification level.
-  ///
-  /// Resolution order: the PSK-keyed mode when one is set, else the legacy
-  /// name-keyed mute (so a channel muted before this feature existed still
-  /// reports [ChannelNotifyMode.off]), else [ChannelNotifyMode.all].
-  ///
-  /// [identityKey] comes from [AppSettings.channelNotifyKey]; the caller
-  /// resolves the slot index to a PSK.
+  /// First 10 hex of the connected radio's key, matching every other per-radio
+  /// store. Empty when no radio is connected -> the caller gets the default.
+  static String _scopePrefix(String devicePrefix) =>
+      devicePrefix.length > 10 ? devicePrefix.substring(0, 10) : devicePrefix;
+
+  /// Resolve a channel's notify mode for the CONNECTED radio ([devicePrefix])
+  /// by its [pskHex]. No bare-index fallback and no cross-radio legacy fallback:
+  /// an unknown scope (no radio, or PSK not yet synced) resolves to the default
+  /// `all` rather than inheriting another radio's or slot's state (#839).
   ChannelNotifyMode channelNotifyMode({
-    required String identityKey,
-    required String channelName,
+    required String devicePrefix,
+    required String? pskHex,
   }) {
-    final mode = _settings.channelNotifyModes[identityKey];
-    if (mode != null) return mode;
-    if (_settings.mutedChannels.contains(channelName)) {
-      return ChannelNotifyMode.off;
+    final prefix = _scopePrefix(devicePrefix);
+    if (prefix.isEmpty || pskHex == null || pskHex.isEmpty) {
+      return ChannelNotifyMode.all;
     }
-    return ChannelNotifyMode.all;
+    return _settings.channelNotifyModesByRadio[prefix]?[pskHex] ??
+        ChannelNotifyMode.all;
   }
 
+  /// Store a channel's notify mode for the connected radio. Keyed only by
+  /// ([devicePrefix], [pskHex]); when either is unknown this is a no-op so we
+  /// never write an unscoped or index-keyed entry. `all` removes the single
+  /// entry (it is the default), so set-and-back genuinely resets (#839).
   Future<void> setChannelNotifyMode({
-    required String identityKey,
+    required String devicePrefix,
+    required String? pskHex,
     required String channelName,
     required ChannelNotifyMode mode,
   }) async {
-    final modes = Map<String, ChannelNotifyMode>.from(
-      _settings.channelNotifyModes,
-    );
+    final prefix = _scopePrefix(devicePrefix);
+    if (prefix.isEmpty || pskHex == null || pskHex.isEmpty) return;
+
+    final byRadio = _copyByRadio();
+    final radioModes = byRadio.putIfAbsent(prefix, () => {});
     if (mode == ChannelNotifyMode.all) {
-      modes.remove(identityKey); // `all` is the default; don't store it.
+      radioModes.remove(pskHex);
+      if (radioModes.isEmpty) byRadio.remove(prefix);
     } else {
-      modes[identityKey] = mode;
+      radioModes[pskHex] = mode;
     }
 
-    // Keep the legacy name-keyed set in sync so rolling back to a build without
-    // notify modes still honours an Off channel. Remove after one release.
+    // Keep the legacy name-keyed set written (rollback compat only; it is not
+    // consulted by the resolution above). Remove after one release.
     final muted = Set<String>.from(_settings.mutedChannels);
     if (mode == ChannelNotifyMode.off) {
       muted.add(channelName);
@@ -281,24 +290,66 @@ class AppSettingsService extends ChangeNotifier {
     }
 
     await updateSettings(
-      _settings.copyWith(channelNotifyModes: modes, mutedChannels: muted),
+      _settings.copyWith(
+        channelNotifyModesByRadio: byRadio,
+        mutedChannels: muted,
+      ),
     );
   }
 
-  bool isChannelMuted(String channelName) {
-    return _settings.mutedChannels.contains(channelName);
+  /// One-time migration of the pre-#839 global state into the FIRST radio seen
+  /// after upgrade. Called by the connector once that radio's channels are
+  /// known. Later radios start clean, so the ambiguous legacy state never
+  /// bleeds across radios. [pskByChannelIndex] / [pskByChannelName] resolve the
+  /// legacy index- and name-keyed entries to a PSK; unresolvable ones drop.
+  Future<void> migrateLegacyChannelNotify({
+    required String devicePrefix,
+    required Map<int, String> pskByChannelIndex,
+    required Map<String, String> pskByChannelName,
+  }) async {
+    if (_settings.channelNotifyMigrated) return;
+    final prefix = _scopePrefix(devicePrefix);
+    if (prefix.isEmpty) return;
+
+    final byRadio = _copyByRadio();
+    final radioModes = byRadio.putIfAbsent(prefix, () => {});
+
+    // 1) psk_<hex> entries map straight across; 2) <index> entries resolve via
+    // the connected radio's channel table (index entries that don't resolve are
+    // ambiguous and dropped); later writes override earlier.
+    _settings.channelNotifyModes.forEach((key, mode) {
+      if (mode == ChannelNotifyMode.all) return;
+      if (key.startsWith('psk_')) {
+        radioModes[key.substring(4)] = mode;
+      } else {
+        final idx = int.tryParse(key);
+        final psk = idx == null ? null : pskByChannelIndex[idx];
+        if (psk != null && psk.isNotEmpty) radioModes[psk] = mode;
+      }
+    });
+
+    // 3) legacy name-keyed mutes become Off on their resolved PSK.
+    for (final name in _settings.mutedChannels) {
+      final psk = pskByChannelName[name];
+      if (psk != null && psk.isNotEmpty) {
+        radioModes[psk] = ChannelNotifyMode.off;
+      }
+    }
+
+    if (radioModes.isEmpty) byRadio.remove(prefix);
+
+    await updateSettings(
+      _settings.copyWith(
+        channelNotifyModesByRadio: byRadio,
+        channelNotifyMigrated: true,
+      ),
+    );
   }
 
-  Future<void> muteChannel(String channelName) async {
-    final updated = Set<String>.from(_settings.mutedChannels)..add(channelName);
-    await updateSettings(_settings.copyWith(mutedChannels: updated));
-  }
-
-  Future<void> unmuteChannel(String channelName) async {
-    final updated = Set<String>.from(_settings.mutedChannels)
-      ..remove(channelName);
-    await updateSettings(_settings.copyWith(mutedChannels: updated));
-  }
+  Map<String, Map<String, ChannelNotifyMode>> _copyByRadio() => {
+    for (final e in _settings.channelNotifyModesByRadio.entries)
+      e.key: Map<String, ChannelNotifyMode>.from(e.value),
+  };
 
   Future<void> setTcpServerAddress(String value) async {
     await updateSettings(_settings.copyWith(tcpServerAddress: value));

@@ -29,6 +29,7 @@ import '../helpers/cayenne_lpp.dart';
 import '../helpers/path_helper.dart';
 import '../services/app_debug_log_service.dart';
 import '../services/ble_debug_log_service.dart';
+import '../services/storage_service.dart';
 import '../services/linux_ble_error_classifier.dart';
 import '../services/linux_ble_pairing_service_stub.dart'
     if (dart.library.io) '../services/linux_ble_pairing_service.dart';
@@ -45,6 +46,7 @@ import '../services/queue_sync_file_log_stub.dart'
     if (dart.library.io) '../services/queue_sync_file_log_io.dart';
 import 'meshcore_connector_usb.dart';
 import 'meshcore_connector_tcp.dart';
+import 'reconnect_policy.dart';
 import '../storage/channel_message_store.dart';
 import '../storage/channel_order_store.dart';
 import '../storage/channel_settings_store.dart';
@@ -59,8 +61,14 @@ import '../utils/app_logger.dart';
 import '../utils/battery_utils.dart';
 import '../utils/platform_info.dart';
 import 'meshcore_uuids.dart';
+import 'cli_command_codec.dart';
+import 'device_population.dart';
 import 'meshcore_protocol.dart';
+import '../helpers/region_key.dart';
+import '../storage/channel_region_scope_store.dart';
 import 'offband_device_ui.dart';
+import 'offband_screen_settings.dart';
+import 'offband_tones.dart';
 import 'caplog_reassembler.dart';
 
 class DirectRepeater {
@@ -341,7 +349,19 @@ class MeshCoreConnector extends ChangeNotifier {
   int _radioStatsPollRefCount = 0;
   final ValueNotifier<CompanionRadioStats?> radioStatsNotifier =
       ValueNotifier<CompanionRadioStats?>(null);
-  int _reconnectAttempts = 0;
+  final ReconnectPolicy _reconnectPolicy = ReconnectPolicy();
+
+  /// True while the BLE connect in flight was started by the automatic retry,
+  /// not by the user. A user connect may abandon it; it may not abandon a
+  /// user's. (#997)
+  bool _autoReconnectInFlight = false;
+
+  /// True once the retry budget ran out, until the user connects again. (#997)
+  bool _autoReconnectGaveUp = false;
+
+  /// Bumped whenever a BLE connect starts or is abandoned. An attempt that
+  /// finds it changed has been superseded and must stop touching shared state.
+  int _connectGeneration = 0;
   bool _notifyListenersDirty = false;
   static const Duration _notifyListenersDebounce = Duration(milliseconds: 50);
 
@@ -384,12 +404,35 @@ class MeshCoreConnector extends ChangeNotifier {
   String? _firmwareVersion;
   String? _deviceModel;
   int? _offbandCaps;
+
+  /// Listeners for RESP_CODE_CLI_REPLY (29) frames (#882). The connector only
+  /// routes; correlation and timeouts live in LocalCliService.
+  final List<void Function(CliReply)> _cliReplyListeners = [];
+
+  /// Registers [listener] for CLI replies; returns the detach callback.
+  void Function() addCliReplyListenerForLocalCli(
+    void Function(CliReply) listener,
+  ) {
+    _cliReplyListeners.add(listener);
+    return () => _cliReplyListeners.remove(listener);
+  }
+
+  Classification? _classification;
   int? _offbandCaps2;
   bool? _femLnaEnabled;
   ButtonMatrix? _buttonMatrix;
   String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
   String? _deviceUiError;
+  DeviceUiSurface? _deviceUiErrorSurface;
+  DeviceUiSurface? _pendingDeviceUiWrite;
+  GpsModeState? _gpsModeState;
+  final Map<int, ChannelTune> _channelTunes = {};
+  final Map<ToneEvent, EventToneState> _eventTones = {};
+  final Map<int, TuneSlotInfo> _tuneSlots = {};
+  ScreenSettingsState? _screenSettings;
+  bool _tuneSlotTransferActive = false;
+  final List<_DeviceUiWaiter> _deviceUiWaiters = [];
   int _pathHashByteWidth = 1;
   CompanionRadioStats? _latestRadioStats;
   Stopwatch? _airtimeBumpStopwatch;
@@ -530,6 +573,7 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
   Timer? _channelsChangedDebounce;
+  Timer? _advertReconcileDebounce;
   int _channelSyncRetries = 0;
   int _nextChannelIndexToRequest = 0;
   int _totalChannelsToRequest = 0;
@@ -552,11 +596,33 @@ class MeshCoreConnector extends ChangeNotifier {
   final MessageStore _messageStore = MessageStore();
   final ChannelOrderStore _channelOrderStore = ChannelOrderStore();
   final ChannelSettingsStore _channelSettingsStore = ChannelSettingsStore();
+  final ChannelRegionScopeStore _channelRegionScopeStore =
+      ChannelRegionScopeStore();
   final ContactSettingsStore _contactSettingsStore = ContactSettingsStore();
+
+  /// Custom names by pubkey hex, the in-memory mirror of what
+  /// `contact_settings_store` holds. (#750)
+  ///
+  /// Needed because `contact_store` deliberately does not persist the custom
+  /// name: that record is rebuilt from radio contact-sync data, so a save
+  /// after a sync would wipe it. The cost of keeping it out of there is that
+  /// the live `Contact` objects have to be reattached to it, which is what
+  /// [_withCustomName] does at every path that rebuilds one.
+  final Map<String, String> _customNames = {};
+
   final ContactStore _contactStore = ContactStore();
   final ContactDiscoveryStore _discoveryContactStore = ContactDiscoveryStore();
   final ChannelStore _channelStore = ChannelStore();
   final UnreadStore _unreadStore = UnreadStore();
+
+  /// Injected from `main()`, because `StorageService` is shared with
+  /// `PathHistoryService` and `TimeoutPredictionService` and so cannot be
+  /// owned here like the stores above.
+  ///
+  /// Needed since #854 and #856: path history and delivery observations are
+  /// per-radio now, so this service needs the device key on connect like
+  /// every other per-radio store.
+  StorageService? storageService;
   List<Channel> _cachedChannels = [];
   final Map<int, bool> _channelCyr2LatEnabled = {};
   final Map<int, String?> _channelCyr2LatProfileId = {};
@@ -689,6 +755,16 @@ class MeshCoreConnector extends ChangeNotifier {
       _activeTransport == MeshCoreTransportType.usb;
   bool get isAutoReconnectScheduled =>
       _shouldAutoReconnect && (_reconnectTimer?.isActive ?? false);
+
+  /// An automatic retry is scheduled or in flight. (#997)
+  bool get isAutoReconnecting =>
+      _autoReconnectInFlight || isAutoReconnectScheduled;
+  int get autoReconnectAttempt => _reconnectPolicy.attempts;
+  int get autoReconnectMaxAttempts => _reconnectPolicy.maxAttempts;
+  bool get autoReconnectGaveUp => _autoReconnectGaveUp;
+
+  /// The radio the automatic retry is aimed at, for the status bar.
+  String? get autoReconnectTargetName => _lastDeviceDisplayName;
   String? get activeTcpEndpoint => _tcpConnector.activeEndpoint;
   bool get isTcpTransportConnected =>
       _state == MeshCoreConnectionState.connected &&
@@ -846,6 +922,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// null on older firmware that sends a shorter frame.
   int? get offbandCaps => _offbandCaps;
 
+  /// Population verdict from the last device-info reply (#875/#876); null
+  /// before one arrives. Capability decisions route through this, never
+  /// through bare ver-code or frame-offset reads.
+  Classification? get classification => _classification;
+
   /// Second `offband_caps` bitfield (frame offset 84, firmware #508). Null when
   /// the frame is too short, which means "no byte-2 capabilities" and is never
   /// an error: every radio predating #508 reports null here. (#480)
@@ -856,6 +937,41 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether this radio exposes a settable device notification scope (#475).
   bool get supportsNotifyScope => firmwareSupportsNotifyScope(_offbandCaps2);
+
+  /// Whether this radio answers the `0xC5` GPS-mode sub-codes (#969). Says
+  /// nothing about Power save, which [GpsModeState.powerSaveAvailable] answers.
+  bool get supportsGpsMode => firmwareSupportsGpsMode(_offbandCaps2);
+
+  /// Last GPS state the radio reported, or null if not read yet.
+  GpsModeState? get gpsModeState => _gpsModeState;
+
+  /// Whether this radio answers the `0xC5` tune sub-codes: custom slots,
+  /// channel tune, event tones and preview (caps byte 2 `0x10`).
+  bool get supportsTunes => firmwareSupportsTunes(_offbandCaps2);
+
+  /// Whether this radio answers the screen-settings sub-codes (#987).
+  bool get supportsScreenSettings =>
+      firmwareSupportsScreenSettings(_offbandCaps2);
+
+  /// The tune the radio reported for [channel], or null if not read yet.
+  ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
+
+  /// The tune the radio reported for [event], or null if not read yet.
+  EventToneState? eventTone(ToneEvent event) => _eventTones[event];
+
+  /// `SLOT_GET` replies read so far, by slot index.
+  Map<int, TuneSlotInfo> get tuneSlots => Map.unmodifiable(_tuneSlots);
+
+  /// The radio's screen and battery settings, or null if not read yet.
+  ScreenSettingsState? get screenSettings => _screenSettings;
+
+  /// True while a slot is being read or saved. One at a time: firmware takes
+  /// one push per slot, and a second would displace the first.
+  bool get tuneSlotTransferActive => _tuneSlotTransferActive;
+
+  /// Which surface [deviceUiError] belongs to, so a screen shows only its own.
+  /// Null when the error could not be attributed to an outstanding write.
+  DeviceUiSurface? get deviceUiErrorSurface => _deviceUiErrorSurface;
 
   /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
   bool get supportsPktHash =>
@@ -891,6 +1007,7 @@ class MeshCoreConnector extends ChangeNotifier {
   void clearDeviceUiError() {
     if (_deviceUiError == null) return;
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
     notifyListeners();
   }
 
@@ -956,6 +1073,8 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.buttonMatrix;
     _appDebugLogService?.info(
       'matrix SET -> ${sequence.label} = ${action.label} '
       '[0xC5][0x04][0x${sequence.code.toRadixString(16).padLeft(2, '0')}]'
@@ -981,6 +1100,8 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.notifyScope;
     _appDebugLogService?.info(
       'scope SET -> ${scope.label} '
       '[0xC5][0x02][0x${scope.code.toRadixString(16).padLeft(2, '0')}]',
@@ -988,6 +1109,368 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     await sendFrame(buildNotifyScopeSetFrame(scope));
   }
+
+  /// Ask the radio which tune [channel] plays (#971).
+  Future<void> requestChannelTune(int channel) async {
+    if (!_deviceUiGateOpen('chtune GET', advertised: supportsTunes)) {
+      return;
+    }
+    _appDebugLogService?.info(
+      'chtune GET -> [0xC5][0x0B][$channel]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelTuneGetFrame(channel));
+  }
+
+  /// Set which tune [channel] plays. Local state follows the device's re-read
+  /// reply, never the request, so a refused choice is never shown as saved.
+  Future<void> setChannelTune(int channel, ChannelTune tune) async {
+    if (!_deviceUiGateOpen('chtune SET', advertised: supportsTunes)) {
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.channelTune;
+    _appDebugLogService?.info(
+      'chtune SET -> ch=$channel stored=${tune.stored} '
+      '(${tune.inherits
+          ? 'inherit'
+          : tune.isSilent
+          ? 'silent'
+          : 'tune ${tune.tuneId}'}) '
+      '[0xC5][0x0C]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelTuneSetFrame(channel, tune));
+  }
+
+  /// Ask the radio how GPS is running (#969).
+  Future<void> requestGpsMode() async {
+    if (!_deviceUiGateOpen('gps GET', advertised: supportsGpsMode)) return;
+    _appDebugLogService?.info('gps GET -> [0xC5][0x0D]', tag: 'DeviceUI');
+    await sendFrame(buildGpsModeGetFrame());
+  }
+
+  /// Set how GPS runs, and optionally the Power-save interval.
+  ///
+  /// The interval always travels with the mode on the wire, so when
+  /// [intervalSeconds] is omitted the radio's current interval is resent. That
+  /// needs a state read first: sending an interval the client does not know
+  /// would silently reset the user's, so without one this refuses, visibly.
+  /// As with the other surfaces, local state follows the device's reply only.
+  Future<void> setGpsMode(GpsMode mode, {int? intervalSeconds}) async {
+    if (!_deviceUiGateOpen('gps SET', advertised: supportsGpsMode)) return;
+    final interval = intervalSeconds ?? _gpsModeState?.intervalSeconds;
+    if (interval == null || interval < 0 || interval > 0xFFFFFFFF) {
+      _deviceUiErrorSurface = DeviceUiSurface.gpsMode;
+      _deviceUiError = interval == null
+          ? 'GPS settings have not been read from the radio yet. Try again.'
+          : 'That interval is out of range';
+      _appDebugLogService?.warn(
+        'gps SET suppressed: ${interval == null ? 'state not read, interval unknown' : 'interval $interval out of range'}',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.gpsMode;
+    _appDebugLogService?.info(
+      'gps SET -> mode=${mode.name} interval=${interval}s '
+      '[0xC5][0x0E][0x${mode.code.toRadixString(16).padLeft(2, '0')}]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildGpsModeSetFrame(mode, interval));
+  }
+
+  /// Send [frame] and wait for the reply [matches] accepts, or for a refusal
+  /// attributed to [surface]. Null on timeout.
+  ///
+  /// The multi-frame flows (slot read, slot save) and preview need the answer
+  /// before their next step; the single-frame settings do not, and keep the
+  /// fire-and-forget shape the rest of this command uses.
+  Future<OffbandUiReply?> _sendDeviceUiAndAwait(
+    Uint8List frame,
+    DeviceUiSurface surface,
+    bool Function(OffbandUiReply reply) matches, {
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final waiter = _DeviceUiWaiter(surface, matches);
+    _deviceUiWaiters.add(waiter);
+    _pendingDeviceUiWrite = surface;
+    try {
+      await sendFrame(frame);
+      return await waiter.completer.future.timeout(
+        timeout,
+        onTimeout: () => null,
+      );
+    } finally {
+      _deviceUiWaiters.remove(waiter);
+      // Answered or not, this request is no longer outstanding, so a later
+      // refusal must not be pinned on it.
+      if (_pendingDeviceUiWrite == surface) _pendingDeviceUiWrite = null;
+    }
+  }
+
+  /// Hand [reply] to the first waiter that wants it. A refusal carries no
+  /// sub-code, so it goes to the waiter on the surface it was attributed to.
+  void _offerDeviceUiReply(OffbandUiReply reply, {DeviceUiSurface? errorOn}) {
+    for (final w in _deviceUiWaiters) {
+      final wanted = reply.isError
+          ? errorOn != null && w.surface == errorOn
+          : w.matches(reply);
+      if (wanted && !w.completer.isCompleted) {
+        w.completer.complete(reply);
+        return;
+      }
+    }
+  }
+
+  void _setDeviceUiError(DeviceUiSurface surface, String message) {
+    _deviceUiErrorSurface = surface;
+    _deviceUiError = message;
+    _appDebugLogService?.warn('${surface.name}: $message', tag: 'DeviceUI');
+    notifyListeners();
+  }
+
+  /// Read all six event tones (#986).
+  Future<void> requestEventTones() async {
+    if (!_deviceUiGateOpen('evtone GET', advertised: supportsTunes)) return;
+    for (final event in ToneEvent.values) {
+      await sendFrame(buildEventToneGetFrame(event));
+    }
+  }
+
+  /// Set the tune [event] plays. The id must be one the picker offers; the
+  /// radio refuses the rest, and the row changes only on its re-read reply.
+  Future<void> setEventTone(ToneEvent event, int tuneId) async {
+    if (!_deviceUiGateOpen('evtone SET', advertised: supportsTunes)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.eventTone;
+    _appDebugLogService?.info(
+      'evtone SET -> ${event.label} = $tuneId [0xC5][0x10]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildEventToneSetFrame(event, tuneId));
+  }
+
+  /// Audition [tuneId] on the radio. Null when the radio did not answer, or
+  /// refused the id (the refusal is then shown like any other).
+  Future<TunePlayResult?> playTune(int tuneId) async {
+    if (!_deviceUiGateOpen('play', advertised: supportsTunes)) return null;
+    // A refusal names no sub-code, so a preview sent mid-transfer could take
+    // the transfer's refusal, or hand it one.
+    if (_tuneSlotTransferActive) return null;
+    _appDebugLogService?.info('play -> $tuneId [0xC5][0x11]', tag: 'DeviceUI');
+    final reply = await _sendDeviceUiAndAwait(
+      buildTunePlayFrame(tuneId),
+      DeviceUiSurface.tunePlay,
+      (r) => r.tunePlay?.tuneId == tuneId,
+    );
+    final result = reply?.tunePlay?.result;
+    _appDebugLogService?.info(
+      'play reply: ${result?.name ?? (reply == null ? 'no answer' : 'refused')}',
+      tag: 'DeviceUI',
+    );
+    return result;
+  }
+
+  /// Read every slot's name and length (#970).
+  Future<void> requestTuneSlots() async {
+    if (!_deviceUiGateOpen('slot GET', advertised: supportsTunes)) return;
+    for (var slot = 0; slot < tuneSlotCount; slot++) {
+      await sendFrame(buildSlotGetFrame(slot));
+    }
+  }
+
+  /// A slot's whole stored tune, read in chunks, or null if the read failed.
+  /// [onProgress] reports bytes read so far.
+  Future<String?> readTuneSlot(
+    int slot, {
+    void Function(int bytesRead)? onProgress,
+  }) async {
+    if (!_deviceUiGateOpen('slot READ', advertised: supportsTunes)) {
+      return null;
+    }
+    if (_tuneSlotTransferActive) return null;
+    _tuneSlotTransferActive = true;
+    notifyListeners();
+    try {
+      final out = <int>[];
+      while (true) {
+        final offset = out.length;
+        final reply = await _sendDeviceUiAndAwait(
+          buildSlotReadFrame(slot, offset),
+          DeviceUiSurface.tuneSlot,
+          (r) => r.slotChunk?.slot == slot && r.slotChunk?.offset == offset,
+        );
+        final chunk = reply?.slotChunk;
+        if (chunk == null) {
+          if (reply == null) {
+            _setDeviceUiError(
+              DeviceUiSurface.tuneSlot,
+              'The radio did not answer while reading this tune.',
+            );
+          }
+          return null;
+        }
+        out.addAll(chunk.bytes);
+        onProgress?.call(out.length);
+        if (!chunk.more) break;
+        // A chunk that says more but carries nothing would loop forever.
+        if (chunk.bytes.isEmpty || out.length > maxSlotRtttl) {
+          _setDeviceUiError(
+            DeviceUiSurface.tuneSlot,
+            'The radio sent this tune in a shape the app cannot read.',
+          );
+          return null;
+        }
+      }
+      _appDebugLogService?.info(
+        'slot READ: slot=$slot ${out.length} bytes',
+        tag: 'DeviceUI',
+      );
+      return latin1.decode(out);
+    } finally {
+      _tuneSlotTransferActive = false;
+      notifyListeners();
+    }
+  }
+
+  /// Save [rtttl] to [slot] in chunks sized to the transport, then re-read the
+  /// slot. An empty [rtttl] clears it. True only when the radio committed it.
+  ///
+  /// The radio replaces a slot only on the final chunk, so a push that fails
+  /// partway leaves the old tune intact. A displaced push (`ERR_SLOT_OFFSET`)
+  /// restarts from 0 once; a second refusal stops and is shown.
+  Future<bool> saveTuneSlot(
+    int slot,
+    String rtttl, {
+    void Function(int bytesSent, int total)? onProgress,
+  }) async {
+    if (!_deviceUiGateOpen('slot SET', advertised: supportsTunes)) {
+      return false;
+    }
+    if (_tuneSlotTransferActive) return false;
+    final bytes = latin1.encode(rtttl);
+    if (bytes.length > maxSlotRtttl) {
+      _setDeviceUiError(
+        DeviceUiSurface.tuneSlot,
+        'A tune can be at most $maxSlotRtttl characters.',
+      );
+      return false;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _tuneSlotTransferActive = true;
+    notifyListeners();
+    try {
+      final chunkSize = math.max(1, effectiveMaxFrameSize - 5);
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final outcome = await _pushTuneSlot(slot, bytes, chunkSize, onProgress);
+        if (outcome == _SlotPush.committed) {
+          _deviceUiError = null;
+          _deviceUiErrorSurface = null;
+          await _sendDeviceUiAndAwait(
+            buildSlotGetFrame(slot),
+            DeviceUiSurface.tuneSlot,
+            (r) => r.tuneSlot?.slot == slot,
+          );
+          _appDebugLogService?.info(
+            'slot SET committed: slot=$slot ${bytes.length} bytes',
+            tag: 'DeviceUI',
+          );
+          return true;
+        }
+        if (outcome != _SlotPush.displaced) return false;
+      }
+      return false;
+    } finally {
+      _tuneSlotTransferActive = false;
+      notifyListeners();
+    }
+  }
+
+  Future<_SlotPush> _pushTuneSlot(
+    int slot,
+    List<int> bytes,
+    int chunkSize,
+    void Function(int bytesSent, int total)? onProgress,
+  ) async {
+    var offset = 0;
+    do {
+      final end = math.min(offset + chunkSize, bytes.length);
+      final more = end < bytes.length;
+      final reply = await _sendDeviceUiAndAwait(
+        buildSlotSetFrame(slot, offset, more, bytes.sublist(offset, end)),
+        DeviceUiSurface.tuneSlot,
+        (r) => r.slotAccepted?.slot == slot,
+      );
+      if (reply == null) {
+        _setDeviceUiError(
+          DeviceUiSurface.tuneSlot,
+          'The radio did not answer while saving this tune. Nothing was '
+          'changed.',
+        );
+        return _SlotPush.failed;
+      }
+      if (reply.isError) {
+        return reply.errorCode == ButtonConfigError.slotOffset.code
+            ? _SlotPush.displaced
+            : _SlotPush.failed;
+      }
+      // Mid-push the radio counts what it holds; anything but the end of this
+      // chunk means another push took over.
+      if (more && reply.slotAccepted!.accepted != end) {
+        return _SlotPush.displaced;
+      }
+      // A commit answers 0. Anything else is not a commit, whatever it is.
+      if (!more && reply.slotAccepted!.accepted != 0) {
+        _setDeviceUiError(
+          DeviceUiSurface.tuneSlot,
+          'The radio did not confirm saving this tune. Nothing was changed.',
+        );
+        return _SlotPush.failed;
+      }
+      offset = end;
+      onProgress?.call(offset, bytes.length);
+    } while (offset < bytes.length);
+    return _SlotPush.committed;
+  }
+
+  /// Read the badge's screen and battery settings (#987).
+  Future<void> requestScreenSettings() async {
+    if (!_deviceUiGateOpen('screen GET', advertised: supportsScreenSettings)) {
+      return;
+    }
+    await sendFrame(buildScreenSettingsGetFrame());
+  }
+
+  Future<void> _sendScreenSet(String what, Uint8List frame) async {
+    if (!_deviceUiGateOpen(what, advertised: supportsScreenSettings)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.screenSettings;
+    _appDebugLogService?.info('$what -> $frame', tag: 'DeviceUI');
+    await sendFrame(frame);
+  }
+
+  Future<void> setTextSize(BadgeTextTarget target, BadgeTextSize size) =>
+      _sendScreenSet('text SET', buildTextSizeSetFrame(target, size));
+
+  /// [seconds] must be one of [screenOffSteps]; the radio refuses the rest.
+  Future<void> setScreenOff(int seconds) =>
+      _sendScreenSet('scroff SET', buildScreenOffSetFrame(seconds));
+
+  Future<void> setTimeZone(int index) =>
+      _sendScreenSet('tz SET', buildTimeZoneSetFrame(index));
+
+  /// Pin the radio's own current reading as 100%, or hand the full point back
+  /// to auto-learn. The radio refuses a reading that is not a full cell.
+  Future<void> setBatteryFull({required bool pin}) =>
+      _sendScreenSet('batt SET', buildBatteryFullSetFrame(pin: pin));
 
   /// Re-read whatever headless-UI state this radio supports. Called after every
   /// device-info reply so a scope changed by triple-press on the device is
@@ -1002,11 +1485,21 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
     _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = null;
+    _gpsModeState = null;
+    _channelTunes.clear();
+    _eventTones.clear();
+    _tuneSlots.clear();
+    _screenSettings = null;
   }
 
   void _reconcileDeviceUi() {
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
+    if (supportsGpsMode) requestGpsMode();
+    // Node Settings names the battery full point in its Battery row.
+    if (supportsScreenSettings) requestScreenSettings();
   }
 
   /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
@@ -1022,18 +1515,187 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     final scope = parseNotifyScopeReply(frame);
-    if (scope != null) _handleNotifyScopeReply(scope);
+    if (scope != null) {
+      _handleNotifyScopeReply(scope);
+      return;
+    }
+    final gps = parseGpsModeReply(frame);
+    if (gps != null) {
+      _handleGpsModeReply(gps);
+      return;
+    }
+    final tune = parseChannelTuneReply(frame);
+    if (tune != null) {
+      _handleChannelTuneReply(tune);
+      return;
+    }
+    final tunes = parseTuneReply(frame);
+    if (tunes != null) {
+      _handleTuneReply(tunes);
+      return;
+    }
+    final screen = parseScreenSettingsReply(frame);
+    if (screen != null) {
+      _handleScreenSettingsReply(screen);
+      return;
+    }
+    _appDebugLogService?.warn(
+      '0xC5 reply not understood (sub=0x'
+      '${frame.length > 1 ? frame[1].toRadixString(16).padLeft(2, '0') : '??'}, '
+      'len=${frame.length})',
+      tag: 'DeviceUI',
+    );
   }
 
-  void _handleButtonMatrixReply(OffbandUiReply reply) {
+  /// A `0x7F` refusal. The frame names no sub-code, so it is attributed to the
+  /// write outstanding when it arrived; a refusal with none is still shown and
+  /// logged, just not claimed by any one screen.
+  void _handleDeviceUiError(OffbandUiReply reply) {
+    final surface = _pendingDeviceUiWrite;
+    _pendingDeviceUiWrite = null;
+    _deviceUiErrorSurface = surface;
+    _deviceUiError =
+        surface == DeviceUiSurface.gpsMode && reply.errorCode != null
+        ? describeGpsError(reply.errorCode!)
+        : reply.errorMessage;
+    final what = switch (surface) {
+      DeviceUiSurface.buttonMatrix => 'Button config',
+      DeviceUiSurface.notifyScope => 'Notification scope',
+      DeviceUiSurface.gpsMode => 'GPS mode',
+      DeviceUiSurface.channelTune => 'Channel tune',
+      DeviceUiSurface.eventTone => 'Event tone',
+      DeviceUiSurface.tunePlay => 'Tune preview',
+      DeviceUiSurface.tuneSlot => 'Tune slot',
+      DeviceUiSurface.screenSettings => 'Screen settings',
+      null => 'Device UI request',
+    };
+    _appDebugLogService?.warn(
+      '$what refused: $_deviceUiError'
+      '${reply.errorDetail == null ? '' : ' (detail ${reply.errorDetail})'}',
+      tag: 'DeviceUI',
+    );
+    _offerDeviceUiReply(reply, errorOn: surface);
+    notifyListeners();
+  }
+
+  void _handleTuneReply(OffbandUiReply reply) {
     if (reply.isError) {
+      _setDeviceUiError(DeviceUiSurface.eventTone, reply.errorMessage!);
+      return;
+    }
+    if (_pendingDeviceUiWrite == DeviceUiSurface.eventTone &&
+        reply.sub == offbandUiEventToneSet) {
+      _pendingDeviceUiWrite = null;
+    }
+    final ev = reply.eventTone;
+    if (ev != null) {
+      _eventTones[ev.event] = ev.state;
+      _appDebugLogService?.info(
+        'evtone reply: ${ev.event.label} stored=${ev.state.stored} '
+        'effective=${ev.state.effective}',
+        tag: 'DeviceUI',
+      );
+    }
+    final slot = reply.tuneSlot;
+    if (slot != null && slot.slot >= 0 && slot.slot < tuneSlotCount) {
+      _tuneSlots[slot.slot] = slot.info;
+    }
+    _offerDeviceUiReply(reply);
+    notifyListeners();
+  }
+
+  void _handleScreenSettingsReply(OffbandUiReply reply) {
+    if (_pendingDeviceUiWrite == DeviceUiSurface.screenSettings &&
+        reply.sub != offbandUiScreenGet) {
+      _pendingDeviceUiWrite = null;
+    }
+    final s = reply.screen!;
+    _screenSettings = s;
+    _appDebugLogService?.info(
+      'screen reply: nav=${s.navText?.name} msg=${s.messageText?.name} '
+      'scroff=${s.screenOffStored}/${s.screenOffSeconds}s tz=${s.timeZone} '
+      'batt=${s.batteryFullStored}/${s.batteryFullMv}mV '
+      'pinned=${s.batteryPinned}',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleChannelTuneReply(OffbandUiReply reply) {
+    final t = reply.channelTune;
+    if (t == null) {
+      // Not reachable today: parseChannelTuneReply always carries a value.
+      _appDebugLogService?.warn('chtune reply with no value', tag: 'DeviceUI');
+      return;
+    }
+    final isWrite = reply.sub == offbandUiChannelTuneSet;
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.channelTune) {
+      _pendingDeviceUiWrite = null;
+    }
+    _channelTunes[t.channel] = t.tune;
+    _appDebugLogService?.info(
+      'chtune reply: ch=${t.channel} stored=${t.tune.stored} '
+      '(${isWrite ? 'write confirmed' : 'read'})',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleGpsModeReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _deviceUiErrorSurface = DeviceUiSurface.gpsMode;
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
-        'Button config refused: ${reply.errorMessage}',
+        'GPS mode reply rejected: ${reply.errorMessage}',
         tag: 'DeviceUI',
       );
       notifyListeners();
       return;
+    }
+    final g = reply.gps;
+    if (g == null) {
+      // Not reachable today: parseGpsModeReply returns an error reply whenever
+      // it cannot build a state. Checked rather than asserted across files.
+      _appDebugLogService?.warn('gps reply with no state', tag: 'DeviceUI');
+      return;
+    }
+    final isWrite = reply.sub == offbandUiGpsSet;
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.gpsMode) {
+      _pendingDeviceUiWrite = null;
+    }
+    _gpsModeState = g;
+    _appDebugLogService?.info(
+      'gps reply: mode=${g.mode.name} '
+      'stored=0x${g.storedMode.toRadixString(16).padLeft(2, '0')} '
+      'ps_ok=${g.powerSaveAvailable ? 1 : 0} '
+      'activity=${g.activity?.name ?? 'unknown'} '
+      'interval=${g.intervalSeconds}s wait=${g.waitSeconds}s '
+      '(${isWrite ? 'write confirmed' : 'read'})',
+      tag: 'DeviceUI',
+    );
+    // The radio's gps_enabled is what this reply resolved, and the legacy
+    // `gps` custom var mirrors it. Keep the mirror honest so the 0xC1 poll
+    // follows a mode change made here, but never invent the var on a radio
+    // that did not report one.
+    final vars = _currentCustomVars;
+    if (vars != null && vars.containsKey('gps')) {
+      final enabled = g.mode == GpsMode.off ? '0' : '1';
+      if (vars['gps'] != enabled) {
+        vars['gps'] = enabled;
+        _reconcileGpsPolling();
+      }
+    }
+    notifyListeners();
+  }
+
+  void _handleButtonMatrixReply(OffbandUiReply reply) {
+    if (reply.isError) {
+      _handleDeviceUiError(reply);
+      return;
+    }
+    if (_pendingDeviceUiWrite == DeviceUiSurface.buttonMatrix &&
+        reply.sub == offbandUiMatrixSet) {
+      _pendingDeviceUiWrite = null;
     }
     if (reply.matrix != null) {
       final m = reply.matrix!;
@@ -1066,7 +1728,12 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   void _handleNotifyScopeReply(OffbandUiReply reply) {
+    if (_pendingDeviceUiWrite == DeviceUiSurface.notifyScope &&
+        reply.sub == offbandUiScopeSet) {
+      _pendingDeviceUiWrite = null;
+    }
     if (reply.isError) {
+      _deviceUiErrorSurface = DeviceUiSurface.notifyScope;
       _deviceUiError = reply.errorMessage;
       _appDebugLogService?.warn(
         'Notification scope refused: ${reply.errorMessage}',
@@ -1575,6 +2242,64 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reattaches the stored custom name to [contact], if the user set one.
+  ///
+  /// Call this anywhere a `Contact` is built from the radio or from
+  /// `contact_store`, because neither source carries the custom name. Paths
+  /// that use `copyWith` on an EXISTING contact do not need it: `copyWith`
+  /// preserves `customName` unless `clearCustomName` is passed. (#750)
+  /// Loads the stored custom names for [keys] into [_customNames] in one pass.
+  ///
+  /// Batched rather than per-contact for the reason documented on
+  /// `_ensureContactCyr2LatSettingLoaded`: a notify per contact rebuilds the
+  /// tree twice per contact, and each rebuild walks the contact list.
+  Future<void> _loadCustomNames(Iterable<String> keys) async {
+    final loaded = await Future.wait([
+      for (final key in keys)
+        _contactSettingsStore
+            .loadCustomName(key)
+            .then((name) => MapEntry(key, name)),
+    ]);
+    for (final entry in loaded) {
+      final name = entry.value;
+      if (name != null && name.trim().isNotEmpty) {
+        _customNames[entry.key] = name;
+      }
+    }
+  }
+
+  Contact _withCustomName(Contact contact) {
+    final custom = _customNames[contact.publicKeyHex];
+    if (custom == null) return contact;
+    return contact.copyWith(customName: custom);
+  }
+
+  /// The user's label for a contact, or null. Read by the contacts UI.
+  String? customNameFor(String contactKeyHex) => _customNames[contactKeyHex];
+
+  /// Sets or clears the user's label for a contact.
+  ///
+  /// Null, empty and whitespace-only all clear it, matching `Contact.name` and
+  /// the store, so a user who deletes the field's text cannot end up with a
+  /// blank name and no way back. (T34b, T34c)
+  Future<void> setContactCustomName(String contactKeyHex, String? name) async {
+    final cleaned = (name == null || name.trim().isEmpty) ? null : name;
+    if (cleaned == null) {
+      _customNames.remove(contactKeyHex);
+    } else {
+      _customNames[contactKeyHex] = cleaned;
+    }
+    await _contactSettingsStore.saveCustomName(contactKeyHex, cleaned);
+
+    final index = _contacts.indexWhere((c) => c.publicKeyHex == contactKeyHex);
+    if (index >= 0) {
+      _contacts[index] = cleaned == null
+          ? _contacts[index].copyWith(clearCustomName: true)
+          : _contacts[index].copyWith(customName: cleaned);
+    }
+    notifyListeners();
+  }
+
   Future<void> setContactCyr2LatEnabled(
     String contactKeyHex,
     bool enabled,
@@ -1720,9 +2445,17 @@ class MeshCoreConnector extends ChangeNotifier {
     _knownContactKeys
       ..clear()
       ..addAll(cached.map((c) => c.publicKeyHex));
+    // Custom names first, so the contacts below are hydrated with them in one
+    // pass rather than rebuilt a second time. Without this a restart silently
+    // loses every rename the user made, because contact_store does not hold
+    // them on purpose. (#750, T35)
+    // Cleared first: custom names are per radio, so a switch must not carry the
+    // previous radio's labels onto contacts both radios hold. (#750, T37)
+    _customNames.clear();
+    await _loadCustomNames(cached.map((c) => c.publicKeyHex));
     _contacts
       ..clear()
-      ..addAll(cached);
+      ..addAll(cached.map(_withCustomName));
     // Load every contact's settings without notifying per contact, then
     // notify once. Per-contact notification rebuilt the whole tree 2x per
     // contact (600 rebuilds for 300 contacts), and each rebuild walks the
@@ -2296,6 +3029,10 @@ class MeshCoreConnector extends ChangeNotifier {
     required String portName,
     int baudRate = 115200,
   }) async {
+    if (_autoReconnectInFlight) {
+      await _abandonAutoReconnect('USB connect to $portName started');
+    }
+    await _awaitDisconnectInFlight('USB connect to $portName');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -2382,6 +3119,10 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> connectTcp({required String host, required int port}) async {
+    if (_autoReconnectInFlight) {
+      await _abandonAutoReconnect('TCP connect to $host:$port started');
+    }
+    await _awaitDisconnectInFlight('TCP connect to $host:$port');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
       _appDebugLogService?.warn(
@@ -2511,6 +3252,11 @@ class MeshCoreConnector extends ChangeNotifier {
         (activeTransport != MeshCoreTransportType.tcp || !tcpManagerConnected);
   }
 
+  /// Sets the self public key so tests can drive the incoming-message path,
+  /// which bails when no self identity is known.
+  @visibleForTesting
+  void setSelfPublicKeyForTest(Uint8List key) => _selfPublicKey = key;
+
   @visibleForTesting
   static bool shouldResetStateAfterTcpConnectAbort({
     required MeshCoreConnectionState state,
@@ -2524,15 +3270,38 @@ class MeshCoreConnector extends ChangeNotifier {
     BluetoothDevice device, {
     String? displayName,
     Future<String?> Function()? linuxPairingPinProvider,
+  }) => _connectBle(
+    device,
+    displayName: displayName,
+    linuxPairingPinProvider: linuxPairingPinProvider,
+    auto: false,
+  );
+
+  Future<void> _connectBle(
+    BluetoothDevice device, {
+    String? displayName,
+    Future<String?> Function()? linuxPairingPinProvider,
+    required bool auto,
   }) async {
+    final attemptLabel = displayName ?? device.remoteId.toString();
+    if (!auto && _autoReconnectInFlight) {
+      await _abandonAutoReconnect('Connect to $attemptLabel started');
+    }
+    await _awaitDisconnectInFlight('Connect to $attemptLabel');
     if (_state == MeshCoreConnectionState.connecting ||
         _state == MeshCoreConnectionState.connected) {
+      _appDebugLogService?.warn(
+        'connect ignored: already $_state',
+        tag: 'BLE Connect',
+      );
       return;
     }
 
+    final generation = _beginConnectAttempt(auto: auto);
     _activeTransport = MeshCoreTransportType.bluetooth;
 
     await stopScan();
+    if (generation != _connectGeneration) return;
     _setState(MeshCoreConnectionState.connecting);
     _device = device;
     _deviceId = device.remoteId.toString();
@@ -2546,7 +3315,6 @@ class MeshCoreConnector extends ChangeNotifier {
     _lastDeviceDisplayName = _deviceDisplayName;
     _manualDisconnect = false;
     _bleReleaseUnconfirmed = false;
-    _cancelReconnectTimer();
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
       _resetConnectionHandshakeState();
@@ -2566,6 +3334,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _notifySubscription = null;
       await _mtuSubscription?.cancel();
       _mtuSubscription = null;
+      _throwIfSuperseded(generation);
       _connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected && isConnected) {
           _handleDisconnection();
@@ -2758,6 +3527,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // message byte budget recover from the 20-byte floor once the real value
       // is known (#592).
       await _mtuSubscription?.cancel();
+      _throwIfSuperseded(generation);
       _mtuSubscription = device.mtu.listen((mtu) {
         _appDebugLogService?.info('MTU now: $mtu', tag: 'BLE Connect');
         _logComposerBudget('mtu');
@@ -2792,6 +3562,7 @@ class MeshCoreConnector extends ChangeNotifier {
         }
       }
 
+      _throwIfSuperseded(generation);
       BluetoothService? uartService;
       for (var service in services) {
         if (service.uuid.toString().toLowerCase() == MeshCoreUuids.service) {
@@ -2863,6 +3634,7 @@ class MeshCoreConnector extends ChangeNotifier {
           }
         }
       }
+      _throwIfSuperseded(generation);
       _notifySubscription = _txCharacteristic!.onValueReceived.listen(
         _handleFrame,
         onError: (error, stackTrace) {
@@ -2871,6 +3643,8 @@ class MeshCoreConnector extends ChangeNotifier {
         },
       );
 
+      _autoReconnectInFlight = false;
+      _cancelReconnectTimer();
       _setState(MeshCoreConnectionState.connected);
       if (_shouldGateInitialChannelSync) {
         _hasReceivedDeviceInfo = false;
@@ -2878,6 +3652,17 @@ class MeshCoreConnector extends ChangeNotifier {
       }
       await _startBleInitialSync();
     } catch (e) {
+      if (e is _ConnectSuperseded || generation != _connectGeneration) {
+        // Stop, or a newer connect, took over. Whoever did that already tore
+        // this attempt down; touching state now would clobber theirs. (#997)
+        // attemptLabel, not _deviceDisplayName: by now a newer connect may
+        // have overwritten that with its own radio's name.
+        _appDebugLogService?.info(
+          'Connect to $attemptLabel abandoned: superseded',
+          tag: 'BLE Connect',
+        );
+        return;
+      }
       _appDebugLogService?.error('Connection error: $e', tag: 'BLE Connect');
       final errorText = e.toString();
       final lowerErrorText = errorText.toLowerCase();
@@ -3167,6 +3952,36 @@ class MeshCoreConnector extends ChangeNotifier {
     unawaited(service.loadForDevice(key == null ? null : pubKeyToHex(key)));
   }
 
+  /// Drops the identity that scopes every per-radio store, so a read before
+  /// the next radio's SELF_INFO returns nothing instead of the last radio's
+  /// data (#158).
+  ///
+  /// Every store below treats an empty key as "no radio": loads nothing,
+  /// writes nothing. That is deliberate and is the #754 precedent, so this is
+  /// a fail-closed reset rather than a cache invalidation.
+  ///
+  /// `_selfPublicKey` goes too, because `channels_screen` builds its own store
+  /// from `selfPublicKeyHex` rather than sharing these instances, so clearing
+  /// only the stores here would leave that path reading a stale prefix.
+  @visibleForTesting
+  void clearStorageScopeKeysForTest() => _clearStorageScopeKeys();
+
+  void _clearStorageScopeKeys() {
+    _selfPublicKey = null;
+    _channelMessageStore.setPublicKeyHex = '';
+    _messageStore.setPublicKeyHex = '';
+    _channelOrderStore.setPublicKeyHex = '';
+    _channelSettingsStore.setPublicKeyHex = '';
+    _channelRegionScopeStore.setPublicKeyHex = '';
+    _contactSettingsStore.setPublicKeyHex = '';
+    _contactStore.setPublicKeyHex = '';
+    _channelStore.setPublicKeyHex = '';
+    _unreadStore.setPublicKeyHex = '';
+    _discoveryContactStore.setPublicKeyHex = '';
+    storageService?.setPublicKeyHex = '';
+    _applySelfKeyToBlockService();
+  }
+
   void _resetConnectionHandshakeState() {
     _selfPublicKey = null;
     _applySelfKeyToBlockService();
@@ -3197,6 +4012,20 @@ class MeshCoreConnector extends ChangeNotifier {
   void resetConnectionHandshakeStateForTest() =>
       _resetConnectionHandshakeState();
 
+  /// Scopes the contact stores to [radioKeyHex] and hydrates the cache, which
+  /// normally happens as part of the connect handshake. (#750)
+  @visibleForTesting
+  Future<void> loadContactCacheForTest(String radioKeyHex) async {
+    _contactStore.setPublicKeyHex = radioKeyHex;
+    _contactSettingsStore.setPublicKeyHex = radioKeyHex;
+    await loadContactCache();
+  }
+
+  /// Scopes the contact settings store without a connect handshake. (#750)
+  @visibleForTesting
+  void setContactSettingsKeyForTest(String radioKeyHex) =>
+      _contactSettingsStore.setPublicKeyHex = radioKeyHex;
+
   /// Feeds a device frame through the normal dispatch, so parse paths can be
   /// exercised without a radio. (#578)
   @visibleForTesting
@@ -3208,6 +4037,26 @@ class MeshCoreConnector extends ChangeNotifier {
 
   @visibleForTesting
   void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
+
+  @visibleForTesting
+  void setAppDebugLogServiceForTest(AppDebugLogService service) =>
+      _appDebugLogService = service;
+
+  /// The state a BLE link leaves behind: a radio to go back to. (#997)
+  @visibleForTesting
+  void primeAutoReconnectForTest(String deviceId) {
+    _lastDeviceId = deviceId;
+    _lastDeviceDisplayName = deviceId;
+    _activeTransport = MeshCoreTransportType.bluetooth;
+    _manualDisconnect = false;
+  }
+
+  /// Starts an automatic attempt through the real bookkeeping, without BLE.
+  @visibleForTesting
+  void beginAutoReconnectAttemptForTest() {
+    _beginConnectAttempt(auto: true);
+    _setState(MeshCoreConnectionState.connecting);
+  }
 
   @visibleForTesting
   Map<int, List<ChannelMessage>> get channelMessagesForTest => _channelMessages;
@@ -3289,25 +4138,57 @@ class MeshCoreConnector extends ChangeNotifier {
       (_activeTransport == MeshCoreTransportType.bluetooth &&
           PlatformInfo.isWeb);
 
+  /// Cancels a scheduled retry and starts a fresh retry budget. Only for a
+  /// user action or a successful connect, never for an automatic attempt:
+  /// that reset is what kept the delay at 1 s for hours (#995).
   void _cancelReconnectTimer() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _reconnectAttempts = 0;
+    _reconnectPolicy.reset();
+    _autoReconnectGaveUp = false;
   }
 
-  int _nextReconnectDelayMs() {
-    final attempt = _reconnectAttempts < 6 ? _reconnectAttempts : 6;
-    _reconnectAttempts += 1;
-    final delayMs = 1000 * (1 << attempt);
-    return delayMs > 30000 ? 30000 : delayMs;
+  /// Bookkeeping at the start of every BLE connect. Returns the attempt's
+  /// generation, which it checks after each await. (#997)
+  int _beginConnectAttempt({required bool auto}) {
+    _autoReconnectInFlight = auto;
+    if (auto) {
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+    } else {
+      _cancelReconnectTimer();
+    }
+    return ++_connectGeneration;
+  }
+
+  /// Called after each await in a BLE connect that precedes a write to shared
+  /// connection state, so an abandoned attempt stops before it writes.
+  void _throwIfSuperseded(int generation) {
+    if (generation != _connectGeneration) throw const _ConnectSuperseded();
   }
 
   void _scheduleReconnect() {
     if (!_shouldAutoReconnect) return;
     if (_reconnectTimer?.isActive == true) return;
 
-    final delayMs = _nextReconnectDelayMs();
-    _reconnectTimer = Timer(Duration(milliseconds: delayMs), () async {
+    final target = _lastDeviceDisplayName ?? _lastDeviceId;
+    final delay = _reconnectPolicy.nextDelay(DateTime.now());
+    if (delay == null) {
+      _autoReconnectGaveUp = true;
+      _appDebugLogService?.warn(
+        'Auto-reconnect stopped: $target not reached after '
+        '${_reconnectPolicy.attempts} attempt(s)',
+        tag: 'Connection',
+      );
+      notifyListeners();
+      return;
+    }
+    _appDebugLogService?.info(
+      'Auto-reconnect attempt ${_reconnectPolicy.attempts} of '
+      '${_reconnectPolicy.maxAttempts} to $target in ${delay.inSeconds}s',
+      tag: 'Connection',
+    );
+    _reconnectTimer = Timer(delay, () async {
       if (!_shouldAutoReconnect) return;
       if (_state == MeshCoreConnectionState.connecting ||
           _state == MeshCoreConnectionState.connected) {
@@ -3322,18 +4203,99 @@ class MeshCoreConnector extends ChangeNotifier {
       if (device == null) return;
 
       try {
-        await connect(device, displayName: _lastDeviceDisplayName);
+        await _connectBle(
+          device,
+          displayName: _lastDeviceDisplayName,
+          auto: true,
+        );
       } catch (_) {
-        _scheduleReconnect();
+        // A failed attempt has already scheduled the next one, through
+        // disconnect(manual: false), or spent the budget.
       }
     });
+    notifyListeners();
   }
+
+  /// Ends an automatic retry, in flight or scheduled, so the user can act.
+  /// The attempt in flight sees its generation change and stops. (#997)
+  Future<void> _abandonAutoReconnect(String reason) async {
+    _appDebugLogService?.info(
+      '$reason: abandoning automatic reconnect',
+      tag: 'Connection',
+    );
+    _connectGeneration++;
+    final wasInFlight = _autoReconnectInFlight;
+    _autoReconnectInFlight = false;
+    if (wasInFlight) {
+      await disconnect(manual: true);
+    } else {
+      _manualDisconnect = true;
+      _cancelReconnectTimer();
+      notifyListeners();
+    }
+  }
+
+  /// The status bar's Stop button: end an automatic retry now. (#997)
+  Future<void> stopAutoReconnect() async {
+    if (!isAutoReconnecting && !_autoReconnectGaveUp) return;
+    await _abandonAutoReconnect('Stop pressed');
+  }
+
+  /// The status bar's Retry button after the retry gave up: a user connect to
+  /// the same radio, with a fresh budget. (#997)
+  Future<void> retryLastDevice() async {
+    final device =
+        _lastDevice ??
+        (_lastDeviceId == null ? null : BluetoothDevice.fromId(_lastDeviceId!));
+    if (device == null) return;
+    await connect(device, displayName: _lastDeviceDisplayName);
+  }
+
+  /// The disconnect in progress, if any. A connect waits for it, and a second
+  /// disconnect joins it, because its tail clears the device, name and state
+  /// and would wipe a connection started on top of it. (#997)
+  Future<void>? _disconnectInFlight;
 
   Future<void> disconnect({
     bool manual = true,
     bool skipBleDeviceDisconnect = false,
+  }) {
+    final inFlight = _disconnectInFlight;
+    if (inFlight != null) {
+      if (manual) {
+        // The running disconnect may be an automatic one that is about to
+        // schedule a retry; a manual caller means no retry.
+        _manualDisconnect = true;
+        _cancelReconnectTimer();
+      }
+      return inFlight;
+    }
+    final running = _disconnect(
+      manual: manual,
+      skipBleDeviceDisconnect: skipBleDeviceDisconnect,
+    );
+    _disconnectInFlight = running;
+    return running.whenComplete(() {
+      if (identical(_disconnectInFlight, running)) _disconnectInFlight = null;
+    });
+  }
+
+  Future<void> _awaitDisconnectInFlight(String what) async {
+    final inFlight = _disconnectInFlight;
+    if (inFlight == null) return;
+    _appDebugLogService?.info(
+      '$what waiting for the previous disconnect to finish',
+      tag: 'Connection',
+    );
+    await inFlight;
+  }
+
+  Future<void> _disconnect({
+    required bool manual,
+    required bool skipBleDeviceDisconnect,
   }) async {
     if (_state == MeshCoreConnectionState.disconnecting) return;
+    _autoReconnectInFlight = false;
     final transportAtDisconnect = _activeTransport;
     final transportLabel = switch (transportAtDisconnect) {
       MeshCoreTransportType.bluetooth => 'BLE',
@@ -3421,6 +4383,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _deviceDisplayName = null;
     _deviceId = null;
     _contacts.clear();
+    _customNames.clear(); // per radio: none may outlive the link (#750, T37b)
     _discoveredContacts.clear();
     _conversations.clear();
     _loadedConversationKeys.clear();
@@ -3432,7 +4395,18 @@ class MeshCoreConnector extends ChangeNotifier {
     _clientRepeat = null;
     _rememberedNonRepeatRadioState = null;
     _firmwareVerCode = null;
+    _classification = null;
+    // Capability bytes die with the connection, like the ver code above: a
+    // disconnect must not leave the previous radio's capabilities showing
+    // until the next device-info lands (Gemini review, task #876).
+    _offbandCaps = null;
+    _offbandCaps2 = null;
+    _femLnaEnabled = null;
     _blockListRetryTimer?.cancel();
+    // Per-connection debounce timers must die with the connection so a timer
+    // scheduled against this radio can't fire against the next one (#838 review).
+    _advertReconcileDebounce?.cancel();
+    _channelsChangedDebounce?.cancel();
     _blockDumpInFlight = false;
     _blockKeysTouchedDuringDump.clear();
     _firmwareVersion = null;
@@ -3940,6 +4914,31 @@ class MeshCoreConnector extends ChangeNotifier {
     await getContacts(since: _latestContactLastmod(), preserveExisting: true);
   }
 
+  /// True when the connected radio's own auto-add policy covers this contact
+  /// type, i.e. the radio would have stored a new advert of this type (subject
+  /// to its hop/capacity limits, which only the radio enforces). Mirrors the
+  /// radio's type policy so a reconcile is nudged only when the radio might
+  /// actually hold something new. (#838)
+  bool _isAutoAddEligible(int type) =>
+      (_autoAddUsers && type == advTypeChat) ||
+      (_autoAddRepeaters && type == advTypeRepeater) ||
+      (_autoAddRoomServers && type == advTypeRoom) ||
+      (_autoAddSensors && type == advTypeSensor);
+
+  /// Coalesce a burst of new adverts into a single incremental contact sync so
+  /// a node the radio actually added surfaces without a manual sync, while a
+  /// node it rejected simply never comes back in the stream. (#838)
+  static const Duration _advertReconcileWindow = Duration(milliseconds: 800);
+
+  void _scheduleContactReconcile() {
+    if (!isConnected || _isLoadingContacts) return;
+    _advertReconcileDebounce?.cancel();
+    _advertReconcileDebounce = Timer(_advertReconcileWindow, () {
+      if (!isConnected || _isLoadingContacts) return;
+      unawaited(refreshContactsSinceLastmod());
+    });
+  }
+
   /// The latest short full sync, kept until dismissed or a complete sync.
   ContactSyncShortfall? get contactSyncShortfall => _contactSyncShortfall;
 
@@ -4345,7 +5344,10 @@ class MeshCoreConnector extends ChangeNotifier {
           hashWidth: hashWidth,
           type: contact.type,
           flags: contact.flags,
-          name: contact.name,
+          // receivedName, never `.name`. The radio's contact table is the
+          // shared record of what this node calls itself; the user's label is
+          // ours alone and there is nowhere on the device to put it. (#750, T11)
+          name: contact.receivedName,
         ),
       );
       // USB writes return instantly (no BLE flow control), so give the firmware
@@ -4378,6 +5380,7 @@ class MeshCoreConnector extends ChangeNotifier {
     bool? teleBase,
     bool? teleLoc,
     bool? teleEnv,
+    bool? remoteCli,
   }) async {
     if (!isConnected) return;
     final latestContact =
@@ -4402,6 +5405,11 @@ class MeshCoreConnector extends ChangeNotifier {
               ? (updatedFlags | contactFlagTeleEnv)
               : (updatedFlags & ~contactFlagTeleEnv))
         : updatedFlags;
+    updatedFlags = remoteCli != null
+        ? (remoteCli
+              ? (updatedFlags | contactFlagRemoteCliAllowed)
+              : (updatedFlags & ~contactFlagRemoteCliAllowed))
+        : updatedFlags;
 
     await sendFrame(
       buildUpdateContactPathFrame(
@@ -4411,7 +5419,7 @@ class MeshCoreConnector extends ChangeNotifier {
         hashWidth: latestContact.pathHashWidth,
         type: latestContact.type,
         flags: updatedFlags,
-        name: latestContact.name,
+        name: latestContact.receivedName, // never `.name` (#750, T11)
       ),
     );
 
@@ -4421,7 +5429,9 @@ class MeshCoreConnector extends ChangeNotifier {
     if (index >= 0) {
       _contacts[index] = _contacts[index].copyWith(
         type: latestContact.type,
-        name: latestContact.name,
+        // Received, not `.name`: copying the getter would move one contact's
+        // custom name onto another's received field. (#750)
+        receivedName: latestContact.receivedName,
         pathLength: latestContact.pathLength,
         path: latestContact.path,
         flags: updatedFlags,
@@ -4687,7 +5697,8 @@ class MeshCoreConnector extends ChangeNotifier {
       _pendingChannelSentQueue.add(reactionQueueId);
       await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
       try {
-        await sendFrame(
+        await _sendChannelFrameScoped(
+          channel.index,
           buildSendChannelTextMsgFrame(
             channel.index,
             text,
@@ -4729,7 +5740,8 @@ class MeshCoreConnector extends ChangeNotifier {
     final outboundText = prepareChannelOutboundText(channel.index, text);
     await _waitForRadioQuiet(lastInboundRxTime: _lastChannelMsgRxTime);
     try {
-      await sendFrame(
+      await _sendChannelFrameScoped(
+        channel.index,
         buildSendChannelTextMsgFrame(
           channel.index,
           outboundText,
@@ -4756,6 +5768,86 @@ class MeshCoreConnector extends ChangeNotifier {
       _markChannelMessageFailed(channel.index, message.messageId);
       appLogger.error('Failed to send channel message: $e', tag: 'Connector');
     }
+  }
+
+  /// Send a channel frame, applying the channel's region scope on the wire if
+  /// one is configured (Feature #812, Epic #815). Fail-closed: a scoped channel
+  /// on firmware that cannot scope is blocked, never sent unscoped; the scope is
+  /// set before the send and cleared to the node default after.
+  Future<void> _sendChannelFrameScoped(
+    int channelIndex,
+    Uint8List frame, {
+    String? channelSendQueueId,
+    bool expectsGenericAck = false,
+  }) async {
+    final regionName = await _channelRegionScopeStore.scopeFor(channelIndex);
+    if (regionName == null) {
+      await sendFrame(
+        frame,
+        channelSendQueueId: channelSendQueueId,
+        expectsGenericAck: expectsGenericAck,
+      );
+      return;
+    }
+    if (!supportsRegionScope) {
+      throw StateError(
+        'channel $channelIndex is region-scoped to "$regionName" but the '
+        'firmware does not support region scoping',
+      );
+    }
+    final key = transportKeyForName(regionName);
+    if (key == null) {
+      throw StateError(
+        'cannot derive a transport key for region "$regionName"',
+      );
+    }
+    try {
+      // Inside the try so a lost ack on the set (the firmware may already have
+      // applied the scope) still runs the clear below, rather than leaking the
+      // scope onto the next unscoped send.
+      await setChannelSendScope(key);
+      await sendFrame(
+        frame,
+        channelSendQueueId: channelSendQueueId,
+        expectsGenericAck: expectsGenericAck,
+      );
+    } finally {
+      try {
+        await clearSendScope();
+      } catch (e) {
+        appLogger.warn(
+          'failed to clear region send-scope after a channel send: $e',
+          tag: 'Region',
+        );
+      }
+    }
+  }
+
+  @visibleForTesting
+  ChannelRegionScopeStore get channelRegionScopeStoreForTest =>
+      _channelRegionScopeStore;
+
+  @visibleForTesting
+  Future<void> sendChannelFrameScopedForTest(
+    int channelIndex,
+    Uint8List frame,
+  ) => _sendChannelFrameScoped(channelIndex, frame);
+
+  /// The region name scoping [channelIndex], or null when unscoped (#815).
+  Future<String?> channelRegionScope(int channelIndex) =>
+      _channelRegionScopeStore.scopeFor(channelIndex);
+
+  /// Set (or, with null, clear) the region scope for [channelIndex] (#815).
+  Future<void> setChannelRegionScope(
+    int channelIndex,
+    String? regionName,
+  ) async {
+    if (regionName == null) {
+      await _channelRegionScopeStore.clearScope(channelIndex);
+    } else {
+      await _channelRegionScopeStore.setScope(channelIndex, regionName);
+    }
+    notifyListeners();
   }
 
   Future<void> removeContact(Contact contact) async {
@@ -4831,7 +5923,10 @@ class MeshCoreConnector extends ChangeNotifier {
         -1,
         type: stub.type,
         flags: 0,
-        name: stub.name,
+        // A card or QR stub carries the shared name as its received name, so
+        // this is unchanged in practice. Reading `.name` would still be wrong:
+        // a user could rename before the add completes. (#750, T13)
+        name: stub.receivedName,
         // The whole point of this path. Anything else here would trip the
         // firmware advert replay guard and leave the contact permanently deaf
         // to its own adverts. See buildUpdateContactPathFrame. (#620)
@@ -4859,7 +5954,7 @@ class MeshCoreConnector extends ChangeNotifier {
         hashWidth: contact.pathHashWidth,
         type: contact.type,
         flags: contact.flags,
-        name: contact.name,
+        name: contact.receivedName, // never `.name` (#750, T11)
         lat: contact.latitude,
         lon: contact.longitude,
         lastModified: contact.lastSeen,
@@ -4878,7 +5973,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _handleContactAdvert(
       Contact(
         publicKey: contact.publicKey,
-        name: contact.name,
+        receivedName: contact.receivedName,
         type: contact.type,
         pathLength: contact.pathLength,
         path: contact.path,
@@ -5255,6 +6350,33 @@ class MeshCoreConnector extends ChangeNotifier {
     // Apply ordering and notify UI
     _applyChannelOrder();
     notifyListeners();
+
+    // #839: one-time migration of the pre-per-radio notify state into THIS
+    // radio (the first synced after upgrade). The service guards itself with a
+    // persisted flag, so this is a no-op on every later sync and later radio.
+    _migrateLegacyChannelNotifyForThisRadio();
+  }
+
+  void _migrateLegacyChannelNotifyForThisRadio() {
+    final service = _appSettingsService;
+    if (service == null || service.settings.channelNotifyMigrated) return;
+    final prefix = selfPublicKeyHex;
+    if (prefix.isEmpty || _channels.isEmpty) return;
+    final pskByIndex = <int, String>{};
+    final pskByName = <String, String>{};
+    for (final channel in _channels) {
+      final psk = channel.pskHex;
+      if (psk.isEmpty) continue;
+      pskByIndex[channel.index] = psk;
+      pskByName[channel.name] = psk;
+    }
+    unawaited(
+      service.migrateLegacyChannelNotify(
+        devicePrefix: prefix,
+        pskByChannelIndex: pskByIndex,
+        pskByChannelName: pskByName,
+      ),
+    );
   }
 
   void _cleanupChannelSync({required bool completed}) {
@@ -5721,6 +6843,198 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
+  // --- Region flood-scoping + regions discovery (Feature #812, Epic #813).
+  // Frames and parsers live in meshcore_protocol.dart; this is the connector
+  // wiring, modeled on the 0xC6 pkt-hash request/reply correlation above.
+
+  Completer<DefaultFloodScope?>? _defaultFloodScopeCompleter;
+
+  /// True iff the connected firmware supports region flood-scoping + discovery.
+  bool get supportsRegionScope => firmwareSupportsRegionScope(_firmwareVerCode);
+
+  @visibleForTesting
+  void setFirmwareVerCodeForTest(int? value) => _firmwareVerCode = value;
+  void setOffbandCapsForTest(int? value) => _offbandCaps = value;
+
+  @visibleForTesting
+  Message? parseContactMessageForTest(Uint8List frame) =>
+      _parseContactMessage(frame);
+
+  void _guardRegionScope() {
+    if (!supportsRegionScope) {
+      throw StateError('firmware does not support region scoping');
+    }
+  }
+
+  /// Discover the flood regions a reachable repeater advertises. Sends an anon
+  /// regions request to [repeaterPubKey] (32 bytes).
+  ///
+  /// Correlation: the firmware generates the anon-request tag and returns it in
+  /// the `RESP_CODE_SENT` ack; the repeater echoes that same tag in its `0x8C`
+  /// reply. So we learn the tag from the ack that follows our send, then match
+  /// the `0x8C` by it (the client cannot pick the tag, #836). Returns null on
+  /// timeout. Throws [StateError] when the firmware does not support region
+  /// scoping (fail-closed; callers gate the UI on [supportsRegionScope]).
+  Future<RegionsReply?> discoverRegions({
+    required Uint8List repeaterPubKey,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    _guardRegionScope();
+    // One auto-retry: a single anon-request round-trip can drop over LoRa and a
+    // retry usually gets through; a genuinely unreachable repeater still ends in
+    // a timeout after both attempts (#836, D1 Option A).
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final reply = await _discoverRegionsOnce(repeaterPubKey, timeout);
+      if (reply != null) return reply;
+    }
+    return null;
+  }
+
+  Future<RegionsReply?> _discoverRegionsOnce(
+    Uint8List repeaterPubKey,
+    Duration timeout,
+  ) async {
+    // Reply travels back along the repeater's own stored path (firmware routes
+    // it as-is), so a multi-hop repeater can answer. Empty => zero-hop.
+    final (replyPathLenByte, replyPath) = _regionReplyPathFor(repeaterPubKey);
+    final completer = Completer<RegionsReply?>();
+    int? tag; // firmware tag, learned from the RESP_CODE_SENT after we send
+    void finish(RegionsReply? reply) {
+      if (!completer.isCompleted) completer.complete(reply);
+    }
+
+    Timer timer = Timer(timeout, () => finish(null));
+    final sub = receivedFrames.listen((frame) {
+      if (frame.isEmpty) return;
+      if (tag == null && frame[0] == respCodeSent && frame.length >= 10) {
+        tag = readUint32LE(frame, 2);
+        // Re-arm to the firmware's own round-trip estimate (scales with hops),
+        // rather than a fixed guess, when it is larger than the floor.
+        final estMs = readUint32LE(frame, 6);
+        if (estMs > timeout.inMilliseconds) {
+          timer.cancel();
+          timer = Timer(
+            Duration(milliseconds: estMs + 3000),
+            () => finish(null),
+          );
+        }
+        return;
+      }
+      if (tag != null && frame[0] == pushCodeBinaryResponse) {
+        final reply = parseRegionsReply(frame);
+        if (reply != null && reply.tag == tag) finish(reply);
+      }
+    });
+    try {
+      await sendFrame(
+        buildAnonRegionsRequestFrame(
+          repeaterPubKey,
+          replyPathLenByte: replyPathLenByte,
+          replyPath: replyPath,
+        ),
+      );
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn('regions discovery failed: $e', tag: 'Region');
+      return null;
+    } finally {
+      timer.cancel();
+      await sub.cancel();
+    }
+  }
+
+  /// The regions reply path for [repeaterPubKey], as (packed path-len byte,
+  /// hop-hash bytes), taken from the repeater contact's stored path. Returns
+  /// (0, empty) when the repeater is unknown or has no path, which the firmware
+  /// treats as a zero-hop reply (only an adjacent repeater can answer). The list
+  /// is never filtered on this: stored paths go stale as the companion moves, so
+  /// a repeater that looks far (or pathless) may still answer, and one that looks
+  /// near may not.
+  (int, Uint8List) _regionReplyPathFor(Uint8List repeaterPubKey) {
+    final hex = pubKeyToHex(repeaterPubKey);
+    for (final c in _contacts) {
+      if (pubKeyToHex(c.publicKey) == hex) {
+        if (c.pathLength >= 0 && c.path.isNotEmpty) {
+          return (encodePathLen(c.pathLength, c.pathHashWidth), c.path);
+        }
+        return (0, Uint8List(0));
+      }
+    }
+    return (0, Uint8List(0));
+  }
+
+  /// Override the companion's flood send-scope with [key] (16 bytes) for
+  /// subsequent sends. (CMD 54 sub-0)
+  Future<void> setChannelSendScope(Uint8List key) async {
+    _guardRegionScope();
+    await sendFrame(buildSetFloodScopeKeyFrame(key));
+  }
+
+  /// Clear the send-scope override, reverting to the node default. (CMD 54 sub-0)
+  Future<void> clearSendScope() async {
+    _guardRegionScope();
+    await sendFrame(buildClearFloodScopeFrame());
+  }
+
+  /// Force subsequent sends unscoped. (CMD 54 sub-1)
+  Future<void> setSendUnscoped() async {
+    _guardRegionScope();
+    await sendFrame(buildFloodScopeUnscopedFrame());
+  }
+
+  /// Set the node default flood scope to ([name],[key]). (CMD 63)
+  Future<void> setDefaultFloodScope(String name, Uint8List key) async {
+    _guardRegionScope();
+    await sendFrame(buildSetDefaultFloodScopeFrame(name, key));
+  }
+
+  /// Clear the node default flood scope. (CMD 63, bare)
+  Future<void> clearDefaultFloodScope() async {
+    _guardRegionScope();
+    await sendFrame(buildClearDefaultFloodScopeFrame());
+  }
+
+  /// Query the node default flood scope. Returns null on timeout, or a
+  /// [DefaultFloodScope] whose name is empty when the node has none. (CMD 64)
+  Future<DefaultFloodScope?> getDefaultFloodScope({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    _guardRegionScope();
+    // RESP 28 carries no correlation tag, so only one query can be outstanding.
+    // Coalesce a concurrent caller onto the in-flight request (the default scope
+    // is a single global value, so they want the same answer); otherwise the
+    // second call would orphan the first's completer to a spurious timeout.
+    final inFlight = _defaultFloodScopeCompleter;
+    if (inFlight != null) return inFlight.future;
+    final completer = Completer<DefaultFloodScope?>();
+    _defaultFloodScopeCompleter = completer;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    try {
+      await sendFrame(buildGetDefaultFloodScopeFrame());
+      return await completer.future;
+    } catch (e) {
+      appLogger.warn('get default flood scope failed: $e', tag: 'Region');
+      return null;
+    } finally {
+      timer.cancel();
+      if (identical(_defaultFloodScopeCompleter, completer)) {
+        _defaultFloodScopeCompleter = null;
+      }
+    }
+  }
+
+  /// Routes a RESP_CODE_DEFAULT_FLOOD_SCOPE (28) reply to a waiting query.
+  void _handleDefaultFloodScopeReply(Uint8List frame) {
+    final parsed = parseDefaultFloodScopeReply(frame);
+    if (parsed == null) return;
+    final completer = _defaultFloodScopeCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(parsed);
+    }
+  }
+
   /// Ask firmware for the on-air packet hash of a channel message we sent,
   /// keyed by (ts, chan) (0xC6, #524). Returns null on timeout / error frame.
   Future<OffbandPktHash?> _queryPacketHash(
@@ -5917,6 +7231,21 @@ class MeshCoreConnector extends ChangeNotifier {
     final toImport = nodeSet.difference(local).difference(touched);
     final toPush = local.difference(nodeSet).difference(touched);
     unawaited(blockService.importKeys(toImport));
+    // #471 Option A: a radio that reports an EMPTY block list is treated as
+    // blank. Do NOT auto-offload the client's blocks onto it, which made
+    // fresh/erased radios come up pre-blocked. The client stays the source of
+    // truth; blocks reach a radio only by an explicit user action. A radio that
+    // already holds blocks still unions normally.
+    if (nodeSet.isEmpty) {
+      if (toPush.isNotEmpty) {
+        _appDebugLogService?.info(
+          'Radio reports no blocks; not offloading ${toPush.length} '
+          'client block(s) onto a blank radio (#471)',
+          tag: 'Block',
+        );
+      }
+      return;
+    }
     for (final key in toPush) {
       _pushBlockChange(key, true);
     }
@@ -6084,6 +7413,9 @@ class MeshCoreConnector extends ChangeNotifier {
       case cmdOffbandPktHash:
         _handleOffbandPktHashFrame(frame);
         break;
+      case respCodeDefaultFloodScope:
+        _handleDefaultFloodScopeReply(frame);
+        break;
       case respCodeOffbandDeviceUi:
         _handleDeviceUiReply(frame);
         break;
@@ -6205,6 +7537,14 @@ class MeshCoreConnector extends ChangeNotifier {
           const Duration(milliseconds: 400),
           () => unawaited(getChannels(force: true)),
         );
+        break;
+      case respCodeCliReply:
+        final reply = parseCliReply(frame);
+        if (reply != null) {
+          for (final l in List.of(_cliReplyListeners)) {
+            l(reply);
+          }
+        }
         break;
       case respCodeChannelInfo:
         _handleChannelInfo(frame);
@@ -6436,10 +7776,20 @@ class MeshCoreConnector extends ChangeNotifier {
     _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelOrderStore.setPublicKeyHex = selfPublicKeyHex;
     _channelSettingsStore.setPublicKeyHex = selfPublicKeyHex;
+    _channelRegionScopeStore.setPublicKeyHex = selfPublicKeyHex;
     _contactSettingsStore.setPublicKeyHex = selfPublicKeyHex;
     _contactStore.setPublicKeyHex = selfPublicKeyHex;
     _channelStore.setPublicKeyHex = selfPublicKeyHex;
     _unreadStore.setPublicKeyHex = selfPublicKeyHex;
+    // Discovered contacts are what THIS radio heard; scope them per radio so
+    // they don't bleed across radios on one host (#754). The startup load that
+    // follows clears and reloads the in-memory list from this radio's key.
+    _discoveryContactStore.setPublicKeyHex = selfPublicKeyHex;
+    // Path history and delivery observations, same reasoning (#854, #856): a
+    // route or an ACK timing is what THIS radio measured. Unset, both load
+    // nothing and never write, so a read before this point cannot serve
+    // another radio's data.
+    storageService?.setPublicKeyHex = selfPublicKeyHex;
 
     // Now that we have self info, we can load all the persisted data for this
     // node. Each step is timed: this sequence has stalled the UI isolate for
@@ -6473,6 +7823,24 @@ class MeshCoreConnector extends ChangeNotifier {
     await step('channelMessages', () => loadAllChannelMessages());
     await step('unreadState', loadUnreadState);
     await step('discoveredContacts', _loadDiscoveredContactCache);
+
+    // One-time cleanup of the pre-#854/#856 untagged keys, after the loads so
+    // it never delays first paint. Both are no-ops once done, so this is safe
+    // to run on every connect, and both chunk or are small enough not to
+    // block: the path-history purge measured 12.7 s of total work on the
+    // owner's 2,092 keys and yields every 20 removals (plan decision 1).
+    await step('purgeLegacyStorage', () async {
+      final removed = await storageService?.purgeLegacyPathHistory() ?? 0;
+      final hadObs =
+          await storageService?.purgeLegacyDeliveryObservations() ?? false;
+      if (removed > 0 || hadObs) {
+        appLogger.info(
+          'Legacy storage purge: $removed path-history keys, '
+          '${hadObs ? "the" : "no"} global observation list (#854, #856)',
+          tag: 'Storage',
+        );
+      }
+    });
   }
 
   /// Extract the additive `offband_caps` byte from a device-info reply.
@@ -6553,14 +7921,36 @@ class MeshCoreConnector extends ChangeNotifier {
     } else {
       _appDebugLogService?.info(widthNote, tag: 'Device');
     }
-    // Offband config capability v14+ (byte 82). Extracted + bounds-checked in a
-    // testable helper; offset verified against firmware (see parseOffbandCaps).
-    _offbandCaps = parseOffbandCaps(frame);
-    // FEM LNA state rides one byte past the caps byte on v16+ (#304). Primary
-    // read on connect, a 0xC3 GET is only the fallback.
-    _femLnaEnabled = parseFemLnaState(frame);
-    // Second caps byte rides at offset 84, past the FEM state byte (#480).
-    _offbandCaps2 = parseOffbandCaps2(frame);
+    // Population first (#875/#876): stock 1.18 moved FIRMWARE_VER_CODE into
+    // the fork's spent range, so the caps bytes are only read once the
+    // classifier corroborates the fork layout. On a conflict every Offband
+    // field stays null -the same signals the fork absence always sent.
+    _classification = classifyDevicePopulation(
+      deviceInfo: frame,
+      firmwareVersion: info.version,
+    );
+    if (_classification!.conflict) {
+      _appDebugLogService?.warn(
+        'Population conflict, Offband surfaces disabled: '
+        '${_classification!.evidence}',
+        tag: 'Device',
+      );
+    }
+    if (_classification!.allowsOffbandFrames) {
+      // Offband config capability v14+ (byte 82). Extracted + bounds-checked
+      // in a testable helper; offset verified against firmware (see
+      // parseOffbandCaps).
+      _offbandCaps = parseOffbandCaps(frame);
+      // FEM LNA state rides one byte past the caps byte on v16+ (#304).
+      // Primary read on connect, a 0xC3 GET is only the fallback.
+      _femLnaEnabled = parseFemLnaState(frame);
+      // Second caps byte rides at offset 84, past the FEM state byte (#480).
+      _offbandCaps2 = parseOffbandCaps2(frame);
+    } else {
+      _offbandCaps = null;
+      _femLnaEnabled = null;
+      _offbandCaps2 = null;
+    }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
     // be told apart from "this radio says it can't". (#304)
@@ -6984,37 +8374,46 @@ class MeshCoreConnector extends ChangeNotifier {
 
         // Preserve user-selected path settings and previously known GPS when
         // refreshed frames omit coordinates (lat/lon encoded as 0,0).
-        _contacts[existingIndex] = contact.copyWith(
-          lastMessageAt: mergedLastMessageAt,
-          pathOverride: existing.pathOverride, // Preserve user's path choice
-          pathOverrideBytes: existing.pathOverrideBytes,
-          latitude: contact.latitude ?? existing.latitude,
-          longitude: contact.longitude ?? existing.longitude,
+        // `contact` is built from the device frame, which carries no custom
+        // name, so copyWith from it drops the user's label. Reattach it. (#750)
+        _contacts[existingIndex] = _withCustomName(
+          contact.copyWith(
+            lastMessageAt: mergedLastMessageAt,
+            pathOverride: existing.pathOverride, // Preserve user's path choice
+            pathOverrideBytes: existing.pathOverrideBytes,
+            latitude: contact.latitude ?? existing.latitude,
+            longitude: contact.longitude ?? existing.longitude,
+          ),
         );
 
         appLogger.info(
           'After merge: pathOverride=${_contacts[existingIndex].pathOverride}, devicePath=${_pathDiag(_contacts[existingIndex].path, _contacts[existingIndex].pathLength, _contacts[existingIndex].pathHashWidth)}',
           tag: 'Connector',
         );
+      } else if (isContact) {
+        // The contact sync stream is radio truth; it is the only thing that
+        // populates the persisted list.
+        _contacts.add(_withCustomName(contact));
+        appLogger.info(
+          'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
+          tag: 'Connector',
+        );
       } else {
-        if ((_autoAddUsers && contact.type == advTypeChat) ||
-            (_autoAddRepeaters && contact.type == advTypeRepeater) ||
-            (_autoAddRoomServers && contact.type == advTypeRoom) ||
-            (_autoAddSensors && contact.type == advTypeSensor) ||
-            isContact) {
-          _contacts.add(contact);
-          appLogger.info(
-            'Added new contact ${contact.name}: pathLen=${_pathDiag(contact.path, contact.pathLength, contact.pathHashWidth)}',
-            tag: 'Connector',
-          );
-        } else {
-          appLogger.info(
-            "Discovered contact ${contact.name} (type ${contact.typeLabelRaw}) not added due to auto-add settings",
-            tag: 'Connector',
-          );
-          notifyListeners();
-          return;
-        }
+        // #838: a live advert (NEW_ADVERT push) is NOT proof the radio stored
+        // the node. The firmware fires it even for adverts it rejects (beyond
+        // the auto-add hop limit, or when the contact table is full), and the
+        // client applies neither limit, so promoting them here drifted a
+        // long-lived session hundreds of contacts above radio truth. Keep it in
+        // discovery (added above) and, when the radio's own policy would have
+        // added it, nudge a reconcile so a genuinely-new contact still surfaces
+        // without a manual sync.
+        appLogger.info(
+          "Discovered contact ${contact.name} (type ${contact.typeLabelRaw}) left in discovery; not a synced contact",
+          tag: 'Connector',
+        );
+        if (_isAutoAddEligible(contact.type)) _scheduleContactReconcile();
+        notifyListeners();
+        return;
       }
       _knownContactKeys.add(contact.publicKeyHex);
       _loadMessagesForContact(contact.publicKeyHex);
@@ -7092,10 +8491,13 @@ class MeshCoreConnector extends ChangeNotifier {
       );
 
       // CRITICAL: Preserve user's path override when contact is refreshed from device
-      _contacts[existingIndex] = contact.copyWith(
-        lastMessageAt: mergedLastMessageAt,
-        pathOverride: existing.pathOverride, // Preserve user's path choice
-        pathOverrideBytes: existing.pathOverrideBytes,
+      // Built from the device frame, so reattach the user's label. (#750)
+      _contacts[existingIndex] = _withCustomName(
+        contact.copyWith(
+          lastMessageAt: mergedLastMessageAt,
+          pathOverride: existing.pathOverride, // Preserve user's path choice
+          pathOverrideBytes: existing.pathOverrideBytes,
+        ),
       );
 
       appLogger.info(
@@ -7103,7 +8505,7 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Connector',
       );
     } else {
-      _contacts.add(contact);
+      _contacts.add(_withCustomName(contact));
       appLogger.info(
         'Added new contact ${contact.name}: pathLen=${contact.pathLength}',
         tag: 'Connector',
@@ -7345,6 +8747,16 @@ class MeshCoreConnector extends ChangeNotifier {
         return;
       }
 
+      // CLI traffic stays in the CLI console only. A CLI reply (type-1) or an
+      // inbound CLI command (type-3) is correlated by the console through the
+      // receivedFrames listener; it must never enter the chat thread, bump the
+      // contact's last-message, or raise unread. CLI and chat are separate
+      // surfaces - drop CLI out of the message pipeline here (#999).
+      if (message.isCli || message.isCliCommand) {
+        _handleQueuedMessageReceived();
+        return;
+      }
+
       final contact = _contacts.cast<Contact?>().firstWhere(
         (c) => c?.publicKeyHex == message!.senderKeyHex,
         orElse: () => null,
@@ -7511,7 +8923,13 @@ class MeshCoreConnector extends ChangeNotifier {
       final isPlain =
           shiftedType == txtTypePlain || rawType == txtTypePlain || isSigned;
       final isCli = shiftedType == txtTypeCliData || rawType == txtTypeCliData;
-      if (!isPlain && !isCli) {
+      // An inbound remote-CLI COMMAND (type 3): a contact asking to run a
+      // command on our radio. It reaches the app as a message (the firmware
+      // queues it when the sender lacks the 0x10 grant), so render it rather
+      // than dropping it (#890).
+      final isCliCommand =
+          shiftedType == txtTypeCliCommand || rawType == txtTypeCliCommand;
+      if (!isPlain && !isCli && !isCliCommand) {
         appLogger.warn(
           'Unknown message type received: txtType=$txtType, shifted=$shiftedType, raw=$rawType',
         );
@@ -7522,7 +8940,7 @@ class MeshCoreConnector extends ChangeNotifier {
         appLogger.warn('Received message with empty text, ignoring');
         return null;
       }
-      final decodedText = isCli
+      final decodedText = (isCli || isCliCommand)
           ? msgText
           : (Smaz.tryDecodePrefixed(msgText) ?? msgText);
 
@@ -7543,6 +8961,7 @@ class MeshCoreConnector extends ChangeNotifier {
         timestamp: timestamp,
         isOutgoing: isOutgoing,
         isCli: isCli,
+        isCliCommand: isCliCommand,
         status: isOutgoing ? MessageStatus.sent : MessageStatus.delivered,
         pathLength: pathLength == 0xFF ? 0 : pathLength,
         pathBytes: Uint8List(0),
@@ -7810,11 +9229,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // the setting survives a rename and does not follow a reused slot (#259).
     // Evaluated against resolvedText so a translated mention still matches.
     final mode = _appSettingsService!.channelNotifyMode(
-      identityKey: AppSettings.channelNotifyKey(
-        channelIndex: channelIndex,
-        pskHex: _findChannelByIndex(channelIndex)?.pskHex,
-      ),
-      channelName: label,
+      devicePrefix: selfPublicKeyHex,
+      pskHex: _findChannelByIndex(channelIndex)?.pskHex,
     );
     switch (mode) {
       case ChannelNotifyMode.off:
@@ -7963,7 +9379,11 @@ class MeshCoreConnector extends ChangeNotifier {
             timestamp: DateTime.fromMillisecondsSinceEpoch(timestampRaw * 1000),
             isOutgoing: false,
             status: ChannelMessageStatus.sent,
-            pathLength: packet.isFlood ? packet.hopCount : 0,
+            // The raw packed byte (hop count low 6 bits, hash width high 2),
+            // same encoding fromFrame stores. Storing the stripped hop count
+            // here lost the width, so a 3-byte-hash path later decoded as
+            // width 1 and the byte length leaked in as the hop count (#985).
+            pathLength: packet.isFlood ? packet.pathLenRaw : 0,
             pathBytes: packet.pathBytes,
             channelIndex: channel.index,
             rxTime: DateTime.now(),
@@ -8804,10 +10224,9 @@ class MeshCoreConnector extends ChangeNotifier {
         existing.pathVariants,
         processedMessage.pathVariants,
       );
-      final mergedPathLength = _mergePathLength(
+      final mergedPathLength = mergePathLenRaw(
         existing.pathLength,
         processedMessage.pathLength,
-        mergedPathBytes.length,
       );
       final newRepeatCount = existing.repeatCount + 1;
       final promotedFromPending =
@@ -8946,18 +10365,6 @@ class MeshCoreConnector extends ChangeNotifier {
     return existing;
   }
 
-  int? _mergePathLength(int? existing, int? incoming, int observedLength) {
-    if (existing == null) {
-      if (incoming == null) return observedLength > 0 ? observedLength : null;
-      return incoming >= observedLength ? incoming : observedLength;
-    }
-    if (incoming == null) {
-      return existing >= observedLength ? existing : observedLength;
-    }
-    final merged = existing >= incoming ? existing : incoming;
-    return merged >= observedLength ? merged : observedLength;
-  }
-
   List<Uint8List> _mergePathVariants(
     List<Uint8List> existing,
     List<Uint8List> incoming,
@@ -9008,6 +10415,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _notifySubscription = null;
     _connectionSubscription?.cancel();
     _connectionSubscription = null;
+    // Per-connection debounce timers must not survive the drop and fire against
+    // the next radio (#838 review).
+    _advertReconcileDebounce?.cancel();
+    _channelsChangedDebounce?.cancel();
 
     _device = null;
     _rxCharacteristic = null;
@@ -9015,6 +10426,18 @@ class MeshCoreConnector extends ChangeNotifier {
     // Preserve deviceId and displayName for UI display during reconnection
     // They're only cleared on manual disconnect via disconnect() method
     _hasReceivedDeviceInfo = false;
+    // But NOT the identity that scopes stored data (#158). A manual
+    // disconnect() clears _selfPublicKey; an unexpected drop did not, so
+    // every per-radio store, and the one channels_screen builds from
+    // `selfPublicKeyHex`, kept the previous radio's prefix. Connect a
+    // DIFFERENT radio after a drop and any read before its SELF_INFO lands
+    // served the old radio's history. Desktop-only in practice, which is
+    // where #158 was seen.
+    //
+    // Cleared here so those reads fail closed and return nothing, the #754
+    // precedent. The names above stay, so the UI can still say which radio it
+    // is reconnecting to; it is only the data-scoping identity that goes.
+    _clearStorageScopeKeys();
     _maxContacts = _defaultMaxContacts;
     _maxChannels = _defaultMaxChannels;
     _resetSyncProgressState();
@@ -9156,6 +10579,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _gpsLocationPollTimer?.cancel();
     _radioStatsPollTimer?.cancel();
     _channelsChangedDebounce?.cancel();
+    _advertReconcileDebounce?.cancel();
     _contactRequestWatchdog?.cancel();
     _pendingKeyCheck?.timer?.cancel();
     _recoverySettleTimer?.cancel();
@@ -9308,7 +10732,7 @@ class MeshCoreConnector extends ChangeNotifier {
       Contact(
         rawPacket: frame,
         publicKey: publicKey,
-        name: name,
+        receivedName: name,
         type: type,
         pathLength: pathBytes.isEmpty ? -1 : pathBytes.length,
         path: Uint8List.fromList(
@@ -9392,7 +10816,7 @@ class MeshCoreConnector extends ChangeNotifier {
       final newContact = Contact(
         rawPacket: rawPacket,
         publicKey: publicKey,
-        name: name,
+        receivedName: name,
         type: type,
         pathLength: path.length,
         path: Uint8List.fromList(
@@ -9402,17 +10826,19 @@ class MeshCoreConnector extends ChangeNotifier {
         longitude: longitude,
         lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
       );
-      if ((_autoAddUsers && type == advTypeChat) ||
-          (_autoAddRepeaters && type == advTypeRepeater) ||
-          (_autoAddRoomServers && type == advTypeRoom) ||
-          (_autoAddSensors && type == advTypeSensor)) {
-        _handleContactAdvert(newContact);
+      // #838: a raw overheard advert is not proof the radio stored the node, so
+      // it never joins the persisted contact list (that is what drifted a long
+      // session above radio truth). It feeds discovery, and when the radio's own
+      // auto-add policy would have added it, a reconcile pulls the radio's real
+      // entry in. The persisted list stays a mirror of the contact sync.
+      if (_isAutoAddEligible(type)) {
         _handleDiscovery(
           newContact,
           rawPacket,
           noNotify: true,
           addActive: true,
         );
+        _scheduleContactReconcile();
       } else {
         _handleDiscovery(newContact, rawPacket);
       }
@@ -9439,7 +10865,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _contacts[existingIndex] = existing.copyWith(
         latitude: hasLocation ? latitude : existing.latitude,
         longitude: hasLocation ? longitude : existing.longitude,
-        name: hasName ? name : existing.name,
+        // The received name updates; the user's custom name is untouched, so
+        // what they see does not move. This is the whole point of #750: before
+        // it, an advert took the user's chosen name back every time, which is
+        // why the client could never hold one. `copyWith` leaves `customName`
+        // alone unless `clearCustomName` is passed, so nothing else is needed
+        // here. A nameless advert (`hasName` false) must not blank the
+        // received name either. (T15, T16, T18, T19)
+        receivedName: hasName ? name : existing.receivedName,
         path: Uint8List.fromList(path.reversed.toList()),
         pathLength: path.length,
         lastMessageAt: mergedLastMessageAt,
@@ -9531,7 +10964,7 @@ class MeshCoreConnector extends ChangeNotifier {
       _discoveredContacts[existingIndex] = _discoveredContacts[existingIndex]
           .copyWith(
             rawPacket: rawPacket,
-            name: contact.name,
+            receivedName: contact.receivedName,
             type: contact.type,
             pathLength: contact.pathLength,
             path: contact.path,
@@ -9549,7 +10982,7 @@ class MeshCoreConnector extends ChangeNotifier {
     final disContact = Contact(
       rawPacket: rawPacket,
       publicKey: contact.publicKey,
-      name: contact.name,
+      receivedName: contact.receivedName,
       type: contact.type,
       pathLength: contact.pathLength,
       path: contact.path,
@@ -9651,8 +11084,6 @@ class _RawPacket {
 
   bool get isFlood =>
       routeType == _routeFlood || routeType == _routeTransportFlood;
-
-  int get hopCount => pathLenRaw & 63;
 }
 
 class _ParsedText {
@@ -9682,4 +11113,20 @@ class _PendingCommandAck {
   final String? channelSendQueueId;
 
   _PendingCommandAck({required this.commandCode, this.channelSendQueueId});
+}
+
+/// A `0xC5` request waiting for its reply.
+class _DeviceUiWaiter {
+  _DeviceUiWaiter(this.surface, this.matches);
+  final DeviceUiSurface surface;
+  final bool Function(OffbandUiReply reply) matches;
+  final Completer<OffbandUiReply?> completer = Completer();
+}
+
+/// How one pass of a slot push ended.
+enum _SlotPush { committed, displaced, failed }
+
+/// A BLE connect that Stop or a newer connect took over (#997).
+class _ConnectSuperseded implements Exception {
+  const _ConnectSuperseded();
 }

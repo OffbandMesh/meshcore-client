@@ -2,6 +2,93 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.7.0] - 2026-10-26
+
+Production successor to 1.6.0. A foundations release: per-message storage with a
+one-way schema upgrade, radio-profile isolation, sync-is-truth contacts, custom contact
+names, region scoping, a Settings restructure, and CLI for stock 1.18 companions.
+
+### Storage (one-way upgrade, schema 1 to 2)
+
+- History stored **one drift row per message** with a verified blob-to-rows
+  migration; save cost no longer grows with history (#917, #920).
+- Blob read-modify-write, DM save merges, and both delete paths moved **off the UI
+  isolate** (#919).
+- A newer schema is **refused loudly** instead of rewriting the version; the migration
+  gate asserts a superset, so keys with extra rows no longer stay stuck (#943, #952).
+- **Stale blob reclamation**: per-key migration timestamps, an automatic sweep after
+  30 days, a durable audit of what it deleted, and **Clear Stale History Now** in App
+  Settings > Storage that reports refusals (#962, #965, #966).
+- Earlier versions cannot open a schema-2 database; disclosed in the release texts
+  (#953).
+
+### Radio-profile isolation (#853)
+
+- Scoping inventory with a verdict gate, and repros of the remaining bleeds (#936).
+- Path history and delivery observations per radio; dead `pending_messages` API
+  removed (#937).
+- Discovered contacts per radio (#754); a blank radio is no longer pre-blocked from
+  another radio's list (#471); Blocked pane says "No radio connected" (#938).
+- Storage scope keys cleared on an unexpected disconnect, closing the stale-read window
+  (#939); full isolation matrix across a radio switch and a restart (#940).
+- Channel notify modes scoped per radio, index fallback removed, set-and-back resets
+  (#839, #848).
+
+### Contacts
+
+- **Sync is truth**: live adverts (0x8A, 0x88) feed discovery only; the persisted list
+  comes from the radio's contact sync, with a debounced incremental reconcile when an
+  advert matches the radio's auto-add policy (#838, #842, #850).
+- **Custom Name**: `customName` over `receivedName`, kept off the wire and out of
+  exports and contact shares, scoped per radio (#750).
+
+### Region scoping (#812)
+
+- Region model and name-derived transport key; flood-scope frames and anon-regions
+  discovery, gated on `FIRMWARE_VER_CODE >= 13` (#813, #820, #821, #822).
+- Discover Regions service and screen (#814, #825, #826); per-channel region-scope
+  store, Set Region Scope action, and per-send scoping (#815, #829, #830, #831).
+- Hardware fixes: searchable, path-aware repeater picker; corrected discovery request
+  format, multi-hop reply path, firmware-estimate timeout, one auto-retry (#830, #836).
+
+### Settings and badge parity (#975)
+
+- Location is a top-level category and the only home for GPS (#977); Button actions in
+  Node Settings, Buzzer and tones in Message Settings (#978).
+- Over 0xC5, capability-gated: GPS mode and power-save interval (#969), event tones
+  (#986), custom tunes with RTTTL order check and Fix order (#970), screen settings
+  (#971, #987), channel tune codec (#981). Requires Offband firmware not yet released.
+- Config import/export, GPX exports, and "Sync queued messages now" moved to Actions;
+  Debug reordered (#902).
+
+### CLI (stock 1.18 companions)
+
+- Population classifier and capability-gate rework (#866, #875, #876, #877, #878,
+  #880); stock 1.18.0 classified by frame shape, not version suffix (#946).
+- Companion CLI codec (frame 66/29), local CLI service, and Device CLI console
+  (#868, #881, #882, #883, #884).
+- Remote CLI to companions: contact permission flag 0x10, role-based TXT type, command
+  service generalized to companions, inbound type 3, CLI kept out of chat, console
+  offered only on a 1.18 radio (#870, #887, #888, #889, #890, #891, #999).
+
+### Bluetooth and stability
+
+- Bounded, interruptible auto-reconnect: 5 attempts or 3 minutes, Stop ends it, a user
+  connect wins; a connect waits for a disconnect still in progress (#996, #997).
+- Windows: use-after-free crash on app close fixed (#989).
+- ANR and exit-record capture via ApplicationExitInfo, shipped with the exported log
+  (Android 11+) (#906, #910, #931).
+
+### Fixes
+
+- Channel hop counts decoded from the packed path-len byte, so 2- and 3-byte path
+  hashes render the right hop count (#985).
+
+### CI
+
+- CI no longer reports a pass without running; Linux pinned to ubuntu-24.04 (#927,
+  #929); docs-only changes short-circuit the required checks (#904, #905).
+
 ## [1.6.0] - 2026-10-05
 
 First stable release of the 1.5.0 line and the production successor to 1.4.0. A large

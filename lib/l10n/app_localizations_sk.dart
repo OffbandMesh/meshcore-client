@@ -81,6 +81,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get common_retry => 'Pokusť znova';
 
   @override
+  String get common_stop => 'Stop';
+
+  @override
   String get common_hide => 'Skryť';
 
   @override
@@ -262,6 +265,20 @@ class AppLocalizationsSk extends AppLocalizations {
   String get scanner_notConnected => 'Nezriadené';
 
   @override
+  String scanner_reconnecting(String deviceName, int attempt, int maxAttempts) {
+    return 'Reconnecting to $deviceName (attempt $attempt of $maxAttempts)';
+  }
+
+  @override
+  String scanner_reconnectGaveUp(String deviceName) {
+    return 'Couldn\'t reach $deviceName';
+  }
+
+  @override
+  String get connectBusy =>
+      'Busy with another connection. Try again in a moment.';
+
+  @override
   String scanner_connectedTo(String deviceName) {
     return 'Pripojené k $deviceName';
   }
@@ -328,6 +345,60 @@ class AppLocalizationsSk extends AppLocalizations {
   String get device_meshcore => 'MeshCore';
 
   @override
+  String get deviceCli_title => 'Device CLI';
+
+  @override
+  String get deviceCli_remoteTitle => 'Remote CLI';
+
+  @override
+  String get deviceCli_entrySubtitle => 'Run commands on the connected radio';
+
+  @override
+  String deviceCli_nameRejected(String chars) {
+    return 'Not sent - name can\'t contain: $chars';
+  }
+
+  @override
+  String get deviceCli_commandHint => 'command...';
+
+  @override
+  String get deviceCli_emptyHint => 'Commands run on the connected device';
+
+  @override
+  String deviceCli_noReply(String command, String seconds) {
+    return '$command: no reply in $seconds s';
+  }
+
+  @override
+  String deviceCli_remoteNoReply(String command, String seconds) {
+    return '$command: no reply in $seconds s. This radio may not allow remote CLI from you, or is unreachable. Not retried.';
+  }
+
+  @override
+  String deviceCli_remoteUnsupported(String command) {
+    return '$command: not sent. Your radio\'s firmware doesn\'t support remote CLI.';
+  }
+
+  @override
+  String deviceCli_sendFailed(String error) {
+    return 'Send failed: $error';
+  }
+
+  @override
+  String get deviceCli_truncatedByDevice => 'reply truncated by the device';
+
+  @override
+  String get deviceCli_secretLongPressToCopy => 'secret, long-press to copy';
+
+  @override
+  String get deviceCli_secretCopied => 'Secret copied to clipboard';
+
+  @override
+  String deviceCli_latencyMs(int ms) {
+    return '$ms ms';
+  }
+
+  @override
   String get settings_title => 'Nastavenia';
 
   @override
@@ -361,6 +432,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get settings_nodeNameUpdated => 'Meno aktualizované';
+
+  @override
+  String settings_nodeNameInvalidChars(String chars) {
+    return 'Name can\'t contain: $chars';
+  }
+
+  @override
+  String get settings_syncQueuedMessages => 'Sync queued messages now';
+
+  @override
+  String get settings_syncQueuedMessagesSubtitle =>
+      'Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.';
+
+  @override
+  String get settings_syncQueuedMessagesRequested =>
+      'Requested queued-message drain (force)';
 
   @override
   String get settings_radioSettings => 'Nastavenia rádia';
@@ -439,6 +526,156 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get settings_longitude => 'Dĺžka';
+
+  @override
+  String get settings_locationCategorySubtitle =>
+      'GPS, coordinates, and reporting';
+
+  @override
+  String get settings_locationCoordinates => 'Coordinates';
+
+  @override
+  String get settings_locationNotSet => 'Not set';
+
+  @override
+  String get settings_locationReportInterval => 'Position reporting interval';
+
+  @override
+  String settings_locationEveryMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Every $minutes minutes',
+      one: 'Every minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_locationEverySeconds(int seconds) {
+    return 'Every $seconds seconds';
+  }
+
+  @override
+  String get settings_gpsModeLabel => 'GPS';
+
+  @override
+  String get settings_gpsModeOff => 'Off';
+
+  @override
+  String get settings_gpsModeOn => 'On';
+
+  @override
+  String get settings_gpsModePowerSave => 'Power save';
+
+  @override
+  String get settings_gpsActivityOff => 'GPS is off';
+
+  @override
+  String get settings_gpsActivityOn => 'GPS is on';
+
+  @override
+  String get settings_gpsActivitySearching => 'Searching for a fix';
+
+  @override
+  String get settings_gpsActivitySleeping => 'Sleeping between fixes';
+
+  @override
+  String get settings_gpsActivityBackedOff => 'Backed off';
+
+  @override
+  String get settings_gpsOffDetail => 'Showing the last stored position';
+
+  @override
+  String settings_gpsNextTryMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Next try in $minutes min',
+      one: 'Next try in 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_gpsNextTrySeconds(int seconds) {
+    return 'Next try in $seconds s';
+  }
+
+  @override
+  String settings_gpsLastFixMinutes(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Last fix $minutes min ago',
+      one: 'Last fix 1 min ago',
+      zero: 'Last fix just now',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settings_gpsSatellites(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count satellites',
+      one: '1 satellite',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settings_gpsQuery => 'Query';
+
+  @override
+  String get settings_gpsReading => 'Reading GPS settings…';
+
+  @override
+  String get settings_gpsSleepTitle => 'Sleep between fix attempts';
+
+  @override
+  String get settings_gpsSleepDefault => 'Firmware default, minimum 5 minutes';
+
+  @override
+  String get settings_gpsSleepFieldLabel => 'Seconds between attempts';
+
+  @override
+  String get settings_gpsSleepFieldHint =>
+      '0 for the firmware default. The radio raises anything under 300 to 300.';
+
+  @override
+  String get settings_gpsSleepInvalid =>
+      'Enter a whole number of seconds, 0 or more.';
+
+  @override
+  String get settings_buttonActions => 'Button actions';
+
+  @override
+  String get settings_buttonActionsSubtitle => 'Assign what the button does';
+
+  @override
+  String get settings_badgeScreen => 'Screen';
+
+  @override
+  String get settings_badgeScreenSubtitle => 'Text size, screen off, time zone';
+
+  @override
+  String get settings_badgeBattery => 'Battery';
+
+  @override
+  String settings_badgeBatterySubtitle(int mv) {
+    return '100% at $mv mV';
+  }
+
+  @override
+  String get settings_badgeBatteryReading => 'Reading from the radio';
+
+  @override
+  String get settings_buzzerTones => 'Buzzer and tones';
+
+  @override
+  String get settings_buzzerTonesSubtitle => 'When this radio beeps';
 
   @override
   String get settings_contactSettings => 'Nastavenia kontaktov';
@@ -1242,6 +1479,32 @@ class AppLocalizationsSk extends AppLocalizations {
   String get contact_info => 'Kontaktné informácie';
 
   @override
+  String get contact_rename => 'Rename';
+
+  @override
+  String get contact_renameTitle => 'Custom name';
+
+  @override
+  String get contact_renameHint => 'Your name for this node';
+
+  @override
+  String get contact_renameExplain =>
+      'Only you see this. The node keeps its own name, and adverts keep that up to date.';
+
+  @override
+  String get contact_renameClear => 'Clear';
+
+  @override
+  String contact_renameTooLong(int max) {
+    return 'Keep it under $max characters';
+  }
+
+  @override
+  String contact_nodeCallsItself(String name) {
+    return 'Node name: $name';
+  }
+
+  @override
   String get contact_settings => 'Nastavenia kontaktov';
 
   @override
@@ -1272,6 +1535,16 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get contact_teleEnvSubtitle =>
       'Povoliť zdieľanie údajov senzorov prostredia';
+
+  @override
+  String get contact_remoteCli => 'Remote CLI';
+
+  @override
+  String get contact_remoteCliSubtitle =>
+      'Let this contact run CLI commands on your radio';
+
+  @override
+  String get contact_cliConsole => 'CLI console';
 
   @override
   String get channels_title => 'Kanály';
@@ -4990,6 +5263,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get block_none => 'No blocked users';
 
   @override
+  String get block_noRadio => 'No radio connected';
+
+  @override
+  String get block_noRadioHint =>
+      'Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.';
+
+  @override
   String get block_keysSection => 'Blocked contacts';
 
   @override
@@ -5282,4 +5562,125 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get discoverRegions_title => 'Discover Regions';
+
+  @override
+  String get discoverRegions_subtitle =>
+      'Find the flood regions this repeater carries.';
+
+  @override
+  String discoverRegions_loading(String name) {
+    return 'Discovering regions from $name...';
+  }
+
+  @override
+  String discoverRegions_source(String name) {
+    return 'Regions carried by $name';
+  }
+
+  @override
+  String discoverRegions_empty(String name) {
+    return '$name advertises no flood regions.';
+  }
+
+  @override
+  String discoverRegions_timeout(String name) {
+    return 'No response from $name. The repeater may be out of range.';
+  }
+
+  @override
+  String get discoverRegions_error => 'Could not discover regions.';
+
+  @override
+  String get discoverRegions_retry => 'Retry';
+
+  @override
+  String get setRegionScope_menu => 'Set Region Scope';
+
+  @override
+  String setRegionScope_title(String channel) {
+    return 'Region scope for $channel';
+  }
+
+  @override
+  String get setRegionScope_discover => 'Discover from repeater';
+
+  @override
+  String get setRegionScope_none => 'None (unscoped)';
+
+  @override
+  String get setRegionScope_save => 'Save';
+
+  @override
+  String get setRegionScope_searchRepeaters => 'Search repeaters';
+
+  @override
+  String get setRegionScope_pathNote =>
+      'You can only discover regions from a repeater you have a stored path to.';
+
+  @override
+  String get setRegionScope_noPath => 'No stored path';
+
+  @override
+  String get storage_title => 'Storage';
+
+  @override
+  String storage_databaseSize(String size) {
+    return 'Message database: $size';
+  }
+
+  @override
+  String get storage_staleHint =>
+      'When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.';
+
+  @override
+  String get storage_clearStaleNow => 'Clear Stale History Now';
+
+  @override
+  String get storage_working => 'Clearing...';
+
+  @override
+  String get storage_resultNothing => 'Nothing to clear.';
+
+  @override
+  String storage_resultCleared(int count, String size) {
+    return 'Cleared $count old copies, $size returned.';
+  }
+
+  @override
+  String storage_resultRefused(int count) {
+    return 'Kept $count that could not be verified. Your messages are intact; nothing was deleted for those.';
+  }
+
+  @override
+  String get storage_confirmTitle => 'Clear stale history?';
+
+  @override
+  String storage_confirmBody(int count, String size) {
+    return 'This removes $count old copies of history that has already moved to the new format, freeing about $size.';
+  }
+
+  @override
+  String storage_confirmSafe(int count) {
+    return 'Your messages are not affected. All $count stay.';
+  }
+
+  @override
+  String get storage_confirmIrreversible => 'This cannot be undone.';
+
+  @override
+  String storage_confirmKeptBack(int count) {
+    return '$count will be kept back because its messages could not be verified. This cannot be undone.';
+  }
+
+  @override
+  String storage_confirmAction(int count) {
+    return 'Clear $count copies';
+  }
+
+  @override
+  String get storage_resultFailed =>
+      'Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.';
 }

@@ -8,23 +8,28 @@
 // These tests pin the contract that no reply is ever dropped silently.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/services/repeater_command_service.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Contact _repeater() => Contact(
+Contact _contact({required int type}) => Contact(
   publicKey: Uint8List.fromList(List<int>.generate(32, (i) => i)),
-  name: 'Test Repeater',
-  type: 2,
+  receivedName: 'Test',
+  type: type,
   pathLength: 0,
   path: Uint8List(0),
   lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
 );
+
+Contact _repeater() => _contact(type: advTypeRepeater);
+Contact _companion() => _contact(type: advTypeChat);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -272,6 +277,43 @@ void main() {
         reason: 'ambiguity must be surfaced, never guessed at',
       );
       expect(surfaced.single.command, isNull);
+    });
+  });
+
+  group('target split: message type by role (#889)', () {
+    // Drives a real send and reads the TXT type byte off the captured frame.
+    // Frame: [cmd][type][attempt][ts x4][pubKey x6][command...]; the cc| prefix
+    // leads the command at offset 13.
+    Future<int> sentTypeFor(Contact target) async {
+      final connector = MeshCoreConnector();
+      // Fires the moment the CLI send frame goes out, so the test is
+      // deterministic rather than racing a fixed delay. The send path emits a
+      // contact-path-update frame first; the CLI command is the
+      // CMD_SEND_TXT_MSG frame.
+      final cliSent = Completer<Uint8List>();
+      connector.sendFrameOverrideForTest = (f) {
+        if (!cliSent.isCompleted && f.isNotEmpty && f[0] == cmdSendTxtMsg) {
+          cliSent.complete(f);
+        }
+      };
+      connector.setConnectedForTest();
+      final svc = RepeaterCommandService(connector);
+      final future = svc.sendCommand(target, 'get radio', retries: 1);
+      final frame = await cliSent.future;
+      // Complete the command so sendCommand resolves (feed the reflected prefix).
+      final prefix = ascii.decode(frame.sublist(13, 16));
+      svc.handleResponse(target, '${prefix}ok');
+      await future;
+      svc.dispose();
+      return frame[1];
+    }
+
+    test('a companion target gets the 1.18 command type', () async {
+      expect(await sentTypeFor(_companion()), txtTypeCliCommand);
+    });
+
+    test('a repeater target keeps the universal CLI_DATA type', () async {
+      expect(await sentTypeFor(_repeater()), txtTypeCliData);
     });
   });
 }

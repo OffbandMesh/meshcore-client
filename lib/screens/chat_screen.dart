@@ -38,6 +38,7 @@ import '../widgets/elements_ui.dart';
 import '../widgets/mention_autocomplete.dart';
 import '../helpers/emoji_shortcodes.dart';
 import 'channel_message_path_screen.dart';
+import 'device_cli_screen.dart';
 import 'map_screen.dart';
 import '../utils/emoji_utils.dart';
 import '../widgets/emoji_picker.dart';
@@ -353,6 +354,15 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     );
                   }
+                  if (value == 'cliConsole') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            DeviceCliScreen(remoteContact: widget.contact),
+                      ),
+                    );
+                  }
                   if (value == 'clearChat') {
                     connector.clearMessagesForContact(widget.contact);
                   }
@@ -402,6 +412,22 @@ class _ChatScreenState extends State<ChatScreen> {
                         ],
                       ),
                     ),
+                    // Remote CLI is a companion feature (#999), and the
+                    // connected radio must speak the 1.18 CLI to send it.
+                    if (DeviceCliScreen.offersRemoteConsole(
+                      contact: widget.contact,
+                      classification: connector.classification,
+                    ))
+                      PopupMenuItem(
+                        value: 'cliConsole',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.terminal, size: 20),
+                            const SizedBox(width: 12),
+                            Text(context.l10n.contact_cliConsole),
+                          ],
+                        ),
+                      ),
                     PopupMenuItem(
                       value: 'clearChat',
                       child: Row(
@@ -1536,7 +1562,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final canTranslateMessage =
         translationService.canTranslateIncoming(
           text: message.text,
-          isCli: message.isCli,
+          // A received command is a CLI string, never translate it (#890).
+          isCli: message.isCli || message.isCliCommand,
           isOutgoing: message.isOutgoing,
         ) &&
         (message.translatedText?.trim().isEmpty ?? true);

@@ -165,7 +165,7 @@ void main() {
   group('Contact share URI emit (#626)', () {
     Contact stub(String name, int type) => Contact(
       publicKey: hex2Uint8List(_key),
-      name: name,
+      receivedName: name,
       type: type,
       pathLength: -1,
       path: Uint8List(0),
@@ -232,7 +232,7 @@ void main() {
   group('Compact channel contact share (#611)', () {
     Contact stub(String name, int type) => Contact(
       publicKey: hex2Uint8List(_key),
-      name: name,
+      receivedName: name,
       type: type,
       pathLength: -1,
       path: Uint8List(0),

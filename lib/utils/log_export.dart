@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../l10n/l10n.dart';
+import '../services/app_exit_info_service.dart';
 import '../services/file_log_service.dart';
 import 'log_web_download.dart';
 
@@ -66,14 +67,39 @@ class LogExport {
     // possibly-deactivated widget after the await.
     final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
-    final file = await FileLogService.instance.flushAndGetActiveFile();
+    // On mobile, take every log file rather than just the active one, and the
+    // ANR traces with them (#906). Two reasons: a trace lives beside the log
+    // rather than inside it, and a pointer line written once at startup can
+    // rotate into `.1.log` before the user exports, which would hand over a
+    // trace with its metadata line missing. Desktop keeps its single-file Save
+    // As: there are no exit records off Android.
+    final List<File> logs;
+    if (_isMobile) {
+      logs = await FileLogService.instance.flushAndGetAllFiles();
+    } else {
+      final active = await FileLogService.instance.flushAndGetActiveFile();
+      logs = active == null ? const <File>[] : <File>[active];
+    }
+    final candidates = <File>[
+      ...logs,
+      if (_isMobile) ...await AppExitInfoService.traceFiles(),
+    ];
+    // Last-moment existence check. Rotation renames files underneath us and a
+    // trace can be pruned, so a path collected a moment ago may already be
+    // gone; handing a missing path to the share sheet fails the whole export
+    // rather than one attachment.
+    final present = <File>[];
+    for (final f in candidates) {
+      if (await f.exists()) present.add(f);
+    }
     await _exportFile(
       messenger,
-      file: file,
+      file: present.isEmpty ? null : present.first,
       fileName: _defaultFileName,
       subject: l10n.debugLog_shareSubject,
       unavailableMessage: l10n.debugLog_logUnavailable,
       savedMessage: l10n.debugLog_logSaved,
+      extraFiles: present.skip(1).toList(),
     );
   }
 
@@ -104,6 +130,7 @@ class LogExport {
     required String subject,
     required String unavailableMessage,
     required String savedMessage,
+    List<File> extraFiles = const [],
   }) async {
     if (file == null) {
       messenger.showSnackBar(SnackBar(content: Text(unavailableMessage)));
@@ -111,7 +138,13 @@ class LogExport {
     }
     if (_isMobile) {
       await SharePlus.instance.share(
-        ShareParams(subject: subject, files: [XFile(file.path)]),
+        ShareParams(
+          subject: subject,
+          files: [
+            XFile(file.path),
+            for (final extra in extraFiles) XFile(extra.path),
+          ],
+        ),
       );
       return;
     }

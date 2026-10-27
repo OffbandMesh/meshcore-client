@@ -28,7 +28,10 @@ import '../models/translation_support.dart';
 import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
 import '../services/corescope_service.dart';
+import '../services/region_discovery_service.dart';
+import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_tone.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
 import '../services/translation_service.dart';
@@ -320,6 +323,46 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     );
   }
 
+  /// Open the Set Region Scope picker for the current channel (#815).
+  Future<void> _openRegionScopeDialog() async {
+    final connector = context.read<MeshCoreConnector>();
+    final channelIndex = _currentChannel.index;
+    final current = await connector.channelRegionScope(channelIndex);
+    final repeaters = connector.contacts
+        .where((c) => c.type == advTypeRepeater)
+        .map(
+          (c) => RepeaterChoice(
+            name: c.name,
+            pubKey: c.publicKey,
+            // A direct (0-hop) repeater has pathLength 0 and an empty path and
+            // is reachable (the best case). Only pathLength -1 (flood/unknown)
+            // has no usable route, so only that is treated as "no path".
+            hasPath: c.pathLength >= 0,
+          ),
+        )
+        .toList();
+    final service = RegionDiscoveryService(
+      (pub, timeout) =>
+          connector.discoverRegions(repeaterPubKey: pub, timeout: timeout),
+    );
+    if (!mounted) {
+      service.dispose();
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => ChannelRegionScopeDialog(
+        channelName: _currentChannel.name,
+        currentScope: current,
+        repeaters: repeaters,
+        service: service,
+        onSave: (region) =>
+            connector.setChannelRegionScope(channelIndex, region),
+      ),
+    );
+    service.dispose();
+  }
+
   /// Switch to another channel picked from the nav panel.
   ///
   /// Swaps the conversation in place rather than pushing a route, so a pinned
@@ -431,10 +474,16 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             onSelected: (value) {
               if (value == 'notifications') {
                 showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'radioTone') {
+                final connector = context.read<MeshCoreConnector>();
+                requestChannelRadioTone(connector, _currentChannel.index);
+                showChannelRadioToneDialog(context, _currentChannel);
               } else if (value == 'clearChat') {
                 context.read<MeshCoreConnector>().clearMessagesForChannel(
                   _currentChannel.index,
                 );
+              } else if (value == 'setRegionScope') {
+                _openRegionScopeDialog();
               }
             },
             itemBuilder: (context) => [
@@ -445,8 +494,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                     Icon(
                       channelNotifyModeIcon(
                         context.read<AppSettingsService>().channelNotifyMode(
-                          identityKey: channelNotifyKeyFor(widget.channel),
-                          channelName: widget.channel.name,
+                          devicePrefix: context
+                              .read<MeshCoreConnector>()
+                              .selfPublicKeyHex,
+                          pskHex: widget.channel.pskHex,
                         ),
                       ),
                       size: 20,
@@ -456,6 +507,28 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   ],
                 ),
               ),
+              if (context.read<MeshCoreConnector>().supportsTunes)
+                const PopupMenuItem(
+                  value: 'radioTone',
+                  child: Row(
+                    children: [
+                      Icon(Icons.music_note_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Radio tone'),
+                    ],
+                  ),
+                ),
+              if (context.read<MeshCoreConnector>().supportsRegionScope)
+                PopupMenuItem(
+                  value: 'setRegionScope',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.travel_explore, size: 20),
+                      const SizedBox(width: 12),
+                      Text(context.l10n.setRegionScope_menu),
+                    ],
+                  ),
+                ),
               PopupMenuItem(
                 value: 'clearChat',
                 child: Row(
@@ -869,7 +942,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   Widget _buildMessageBubble(ChannelMessage message, double textScale) {
     final settingsService = context.watch<AppSettingsService>();
     final enableTracing = settingsService.settings.enableMessageTracing;
-    final hashWidth = context.read<MeshCoreConnector>().pathHashByteWidth;
+    // The packet's own hash width; device-wide mode only for legacy records
+    // with no stored path-len byte (#985).
+    final hashWidth = message.effectivePathHashWidth(
+      context.read<MeshCoreConnector>().pathHashByteWidth,
+    );
     final isOutgoing = message.isOutgoing;
     final gifUrl = GifHelper.resolveGifUrl(message.text);
     final gifReplyName = gifUrl != null
@@ -1710,8 +1787,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   /// truncated with … to fit the channel byte budget, fired directly. (#106)
   void _sendRouteReply(ChannelMessage message) {
     final connector = context.read<MeshCoreConnector>();
-    final w = connector.pathHashByteWidth;
-    final hops = message.pathBytes.length ~/ (w < 1 ? 1 : w);
+    final w = message.effectivePathHashWidth(connector.pathHashByteWidth);
+    // Same number the hop badge shows; byte division is only the fallback for
+    // records with no decodable path-len byte (#985).
+    final decodedHops = message.hopCount;
+    final hops = (decodedHops != null && decodedHops >= 0)
+        ? decodedHops
+        : message.pathBytes.length ~/ w;
     final prefix =
         '@[${message.senderName}] ↩ ${context.l10n.chat_hopsCount(hops)} · via ';
     final maxBytes = maxChannelMessageBytes(

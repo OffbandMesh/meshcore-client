@@ -27,6 +27,7 @@ import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channel_chat_screen.dart';
@@ -490,8 +491,8 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     final parentContext = context;
     final settingsService = context.read<AppSettingsService>();
     final notifyMode = settingsService.channelNotifyMode(
-      identityKey: channelNotifyKeyFor(channel),
-      channelName: channel.name,
+      devicePrefix: connector.selfPublicKeyHex,
+      pskHex: channel.pskHex,
     );
 
     showModalBottomSheet(
@@ -531,6 +532,18 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 await Future.delayed(const Duration(milliseconds: 100));
                 if (parentContext.mounted) {
                   showChannelNotifyModeDialog(parentContext, channel);
+                }
+              },
+            ),
+            // The radio's own tone for this channel (#971), named apart from
+            // Notifications, which is the phone's. Gated on caps byte 2 0x10.
+            ChannelRadioToneTile(
+              channel: channel,
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await Future.delayed(const Duration(milliseconds: 100));
+                if (parentContext.mounted) {
+                  showChannelRadioToneDialog(parentContext, channel);
                 }
               },
             ),

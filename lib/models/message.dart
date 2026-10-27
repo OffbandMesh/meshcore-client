@@ -13,6 +13,11 @@ class Message {
   final DateTime timestamp;
   final bool isOutgoing;
   final bool isCli;
+
+  /// True when this is an inbound remote-CLI COMMAND (TXT type 3) another
+  /// contact sent to run on our radio, as opposed to [isCli] (a CLI data
+  /// reply). Rendered distinctly and never SMAZ-decoded (#890).
+  final bool isCliCommand;
   final MessageStatus status;
   final String? originalText;
   final String? translatedText;
@@ -68,6 +73,7 @@ class Message {
     required this.timestamp,
     required this.isOutgoing,
     this.isCli = false,
+    this.isCliCommand = false,
     this.status = MessageStatus.pending,
     String? messageId,
     this.originalText,
@@ -113,6 +119,7 @@ class Message {
     int? pathLength,
     Uint8List? pathBytes,
     bool? isCli,
+    bool? isCliCommand,
     Object? originalText = _unset,
     Object? translatedText = _unset,
     Object? translatedLanguageCode = _unset,
@@ -133,6 +140,7 @@ class Message {
       timestamp: timestamp,
       isOutgoing: isOutgoing,
       isCli: isCli ?? this.isCli,
+      isCliCommand: isCliCommand ?? this.isCliCommand,
       status: status ?? this.status,
       messageId: messageId,
       originalText: originalText == _unset

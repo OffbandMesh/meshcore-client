@@ -16,7 +16,7 @@ Contact _contact({
   }
   return Contact(
     publicKey: key,
-    name: name,
+    receivedName: name,
     type: type,
     pathLength: 0,
     path: Uint8List(0),

@@ -274,6 +274,12 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get common_retry;
 
+  /// No description provided for @common_stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get common_stop;
+
   /// No description provided for @common_hide.
   ///
   /// In en, this message translates to:
@@ -592,6 +598,24 @@ abstract class AppLocalizations {
   /// **'Not connected'**
   String get scanner_notConnected;
 
+  /// No description provided for @scanner_reconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to {deviceName} (attempt {attempt} of {maxAttempts})'**
+  String scanner_reconnecting(String deviceName, int attempt, int maxAttempts);
+
+  /// No description provided for @scanner_reconnectGaveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach {deviceName}'**
+  String scanner_reconnectGaveUp(String deviceName);
+
+  /// No description provided for @connectBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Busy with another connection. Try again in a moment.'**
+  String get connectBusy;
+
   /// No description provided for @scanner_connectedTo.
   ///
   /// In en, this message translates to:
@@ -700,6 +724,90 @@ abstract class AppLocalizations {
   /// **'MeshCore'**
   String get device_meshcore;
 
+  /// No description provided for @deviceCli_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Device CLI'**
+  String get deviceCli_title;
+
+  /// Title of the CLI console when it targets a remote companion contact (#999); the contact's name is the subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CLI'**
+  String get deviceCli_remoteTitle;
+
+  /// No description provided for @deviceCli_entrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Run commands on the connected radio'**
+  String get deviceCli_entrySubtitle;
+
+  /// Console row when a `set name` command is blocked client-side; {chars} is the offending characters, space-separated.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent - name can\'t contain: {chars}'**
+  String deviceCli_nameRejected(String chars);
+
+  /// No description provided for @deviceCli_commandHint.
+  ///
+  /// In en, this message translates to:
+  /// **'command...'**
+  String get deviceCli_commandHint;
+
+  /// No description provided for @deviceCli_emptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands run on the connected device'**
+  String get deviceCli_emptyHint;
+
+  /// No description provided for @deviceCli_noReply.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: no reply in {seconds} s'**
+  String deviceCli_noReply(String command, String seconds);
+
+  /// Console row when a remote-CLI command to a companion times out (#891). A companion that has not granted remote CLI simply never replies, so this explains the silence and that the command was sent once, not retried.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: no reply in {seconds} s. This radio may not allow remote CLI from you, or is unreachable. Not retried.'**
+  String deviceCli_remoteNoReply(String command, String seconds);
+
+  /// Console row when the connected radio refuses to send a remote-CLI command because its firmware predates TXT_TYPE_CLI_COMMAND (#999). Nothing was transmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: not sent. Your radio\'s firmware doesn\'t support remote CLI.'**
+  String deviceCli_remoteUnsupported(String command);
+
+  /// No description provided for @deviceCli_sendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Send failed: {error}'**
+  String deviceCli_sendFailed(String error);
+
+  /// No description provided for @deviceCli_truncatedByDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'reply truncated by the device'**
+  String get deviceCli_truncatedByDevice;
+
+  /// No description provided for @deviceCli_secretLongPressToCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'secret, long-press to copy'**
+  String get deviceCli_secretLongPressToCopy;
+
+  /// No description provided for @deviceCli_secretCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret copied to clipboard'**
+  String get deviceCli_secretCopied;
+
+  /// No description provided for @deviceCli_latencyMs.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String deviceCli_latencyMs(int ms);
+
   /// No description provided for @settings_title.
   ///
   /// In en, this message translates to:
@@ -765,6 +873,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Name updated'**
   String get settings_nodeNameUpdated;
+
+  /// Shown when a device name contains characters the firmware rejects; {chars} is the offending characters, space-separated.
+  ///
+  /// In en, this message translates to:
+  /// **'Name can\'t contain: {chars}'**
+  String settings_nodeNameInvalidChars(String chars);
+
+  /// No description provided for @settings_syncQueuedMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync queued messages now'**
+  String get settings_syncQueuedMessages;
+
+  /// No description provided for @settings_syncQueuedMessagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.'**
+  String get settings_syncQueuedMessagesSubtitle;
+
+  /// No description provided for @settings_syncQueuedMessagesRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Requested queued-message drain (force)'**
+  String get settings_syncQueuedMessagesRequested;
 
   /// No description provided for @settings_radioSettings.
   ///
@@ -909,6 +1041,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Longitude'**
   String get settings_longitude;
+
+  /// No description provided for @settings_locationCategorySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS, coordinates, and reporting'**
+  String get settings_locationCategorySubtitle;
+
+  /// No description provided for @settings_locationCoordinates.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates'**
+  String get settings_locationCoordinates;
+
+  /// No description provided for @settings_locationNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settings_locationNotSet;
+
+  /// No description provided for @settings_locationReportInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Position reporting interval'**
+  String get settings_locationReportInterval;
+
+  /// No description provided for @settings_locationEveryMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{Every minute} other{Every {minutes} minutes}}'**
+  String settings_locationEveryMinutes(int minutes);
+
+  /// No description provided for @settings_locationEverySeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {seconds} seconds'**
+  String settings_locationEverySeconds(int seconds);
+
+  /// No description provided for @settings_gpsModeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS'**
+  String get settings_gpsModeLabel;
+
+  /// No description provided for @settings_gpsModeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settings_gpsModeOff;
+
+  /// No description provided for @settings_gpsModeOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get settings_gpsModeOn;
+
+  /// No description provided for @settings_gpsModePowerSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Power save'**
+  String get settings_gpsModePowerSave;
+
+  /// No description provided for @settings_gpsActivityOff.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is off'**
+  String get settings_gpsActivityOff;
+
+  /// No description provided for @settings_gpsActivityOn.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is on'**
+  String get settings_gpsActivityOn;
+
+  /// No description provided for @settings_gpsActivitySearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for a fix'**
+  String get settings_gpsActivitySearching;
+
+  /// No description provided for @settings_gpsActivitySleeping.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleeping between fixes'**
+  String get settings_gpsActivitySleeping;
+
+  /// No description provided for @settings_gpsActivityBackedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed off'**
+  String get settings_gpsActivityBackedOff;
+
+  /// No description provided for @settings_gpsOffDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the last stored position'**
+  String get settings_gpsOffDetail;
+
+  /// No description provided for @settings_gpsNextTryMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{Next try in 1 min} other{Next try in {minutes} min}}'**
+  String settings_gpsNextTryMinutes(int minutes);
+
+  /// No description provided for @settings_gpsNextTrySeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Next try in {seconds} s'**
+  String settings_gpsNextTrySeconds(int seconds);
+
+  /// No description provided for @settings_gpsLastFixMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =0{Last fix just now} =1{Last fix 1 min ago} other{Last fix {minutes} min ago}}'**
+  String settings_gpsLastFixMinutes(int minutes);
+
+  /// No description provided for @settings_gpsSatellites.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 satellite} other{{count} satellites}}'**
+  String settings_gpsSatellites(int count);
+
+  /// No description provided for @settings_gpsQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'Query'**
+  String get settings_gpsQuery;
+
+  /// No description provided for @settings_gpsReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading GPS settings…'**
+  String get settings_gpsReading;
+
+  /// No description provided for @settings_gpsSleepTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep between fix attempts'**
+  String get settings_gpsSleepTitle;
+
+  /// No description provided for @settings_gpsSleepDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware default, minimum 5 minutes'**
+  String get settings_gpsSleepDefault;
+
+  /// No description provided for @settings_gpsSleepFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds between attempts'**
+  String get settings_gpsSleepFieldLabel;
+
+  /// No description provided for @settings_gpsSleepFieldHint.
+  ///
+  /// In en, this message translates to:
+  /// **'0 for the firmware default. The radio raises anything under 300 to 300.'**
+  String get settings_gpsSleepFieldHint;
+
+  /// No description provided for @settings_gpsSleepInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of seconds, 0 or more.'**
+  String get settings_gpsSleepInvalid;
+
+  /// No description provided for @settings_buttonActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Button actions'**
+  String get settings_buttonActions;
+
+  /// No description provided for @settings_buttonActionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign what the button does'**
+  String get settings_buttonActionsSubtitle;
+
+  /// No description provided for @settings_badgeScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen'**
+  String get settings_badgeScreen;
+
+  /// No description provided for @settings_badgeScreenSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Text size, screen off, time zone'**
+  String get settings_badgeScreenSubtitle;
+
+  /// No description provided for @settings_badgeBattery.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get settings_badgeBattery;
+
+  /// No description provided for @settings_badgeBatterySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'100% at {mv} mV'**
+  String settings_badgeBatterySubtitle(int mv);
+
+  /// No description provided for @settings_badgeBatteryReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading from the radio'**
+  String get settings_badgeBatteryReading;
+
+  /// No description provided for @settings_buzzerTones.
+  ///
+  /// In en, this message translates to:
+  /// **'Buzzer and tones'**
+  String get settings_buzzerTones;
+
+  /// No description provided for @settings_buzzerTonesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'When this radio beeps'**
+  String get settings_buzzerTonesSubtitle;
 
   /// No description provided for @settings_contactSettings.
   ///
@@ -2314,6 +2662,48 @@ abstract class AppLocalizations {
   /// **'Contact Info'**
   String get contact_info;
 
+  /// No description provided for @contact_rename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get contact_rename;
+
+  /// No description provided for @contact_renameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom name'**
+  String get contact_renameTitle;
+
+  /// No description provided for @contact_renameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name for this node'**
+  String get contact_renameHint;
+
+  /// No description provided for @contact_renameExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you see this. The node keeps its own name, and adverts keep that up to date.'**
+  String get contact_renameExplain;
+
+  /// No description provided for @contact_renameClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get contact_renameClear;
+
+  /// No description provided for @contact_renameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep it under {max} characters'**
+  String contact_renameTooLong(int max);
+
+  /// No description provided for @contact_nodeCallsItself.
+  ///
+  /// In en, this message translates to:
+  /// **'Node name: {name}'**
+  String contact_nodeCallsItself(String name);
+
   /// No description provided for @contact_settings.
   ///
   /// In en, this message translates to:
@@ -2373,6 +2763,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow sharing environment sensor data'**
   String get contact_teleEnvSubtitle;
+
+  /// No description provided for @contact_remoteCli.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CLI'**
+  String get contact_remoteCli;
+
+  /// No description provided for @contact_remoteCliSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let this contact run CLI commands on your radio'**
+  String get contact_remoteCliSubtitle;
+
+  /// Chat app-bar menu action on a companion contact that opens the remote CLI console targeting that contact (#999).
+  ///
+  /// In en, this message translates to:
+  /// **'CLI console'**
+  String get contact_cliConsole;
 
   /// No description provided for @channels_title.
   ///
@@ -8506,6 +8914,18 @@ abstract class AppLocalizations {
   /// **'No blocked users'**
   String get block_none;
 
+  /// No description provided for @block_noRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'No radio connected'**
+  String get block_noRadio;
+
+  /// No description provided for @block_noRadioHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.'**
+  String get block_noRadioHint;
+
   /// No description provided for @block_keysSection.
   ///
   /// In en, this message translates to:
@@ -8979,6 +9399,192 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 saved contact is no longer on the radio.} other{{count} saved contacts are no longer on the radio.}}'**
   String contactSyncConfirmedGone(int count);
+
+  /// No description provided for @discoverRegions_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover Regions'**
+  String get discoverRegions_title;
+
+  /// No description provided for @discoverRegions_subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the flood regions this repeater carries.'**
+  String get discoverRegions_subtitle;
+
+  /// No description provided for @discoverRegions_loading.
+  ///
+  /// In en, this message translates to:
+  /// **'Discovering regions from {name}...'**
+  String discoverRegions_loading(String name);
+
+  /// No description provided for @discoverRegions_source.
+  ///
+  /// In en, this message translates to:
+  /// **'Regions carried by {name}'**
+  String discoverRegions_source(String name);
+
+  /// No description provided for @discoverRegions_empty.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} advertises no flood regions.'**
+  String discoverRegions_empty(String name);
+
+  /// No description provided for @discoverRegions_timeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No response from {name}. The repeater may be out of range.'**
+  String discoverRegions_timeout(String name);
+
+  /// No description provided for @discoverRegions_error.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not discover regions.'**
+  String get discoverRegions_error;
+
+  /// No description provided for @discoverRegions_retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get discoverRegions_retry;
+
+  /// No description provided for @setRegionScope_menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Region Scope'**
+  String get setRegionScope_menu;
+
+  /// No description provided for @setRegionScope_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Region scope for {channel}'**
+  String setRegionScope_title(String channel);
+
+  /// No description provided for @setRegionScope_discover.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover from repeater'**
+  String get setRegionScope_discover;
+
+  /// No description provided for @setRegionScope_none.
+  ///
+  /// In en, this message translates to:
+  /// **'None (unscoped)'**
+  String get setRegionScope_none;
+
+  /// No description provided for @setRegionScope_save.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get setRegionScope_save;
+
+  /// No description provided for @setRegionScope_searchRepeaters.
+  ///
+  /// In en, this message translates to:
+  /// **'Search repeaters'**
+  String get setRegionScope_searchRepeaters;
+
+  /// No description provided for @setRegionScope_pathNote.
+  ///
+  /// In en, this message translates to:
+  /// **'You can only discover regions from a repeater you have a stored path to.'**
+  String get setRegionScope_pathNote;
+
+  /// No description provided for @setRegionScope_noPath.
+  ///
+  /// In en, this message translates to:
+  /// **'No stored path'**
+  String get setRegionScope_noPath;
+
+  /// No description provided for @storage_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get storage_title;
+
+  /// Current size of the message database on this device (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Message database: {size}'**
+  String storage_databaseSize(String size);
+
+  /// Explains what the Clear Stale History action does (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.'**
+  String get storage_staleHint;
+
+  /// No description provided for @storage_clearStaleNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Stale History Now'**
+  String get storage_clearStaleNow;
+
+  /// No description provided for @storage_working.
+  ///
+  /// In en, this message translates to:
+  /// **'Clearing...'**
+  String get storage_working;
+
+  /// No description provided for @storage_resultNothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to clear.'**
+  String get storage_resultNothing;
+
+  /// Result of a successful stale-history clear (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared {count} old copies, {size} returned.'**
+  String storage_resultCleared(int count, String size);
+
+  /// Reported when the clear kept a copy back because its messages could not be verified against the new format (#962, owner decision: the button reports refusals rather than only logging them).
+  ///
+  /// In en, this message translates to:
+  /// **'Kept {count} that could not be verified. Your messages are intact; nothing was deleted for those.'**
+  String storage_resultRefused(int count);
+
+  /// No description provided for @storage_confirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear stale history?'**
+  String get storage_confirmTitle;
+
+  /// Body of the confirmation shown before clearing stale history. The size is approximate because VACUUM's real figure depends on page rounding (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'This removes {count} old copies of history that has already moved to the new format, freeing about {size}.'**
+  String storage_confirmBody(int count, String size);
+
+  /// Reassurance in the clear confirmation: this deletes duplicate copies, not history (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Your messages are not affected. All {count} stay.'**
+  String storage_confirmSafe(int count);
+
+  /// No description provided for @storage_confirmIrreversible.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone.'**
+  String get storage_confirmIrreversible;
+
+  /// Shown when the preview already knows a copy will be refused, so the user hears it before the press rather than after (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'{count} will be kept back because its messages could not be verified. This cannot be undone.'**
+  String storage_confirmKeptBack(int count);
+
+  /// Confirm button. Carries the count so the scope is the last thing read before the tap (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Clear {count} copies'**
+  String storage_confirmAction(int count);
+
+  /// Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.'**
+  String get storage_resultFailed;
 }
 
 class _AppLocalizationsDelegate

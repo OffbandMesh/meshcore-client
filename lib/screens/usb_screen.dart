@@ -315,8 +315,12 @@ class _UsbScreenState extends State<UsbScreen> {
   Future<void> _pollHotPlug() async {
     if (_isLoadingPorts) return;
     if (!mounted) return;
-    // Don't poll while connecting or connected.
-    if (_connector.state != MeshCoreConnectionState.disconnected) return;
+    // Don't poll while connecting or connected, unless that is only an
+    // automatic BLE retry the user can preempt from this screen (#997).
+    if (_connector.state != MeshCoreConnectionState.disconnected &&
+        !_connector.isAutoReconnecting) {
+      return;
+    }
     try {
       final ports = await _connector.listUsbPorts();
       if (!mounted) return;
@@ -361,7 +365,17 @@ class _UsbScreenState extends State<UsbScreen> {
   }
 
   Future<void> _connectPort(String port) async {
-    if (_connector.state != MeshCoreConnectionState.disconnected) return;
+    // An automatic BLE retry yields to this connect (#997). Anything else
+    // that holds the connection is said out loud, never dropped silently.
+    if (_connector.state != MeshCoreConnectionState.disconnected &&
+        !_connector.isAutoReconnecting) {
+      appLogger.warn(
+        'Connect tap for $port ignored: connection is ${_connector.state}',
+        tag: 'UsbScreen',
+      );
+      showDismissibleSnackBar(context, content: Text(context.l10n.connectBusy));
+      return;
+    }
 
     final rawPortName = normalizeUsbPortName(port);
     appLogger.info(

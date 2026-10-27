@@ -8,10 +8,23 @@ import 'drift/blob_store.dart';
 class ContactDiscoveryStore {
   static const String _keyPrefix = 'discovered_contacts';
 
+  /// First 10 hex of the connected radio's key, like every other per-radio
+  /// store. Discovered contacts are what THIS radio heard, so they are scoped
+  /// per radio and never shared across radios on the same host (#754). The
+  /// legacy unscoped `discovered_contacts` blob is left orphaned; the list
+  /// self-heals as each radio re-hears adverts.
+  String publicKeyHex = '';
+  set setPublicKeyHex(String value) =>
+      publicKeyHex = value.length > 10 ? value.substring(0, 10) : '';
+
+  String get _keyFor => '$_keyPrefix$publicKeyHex';
+
   Future<List<Contact>> loadContacts() async {
+    // No connected radio -> no list (never the shared/legacy blob).
+    if (publicKeyHex.isEmpty) return [];
     // Bulk data lives in drift (#335), not SharedPreferences. The fallback
     // covers a key the migration has not moved yet and logs loudly if it fires.
-    final jsonStr = await BlobStore.instance.readWithPrefsFallback(_keyPrefix);
+    final jsonStr = await BlobStore.instance.readWithPrefsFallback(_keyFor);
     if (jsonStr == null) return [];
 
     try {
@@ -30,14 +43,20 @@ class ContactDiscoveryStore {
   }
 
   Future<void> saveContacts(List<Contact> contacts) async {
+    // No connected radio -> don't write an unscoped/shared blob.
+    if (publicKeyHex.isEmpty) return;
     final jsonList = contacts.map(_toJson).toList();
-    await BlobStore.instance.write(_keyPrefix, jsonEncode(jsonList));
+    await BlobStore.instance.write(_keyFor, jsonEncode(jsonList));
   }
 
   Map<String, dynamic> _toJson(Contact contact) {
     return {
       'publicKey': base64Encode(contact.publicKey),
-      'name': contact.name,
+      // The RECEIVED name, never `contact.name`. Same one-way data loss as
+      // `contact_store`: the getter would persist a user label into this key
+      // and the next load would read it back as what the node calls itself.
+      // (#750)
+      'name': contact.receivedName,
       'type': contact.type,
       'flags': contact.flags,
       'pathLength': contact.pathLength,
@@ -63,7 +82,8 @@ class ContactDiscoveryStore {
     final lastModifiedMs = json['lastModified'] as int?;
     return Contact(
       publicKey: Uint8List.fromList(base64Decode(json['publicKey'] as String)),
-      name: json['name'] as String? ?? 'Unknown',
+      // Fallback retained for the same reason as `contact_store`. (T31)
+      receivedName: json['name'] as String? ?? 'Unknown',
       type: json['type'] as int? ?? 0,
       flags: json['flags'] as int? ?? 0,
       pathLength: json['pathLength'] as int? ?? -1,

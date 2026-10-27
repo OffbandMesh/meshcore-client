@@ -11,7 +11,7 @@ import 'package:meshcore_open/models/contact.dart';
 /// namesake case the UI must never resolve on the user's behalf.
 Contact _contact(String name, int keyByte, {int type = advTypeChat}) => Contact(
   publicKey: Uint8List.fromList(List<int>.filled(32, keyByte)),
-  name: name,
+  receivedName: name,
   type: type,
   pathLength: -1,
   path: Uint8List(0),

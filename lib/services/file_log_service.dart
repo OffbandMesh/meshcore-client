@@ -73,6 +73,28 @@ class FileLogService {
     return _writer?.activeFile;
   }
 
+  /// Flush pending lines and return every log file on disk, newest first.
+  ///
+  /// The export needs all of them, not just the active one: a line written once
+  /// at startup, such as an exit-record pointer, can rotate into `.1.log` after
+  /// a couple of MiB of ordinary logging, and the rotated files were previously
+  /// unreachable so that context was simply lost (#906). Empty when file logging
+  /// is unavailable.
+  Future<List<File>> flushAndGetAllFiles() async {
+    await _flush();
+    final w = _writer;
+    if (w == null) return const [];
+    try {
+      return await w.existingFiles();
+    } catch (_) {
+      // Degrade to the active file rather than failing the export outright:
+      // this is the logger, so it cannot report its own listing failure
+      // anywhere, and handing over one log beats handing over none.
+      final active = w.activeFile;
+      return await active.exists() ? <File>[active] : const <File>[];
+    }
+  }
+
   /// Cancel the periodic flush and flush once more. The singleton normally lives
   /// for the app's lifetime; this is for a clean shutdown / tests.
   Future<void> dispose() async {

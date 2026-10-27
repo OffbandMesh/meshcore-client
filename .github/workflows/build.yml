@@ -8,19 +8,83 @@ on:
   pull_request:
 
 jobs:
-  android:
+  # #904: decides whether this change touches only documentation. Plain git,
+  # no third-party actions - the merge gate must not grow a supply-chain
+  # dependency. Every build job below still RUNS (so all required check names
+  # report), but short-circuits its steps to an honest success when the diff
+  # is docs-only. A wrong classification must only ever waste a build, never
+  # skip one, so every ambiguous case classifies as code.
+  classify:
     runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: diff
+        run: |
+          set -eu
+          # No override, by design (#927). The #904 spike added an env flag
+          # that forced docs_only=true, it reached dev, and for every PR after
+          # it the build and test jobs reported pass in a few seconds having
+          # built nothing. A switch that turns every merge gate in the repo
+          # into a no-op, silently, is not worth the convenience of testing
+          # this job against itself.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # checkout hands us the PR merge commit; parent 1 is the current
+            # base tip, so this is exactly the PR's effective diff.
+            git diff --name-only HEAD^1 HEAD > changed.txt
+          else
+            before="${{ github.event.before }}"
+            if [ "$before" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$before" 2>/dev/null; then
+              echo "no usable before-SHA; classifying as code"
+              echo "docs_only=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git diff --name-only "$before" "${{ github.sha }}" > changed.txt
+          fi
+          echo "changed files:"
+          cat changed.txt
+          if [ ! -s changed.txt ]; then
+            echo "empty diff; classifying as code"
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_only=true
+          while IFS= read -r f; do
+            case "$f" in
+              *.md) ;;
+              docs/*) ;;
+              LICENSE) ;;
+              .github/ISSUE_TEMPLATE/*) ;;
+              *) docs_only=false; echo "not docs: $f"; break ;;
+            esac
+          done < changed.txt
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+  android:
+    runs-on: ubuntu-latest
+    needs: classify
+    steps:
+      - name: "Docs-only change: android build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
+      - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: actions/setup-java@v4
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           distribution: "temurin"
           java-version: "17"
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - name: Cache Gradle
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -30,13 +94,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Write dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
       - run: flutter build apk --release --no-pub --dart-define-from-file=dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Upload APK
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: offband-android-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -46,36 +115,67 @@ jobs:
 
   ios:
     runs-on: macos-latest
+    needs: classify
     steps:
+      - name: "Docs-only change: ios build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       - run: flutter build ios --release --no-codesign --no-pub
+        if: needs.classify.outputs.docs_only != 'true'
 
   linux:
-    runs-on: ubuntu-latest
+    # PINNED, not ubuntu-latest (#929). GitHub moved ubuntu-latest from 24.04
+    # to 26.04 on 2026-10-19, and 26.04's glibc headers clash with the vendored
+    # native sources: "typedef redefinition with different types ('__once_flag'
+    # vs 'int')" plus "conflicting types for 'pthread_once'", two seconds into
+    # the native compile. The same commit built on 24.04 that morning.
+    #
+    # This buys time, it does not fix anything: 24.04 images get retired, and
+    # the header conflict has to be resolved before that. #929 carries the real
+    # fix. The other ubuntu jobs pass on 26.04 and stay on ubuntu-latest.
+    runs-on: ubuntu-24.04
+    needs: classify
     steps:
+      - name: "Docs-only change: linux build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - name: Install Linux build deps
+        if: needs.classify.outputs.docs_only != 'true'
         run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Write dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
       - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter config --enable-native-assets
       - run: flutter build linux --release --no-pub --dart-define-from-file=dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Upload Linux bundle
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: offband-linux-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -85,34 +185,55 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    needs: classify
     steps:
+      - name: "Docs-only change: macos build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter config --enable-native-assets
       - run: flutter build macos --release --no-pub
+        if: needs.classify.outputs.docs_only != 'true'
 
   web:
     runs-on: ubuntu-latest
+    needs: classify
     steps:
+      - name: "Docs-only change: web build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Write dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
       - run: flutter build web --release --no-pub --dart-define-from-file=dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Upload web build
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: offband-web-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -122,26 +243,38 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    needs: classify
     steps:
+      - name: "Docs-only change: windows build short-circuited (#904)"
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
       - uses: subosito/flutter-action@v2
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           flutter-version: "3.44.1"
           cache: true
       - run: flutter pub get
+        if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
+        if: needs.classify.outputs.docs_only != 'true'
       # Windows runner defaults to PowerShell; jq is not guaranteed there,
       # so build the JSON with ConvertTo-Json, which escapes correctly.
       - name: Write dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: |
           @{ GIPHY_API_KEY = $env:GIPHY_API_KEY } | ConvertTo-Json -Compress |
             Set-Content -Path dart_defines.json -Encoding utf8 -NoNewline
       - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        if: needs.classify.outputs.docs_only != 'true'
         run: flutter config --enable-native-assets
       - run: flutter build windows --release --no-pub --dart-define-from-file=dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
       - name: Upload Windows build
+        if: needs.classify.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: offband-windows-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}

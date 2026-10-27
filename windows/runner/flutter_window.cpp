@@ -11,7 +11,27 @@
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
-FlutterWindow::~FlutterWindow() {}
+FlutterWindow::~FlutterWindow() {
+  // Destroy the controller with the member ALREADY null. (#984)
+  //
+  // This destructor is reached without OnDestroy() having run whenever the
+  // message loop ends before the window is destroyed. windowManager.destroy()
+  // does exactly that: in window_manager 0.5.2, Destroy() is only
+  // PostQuitMessage(0), so WM_DESTROY is never sent and OnDestroy()'s safe
+  // reset never happens.
+  //
+  // Left to the member destructor, the controller was deleted by
+  // ~unique_ptr, which in MSVC does NOT null the pointer first (reset() does).
+  // While the engine tore down, the still-live top-level window received a
+  // message, MessageHandler saw a non-null flutter_controller_, and forwarded
+  // into the half-destroyed view: FlutterWindowsView::GetEngine read freed
+  // memory and the app crashed on close.
+  //
+  // Moving it out leaves flutter_controller_ null for the whole teardown, so
+  // MessageHandler's guard holds no matter which path ended the loop.
+  auto controller = std::move(flutter_controller_);
+  controller.reset();
+}
 
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {

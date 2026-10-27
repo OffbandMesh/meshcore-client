@@ -259,6 +259,10 @@ const int cmdImportPrivateKey = 24;
 const int txtTypePlain = 0;
 const int txtTypeCliData = 1;
 const int txtTypeSigned = 2;
+// Remote CLI command to a companion (upstream 1.18, TXT_TYPE_CLI_COMMAND).
+// Repeaters/room servers treat it exactly like CLI_DATA; a pre-1.18 or
+// Offband-pre-absorb companion silently drops it (surfaced as no reply).
+const int txtTypeCliCommand = 3;
 
 // Repeater request types (for server requests)
 const int reqTypeGetStatus = 0x01;
@@ -552,6 +556,15 @@ const int offbandCapBlock = 0x02;
 /// FEM-bearing boards report false today.
 const int offbandCapFemLna = 0x04;
 
+// POPULATION INVARIANT (#875-#877): every `offbandCaps`-anchored gate below is
+// safe against stock 1.18+ devices ONLY because the connector nulls the caps
+// bytes unless the population classifier corroborates the fork layout
+// (device_population.dart). The ver-code floors in these gates are FORK
+// contract numbers; stock reuses 14+ with different meanings, so a bare
+// `firmwareVerCode >=` comparison may only be added for codes BELOW 14
+// (pre-split, same meaning everywhere: see supportsCompanionRadioStats >= 8
+// and firmwareSupportsRegionScope >= 13) or behind a caps-anchored gate here.
+
 bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
     offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
 
@@ -592,6 +605,37 @@ bool firmwareSupportsButtonMatrix(int? offbandCaps2) =>
 /// True iff this radio advertises a settable device notification scope (#475).
 bool firmwareSupportsNotifyScope(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2NotifyScope) != 0;
+
+/// The tune system over `0xC5` (#970, #971, #986): custom slots (0x09, 0x0A,
+/// 0x12), channel tune (0x0B, 0x0C), event tones (0x0F, 0x10) and preview
+/// (0x11). Firmware sets it where the UI plays every sound through its tune
+/// engine, which needs a buzzer but is not implied by one, so a radio can
+/// advertise the scope bit without this (meshcore-firmware `f3d30a88`).
+const int offbandCap2Tunes = 0x10;
+
+/// GPS mode and Power-save interval over `0xC5` sub-codes 0x0D / 0x0E (#969).
+/// Firmware sets it where `ENV_INCLUDE_GPS == 1` (meshcore-firmware#1789).
+///
+/// It says the radio speaks the GPS sub-codes, NOT that it can run Power save:
+/// the duty cycle is compiled per variant, and every GPS reply carries `ps_ok`
+/// for that. Never offer Power save from this bit alone.
+const int offbandCap2GpsMode = 0x20;
+
+/// The badge's own display and battery settings over `0xC5` 0x13 to 0x17
+/// (#987): text sizes, Screen off, time zone, battery full point.
+const int offbandCap2ScreenSettings = 0x40;
+
+/// True iff this radio answers the `0xC5` tune sub-codes.
+bool firmwareSupportsTunes(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2Tunes) != 0;
+
+/// True iff this radio answers the `0xC5` screen-settings sub-codes (#987).
+bool firmwareSupportsScreenSettings(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2ScreenSettings) != 0;
+
+/// True iff this radio answers the `0xC5` GPS-mode sub-codes (#969).
+bool firmwareSupportsGpsMode(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2GpsMode) != 0;
 
 bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
     offbandCaps != null &&
@@ -665,6 +709,176 @@ OffbandPktHash? parseOffbandPktHashReply(Uint8List frame) {
       .map((b) => b.toRadixString(16).padLeft(2, '0'))
       .join();
   return OffbandPktHash(timestamp: ts, channelIdx: chan, hashHex: hashHex);
+}
+
+// --- Region flood-scoping + regions discovery (Feature #812, Epic #813).
+//
+// Stock MeshCore companion frames, verified against firmware source:
+//  - CMD_SET_FLOOD_SCOPE_KEY 54 (companion MyMesh.cpp:3512): sub-0 sets a 16-byte
+//    send-scope override ([54,0,key16]) or clears it to the node default ([54,0]);
+//    sub-1 ([54,1]) forces unscoped sends (FIRMWARE_VER_CODE 12+).
+//  - CMD_SET_DEFAULT_FLOOD_SCOPE 63 (MyMesh.cpp:3523): [63,name:31,key:16] sets
+//    the node default, bare [63] clears it.
+//  - CMD_GET_DEFAULT_FLOOD_SCOPE 64 (MyMesh.cpp:3540) -> RESP_CODE_DEFAULT_FLOOD_SCOPE
+//    28: bare [28] = none, or [28,name:31,key:16].
+//  - Discovery is an ANON request: CMD_SEND_ANON_REQ 57 carrying
+//    [timestamp:4][ANON_REQ_TYPE_REGIONS 0x01][reply_path_len] (companion
+//    MyMesh.cpp:3114; repeater simple_repeater MyMesh.cpp:586-607,150-163). The
+//    repeater replies region names as a CSV; the companion forwards it to the app
+//    as PUSH_CODE_BINARY_RESPONSE 0x8C: [0x8C,0,tag:4,clock:4,CSV]. The tag is the
+//    request timestamp the firmware echoes in RESP_CODE_SENT.
+const int cmdSetFloodScopeKey = 54;
+const int cmdSetDefaultFloodScope = 63;
+const int cmdGetDefaultFloodScope = 64;
+const int respCodeDefaultFloodScope = 28;
+const int anonReqTypeRegions = 0x01;
+const int floodScopeSubSetKey = 0x00;
+const int floodScopeSubUnscoped = 0x01;
+
+/// Byte length of the on-wire region transport key and the default-scope name
+/// field (firmware `TransportKey::key` and `default_scope_name`).
+const int regionKeyLength = 16;
+const int defaultScopeNameField = 31;
+
+/// True iff the connected firmware supports region flood-scoping and regions
+/// discovery. Floor is `FIRMWARE_VER_CODE` 13: `CMD_SEND_ANON_REQ` accepts a
+/// non-contact repeater recipient at 13+ (companion `MyMesh.cpp:3118`), the path
+/// regions discovery relies on; `CMD_SET_FLOOD_SCOPE_KEY` sub-0 is older (8+) and
+/// sub-1 unscoped is 12+, both covered by 13. Fail-closed: the client must never
+/// emit a region frame when this is false. (#813)
+bool firmwareSupportsRegionScope(int? firmwareVerCode) =>
+    (firmwareVerCode ?? 0) >= 13;
+
+/// Regions-discovery ANON request to [repeaterPubKey] (32 bytes). Wire after
+/// the pubkey: `[ANON_REQ_TYPE_REGIONS 0x01][reply_path_len]`.
+///
+/// The firmware's `sendAnonReq` (BaseChatMesh) prepends its OWN 4-byte tag to
+/// this payload before transmit, and returns that tag in `RESP_CODE_SENT`; the
+/// repeater echoes it in the `0x8C` reply. So the client must NOT add a
+/// timestamp/tag here: doing so shifts the request-type byte and the repeater
+/// reads it as a login request, never regions (D1 bug, #836). Correlate the
+/// reply by the `RESP_CODE_SENT` tag, not a client value.
+///
+/// [replyPathLenByte] is the firmware packed path-len byte and [replyPath] the
+/// matching hop-hash bytes: the repeater routes its reply back along this path
+/// as-is (MeshCore paths are bidirectional, Mesh.cpp:176-177), so pass the
+/// repeater contact's own stored path for a multi-hop reply. An empty path
+/// (`replyPathLenByte = 0`) is zero-hop, which only reaches an adjacent repeater.
+Uint8List buildAnonRegionsRequestFrame(
+  Uint8List repeaterPubKey, {
+  int replyPathLenByte = 0,
+  Uint8List? replyPath,
+}) {
+  final writer = BufferWriter();
+  writer.writeByte(cmdSendAnonReq);
+  writer.writeBytes(repeaterPubKey);
+  writer.writeByte(anonReqTypeRegions);
+  writer.writeByte(replyPathLenByte & 0xFF);
+  if (replyPath != null && replyPath.isNotEmpty) writer.writeBytes(replyPath);
+  return writer.toBytes();
+}
+
+/// Set the companion's flood send-scope override to [key], applied to subsequent
+/// sends until cleared. Wire: `[54][0][key16]`. (FIRMWARE_VER_CODE 8+)
+Uint8List buildSetFloodScopeKeyFrame(Uint8List key) {
+  final padded = Uint8List(regionKeyLength);
+  padded.setRange(0, min(key.length, regionKeyLength), key);
+  final writer = BufferWriter();
+  writer.writeByte(cmdSetFloodScopeKey);
+  writer.writeByte(floodScopeSubSetKey);
+  writer.writeBytes(padded);
+  return writer.toBytes();
+}
+
+/// Clear the flood send-scope override, reverting to the node default scope.
+/// Wire: `[54][0]`. (FIRMWARE_VER_CODE 8+)
+Uint8List buildClearFloodScopeFrame() =>
+    Uint8List.fromList([cmdSetFloodScopeKey, floodScopeSubSetKey]);
+
+/// Force subsequent sends unscoped (no flood scope). Wire: `[54][1]`.
+/// (FIRMWARE_VER_CODE 12+)
+Uint8List buildFloodScopeUnscopedFrame() =>
+    Uint8List.fromList([cmdSetFloodScopeKey, floodScopeSubUnscoped]);
+
+/// Set the node default flood scope to ([name],[key]). Wire:
+/// `[63][name:31 NUL-padded][key:16]`. Firmware requires a name of 1..30 bytes.
+Uint8List buildSetDefaultFloodScopeFrame(String name, Uint8List key) {
+  final padded = Uint8List(regionKeyLength);
+  padded.setRange(0, min(key.length, regionKeyLength), key);
+  final writer = BufferWriter();
+  writer.writeByte(cmdSetDefaultFloodScope);
+  writer.writeCString(name, defaultScopeNameField);
+  writer.writeBytes(padded);
+  return writer.toBytes();
+}
+
+/// Clear the node default flood scope. Wire: `[63]`.
+Uint8List buildClearDefaultFloodScopeFrame() =>
+    Uint8List.fromList([cmdSetDefaultFloodScope]);
+
+/// Query the node default flood scope. Wire: `[64]` -> RESP 28.
+Uint8List buildGetDefaultFloodScopeFrame() =>
+    Uint8List.fromList([cmdGetDefaultFloodScope]);
+
+/// A node's default flood scope, from a `RESP_CODE_DEFAULT_FLOOD_SCOPE` (28)
+/// reply. [name] is empty when the node has no default scope set.
+class DefaultFloodScope {
+  const DefaultFloodScope({required this.name, required this.key});
+  final String name;
+  final Uint8List key;
+
+  bool get isSet => name.isNotEmpty;
+}
+
+/// Parse a `RESP_CODE_DEFAULT_FLOOD_SCOPE` (28) reply. Returns null when [frame]
+/// is not a RESP 28; otherwise a [DefaultFloodScope] whose [name] is empty when
+/// the node reports no default (bare `[28]`).
+DefaultFloodScope? parseDefaultFloodScopeReply(Uint8List frame) {
+  if (frame.isEmpty || frame[0] != respCodeDefaultFloodScope) return null;
+  if (frame.length < 1 + defaultScopeNameField + regionKeyLength) {
+    return DefaultFloodScope(name: '', key: Uint8List(0));
+  }
+  final reader = BufferReader(frame);
+  reader.readByte(); // resp code
+  final name = reader.readCStringGreedy(defaultScopeNameField);
+  final key = reader.readBytes(regionKeyLength);
+  return DefaultFloodScope(name: name, key: key);
+}
+
+/// A regions-discovery reply parsed from a `PUSH_CODE_BINARY_RESPONSE` (0x8C)
+/// envelope: `[0x8C][0][tag:4][clock:4][CSV names]`. [tag] matches the
+/// firmware-chosen tag returned in `RESP_CODE_SENT` for the request; names are
+/// `#`-stripped and comma-separated, with `*` marking a wildcard.
+class RegionsReply {
+  const RegionsReply({
+    required this.tag,
+    required this.clock,
+    required this.regionNames,
+  });
+  final int tag;
+  final int clock;
+  final List<String> regionNames;
+}
+
+/// Parse a `0x8C` frame as a regions reply. Returns null for a short or non-0x8C
+/// frame. An empty name list is a valid reply (a repeater flooding no regions),
+/// never a parse error. Callers match [RegionsReply.tag] to a request they sent;
+/// `0x8C` is a generic binary-response envelope, so only interpret it as regions
+/// for a tag that was a regions request.
+RegionsReply? parseRegionsReply(Uint8List frame) {
+  if (frame.length < 10 || frame[0] != pushCodeBinaryResponse) return null;
+  final reader = BufferReader(frame);
+  reader.readByte(); // 0x8C
+  reader.readByte(); // reserved
+  final tag = reader.readUInt32LE();
+  final clock = reader.readUInt32LE();
+  final csv = reader.readCString();
+  final names = csv
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  return RegionsReply(tag: tag, clock: clock, regionNames: names);
 }
 
 const int statsTypeCore = 0;
@@ -811,6 +1025,11 @@ const int contactFlagFavorite = 0x01;
 const int contactFlagTeleBase = 0x02; // 'base' permission includes battery
 const int contactFlagTeleLoc = 0x04;
 const int contactFlagTeleEnv = 0x08; //access environment sensors
+// 0x10 (isRemoteCLIAllowed): this contact may run remote CLI (TXT type 3)
+// commands on our radio. The receiving side checks it, so setting it here grants
+// the contact permission to command THIS device. [verified: BaseChatMesh.cpp /
+// MyMesh.cpp companion at companion-v1.18.0; INVESTIGATION.md section A]
+const int contactFlagRemoteCliAllowed = 0x10;
 const int contactPathLenOffset = 35;
 const int contactPathOffset = 36;
 const int contactNameOffset = 100;
@@ -829,7 +1048,17 @@ const int msgTextOffset = 38;
 class ParsedContactText {
   final Uint8List senderPrefix;
   final String text;
-  const ParsedContactText({required this.senderPrefix, required this.text});
+
+  /// The raw TXT type byte (plain 0, CLI_DATA 1, signed 2, CLI_COMMAND 3).
+  /// Some layouts carry it shifted left by 2; compare with both the raw value
+  /// and `txtType >> 2`, as the receive path does.
+  final int txtType;
+
+  const ParsedContactText({
+    required this.senderPrefix,
+    required this.text,
+    required this.txtType,
+  });
 }
 
 ParsedContactText? parseContactMessageText(Uint8List frame) {
@@ -862,7 +1091,11 @@ ParsedContactText? parseContactMessageText(Uint8List frame) {
     final text = message.readCString();
     if (text.isEmpty) return null;
 
-    return ParsedContactText(senderPrefix: senderPrefix, text: text);
+    return ParsedContactText(
+      senderPrefix: senderPrefix,
+      text: text,
+      txtType: textType,
+    );
   } catch (e) {
     debugPrint('Error parsing contact message text: $e');
     return null;
@@ -922,6 +1155,19 @@ int pathHashSizeBytes(int pathLenRaw) => ((pathLenRaw >> 6) & 0x03) + 1;
 /// Byte length of the hop-hash array described by a raw path-length byte.
 int pathByteLength(int pathLenRaw) =>
     pathHopCount(pathLenRaw) * pathHashSizeBytes(pathLenRaw);
+
+/// Merges two stored path-len values for repeats of one message: both are the
+/// raw packed byte (or the -1 flood sentinel / null when unknown), and the one
+/// with the higher decoded hop count wins. Never feed a path BYTE length in
+/// here: at 2/3-byte hash widths it is 2-3x the hop count and decodes as a
+/// bogus width-1 count, which is how a 13-hop message rendered as 39 (#985).
+int? mergePathLenRaw(int? existing, int? incoming) {
+  if (existing == null) return incoming;
+  if (incoming == null) return existing;
+  if (existing < 0) return incoming;
+  if (incoming < 0) return existing;
+  return pathHopCount(existing) >= pathHopCount(incoming) ? existing : incoming;
+}
 
 /// Packs a hop count and per-hop hash width into the firmware path-length byte.
 ///
@@ -1402,20 +1648,30 @@ int calculateMessageTimeout({
 
 // Build CLI command text message frame (companion_radio format)
 // Format: [cmd][txt_type][attempt][timestamp x4][pub_key_prefix x6][text...]\0
+/// The CLI txt type for a command sent to a peer of [contactType] (#888).
+/// Decided by ROLE, not firmware version: a companion (chat) takes the 1.18
+/// command type; a repeater/room server takes the universal CLI_DATA type it
+/// has always used. A Contact carries no version, and a non-1.18 companion
+/// silently drops the command type, so role is both sufficient and safe. A
+/// later refinement could pin a peer's version with a `ver` probe on connect.
+int cliTxtTypeForContactType(int contactType) =>
+    contactType == advTypeChat ? txtTypeCliCommand : txtTypeCliData;
+
 Uint8List buildSendCliCommandFrame(
-  Uint8List repeaterPubKey,
+  Uint8List peerPubKey,
   String command, {
   int attempt = 0,
   int? timestampSeconds,
+  int txtType = txtTypeCliData,
 }) {
   final timestamp =
       timestampSeconds ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
   final writer = BufferWriter();
   writer.writeByte(cmdSendTxtMsg);
-  writer.writeByte(txtTypeCliData);
+  writer.writeByte(txtType);
   writer.writeByte(attempt.clamp(0, 255));
   writer.writeUInt32LE(timestamp);
-  writer.writeBytes(repeaterPubKey.sublist(0, 6));
+  writer.writeBytes(peerPubKey.sublist(0, 6));
   writer.writeString(command);
   writer.writeByte(0);
   return writer.toBytes();

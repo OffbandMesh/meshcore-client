@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import '../models/message.dart';
 import '../models/translation_support.dart';
 import '../helpers/reaction_helper.dart';
@@ -7,6 +7,80 @@ import '../helpers/smaz.dart';
 import '../utils/app_logger.dart';
 import 'drift/blob_store.dart';
 import 'prefs_manager.dart';
+
+/// Merges a DM history blob with an incoming batch, entirely in JSON.
+///
+/// Top-level and free of any instance state so `compute` can send it to
+/// another isolate (#919). Both arguments and the result are JSON strings, so
+/// only two strings cross the isolate boundary rather than the object graph.
+///
+/// Throws if [stored] is not decodable. That is deliberate: `mergeOffThread`
+/// turns the throw into a refused write, which keeps an unreadable blob intact
+/// instead of replacing a whole history with just the incoming batch.
+String mergeDmHistoryJson((String?, String) input) {
+  final (stored, incomingJson) = input;
+  final byKey = <String, Message>{};
+
+  if (stored != null && stored.isNotEmpty) {
+    for (final e in jsonDecode(stored) as List<dynamic>) {
+      final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+      byKey[MessageStore._mergeKey(m)] = m;
+    }
+  }
+
+  for (final e in jsonDecode(incomingJson) as List<dynamic>) {
+    final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+    byKey[MessageStore._mergeKey(m)] = m;
+  }
+
+  final merged = byKey.values.toList()
+    ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  return jsonEncode(merged.map(MessageStore._messageToJson).toList());
+}
+
+/// Drops the record whose merge key is `target` from a DM history blob.
+///
+/// `input` is `(storedJson, targetMergeKey)`. Returns null, so nothing is
+/// written, when there is no history or the target is not in it. Throws on
+/// undecodable stored JSON, which `mergeOffThread` turns into a refused write.
+String? dropFromDmHistoryJson((String?, String) input) {
+  final (stored, target) = input;
+  if (stored == null || stored.isEmpty) return null;
+
+  final kept = <Message>[];
+  var removed = false;
+  for (final e in jsonDecode(stored) as List<dynamic>) {
+    final m = MessageStore._messageFromJson(e as Map<String, dynamic>);
+    if (MessageStore._mergeKey(m) == target) {
+      removed = true;
+    } else {
+      kept.add(m);
+    }
+  }
+  if (!removed) return null;
+
+  return jsonEncode(kept.map(MessageStore._messageToJson).toList());
+}
+
+/// Converts a whole DM-history blob into one row per message (#920).
+///
+/// Top-level so `compute` can send it. One row per source element, with no
+/// dedupe and no sorting: the migration counts the blob independently and does
+/// its own deduping, so doing either here would defeat its gate.
+List<MessageRowInput> dmHistoryToRows(String blobJson) {
+  return (jsonDecode(blobJson) as List<dynamic>).map((e) {
+    final map = e as Map<String, dynamic>;
+    final m = MessageStore._messageFromJson(map);
+    return MessageRowInput(
+      mergeKey: MessageStore._mergeKey(m),
+      timestampMs: m.timestamp.millisecondsSinceEpoch,
+      // The source map re-encoded, not a re-serialisation of the decoded
+      // object: a round trip through the model would rewrite any field the
+      // model defaults, and this is a move, not a rewrite.
+      payload: jsonEncode(map),
+    );
+  }).toList();
+}
 
 class MessageStore {
   static const String _keyPrefix = 'messages_';
@@ -31,63 +105,55 @@ class MessageStore {
     // (removeMessage).
     final key = '$keyFor$contactKeyHex';
     final blobs = BlobStore.instance;
-    await blobs.synchronized(key, () async {
-      final byKey = <String, Message>{};
-      final existing = await blobs.readWithPrefsFallback(key);
-      if (existing != null && existing.isNotEmpty) {
-        try {
-          for (final e in jsonDecode(existing) as List<dynamic>) {
-            final m = _messageFromJson(e as Map<String, dynamic>);
-            byKey[_mergeKey(m)] = m;
-          }
-        } catch (e) {
-          appLogger.error(
-            'Failed to decode existing DM history before merge; aborting save '
-            'to avoid truncation: $e',
-            tag: 'Storage',
-          );
-          return;
-        }
-      }
-      for (final m in messages) {
-        byKey[_mergeKey(m)] = m;
-      }
-      final merged = byKey.values.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      await blobs.write(key, jsonEncode(merged.map(_messageToJson).toList()));
-    });
+
+    // Rows (#920): one upsert per message being saved, costing the same at
+    // 50,000 messages of history as at 50.
+    if (await blobs.ensureMessageRowsMigrated(key, dmHistoryToRows)) {
+      await blobs.upsertMessageRows(key, messages.map(_toRow));
+      return;
+    }
+
+    // Blob fallback for a key whose migration was refused. Off the UI isolate
+    // (#919): only the INCOMING messages are encoded here, and `mergeOffThread`
+    // keeps the per-key serialisation and fails closed, so an undecodable blob
+    // is logged and left alone rather than overwritten by a truncated one.
+    final incoming = jsonEncode(messages.map(_messageToJson).toList());
+    await blobs.mergeOffThread(key, incoming, mergeDmHistoryJson);
   }
 
-  String _mergeKey(Message m) {
+  static MessageRowInput _toRow(Message m) => MessageRowInput(
+    mergeKey: _mergeKey(m),
+    timestampMs: m.timestamp.millisecondsSinceEpoch,
+    payload: jsonEncode(_messageToJson(m)),
+  );
+
+  /// The store's own history encoding, for tests that need a blob fixture.
+  /// Saves write rows now, so a test can no longer get one by saving.
+  @visibleForTesting
+  static String encodeHistoryForTest(List<Message> messages) =>
+      jsonEncode(messages.map(_messageToJson).toList());
+
+  static String _mergeKey(Message m) {
     if (m.messageId.isNotEmpty) return 'id:${m.messageId}';
     return 'x:${m.senderKeyHex}:${m.timestamp.millisecondsSinceEpoch}:${m.text}';
   }
 
   /// Explicit delete path (#343): save merges and never removes.
+  ///
+  /// On rows this is a single-row DELETE (#920). On the blob fallback the
+  /// decode and re-encode run off the UI isolate (#919), with the per-key
+  /// serialisation this path did not have before: it was a read-modify-write
+  /// outside [BlobStore.synchronized], so a save landing after a delete could
+  /// resurrect the deleted message.
   Future<void> removeMessage(String contactKeyHex, Message message) async {
     if (publicKeyHex.isEmpty) return;
     final key = '$keyFor$contactKeyHex';
-    final existing = await BlobStore.instance.readWithPrefsFallback(key);
-    if (existing == null || existing.isEmpty) return;
-    final List<dynamic> raw;
-    try {
-      raw = jsonDecode(existing) as List<dynamic>;
-    } catch (e) {
-      appLogger.error(
-        'Failed to decode DM history for delete: $e',
-        tag: 'Storage',
-      );
+    final blobs = BlobStore.instance;
+    if (await blobs.ensureMessageRowsMigrated(key, dmHistoryToRows)) {
+      await blobs.deleteMessageRow(key, _mergeKey(message));
       return;
     }
-    final target = _mergeKey(message);
-    final kept = raw
-        .map((e) => _messageFromJson(e as Map<String, dynamic>))
-        .where((m) => _mergeKey(m) != target)
-        .toList();
-    await BlobStore.instance.write(
-      key,
-      jsonEncode(kept.map(_messageToJson).toList()),
-    );
+    await blobs.mergeOffThread(key, _mergeKey(message), dropFromDmHistoryJson);
   }
 
   Future<List<Message>> loadMessages(String contactKeyHex) async {
@@ -97,9 +163,18 @@ class MessageStore {
     }
     final key = '$keyFor$contactKeyHex';
     final oldKey = '$_keyPrefix$contactKeyHex';
+    final blobs = BlobStore.instance;
+
+    // Rows (#920). Only short-circuits when rows actually exist: a key marked
+    // migrated with no rows must still fall through to the legacy-key adoption
+    // below, or history stored under an older key would never be picked up.
+    if (await blobs.isOnMessageRows(key)) {
+      final payloads = await blobs.messagePayloads(key);
+      if (payloads.isNotEmpty) return _decodePayloads(payloads, key);
+    }
+
     // Bulk data lives in drift (#335); fallback covers an unmigrated key and
     // logs loudly if it fires.
-    final blobs = BlobStore.instance;
     String? jsonString = await blobs.readWithPrefsFallback(key);
 
     if (jsonString == null || jsonString.isEmpty) {
@@ -124,12 +199,34 @@ class MessageStore {
       return [];
     }
 
+    // Blob history that is not in rows yet, either never migrated or just
+    // adopted from a legacy key. Move it so the next load and every save runs
+    // on rows.
+    await blobs.ensureMessageRowsMigrated(key, dmHistoryToRows);
+
     try {
       final jsonList = jsonDecode(jsonString) as List<dynamic>;
       return jsonList.map((json) => _messageFromJson(json)).toList();
     } catch (e) {
       return [];
     }
+  }
+
+  List<Message> _decodePayloads(List<String> payloads, String key) {
+    final out = <Message>[];
+    for (final p in payloads) {
+      try {
+        out.add(_messageFromJson(jsonDecode(p) as Map<String, dynamic>));
+      } catch (e) {
+        // One bad row costs one message. On the blob, one bad byte cost the
+        // whole conversation.
+        appLogger.error(
+          'Skipping an undecodable message row in $key: $e',
+          tag: 'Storage',
+        );
+      }
+    }
+    return out;
   }
 
   Future<void> clearMessages(String contactKeyHex) async {
@@ -142,15 +239,18 @@ class MessageStore {
     // copy must not survive a clear and reappear via the read fallback.
     await BlobStore.instance.delete(key);
     await PrefsManager.instance.remove(key);
+    // Rows too, or a cleared conversation stays readable (#920).
+    await BlobStore.instance.deleteMessageRows(key);
   }
 
-  Map<String, dynamic> _messageToJson(Message msg) {
+  static Map<String, dynamic> _messageToJson(Message msg) {
     return {
       'senderKey': base64Encode(msg.senderKey),
       'text': msg.text,
       'timestamp': msg.timestamp.millisecondsSinceEpoch,
       'isOutgoing': msg.isOutgoing,
       'isCli': msg.isCli,
+      'isCliCommand': msg.isCliCommand,
       'status': msg.status.index,
       'messageId': msg.messageId,
       'originalText': msg.originalText,
@@ -181,10 +281,12 @@ class MessageStore {
     };
   }
 
-  Message _messageFromJson(Map<String, dynamic> json) {
+  static Message _messageFromJson(Map<String, dynamic> json) {
     final rawText = json['text'] as String;
     final isCli = json['isCli'] as bool? ?? false;
-    final decodedText = isCli
+    final isCliCommand = json['isCliCommand'] as bool? ?? false;
+    // Neither a CLI reply nor a CLI command is SMAZ-compressed on the wire.
+    final decodedText = (isCli || isCliCommand)
         ? rawText
         : (Smaz.tryDecodePrefixed(rawText) ?? rawText);
     return Message(
@@ -193,6 +295,7 @@ class MessageStore {
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       isOutgoing: json['isOutgoing'] as bool,
       isCli: isCli,
+      isCliCommand: isCliCommand,
       status: MessageStatus.values[json['status'] as int],
       messageId: json['messageId'] as String?,
       originalText: json['originalText'] as String?,

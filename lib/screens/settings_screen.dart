@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/utils/gpx_export.dart';
-import 'package:meshcore_open/widgets/elements_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,10 +11,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
-import '../models/offband_gps_status.dart';
 import '../models/radio_preset.dart';
 import '../models/radio_settings.dart';
 import '../services/app_debug_log_service.dart';
+import '../services/app_exit_info_service.dart';
 import '../services/app_settings_service.dart';
 import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
@@ -26,9 +25,14 @@ import 'settings/app_settings_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
+import 'settings/badge_battery_view.dart';
+import 'settings/badge_screen_view.dart';
 import 'settings/device_ui_view.dart';
+import 'settings/location_view.dart';
+import '../helpers/device_name_validator.dart';
 import 'app_debug_log_screen.dart';
 import 'ble_debug_log_screen.dart';
+import 'device_cli_screen.dart';
 import 'export_config_screen.dart';
 import 'import_config_screen.dart';
 import 'serial_capture_screen.dart';
@@ -36,6 +40,21 @@ import 'topology_debug_screen.dart';
 import 'companion_radio_stats_screen.dart';
 import '../widgets/radio_preset_picker.dart';
 import '../widgets/sync_progress_overlay.dart';
+
+/// True only in a build that passed `--dart-define=OFFBAND_ANR_TEST=true`.
+///
+/// Gates the force-an-ANR row in the Experimental section. The Experimental
+/// section itself ships in release behind a 7-tap unlock, which is not enough
+/// protection for a control whose whole job is to hang the app, so the row is
+/// compiled out entirely unless a build asks for it (#906). Deliberately NOT
+/// read from `dart_defines.json`, because that file feeds every build.
+const bool _anrTestBuild = bool.fromEnvironment('OFFBAND_ANR_TEST');
+
+/// Show the row only where it can actually do something. Exit records are
+/// Android-only, so on a desktop test build the flag alone would leave a button
+/// that does nothing.
+bool get _showAnrTestRow =>
+    _anrTestBuild && AppExitInfoService.isSupportedPlatform;
 
 /// Convert device coding-rate value (1-4 on some firmware, 5-8 on others)
 /// to the UI enum range (always 5-8).
@@ -169,6 +188,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: l10n.settings_radioSettingsSubtitle,
         builder: _radioRangePane,
       ),
+      // #977: the single home for GPS, directly under Radio Settings.
+      SettingsCategory(
+        icon: Icons.location_on_outlined,
+        title: l10n.settings_location,
+        subtitle: l10n.settings_locationCategorySubtitle,
+        builder: (_) => const LocationView(),
+      ),
       SettingsCategory(
         icon: Icons.sensors_outlined,
         title: l10n.radioStats_settingsTile,
@@ -276,6 +302,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : null,
           ),
         ),
+        if (_showAnrTestRow) const SizedBox(height: 16),
+        if (_showAnrTestRow)
+          // Test-only, and absent from any normal build: the constant below is
+          // false unless the build passes OFFBAND_ANR_TEST, so this row is
+          // compiled out of the shipped artifact. Hanging the main thread is the
+          // only way to produce a real ANR record to read back (#906/#911); no
+          // adb command induces one. Label is deliberately not localized, since
+          // it never reaches a user.
+          //
+          // The subtitle says to keep tapping for a reason. Android's only
+          // relevant trigger is "has not responded to an input event within 5
+          // seconds", and it documents no time-based trigger for a blocked main
+          // thread. A freeze with nothing pending can therefore recover with no
+          // ANR, no process death and no exit record to read back.
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.hourglass_disabled),
+              title: const Text('Force an ANR, native side (test build only)'),
+              subtitle: const Text(
+                'Freezes the UI for 20 seconds in the Android layer. KEEP '
+                'TAPPING the screen while it is frozen: Android raises an ANR '
+                'only when an input event goes unanswered for 5 seconds, so a '
+                'freeze with nothing pending just recovers. Then let the dialog '
+                'close the app, reopen, and export the debug log.',
+              ),
+              onTap: () => AppExitInfoService.instance.forceMainThreadBlock(),
+            ),
+          ),
+        if (_showAnrTestRow) const SizedBox(height: 16),
+        if (_showAnrTestRow)
+          // The second trigger exists because the first one cannot answer the
+          // question the Epic was filed for (#931). Blocking the Android main
+          // thread yields a Java stack, which proved the capture works but says
+          // nothing about our Dart frames. The real ANRs block on the Dart UI
+          // isolate inside the JSON stringifier, so this one blocks there, the
+          // same way, and its trace should match the Play clusters' shape.
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.data_object),
+              title: const Text('Force an ANR, Dart side (test build only)'),
+              subtitle: const Text(
+                'Freezes the UI for 20 seconds by encoding JSON on the Dart '
+                'isolate, which is what the real ANRs do. Same procedure: KEEP '
+                'TAPPING while frozen, let the dialog close the app, reopen, '
+                'then export. Use this one to see whether our own Dart function '
+                'names show up in the trace.',
+              ),
+              onTap: () => AppExitInfoService.instance.forceDartIsolateBlock(),
+            ),
+          ),
         const SizedBox(height: 16),
         // Disable, not just hide: turns off every experimental toggle and
         // re-locks the section, so nothing keeps running invisibly (#553).
@@ -336,6 +412,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _radioStatsPane(BuildContext context) =>
       const CompanionRadioStatsBody();
 
+  void _pushBadgePage(BuildContext context, String title, Widget body) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text(title), centerTitle: true),
+          body: body,
+        ),
+      ),
+    );
+  }
+
   Widget _identityPane(BuildContext context) {
     final l10n = context.l10n;
     final connector = context.watch<MeshCoreConnector>();
@@ -355,54 +443,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _editNodeName(context, connector),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.location_on_outlined),
-                title: Text(l10n.settings_location),
-                subtitle: Text(l10n.settings_locationSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _editLocation(context, connector),
-              ),
-              if (connector.currentCustomVars?.containsKey('gps') ?? false) ...[
-                const Divider(height: 1),
-                SwitchListTile(
-                  secondary: const Icon(Icons.gps_fixed),
-                  title: Text(l10n.settings_locationGPSEnable),
-                  subtitle: Text(l10n.settings_locationGPSEnableSubtitle),
-                  value: connector.currentCustomVars?['gps'] == '1',
-                  onChanged: (value) async {
-                    try {
-                      await connector.setCustomVar(value ? 'gps:1' : 'gps:0');
-                    } catch (_) {
-                      if (context.mounted) {
-                        showDismissibleSnackBar(
-                          context,
-                          content: const Text(
-                            'Could not update GPS setting. Please try again.',
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-              ],
-              // Button and buzzer: device UI config (#474/#475). Owner-placed
-              // under Node Settings, directly above the public key.
+              // Location and the GPS toggle moved to their own category (#977).
+              // Button actions (#474), directly above the public key. The
+              // buzzer moved to Message Settings (#978): boards with a buzzer
+              // and no button exist, so the two are separate entries on
+              // separate bits.
               //
-              // Gated STRICTLY on the capability bits. A radio without the
-              // hardware has no button to configure, so it gets no tile, no
-              // screen and no command. This is the negative test in #474:
-              // "A device that does not advertise the bit shows no screen and
-              // the client emits no command."
-              if (connector.supportsButtonMatrix ||
-                  connector.supportsNotifyScope) ...[
+              // Gated STRICTLY on the capability bit. A radio without a button
+              // gets no tile, no screen and no command. This is the negative
+              // test in #474: "A device that does not advertise the bit shows
+              // no screen and the client emits no command."
+              if (connector.supportsButtonMatrix) ...[
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked_outlined),
-                  title: const Text('Button and buzzer'),
-                  subtitle: const Text(
-                    'Assign button actions and set when this radio beeps',
-                  ),
+                  title: Text(l10n.settings_buttonActions),
+                  subtitle: Text(l10n.settings_buttonActionsSubtitle),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.push(
@@ -410,14 +466,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       MaterialPageRoute(
                         builder: (context) => Scaffold(
                           appBar: AppBar(
-                            title: const Text('Button and buzzer'),
+                            title: Text(l10n.settings_buttonActions),
                             centerTitle: true,
                           ),
-                          body: const DeviceUiView(),
+                          body: const DeviceUiView(part: DeviceUiPart.buttons),
                         ),
                       ),
                     );
                   },
+                ),
+              ],
+              // The badge's own screen and battery settings (#987), beside
+              // Button actions (owner decision 2026-10-25). Strictly on the
+              // 0x40 bit: no bit, no rows, no command.
+              if (connector.supportsScreenSettings) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.monitor),
+                  title: Text(l10n.settings_badgeScreen),
+                  subtitle: Text(l10n.settings_badgeScreenSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_badgeScreen,
+                    const BadgeScreenView(),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.battery_std),
+                  title: Text(l10n.settings_badgeBattery),
+                  subtitle: Text(
+                    connector.screenSettings == null
+                        ? l10n.settings_badgeBatteryReading
+                        : l10n.settings_badgeBatterySubtitle(
+                            connector.screenSettings!.batteryFullMv,
+                          ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_badgeBattery,
+                    const BadgeBatteryView(),
+                  ),
                 ),
               ],
               if (connector.selfPublicKey != null) ...[
@@ -523,21 +614,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _actionsPane(BuildContext context) {
     final connector = context.watch<MeshCoreConnector>();
+    // Config import/export and the GPX exports moved here from Debug (#902):
+    // they are user operations, not diagnostics.
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [_buildActionsCard(context, connector)],
+      children: [
+        _buildActionsCard(context, connector),
+        const SizedBox(height: 16),
+        _buildExportCard(connector),
+      ],
     );
   }
 
   Widget _diagnosticsPane(BuildContext context) {
-    final connector = context.watch<MeshCoreConnector>();
     return ListView(
       padding: const EdgeInsets.all(16),
-      children: [
-        _buildDebugCard(context),
-        const SizedBox(height: 16),
-        _buildExportCard(connector),
-      ],
+      children: [_buildDebugCard(context)],
     );
   }
 
@@ -761,6 +853,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.sync_problem_outlined),
+            title: Text(l10n.settings_syncQueuedMessages),
+            subtitle: Text(l10n.settings_syncQueuedMessagesSubtitle),
+            trailing: const Icon(Icons.download),
+            onTap: () {
+              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
+              showDismissibleSnackBar(
+                context,
+                content: Text(l10n.settings_syncQueuedMessagesRequested),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
             leading: const Icon(Icons.restart_alt, color: Colors.orange),
             title: Text(l10n.settings_rebootDevice),
             subtitle: Text(l10n.settings_rebootDeviceSubtitle),
@@ -873,6 +979,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
     final settingsService = context.watch<AppSettingsService>();
+    // #884: the Device CLI console is offered only when the connected radio
+    // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
+    // at the upstream-1.18 absorb). select() so only this gate flipping
+    // rebuilds the pane, not every connector update (the #81 lesson).
+    final cliCapable = context.select<MeshCoreConnector, bool>(
+      (c) => c.classification?.allowsCliFrame ?? false,
+    );
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -884,21 +997,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.bluetooth_outlined),
-            title: Text(l10n.settings_companionDebugLog),
-            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
+          if (cliCapable) ...[
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: Text(l10n.deviceCli_title),
+              subtitle: Text(l10n.deviceCli_entrySubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const BleDebugLogScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 1),
+                MaterialPageRoute(builder: (_) => const DeviceCliScreen()),
+              ),
+            ),
+            const Divider(height: 1),
+          ],
           SwitchListTile(
             secondary: const Icon(Icons.bug_report_outlined),
             title: Text(l10n.appSettings_appDebugLogging),
@@ -927,6 +1038,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : l10n.appSettings_appDebugLoggingDisabled,
                 ),
                 duration: const Duration(seconds: 2),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.bluetooth_outlined),
+            title: Text(l10n.settings_companionDebugLog),
+            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BleDebugLogScreen(),
+                ),
               );
             },
           ),
@@ -977,24 +1103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(
                   builder: (context) => const TopologyDebugScreen(),
                 ),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.sync_problem_outlined),
-            title: const Text('Sync queued messages now'),
-            subtitle: const Text(
-              'Force-pull messages the radio is holding, diagnostic for #51 '
-              '(radio reports a count but the app shows none). Logs the flow '
-              'for diagnostics.',
-            ),
-            trailing: const Icon(Icons.download),
-            onTap: () {
-              context.read<MeshCoreConnector>().syncQueuedMessages(force: true);
-              showDismissibleSnackBar(
-                context,
-                content: const Text('Requested queued-message drain (force)'),
               );
             },
           ),
@@ -1099,366 +1207,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _editNodeName(BuildContext context, MeshCoreConnector connector) {
     final l10n = context.l10n;
     final controller = TextEditingController(text: connector.selfName ?? '');
+    String? errorText;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.settings_nodeName),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: l10n.settings_nodeNameHint,
-            border: const OutlineInputBorder(),
-          ),
-          maxLength: 31,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.common_cancel),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await connector.setNodeName(controller.text);
-              await connector.refreshDeviceInfo();
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(l10n.settings_nodeNameUpdated),
-              );
-            },
-            child: Text(l10n.common_save),
-          ),
-        ],
-      ),
-    );
-  }
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocalState) {
+          // #885: mirror the firmware's `set name` character rejection so a
+          // bad name is caught here, not bounced as a cryptic device ERROR.
+          void revalidate(String value) {
+            final bad = forbiddenCharsIn(value);
+            setLocalState(() {
+              errorText = bad.isEmpty
+                  ? null
+                  : l10n.settings_nodeNameInvalidChars(bad.join(' '));
+            });
+          }
 
-  Widget _buildGpsQuerySection(
-    BuildContext context,
-    OffbandGpsStatus? status,
-    bool querying,
-    bool queriedOnce,
-    VoidCallback onRefresh,
-  ) {
-    final l10n = context.l10n;
-    final theme = Theme.of(context);
-
-    Widget row(String label, String value) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-
-    final children = <Widget>[
-      const SizedBox(height: 8),
-      const Divider(),
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              l10n.settings_gpsStatusTitle,
-              style: theme.textTheme.titleSmall,
-            ),
-          ),
-          if (querying)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
+          return AlertDialog(
+            title: Text(l10n.settings_nodeName),
+            content: TextField(
+              controller: controller,
+              onChanged: revalidate,
+              decoration: InputDecoration(
+                hintText: l10n.settings_nodeNameHint,
+                border: const OutlineInputBorder(),
+                errorText: errorText,
               ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: l10n.settings_gpsStatusRefresh,
-              onPressed: onRefresh,
+              maxLength: 31,
             ),
-        ],
-      ),
-    ];
-
-    if (status != null) {
-      final live = status.hasLiveFix;
-      final color = live ? Colors.green : Colors.orange;
-      children.add(
-        Row(
-          children: [
-            Icon(
-              live ? Icons.gps_fixed : Icons.gps_off,
-              size: 18,
-              color: color,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                live
-                    ? l10n.settings_gpsStatusLiveFix
-                    : l10n.settings_gpsStatusNoFix,
-                style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.common_cancel),
               ),
-            ),
-          ],
-        ),
-      );
-      children.add(const SizedBox(height: 8));
-      final coords = (status.latitude != null && status.longitude != null)
-          ? '${status.latitude!.toStringAsFixed(6)}, '
-                '${status.longitude!.toStringAsFixed(6)}'
-          : '—';
-      children.add(row(l10n.settings_gpsStatusCoords, coords));
-      children.add(
-        row(l10n.settings_gpsStatusSats, status.satellites?.toString() ?? '—'),
-      );
-      children.add(
-        row(
-          l10n.settings_gpsStatusAltitude,
-          status.altitudeCm != null
-              ? '${(status.altitudeCm! / 100).toStringAsFixed(1)} m'
-              : '—',
-        ),
-      );
-      final t = status.timestampUtc?.toLocal();
-      final ml = MaterialLocalizations.of(context);
-      final timeStr = t == null
-          ? '—'
-          : '${ml.formatCompactDate(t)} '
-                '${ml.formatTimeOfDay(TimeOfDay.fromDateTime(t))}';
-      children.add(row(l10n.settings_gpsStatusTime, timeStr));
-    } else {
-      children.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            queriedOnce
-                ? l10n.settings_gpsStatusNoResponse
-                : l10n.settings_gpsStatusTapRefresh,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: children,
-    );
-  }
-
-  void _editLocation(BuildContext context, MeshCoreConnector connector) {
-    final l10n = context.l10n;
-    final latController = TextEditingController();
-    final lonController = TextEditingController();
-    final intervalController = TextEditingController();
-    latController.text = connector.selfLatitude?.toStringAsFixed(6) ?? '';
-    lonController.text = connector.selfLongitude?.toStringAsFixed(6) ?? '';
-
-    // Safe access to custom vars - may be null before device responds
-    final customVars = connector.currentCustomVars ?? {};
-    final bool hasGPS = customVars.containsKey("gps");
-    bool isGPSEnabled = customVars["gps"] == "1";
-
-    // Read current interval or default to 900 (15 minutes)
-    final currentInterval =
-        int.tryParse(customVars["gps_interval"] ?? "") ?? 900;
-    intervalController.text = currentInterval.toString();
-
-    OffbandGpsStatus? gpsStatus = connector.offbandGpsStatus;
-    bool queryingGps = false;
-    bool queriedOnce = false;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(l10n.settings_location),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: latController,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_latitude,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: lonController,
-                decoration: InputDecoration(
-                  labelText: l10n.settings_longitude,
-                  border: const OutlineInputBorder(),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
-                ),
-              ),
-              if (hasGPS) ...[
-                const SizedBox(height: 16),
-                TextField(
-                  controller: intervalController,
-                  decoration: InputDecoration(
-                    labelText: l10n.settings_locationIntervalSec,
-                    border: const OutlineInputBorder(),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: false,
-                    signed: false,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FeatureToggleRow(
-                  title: l10n.settings_locationGPSEnable,
-                  subtitle: l10n.settings_locationGPSEnableSubtitle,
-                  value: isGPSEnabled,
-                  onChanged: (value) async {
-                    setDialogState(() => isGPSEnabled = value);
-                    try {
-                      await connector.setCustomVar(value ? "gps:1" : "gps:0");
-                    } catch (_) {
-                      if (context.mounted) {
-                        showDismissibleSnackBar(
-                          context,
-                          content: const Text(
-                            'Could not update GPS setting. Please try again.',
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-                if (connector.supportsOffbandGps)
-                  _buildGpsQuerySection(
-                    context,
-                    gpsStatus,
-                    queryingGps,
-                    queriedOnce,
-                    () async {
-                      setDialogState(() => queryingGps = true);
-                      final s = await connector.requestOffbandGps();
-                      if (!dialogContext.mounted) return;
-                      setDialogState(() {
-                        queryingGps = false;
-                        queriedOnce = true;
-                        gpsStatus = s;
-                      });
-                    },
-                  ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l10n.common_cancel),
-            ),
-            TextButton(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                Navigator.pop(context);
-
-                if (hasGPS) {
-                  final intervalText = intervalController.text.trim();
-                  if (intervalText.isEmpty) {
+              TextButton(
+                onPressed: () async {
+                  if (!isValidDeviceName(controller.text)) {
+                    revalidate(controller.text); // show the error, keep open
                     return;
                   }
-
-                  final interval = int.tryParse(intervalText);
-                  if (interval == null || interval < 60 || interval >= 86400) {
-                    if (!context.mounted) return;
-                    showDismissibleSnackBar(
-                      context,
-                      content: Text(l10n.settings_locationIntervalInvalid),
-                    );
-                    return;
-                  }
-
-                  try {
-                    await connector.setCustomVar("gps_interval:$interval");
-                    await connector.refreshDeviceInfo();
-                  } catch (_) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Could not update location. Please try again.',
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationUpdated),
-                  );
-                }
-
-                final latText = latController.text.trim();
-                final lonText = lonController.text.trim();
-                if (latText.isEmpty && lonText.isEmpty) {
-                  return;
-                }
-
-                final currentLat = connector.selfLatitude;
-                final currentLon = connector.selfLongitude;
-                final lat = latText.isNotEmpty
-                    ? double.tryParse(latText)
-                    : currentLat;
-                final lon = lonText.isNotEmpty
-                    ? double.tryParse(lonText)
-                    : currentLon;
-                if (lat == null || lon == null) {
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationBothRequired),
-                  );
-                  return;
-                }
-                if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                  if (!context.mounted) return;
-                  showDismissibleSnackBar(
-                    context,
-                    content: Text(l10n.settings_locationInvalid),
-                  );
-                  return;
-                }
-
-                try {
-                  await connector.setNodeLocation(lat: lat, lon: lon);
+                  Navigator.pop(context);
+                  await connector.setNodeName(controller.text);
                   await connector.refreshDeviceInfo();
-                } catch (_) {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Could not update location. Please try again.',
-                      ),
-                    ),
+                  if (!context.mounted) return;
+                  showDismissibleSnackBar(
+                    context,
+                    content: Text(l10n.settings_nodeNameUpdated),
                   );
-                  return;
-                }
-                if (!context.mounted) return;
-                showDismissibleSnackBar(
-                  context,
-                  content: Text(l10n.settings_locationUpdated),
-                );
-              },
-              child: Text(l10n.common_save),
-            ),
-          ],
-        ),
+                },
+                child: Text(l10n.common_save),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

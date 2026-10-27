@@ -5,6 +5,7 @@ import '../models/path_selection.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../utils/app_logger.dart';
+import 'command_correlation.dart';
 
 /// A repeater reply that arrived with no command waiting to receive it.
 ///
@@ -69,7 +70,7 @@ class RepeaterCommandService {
   final Map<String, String> _commandPrefixes = {};
   final Map<String, String> _pendingByPrefix = {};
   final Map<String, _ExpiredCommand> _expiredCommands = {};
-  int _prefixCounter = 0;
+  final PrefixAllocator _prefixes = PrefixAllocator();
 
   static const int maxRetries = 5;
 
@@ -89,10 +90,20 @@ class RepeaterCommandService {
   /// them in front of users (#589).
   void Function(UnmatchedRepeaterResponse)? onUnmatchedResponse;
 
+  /// When set, the late/unmatched log withholds the reply text and the command
+  /// string, logging only lengths. The remote CLI console sets this so a
+  /// slow `get wifi.pwd` reply never writes the password to the app log, the
+  /// same guarantee [LocalCliService] gives (#999 review). Default false keeps
+  /// the repeater path's existing diagnostics.
+  bool redactUnmatchedReplyText = false;
+
   RepeaterCommandService(this._connector);
 
-  /// Send a CLI command to a repeater with automatic retries
-  /// Returns a future that completes when a response is received or after max retries
+  /// Send a CLI command to a contact (a repeater/room server OR a companion)
+  /// with automatic retries. Returns a future that completes when a response is
+  /// received or after max retries. The message type is chosen by the target's
+  /// role (#888/#889): a companion gets TXT_TYPE_CLI_COMMAND, a repeater/room
+  /// server the universal CLI_DATA; the reply path is identical for both.
   Future<String> sendCommand(
     Contact repeater,
     String command, {
@@ -158,6 +169,9 @@ class RepeaterCommandService {
         framedCommand,
         attempt: attempt,
         timestampSeconds: timestampSeconds,
+        // The target split: companions take the 1.18 command type, repeaters and
+        // room servers the universal CLI_DATA type (#888/#889).
+        txtType: cliTxtTypeForContactType(repeater.type),
       );
       final responseBytes = frame.length > maxFrameSize
           ? frame.length
@@ -208,12 +222,10 @@ class RepeaterCommandService {
     final repeaterKey = repeater.publicKeyHex;
     _pruneExpiredCommands();
 
-    String? prefix;
-    String responsePayload = responseText;
-    if (responseText.length >= 3 && responseText[2] == '|') {
-      prefix = responseText.substring(0, 3);
-      responsePayload = responseText.substring(3).trimLeft();
-    }
+    // Shared `cc|` grammar (#882): same splitter the local frame-66 path uses.
+    final correlated = splitCorrelated(responseText);
+    final prefix = correlated.prefix;
+    final responsePayload = correlated.payload;
 
     // A reply that carries a prefix is self-identifying. If that prefix matches
     // nothing pending, the answer belongs to a command that already completed
@@ -250,16 +262,25 @@ class RepeaterCommandService {
         : DateTime.now().difference(expired.expiredAt);
 
     if (expired != null) {
+      final commandText = redactUnmatchedReplyText
+          ? '(withheld)'
+          : '"${expired.command}"';
+      final payloadText = redactUnmatchedReplyText
+          ? '${responsePayload.length} chars, text withheld'
+          : responsePayload;
       appLogger.warn(
-        'Late reply to "${expired.command}" from $repeaterKey arrived '
+        'Late reply to $commandText from $repeaterKey arrived '
         '${sinceTimeout!.inMilliseconds}ms after its window closed: '
-        '$responsePayload',
+        '$payloadText',
         tag: 'RepeaterCommand',
       );
     } else {
+      final payloadText = redactUnmatchedReplyText
+          ? '${responsePayload.length} chars, text withheld'
+          : responsePayload;
       appLogger.warn(
         'Reply from $repeaterKey matched no pending or recently expired '
-        'command (prefix: ${prefix ?? 'none'}): $responsePayload',
+        'command (prefix: ${prefix ?? 'none'}): $payloadText',
         tag: 'RepeaterCommand',
       );
     }
@@ -352,14 +373,5 @@ class RepeaterCommandService {
     onUnmatchedResponse = null;
   }
 
-  String _nextPrefixToken() {
-    for (var i = 0; i < 256; i++) {
-      final value = _prefixCounter++ & 0xFF;
-      final token = '${value.toRadixString(16).padLeft(2, '0').toUpperCase()}|';
-      if (!_pendingByPrefix.containsKey(token)) {
-        return token;
-      }
-    }
-    return '00|';
-  }
+  String _nextPrefixToken() => _prefixes.next(_pendingByPrefix.keys.toSet());
 }

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
+import 'package:meshcore_open/models/contact.dart';
 
 void main() {
   // Frame layout per the doc comment on buildUpdateContactPathFrame:
@@ -218,6 +219,65 @@ void main() {
       );
       expect(frame.length, greaterThanOrEqualTo(baseFrameLength));
       expect(frame[pathLenOffset], 0xFF);
+    });
+  });
+
+  group('remote-CLI permission flag on the write path (#887)', () {
+    // 1 cmd + 32 pubKey + 1 type = 34.
+    const int flagsOffset = 34;
+
+    test('the 0x10 bit rides the flags byte when set', () {
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        path,
+        path.length,
+        flags: contactFlagRemoteCliAllowed,
+      );
+      expect(
+        frame[flagsOffset] & contactFlagRemoteCliAllowed,
+        contactFlagRemoteCliAllowed,
+      );
+    });
+
+    test('remote-CLI coexists with telemetry flags in the one byte', () {
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        path,
+        path.length,
+        flags: contactFlagRemoteCliAllowed | contactFlagTeleBase,
+      );
+      expect(frame[flagsOffset] & contactFlagRemoteCliAllowed, isNonZero);
+      expect(frame[flagsOffset] & contactFlagTeleBase, isNonZero);
+    });
+
+    test('a frame without the permission carries a clear 0x10 bit', () {
+      final frame = buildUpdateContactPathFrame(
+        pubKey,
+        path,
+        path.length,
+        flags: contactFlagTeleBase,
+      );
+      expect(frame[flagsOffset] & contactFlagRemoteCliAllowed, 0);
+    });
+
+    test('Contact.remoteCliAllowed reflects the 0x10 bit', () {
+      Contact withFlags(int flags) => Contact(
+        publicKey: Uint8List(32),
+        receivedName: 'X',
+        type: 1,
+        pathLength: 0,
+        path: Uint8List(0),
+        lastSeen: DateTime.now(),
+        flags: flags,
+      );
+      expect(withFlags(contactFlagRemoteCliAllowed).remoteCliAllowed, isTrue);
+      expect(withFlags(contactFlagTeleBase).remoteCliAllowed, isFalse);
+      expect(
+        withFlags(
+          contactFlagRemoteCliAllowed | contactFlagFavorite,
+        ).remoteCliAllowed,
+        isTrue,
+      );
     });
   });
 }

@@ -104,7 +104,17 @@ class ContactStore {
   Map<String, dynamic> _toJson(Contact contact) {
     return {
       'publicKey': base64Encode(contact.publicKey),
-      'name': contact.name,
+      // The RECEIVED name, never `contact.name`. Reading the getter here would
+      // write the user's custom name into this key, and the next load would
+      // read it back as the received name. The real name the node gave us
+      // would be destroyed permanently, with no advert able to restore it,
+      // because the contact would already appear to have that name. (#750)
+      //
+      // `customName` is deliberately NOT stored here. This record is rebuilt
+      // from radio contact-sync data, where no custom name exists, so a save
+      // after a sync would wipe it. It lives in `contact_settings_store`,
+      // keyed by pubkey hex, which a sync cannot reach.
+      'name': contact.receivedName,
       'type': contact.type,
       'flags': contact.flags,
       'pathLength': contact.pathLength,
@@ -142,7 +152,10 @@ class ContactStore {
     }
     return Contact(
       publicKey: Uint8List.fromList(base64Decode(json['publicKey'] as String)),
-      name: json['name'] as String? ?? 'Unknown',
+      // Keep the `?? 'Unknown'`: a legacy row can carry a null or missing name,
+      // and `receivedName` is non-nullable, so dropping this fallback during
+      // the rename would crash the load for anyone holding such a row. (T31)
+      receivedName: json['name'] as String? ?? 'Unknown',
       type: json['type'] as int? ?? 0,
       flags: json['flags'] as int? ?? 0,
       // Records written before #309 have no 'pathHashWidth' and their path was

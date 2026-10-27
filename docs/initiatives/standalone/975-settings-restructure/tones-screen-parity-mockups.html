@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Badge settings parity mockups</title>
+<style>
+/* Doc chrome: Offband design-doc family. Inside the frames: Flutter Material 3,
+   drawn against the real widgets: the Node Settings card in settings_screen.dart
+   (_identityPane), DeviceUiView(part: buzzer) under the "Buzzer and tones" Scaffold
+   from message_settings_view.dart, the check-list dialog in
+   widgets/channel_notify_mode.dart, and the persistent _ErrorBanner.
+   Self-contained: inline SVG icons, system fonts, no network. */
+:root{
+  --ink:#EFF3E8; --ink2:#BAC4B5; --dim:#8B9A91; --sig:#7BEFA8; --warn:#FFA552; --bad:#FF7A6E;
+  --sans:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+  --mono:'Cascadia Mono',Consolas,'SF Mono',Menlo,monospace;
+  --page:#0a0d0c; --pageInk:#cfd6cc;
+  --surface:#FDFBFF; --onSurface:#1A1C1E; --onSurfaceVar:#44474F;
+  --outline:#74777F; --outlineVar:#C4C6D0; --primary:#0061A4; --onPrimary:#FFFFFF;
+  --secC:#D6E3FF; --onSecC:#001D36; --cardBg:#F3F3FA;
+  --dialog:#F1EDF5; --scrim:rgba(0,0,0,.40);
+  --errC:#FFDAD6; --onErrC:#410002; --red:#BA1A1A; --track:#D1E4FF;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--pageInk);font-family:var(--sans);padding:24px 16px 56px}
+h1{font-size:25px;font-weight:600;color:var(--ink)}
+h3{font-size:17px;font-weight:600;color:var(--sig);margin:32px 0 12px}
+.lede{font-size:14px;color:var(--dim);margin:8px 0 4px;max-width:1040px;line-height:1.55}
+.lede b{color:var(--ink2);font-weight:500}
+code{font-family:var(--mono);font-size:11.5px;color:var(--sig)}
+.flag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;color:#0a0d0c;background:var(--sig);border-radius:3px;padding:2px 7px}
+table.par{border-collapse:collapse;font-size:12.5px;max-width:1040px;width:100%;margin-top:4px}
+.par th{text-align:left;color:var(--ink);font-weight:600;padding:7px 10px;border-bottom:1px solid #2a332f}
+.par td{color:var(--ink2);padding:6px 10px;border-bottom:1px solid #1b2220;vertical-align:top;line-height:1.4}
+.par td.ok{color:var(--sig)} .par td.new{color:var(--warn)}
+.par code{color:var(--ink2)}
+.grid{display:flex;flex-wrap:wrap;gap:30px}
+.card{width:324px}
+.card h2{font-size:17px;font-weight:600;color:var(--ink)}
+.card .n{font-family:var(--mono);font-size:12px;color:var(--sig);margin-right:7px}
+.card>p{font-size:13.5px;color:var(--ink2);margin:5px 0 12px;line-height:1.45;min-height:58px}
+.card ul{font-size:12.5px;color:var(--dim);margin:12px 0 0 16px;line-height:1.5}
+.card li{margin-bottom:5px}
+.card ul b{color:var(--ink2);font-weight:500}
+.dev{width:324px;height:620px;border:1px solid #2a332f;border-radius:14px;overflow:hidden;background:#000}
+.scr{width:390px;height:746px;transform:scale(.8308);transform-origin:0 0;background:var(--surface);color:var(--onSurface);
+  font-family:'Segoe UI',system-ui,Roboto,sans-serif;position:relative;overflow:hidden}
+.ic{width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic .f{fill:currentColor;stroke:none}
+.ab{height:64px;display:flex;align-items:center;padding:0 4px;font-size:21px}
+.ab .bk{width:48px;height:48px;display:flex;align-items:center;justify-content:center}
+.ab .tt{flex:1;text-align:center;margin-right:48px}
+.pad{padding:16px}
+.mcard{background:var(--cardBg);border-radius:12px;overflow:hidden}
+.sh{font-size:16px;font-weight:500;padding:16px 16px 4px}
+.ex{font-size:14px;padding:0 16px 8px;line-height:1.4}
+.tile{display:flex;align-items:center;gap:16px;padding:8px 16px;min-height:56px}
+.tile .lead{flex:none;color:var(--onSurfaceVar)}
+.tile .lead.on{color:var(--primary)}
+.tile .txt{flex:1;min-width:0}
+.tile .ti{font-size:15.5px;line-height:1.3}
+.tile .ts{font-size:13px;color:var(--onSurfaceVar);margin-top:2px;line-height:1.35}
+.tile .tr{flex:none;color:var(--onSurfaceVar)}
+.tile .tr.pr{color:var(--primary)}
+.tile.sel .ti,.tile.sel .ts{color:var(--primary)}
+.tile.empty .ti{color:var(--onSurfaceVar)}
+.tile.new{background:#E8DEF8}
+.dv{height:1px;background:var(--outlineVar)}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.dlg{position:absolute;left:24px;right:24px;top:60px;background:var(--dialog);border-radius:28px;padding:22px 0 10px}
+.dlg .dt{font-size:22px;padding:0 24px 4px}
+.dlg .ds{font-size:13.5px;color:var(--onSurfaceVar);padding:0 24px 10px;line-height:1.4}
+.dlg .sec{font-size:12.5px;color:var(--onSurfaceVar);padding:10px 24px 2px;letter-spacing:.2px}
+.dlg .tile{padding:4px 12px 4px 24px;min-height:46px}
+.dlg .acts{display:flex;justify-content:flex-end;padding:8px 24px 6px;gap:8px}
+.snack{position:absolute;left:12px;right:12px;bottom:16px;background:#322F35;color:#F5EFF7;border-radius:4px;padding:14px 16px;font-size:14px;line-height:1.4;display:flex;gap:12px;align-items:center}
+.snack .a{color:#9ECAFF;font-weight:500;flex:none}
+.seg{display:flex;margin:4px 16px 8px;border:1px solid var(--outline);border-radius:20px;overflow:hidden;height:40px}
+.seg>span{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;font-weight:500;border-left:1px solid var(--outline)}
+.seg>span:first-child{border-left:none}
+.seg>span.on{background:var(--secC);color:var(--onSecC)}
+.seg .ic{width:18px;height:18px}
+.lab2{font-size:14px;padding:6px 16px 0;color:var(--onSurfaceVar)}
+.fld{margin:8px 16px 0;border:1px solid var(--outline);border-radius:4px;padding:10px 12px;position:relative;min-height:150px}
+.fld.focus{border:2px solid var(--primary);padding:9px 11px}
+.fld .lab{position:absolute;top:-9px;left:9px;background:var(--surface);padding:0 4px;font-size:12px;color:var(--onSurfaceVar)}
+.fld.focus .lab{color:var(--primary)}
+.fld .val{font-family:var(--mono);font-size:13.5px;line-height:1.5;word-break:break-all}
+.help{display:flex;justify-content:space-between;font-size:12px;color:var(--onSurfaceVar);padding:4px 28px 0}
+.row{display:flex;gap:8px;justify-content:flex-end;padding:16px 16px 0}
+.btn{height:40px;border-radius:20px;padding:0 22px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:8px}
+.btn.fill{background:var(--primary);color:var(--onPrimary)}
+.btn.tonal{background:var(--secC);color:var(--onSecC)}
+.btn.outl{border:1px solid var(--outline);color:var(--primary)}
+.btn.text{color:var(--primary);padding:0 12px}
+.btn.text.red{color:var(--red)}
+.btn .ic{width:18px;height:18px}
+.ban{display:flex;align-items:center;gap:12px;margin:12px;padding:12px;border-radius:8px;background:var(--errC);color:var(--onErrC);font-size:14px;line-height:1.4}
+.ban .x{flex:none;width:40px;height:40px;display:flex;align-items:center;justify-content:center}
+.lin{height:4px;background:var(--track);margin:14px 16px 6px;border-radius:2px;overflow:hidden}
+.lin>div{height:100%;background:var(--primary)}
+.prog{font-size:13px;color:var(--onSurfaceVar);padding:0 16px}
+.srch{margin:4px 16px 8px;height:48px;border-radius:24px;background:#ECE6F0;display:flex;align-items:center;gap:12px;padding:0 16px;color:var(--onSurfaceVar);font-size:15px}
+.big{font-size:32px;font-weight:400;padding:8px 16px 0}
+.why{display:flex;flex-wrap:wrap;gap:18px}
+.why>div{width:436px;border-left:2px solid var(--sig);padding:2px 0 2px 13px}
+.why h4{font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.why p{font-size:12.5px;color:var(--dim);line-height:1.55}
+.why code{color:var(--ink2)}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M20 12H5M11 5l-7 7 7 7"/></symbol>
+<symbol id="i-rad-on" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle class="f" cx="12" cy="12" r="5"/></symbol>
+<symbol id="i-rad-off" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5.5l11-2.2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></symbol>
+<symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.2v5.6h3.6l5 4.2V5L7.6 9.2z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></symbol>
+<symbol id="i-follow" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3"/><path d="M18 3.5v3.4h-3.4M6 20.5v-3.4h3.4"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path class="f" d="M10 8.3v7.4l5.8-3.7z"/></symbol>
+<symbol id="i-add" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4"/><path d="M12 8v8M8 12h8"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+<symbol id="i-err" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><circle class="f" cx="12" cy="16.3" r="1.1"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-3.8 3.8-5.8 7.5-5.8s6.7 2 7.5 5.8"/></symbol>
+<symbol id="i-btn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16.5V20"/></symbol>
+<symbol id="i-batt" viewBox="0 0 24 24"><rect x="7" y="4.5" width="10" height="16.5" rx="1.8"/><path d="M10 2.8h4"/><path class="f" d="M9 9h6v10H9z"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.8" width="11" height="18.4" rx="2"/><path d="M10.5 18h3"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></symbol>
+</defs></svg>
+
+<h1>Badge settings, reachable from the app (client #970, #971, #975)</h1>
+<p class="lede">Material 3 blue seed, light, drawn at 390&times;844 against the real widgets. Wire: <code>0xC5</code> as of meshcore-firmware <code>3e788e2a</code> (#1801, branch <code>epic/1788-client-settings</code>, running on QCC2), read 2026-10-25 in <code>OffbandConfigProtocol.h</code>; badge screens read in <code>BadgeScreens.cpp</code>, <code>BadgeLayout.h</code>, <code>TimeZones.h</code>, <code>BatteryGauge.h</code> at the same commit. Supersedes the #970 slot mockup sent 2026-10-24. Values are examples; <b>the bullets are the behavior to build</b>. Built under #970, #971, #986 and #987. <span class="flag">APPROVED 2026-10-25</span></p>
+
+<h3>The badge's screens against the app</h3>
+<table class="par">
+<tr><th>Badge screen and row</th><th>Wire (0xC5 sub-code, caps byte 2)</th><th>App before</th><th>App after this</th></tr>
+<tr><td>Tones &rsaquo; Sound (All, Self, None)</td><td><code>0x01/0x02</code>, <code>0x01</code></td><td class="ok">Buzzer and tones</td><td>unchanged (frame 2)</td></tr>
+<tr><td>Tones &rsaquo; DM, Channel, Room, New contact, Ack, Sent</td><td><code>0x0F/0x10</code> EVTONE, <code>0x10</code></td><td class="new">missing</td><td>six rows + picker (frames 2, 4)</td></tr>
+<tr><td>Each picker: Silent, Chime, Kerplop, Tick, Bloop, Drop, Knock, filled slots</td><td>same "picker's rule" on every set</td><td class="new">missing</td><td>one shared picker (frames 4, 7)</td></tr>
+<tr><td>Picker plays each tune as you move</td><td><code>0x11</code> TUNE_PLAY, <code>0x10</code></td><td class="new">missing</td><td>play button per row (frames 3, 4, 5)</td></tr>
+<tr><td>Tones &rsaquo; Custom: all eight slots, named or "(empty)"</td><td><code>0x09</code> SLOT_GET, <code>0x10</code></td><td class="new">missing</td><td>slot list (frame 3)</td></tr>
+<tr><td>Custom &rsaquo; edit a slot (keyboard)</td><td><code>0x12</code> SLOT_READ + <code>0x0A</code> SLOT_SET, <code>0x10</code></td><td class="new">missing</td><td>editor, prefilled (frame 6)</td></tr>
+<tr><td>Channel's own tone, with Default</td><td><code>0x0B/0x0C</code> CHTUNE, <code>0x10</code></td><td class="new">codec built, no screen</td><td>"Radio tone" in the channel sheet (frame 7)</td></tr>
+<tr><td>Settings &rsaquo; Nav text, Message text</td><td><code>0x13</code> GET, <code>0x14</code> TEXT_SET, <code>0x40</code></td><td class="new">missing</td><td>Screen page (frame 8)</td></tr>
+<tr><td>Settings &rsaquo; Screen off (15 s, 30 s, 1 m, 2 m, 5 m)</td><td><code>0x15</code> SCROFF_SET, <code>0x40</code></td><td class="new">missing</td><td>Screen page (frame 8)</td></tr>
+<tr><td>Settings &rsaquo; Time zone (40 zones plus "not set", which shows ages)</td><td><code>0x16</code> TZ_SET, <code>0x40</code></td><td class="new">missing</td><td>zone list (frame 9)</td></tr>
+<tr><td>Settings &rsaquo; Battery: 100% point, Set 100% here, Back to auto</td><td><code>0x17</code> BATT_SET, <code>0x40</code></td><td class="new">missing</td><td>Battery page (frames 10, 11)</td></tr>
+<tr><td>Settings &rsaquo; GPS</td><td><code>0x0D/0x0E</code>, <code>0x20</code></td><td class="ok">Location (#977)</td><td>unchanged</td></tr>
+<tr><td>Settings &rsaquo; Hibernate, Device pages</td><td>not settings (AmberForge 1350): an action and a navigation</td><td>n/a</td><td>n/a</td></tr>
+</table>
+<p class="lede">One caps change to carry into the code already written: <code>0x10</code> is now <b>TUNES</b> (slots, channel tone, event tones, preview), not channel tone alone, and the slot sub-codes moved from the buzzer bit to it. A radio with a buzzer but no tune engine advertises <code>0x01</code> without <code>0x10</code> and keeps today's scope-only screen.</p>
+
+<h3>Buzzer and tones</h3><div class="grid">
+
+<div class="card"><h2><span class="n">1</span>Node Settings gains Screen and Battery</h2><p>The badge's own hardware settings sit with Button actions, gated on <code>0x40</code>. A radio without it shows today's card.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Node Settings</span></div>
+<div class="pad"><div class="mcard">
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-person"/></svg></span><div class="txt"><div class="ti">Node name</div><div class="ts">QCC2</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-btn"/></svg></span><div class="txt"><div class="ti">Button actions</div><div class="ts">Assign what the button does</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-monitor"/></svg></span><div class="txt"><div class="ti">Screen</div><div class="ts">Text size, screen off, time zone</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-batt"/></svg></span><div class="txt"><div class="ti">Battery</div><div class="ts">100% at 4150 mV, learned</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="dv"></div>
+<div style="padding:8px 16px 12px"><div style="font-size:13px;color:var(--onSurfaceVar)">Public key</div><div style="font-family:var(--mono);font-size:12px;margin-top:2px">a1f3 07c2 9e44 &hellip; 5b10</div></div>
+</div></div>
+</div></div>
+<ul><li>Both rows appear only on a radio advertising caps byte 2 <code>0x40</code>. Today that means firmware built with the Offband screen set; a display fitted to a pyramid badge with that firmware gets them.</li><li>Battery's subtitle is the <code>SCREEN_GET</code> reply: the 100% point and where it came from, in the badge's words (default, learned, set).</li><li>Placement: owner decision 1.</li></ul></div>
+
+<div class="card"><h2><span class="n">2</span>The scope, then the six tones</h2><p>The badge's Tones screen, in its order: Sound first, because nothing below can sound while it says None.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Buzzer and tones</span></div>
+<div class="sh">Device notification scope</div>
+<div class="tile sel"><span class="lead on"><svg class="ic"><use href="#i-rad-on"/></svg></span><div class="txt"><div class="ti">All</div><div class="ts">Beep for any received message</div></div></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Self</div><div class="ts">Beep only for direct messages and @[mentions]</div></div></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">None</div><div class="ts">Never beep</div></div></div>
+<div class="sh">Tones</div>
+<div class="ex">What this radio plays for each event.</div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">DM</div><div class="ts">Chime (radio default)</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Channel</div><div class="ts">Kerplop (radio default)</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Room</div><div class="ts">Mario</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">New contact</div><div class="ts">Bloop</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-mute"/></svg></span><div class="txt"><div class="ti">Ack</div><div class="ts">Silent</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-mute"/></svg></span><div class="txt"><div class="ti">Sent</div><div class="ts">Silent (radio default)</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div>
+<ul><li>Labels are the badge's own (<code>kToneEventRows</code>): DM, Channel, Room, New contact, Ack, Sent. <b>DM is one tone for every direct message</b>; there is no per-contact choice (#983 withdrawn).</li><li>Each subtitle is the <code>effective</code> byte from <code>EVTONE_GET</code>. When <code>stored</code> is 0xFF it adds "(radio default)", so a choice and a default never look alike.</li><li>The tones section exists only with caps <code>0x10</code>. With <code>0x01</code> alone the screen is today's scope rows.</li></ul></div>
+
+<div class="card"><h2><span class="n">3</span>Custom tunes, every slot</h2><p>Scrolled down. All eight slots are rows, as on the badge: an empty slot is where you go to fill one.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Buzzer and tones</span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-mute"/></svg></span><div class="txt"><div class="ti">Sent</div><div class="ts">Silent (radio default)</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+<div class="sh">Custom tunes</div>
+<div class="ex">Eight tunes stored on this radio, in RTTTL. A saved tune can be picked for any event or channel.</div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">1 Mario</div><div class="ts">142 characters</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">2 Zelda</div><div class="ts">96 characters</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile new empty"><span class="lead"><svg class="ic"><use href="#i-add"/></svg></span><div class="txt"><div class="ti">3 (empty)</div><div class="ts">Tap to add a tune</div></div></div>
+<div class="tile new empty"><span class="lead"><svg class="ic"><use href="#i-add"/></svg></span><div class="txt"><div class="ti">4 (empty)</div><div class="ts">Tap to add a tune</div></div></div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">5 Nokia</div><div class="ts">58 characters</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile new empty"><span class="lead"><svg class="ic"><use href="#i-add"/></svg></span><div class="txt"><div class="ti">6 (empty)</div><div class="ts">Tap to add a tune</div></div></div>
+<div class="tile new empty"><span class="lead"><svg class="ic"><use href="#i-add"/></svg></span><div class="txt"><div class="ti">7 (empty)</div><div class="ts">Tap to add a tune</div></div></div>
+<div class="tile new empty"><span class="lead"><svg class="ic"><use href="#i-add"/></svg></span><div class="txt"><div class="ti">8 (empty)</div><div class="ts">Tap to add a tune</div></div></div>
+</div></div>
+<ul><li>"1 Mario" / "3 (empty)" is the badge's own label shape. Names and lengths are <code>SLOT_GET</code> replies, one per slot, read when the screen opens.</li><li>The play button sends <code>TUNE_PLAY</code> with the slot's id (8 + slot). Empty slots have none: there is nothing to hear.</li><li>Tap a row to edit it (frame 6).</li></ul></div>
+
+<div class="card"><h2><span class="n">4</span>Pick a tone, hear it first</h2><p>One picker for all six events, with the badge's list. Play auditions on the radio; tapping the name chooses it.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Buzzer and tones</span></div>
+<div class="scrim"></div>
+<div class="dlg">
+<div class="dt">DM tone</div>
+<div class="ds">Plays for every direct message.</div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-mute"/></svg></span><div class="txt"><div class="ti">Silent</div></div></div>
+<div class="tile sel"><span class="lead on"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Chime</div><div class="ts">Now playing for DMs</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Kerplop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Tick</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Bloop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Drop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Knock</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="sec">Your tunes</div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Mario</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Zelda</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Nokia</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="acts"><span class="btn text">Cancel</span></div>
+</div>
+</div></div>
+<ul><li>The list is exactly what firmware accepts: the named built-ins (ids 0 to 6) and filled slots only. Empty slots are not offered, so a set is never refused for that.</li><li>Tapping a name sends <code>EVTONE_SET</code>; the dialog closes and the row changes only on the radio's reply, which carries stored and effective.</li><li><b>No Default row.</b> Firmware refuses 0xFF on an event, as the badge's own picker offers none (owner decision 3).</li><li>"Now playing" marks the effective tune, as the badge marks it "now".</li></ul></div>
+
+<div class="card"><h2><span class="n">5</span>Why a preview made no sound</h2><p>The radio says why it refused. The app says it in words, as the badge does with "Buzzer: OFF".</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Buzzer and tones</span></div>
+<div class="sh">Device notification scope</div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">All</div><div class="ts">Beep for any received message</div></div></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Self</div><div class="ts">Beep only for direct messages and @[mentions]</div></div></div>
+<div class="tile sel"><span class="lead on"><svg class="ic"><use href="#i-rad-on"/></svg></span><div class="txt"><div class="ti">None</div><div class="ts">Never beep</div></div></div>
+<div class="sh">Custom tunes</div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">1 Mario</div><div class="ts">142 characters</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="snack"><span style="flex:1">Sound is off on this radio. Set the scope to All or Self to hear it.</span><span class="a">OK</span></div>
+</div></div>
+<ul><li><code>TUNE_PLAY</code> result 2 (sound off): this message, which stays until OK.</li><li>Result 1 (something more important is sounding): "The radio is playing a notification. Try again in a moment."</li><li>Result 0: nothing shown. The sound is the confirmation.</li></ul></div>
+
+<div class="card"><h2><span class="n">6</span>Edit a slot, starting from what is there</h2><p>The editor reads the stored tune back first, so a filled slot opens with its text and can be changed, not only replaced.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Slot 1</span></div>
+<div style="height:10px"></div>
+<div class="fld focus"><span class="lab">RTTTL</span><div class="val">Mario:d=4,o=5,b=100:16e6,16e6,32p,8e6,16c6,8e6,8g6,8p,8g,8p,8c6,16p,8g,16p,8e,16p,8a,8b,16a#,8a,16g.,16e6,16g6,8a6,16f6,8g6,8e6,16c6,16d6,8b</div></div>
+<div class="help"><span>Plays as "Mario"</span><span>142 / 240</span></div>
+<div class="row"><span class="btn text red">Clear slot</span><span class="btn outl"><svg class="ic"><use href="#i-play"/></svg>Play saved</span><span class="btn fill">Save</span></div>
+<div class="lin" style="margin-top:22px"><div style="width:100%"></div></div>
+<div class="prog">Read from the radio: 142 of 142 characters</div>
+</div></div>
+<ul><li>Opening sends <code>SLOT_READ</code> at offset 0, then again at offset + bytes while <code>more</code> is 1. The field is read-only and shows this bar until the read completes.</li><li>Typing is checked live with firmware's own <code>rtttlProblem()</code> and its words ("b= must be 1 or more"); Save stays disabled while there is a problem. Saving is the chunked <code>SLOT_SET</code>, then a re-read.</li><li><b>Play saved</b> plays what is on the radio, not unsaved typing: there is no command to play text that has not been saved. It is disabled while the text differs from the saved tune.</li><li>Clear sends the empty commit, after a confirm.</li></ul></div>
+
+<div class="card"><h2><span class="n">7</span>A channel's tone names its Default</h2><p>The channel sheet's "Radio tone" picker (#971), now able to say what Default plays, the way the badge shows "Default Kerplop".</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="tt" style="margin:0 0 0 12px;text-align:left">Channels</span></div>
+<div class="scrim"></div>
+<div class="dlg">
+<div class="dt">Radio tone</div>
+<div class="ds">#okimesh</div>
+<div class="tile sel"><span class="lead on"><svg class="ic"><use href="#i-follow"/></svg></span><div class="txt"><div class="ti">Default</div><div class="ts">Kerplop, the radio's channel tone</div></div><span class="tr pr"><svg class="ic"><use href="#i-check"/></svg></span></div>
+<div class="dv" style="margin:4px 0"></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-mute"/></svg></span><div class="txt"><div class="ti">Silent</div></div></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Chime</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Kerplop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Tick</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Bloop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Drop</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Knock</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="sec">Your tunes</div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Mario</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-note"/></svg></span><div class="txt"><div class="ti">Zelda</div></div><span class="tr pr"><svg class="ic"><use href="#i-play"/></svg></span></div>
+</div>
+</div></div>
+<ul><li>Same picker as frame 4 plus the Default row a conversation needs. Default writes stored 0; it is the only way to un-set a channel's tone.</li><li>Default's subtitle is the Channel event's <code>effective</code> tune from <code>EVTONE_GET</code> ev 1, so it names a real tune rather than "follows the radio".</li><li>Empty slots are hidden here too: firmware now refuses an empty slot for a channel (<code>3e788e2a</code>), which settles the first #971 question.</li><li>The row also sits in the channel chat screen's menu, from the same widget.</li></ul></div>
+
+</div>
+
+<h3>Screen and Battery</h3><div class="grid">
+
+<div class="card"><h2><span class="n">8</span>Screen</h2><p>The badge's Nav text, Message text and Screen off rows, with the same choices and no others.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Screen</span></div>
+<div class="sh">Text size</div>
+<div class="lab2">Menus and lists</div>
+<div class="seg"><span class="on"><svg class="ic"><use href="#i-check"/></svg>Large</span><span>Medium</span><span>Small</span></div>
+<div class="lab2">Messages</div>
+<div class="seg"><span>Large</span><span class="on"><svg class="ic"><use href="#i-check"/></svg>Medium</span><span>Small</span></div>
+<div class="sh">Screen off</div>
+<div class="ex">How long the screen stays on after the last key press.</div>
+<div class="seg"><span>15 s</span><span>30 s</span><span class="on"><svg class="ic"><use href="#i-check"/></svg>1 m</span><span>2 m</span><span>5 m</span></div>
+<div class="sh">Time zone</div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-globe"/></svg></span><div class="txt"><div class="ti">Eastern</div><div class="ts">UTC-4 now. Message times show as clock times.</div></div><span class="tr"><svg class="ic"><use href="#i-chev"/></svg></span></div>
+</div></div>
+<ul><li>Every control is the <code>SCREEN_GET</code> reply; each change sends its SET and the controls redraw from the 14-byte re-read reply, never from the tap.</li><li>"Menus and lists" is the badge's Nav text, "Messages" its Message text (owner decision 4).</li><li>Screen off offers exactly the five steps firmware accepts. When <code>scr_stored</code> is 0 (compiled default), no segment is selected and the line reads "Board default: 1 m" from <code>scr_secs</code>; picking a step replaces it and there is no way back to 0, on the badge or here.</li></ul></div>
+
+<div class="card"><h2><span class="n">9</span>Time zone</h2><p>The badge's 40 zones, its "not set", and a suggestion: the badge suggests from GPS, the app from the phone.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Time zone</span></div>
+<div class="srch"><svg class="ic"><use href="#i-search"/></svg>Search zones</div>
+<div class="tile new"><span class="lead"><svg class="ic"><use href="#i-phone"/></svg></span><div class="txt"><div class="ti">Eastern</div><div class="ts">Matches this phone</div></div><span class="tr">UTC-4</span></div>
+<div class="dv"></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">not set</div><div class="ts">Messages show their age</div></div></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">UTC</div></div><span class="tr">UTC+0</span></div>
+<div class="tile sel"><span class="lead on"><svg class="ic"><use href="#i-rad-on"/></svg></span><div class="txt"><div class="ti">Eastern</div><div class="ts">Current</div></div><span class="tr">UTC-4</span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Central</div></div><span class="tr">UTC-5</span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Mountain</div></div><span class="tr">UTC-6</span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Arizona</div></div><span class="tr">UTC-7</span></div>
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-rad-off"/></svg></span><div class="txt"><div class="ti">Pacific</div></div><span class="tr">UTC-7</span></div>
+</div></div>
+<ul><li>The list is a copy of <code>TimeZones.h</code> <code>kZones</code>, in its order. AmberForge confirms it is append-only, so the index is stable; an index the app does not know is shown by number.</li><li>Offsets are computed with the zone's own daylight rule (US, EU, or none), as the badge's picker shows them.</li><li>"Matches this phone" picks the named zone whose rule and offset equal the phone's, else the fixed UTC offset, else nothing. It is a suggestion; tapping it sends <code>TZ_SET</code> like any row.</li><li>"not set" is storable (index 0), as on the badge.</li></ul></div>
+
+<div class="card"><h2><span class="n">10</span>Battery</h2><p>The badge's Battery screen: where 100% is, how it got there, and its two actions.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Battery</span></div>
+<div class="big">96%</div>
+<div class="ex" style="padding-top:2px">Reading 4120 mV</div>
+<div class="pad" style="padding-top:8px"><div class="mcard">
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-batt"/></svg></span><div class="txt"><div class="ti">100% at 4150 mV</div><div class="ts">Learned after a full charge</div></div></div>
+</div></div>
+<div class="ex">The radio learns where full is after a complete charge. Set it by hand only if the bar never reaches 100% when charged.</div>
+<div class="row" style="justify-content:flex-start"><span class="btn tonal"><svg class="ic"><use href="#i-bolt"/></svg>Set 100% here</span><span class="btn text">Back to auto</span></div>
+</div></div>
+<ul><li>The 100% point and its source (default, learned, set by hand) are the <code>batt_stored</code>, <code>batt_full</code> and <code>batt_pinned</code> bytes; the reading and percent are the battery report the app already receives.</li><li><b>Set 100% here</b> sends <code>BATT_SET 1</code>: the radio pins its own current reading, as the badge does. A confirm says "Only do this with the radio fully charged."</li><li><b>Back to auto</b> sends <code>BATT_SET 0</code>, shown only when something is learned or pinned.</li></ul></div>
+
+<div class="card"><h2><span class="n">11</span>Refused, with the radio's reason</h2><p>The radio refuses a reading that is not a plausible full cell, and says which way it is wrong.</p>
+<div class="dev"><div class="scr">
+<div class="ab"><span class="bk"><svg class="ic"><use href="#i-back"/></svg></span><span class="tt">Battery</span></div>
+<div class="ban"><svg class="ic"><use href="#i-err"/></svg><span style="flex:1">Not charged yet. Charge the radio fully, then set 100% again. Nothing was changed.</span><span class="x"><svg class="ic"><use href="#i-close"/></svg></span></div>
+<div class="big">71%</div>
+<div class="ex" style="padding-top:2px">Reading 3890 mV</div>
+<div class="pad" style="padding-top:8px"><div class="mcard">
+<div class="tile"><span class="lead"><svg class="ic"><use href="#i-batt"/></svg></span><div class="txt"><div class="ti">100% at 4200 mV</div><div class="ts">Default for this board</div></div></div>
+</div></div>
+<div class="row" style="justify-content:flex-start"><span class="btn tonal"><svg class="ic"><use href="#i-bolt"/></svg>Set 100% here</span></div>
+</div></div>
+<ul><li><code>ERR_BATT_NOT_CHARGED</code> (9): this message. <code>ERR_BATT_TOO_HIGH</code> (8): "The reading is higher than a full cell, so it was not used."</li><li>The existing persistent <code>_ErrorBanner</code>: it stays until dismissed.</li><li>Back to auto is absent: nothing is learned or pinned, matching the badge, which hides it then.</li></ul></div>
+
+</div>
+
+<h3>Owner decisions, 2026-10-25</h3>
+<div class="why">
+<div><h4>1. Screen and Battery under Node Settings</h4><p>They are this radio's own hardware settings, beside Button actions, and they appear only on radios that have them. The rejected alternative was a new top-level "Device display" category, which would be empty on most radios.</p></div>
+<div><h4>2. Play is a separate button</h4><p>The badge auditions as you move because moving and choosing are separate keys. On a phone, a tap is the choice, so play is its own button and the name chooses. A preview never changes the setting.</p></div>
+<div><h4>3. No way back to "radio default"</h4><p>Firmware refuses 0xFF on an event because the badge's picker has no Default row for events, and Screen off accepts only its five steps. The app matches that. A way back would be a firmware change.</p></div>
+<div><h4>4. "Menus and lists" and "Messages"</h4><p>The badge says "Nav text" and "Message text", which fit 21 columns. The app has room to say what each governs.</p></div>
+</div>
+
+<h3>Why these choices</h3>
+<div class="why">
+<div><h4>The radio is the record, everywhere</h4><p>Every reply on this list re-reads after the write: EVTONE and CHTUNE carry stored and effective, SCREEN carries the whole set. The app draws only from replies, stores none of it, and so has nothing per radio to isolate (#853) or to drift.</p></div>
+<div><h4>The app offers exactly what the badge offers</h4><p>Firmware refuses anything its own screens would not offer. Building each list from the same rule (named built-ins plus filled slots, five Screen off steps, three sizes, the zone table) means the app never offers a choice the radio will reject.</p></div>
+</div>
+
+</body></html>

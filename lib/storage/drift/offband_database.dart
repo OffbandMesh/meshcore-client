@@ -13,6 +13,40 @@ import 'db_snapshot_web.dart' if (dart.library.io) 'db_snapshot_io.dart';
 
 part 'offband_database.g.dart';
 
+/// Thrown when the database on disk is at a NEWER schema than this build
+/// understands (#943).
+///
+/// The upgrade to schema 2 is one-way by design, so this is a refusal and not
+/// a recoverable condition. It exists to make that refusal legible: drift
+/// would otherwise run this build's `onUpgrade` for a downgrade and then stamp
+/// `user_version` backwards, leaving no trace that the database had been on a
+/// newer build.
+class OffbandSchemaDowngrade implements Exception {
+  const OffbandSchemaDowngrade({
+    required this.from,
+    required this.to,
+    this.databasePath,
+  });
+
+  /// The schema the database on disk is at.
+  final int from;
+
+  /// The newest schema this build understands.
+  final int to;
+
+  /// Where that database is, when it could be resolved.
+  final String? databasePath;
+
+  @override
+  String toString() =>
+      'OffbandSchemaDowngrade: this database is at schema $from and this '
+      'build only understands $to. A newer version of the app has already '
+      'migrated it, and that upgrade is one-way, so this build cannot open '
+      'it. Install the newer version again, or restore a pre-migration copy '
+      'of the database, which loses everything received since.'
+      '${databasePath == null ? '' : ' Database: $databasePath'}';
+}
+
 /// Bulk data store (#335). Replaces SharedPreferences for message history,
 /// contacts and discovered contacts.
 ///
@@ -28,7 +62,7 @@ part 'offband_database.g.dart';
 /// IndexedDB and runs in a worker rather than on the UI thread.
 ///
 /// Settings stay in SharedPreferences. Only bulk data moves here.
-@DriftDatabase(tables: [StoredBlobs])
+@DriftDatabase(tables: [StoredBlobs, MessageRecords])
 class OffbandDatabase extends _$OffbandDatabase {
   OffbandDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
@@ -315,7 +349,83 @@ class OffbandDatabase extends _$OffbandDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  /// Schema 2 adds [MessageRecords] (#920). Purely additive: [StoredBlobs] is
+  /// untouched and keeps every byte it had.
+  ///
+  /// That is true of the data and NOT of a downgrade, which is what #943
+  /// corrects. drift has no "newer schema" refusal: it compares the stored
+  /// `user_version` against [schemaVersion] for inequality and routes BOTH
+  /// directions into this callback. The pre-#917 build declared schema 1 and
+  /// no strategy at all, so it got drift's default `onUpgrade`, which throws,
+  /// and so it could never reach the blobs it would have found.
+  ///
+  /// A downgrade therefore has to be refused HERE, which is what the first
+  /// branch below does (#943, owner decision 2026-10-22). Without it the
+  /// `from < 2` guard let a future schema open silently, and drift then
+  /// stamped `user_version` back down, erasing the only record the database
+  /// had ever been on a newer build.
+  ///
+  /// Downgrades are deliberately unsupported rather than made to work. Once a
+  /// key is on rows its blob is frozen, so an older build would read stale
+  /// history and write into the blob while this one reads rows, orphaning
+  /// everything it received. Supporting a downgrade would mean dual-writing
+  /// the blob on every save, which is the cost #917 exists to remove.
+  /// `test/storage/schema_downgrade_test.dart` pins all of this.
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from > to) {
+        // Logged BEFORE the path lookup and before the throw, deliberately.
+        // This runs inside drift's beforeOpen, so it fires on whichever
+        // isolate issued the first query, and whoever catches the exception
+        // decides what the user sees. A downgrade that only stopped
+        // background work, with nothing in the log, would be the quiet
+        // failure this branch exists to replace (Gemini review).
+        appLogger.error(
+          'Refusing to open the database: it is at schema $from and this '
+          'build understands $to. The upgrade to a newer schema is one-way '
+          '(#943).',
+          tag: 'Storage',
+        );
+        // Best-effort: path_provider has no web implementation, and on the
+        // platforms where a downgrade is reachable this reads environment
+        // variables rather than a platform channel, and has already resolved
+        // once to open this database. A message without the path still beats
+        // the silent version rewrite it replaces.
+        String? path;
+        try {
+          path = await pinnedDatabasePath();
+        } catch (_) {}
+        throw OffbandSchemaDowngrade(from: from, to: to, databasePath: path);
+      }
+      if (from < 2) {
+        await m.createTable(messageRecords);
+        await m.createIndex(
+          Index(
+            'idx_message_records_store_ts',
+            'CREATE INDEX IF NOT EXISTS idx_message_records_store_ts '
+                'ON message_records (store_key, timestamp_ms)',
+          ),
+        );
+        appLogger.info(
+          'drift schema $from -> $to: created message_records (#920). '
+          'stored_blobs untouched.',
+        );
+      }
+    },
+    beforeOpen: (details) async {
+      // A fresh database is created at the current schema, so onUpgrade never
+      // runs for it and the index would be missing.
+      if (details.wasCreated) {
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_message_records_store_ts '
+          'ON message_records (store_key, timestamp_ms)',
+        );
+      }
+    },
+  );
 
   /// Step-1 gate for #335: proves the database opens, writes and reads back on
   /// the current platform. Deliberately trivial - no user data is involved, so
@@ -351,4 +461,47 @@ class StoredBlobs extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+/// One row per message, replacing one element of a [StoredBlobs] JSON array
+/// each (#920).
+///
+/// Why this exists: with the whole history in one blob, saving a single message
+/// decoded, rebuilt and re-encoded every message that came before it. On the
+/// owner's largest channel that was 9,230 records and 134 ms of work per
+/// arriving message, and #919 could only move that cost to another isolate,
+/// not remove it. One row per message makes a save an upsert of one row.
+///
+/// [storeKey] is deliberately the SAME key the blob used, not a new scheme.
+/// All of the per-radio and per-channel scoping rules (#194, #472) already live
+/// in those keys, so reusing them means this table inherits that scoping
+/// unchanged, and the migration becomes a per-key operation with an exact
+/// record count to verify against.
+///
+/// [payload] holds the per-message JSON exactly as the stores already emit it,
+/// rather than a column per field. That keeps the migration a pure re-key with
+/// no field mapping that could silently drop or coerce a value, lets the
+/// stores reuse their existing encoders, and means a new message field needs
+/// no second data migration. The trade: message fields are not SQL-queryable.
+/// Columns can be added beside the payload later without another migration if
+/// that is ever wanted.
+class MessageRecords extends Table {
+  @override
+  String get tableName => 'message_records';
+
+  /// The store key this message belongs to, byte-identical to the blob key.
+  TextColumn get storeKey => text()();
+
+  /// Stable per-message identity: the stores' existing `_mergeKey`. Upserting
+  /// on it preserves exactly the dedupe semantics the blob merge had.
+  TextColumn get mergeKey => text()();
+
+  /// Sender-claimed time in epoch milliseconds, for ordering and paging. An
+  /// INTEGER column so ORDER BY and LIMIT happen in SQLite, not in Dart.
+  IntColumn get timestampMs => integer()();
+
+  TextColumn get payload => text()();
+
+  @override
+  Set<Column> get primaryKey => {storeKey, mergeKey};
 }

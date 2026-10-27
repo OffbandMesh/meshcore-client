@@ -264,6 +264,31 @@ class _ScannerScreenState extends State<ScannerScreen> {
         break;
     }
 
+    // An automatic retry, or one that gave up, says so and offers a way out,
+    // rather than a bare "Connecting..." nobody can stop (#997).
+    final target = connector.autoReconnectTargetName ?? '';
+    Widget? action;
+    if (connector.isAutoReconnecting) {
+      statusText = l10n.scanner_reconnecting(
+        target,
+        connector.autoReconnectAttempt,
+        connector.autoReconnectMaxAttempts,
+      );
+      statusColor = Colors.orange;
+      action = TextButton(
+        onPressed: connector.stopAutoReconnect,
+        child: Text(l10n.common_stop),
+      );
+    } else if (connector.autoReconnectGaveUp &&
+        connector.state == MeshCoreConnectionState.disconnected) {
+      statusText = l10n.scanner_reconnectGaveUp(target);
+      statusColor = Colors.red;
+      action = TextButton(
+        onPressed: connector.retryLastDevice,
+        child: Text(l10n.common_retry),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -272,10 +297,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
         children: [
           Icon(Icons.circle, size: 12, color: statusColor),
           const SizedBox(width: 8),
-          Text(
-            statusText,
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.w500),
+          Expanded(
+            child: Text(
+              statusText,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w500),
+            ),
           ),
+          ?action,
         ],
       ),
     );

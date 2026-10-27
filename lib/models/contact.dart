@@ -5,7 +5,40 @@ import '../connector/meshcore_protocol.dart';
 
 class Contact {
   final Uint8List publicKey;
-  final String name;
+
+  /// The name this node last gave us, from its own signed advert or from an
+  /// unsigned contact-share card. Never the user's label. (#750)
+  ///
+  /// Called "received" rather than "advert" deliberately: a contact-share card
+  /// is plain unsigned channel text, so a card-added contact carries a name here
+  /// that was never advertised by anyone. Whether a signed advert has ever been
+  /// seen is a separate question, answered by [isAdvertVerified].
+  ///
+  /// **This is what goes on the wire and into storage.** Read [name] to display.
+  /// Sending [name] to the radio would overwrite the shared record of what the
+  /// node calls itself with one user's private label.
+  final String receivedName;
+
+  /// The user's own label for this node, or null when they have not set one.
+  ///
+  /// Client-side only. Firmware holds a single `char name[32]` per contact
+  /// (`ContactInfo.h:10`) and has no override concept, so this can never be sent
+  /// to the radio. Stock MeshCore's CUSTOM NAME field works the same way.
+  final String? customName;
+
+  /// What to show the user: their own label if they set one, otherwise the name
+  /// the node gave us.
+  ///
+  /// Every display site reads this, which is why it keeps the short name: an
+  /// existing or future read of `.name` is already correct and cannot forget.
+  /// An empty or whitespace-only custom name counts as unset, so clearing the
+  /// text field cannot leave a contact with a blank name and no way back.
+  String get name {
+    final custom = customName;
+    if (custom == null || custom.trim().isEmpty) return receivedName;
+    return custom;
+  }
+
   final int type;
   final int flags;
 
@@ -38,7 +71,8 @@ class Contact {
 
   Contact({
     required this.publicKey,
-    required this.name,
+    required this.receivedName,
+    this.customName,
     required this.type,
     this.flags = 0,
     required this.pathLength,
@@ -89,9 +123,20 @@ class Contact {
 
   bool get isFavorite => (flags & contactFlagFavorite) != 0;
 
+  /// A chat node (phone/radio companion), as opposed to a repeater, room
+  /// server or sensor. Remote CLI (#999) targets companions; repeaters and
+  /// room servers have their own CLI via the repeater hub.
+  bool get isCompanion => type == advTypeChat;
+
   Contact copyWith({
     Uint8List? publicKey,
-    String? name,
+    String? receivedName,
+    String? customName,
+
+    /// Clears the user's label so [name] falls back to [receivedName]. A null
+    /// `customName` means "leave it alone", the same as every other field here,
+    /// so removing one needs its own flag. (#750)
+    bool clearCustomName = false,
     int? type,
     int? flags,
     int? pathLength,
@@ -110,7 +155,8 @@ class Contact {
   }) {
     return Contact(
       publicKey: publicKey ?? this.publicKey,
-      name: name ?? this.name,
+      receivedName: receivedName ?? this.receivedName,
+      customName: clearCustomName ? null : (customName ?? this.customName),
       type: type ?? this.type,
       flags: flags ?? this.flags,
       pathLength: pathLength ?? this.pathLength,
@@ -238,7 +284,8 @@ class Contact {
 
       return Contact(
         publicKey: pubKey,
-        name: name.isEmpty ? 'Unknown' : name,
+        // Straight off the wire, so a received name by definition. (#750)
+        receivedName: name.isEmpty ? 'Unknown' : name,
         type: type,
         flags: flags,
         pathLength:
@@ -275,8 +322,13 @@ class Contact {
   ///
   /// Note this shares only the identity. It carries no path and no advert, so
   /// the receiving side gets an unverified stub exactly as we do.
+  /// Shares [receivedName], never `.name`. A share payload becomes the
+  /// RECEIVED name on every device that imports it, so sending a custom name
+  /// would push one user's private label out as another operator's ground
+  /// truth, overwriting a signed advert name. Worse than sending it to our own
+  /// radio, because it propagates. (#750, found by the pre-PR review)
   String toShareUri() =>
-      buildShareUri(publicKeyHex: publicKeyHex, name: name, type: type);
+      buildShareUri(publicKeyHex: publicKeyHex, name: receivedName, type: type);
 
   /// Builds the reference-app contact share URI from raw parts.
   ///
@@ -313,8 +365,12 @@ class Contact {
   ///
   /// Use the URI form for a QR, a DM, or an out-of-band paste. Use this for a
   /// channel.
-  String toChannelShare() =>
-      buildChannelShare(publicKeyHex: publicKeyHex, name: name, type: type);
+  /// Shares [receivedName], never `.name`. Same reason as [toShareUri]. (#750)
+  String toChannelShare() => buildChannelShare(
+    publicKeyHex: publicKeyHex,
+    name: receivedName,
+    type: type,
+  );
 
   /// Builds the compact channel share from raw parts, so this device can share
   /// its OWN identity without constructing a [Contact]. (#611)
@@ -378,7 +434,10 @@ class Contact {
 
     return Contact(
       publicKey: publicKey,
-      name: name.isEmpty ? 'Unknown' : name,
+      // A contact-share card is unsigned channel text, so this name was chosen
+      // by whoever posted the card and may not be the key holder. Received, not
+      // the user's label, and not advertised either. (#750, #645)
+      receivedName: name.isEmpty ? 'Unknown' : name,
       type: type,
       flags: 0,
       pathLength: -1,
@@ -440,8 +499,9 @@ class Contact {
 
     return Contact(
       publicKey: publicKey,
-      // Matches fromFrame's convention for a nameless contact.
-      name: (name == null || name.isEmpty) ? 'Unknown' : name,
+      // Matches fromFrame's convention for a nameless contact. Received: the
+      // URI's author picked this name, the same as a card. (#750)
+      receivedName: (name == null || name.isEmpty) ? 'Unknown' : name,
       type: type,
       flags: 0,
       // Flood until the mesh teaches us a path. Mirrors the firmware's
@@ -476,4 +536,7 @@ class Contact {
   bool get teleBaseEnabled => (flags & contactFlagTeleBase) != 0;
   bool get teleLocEnabled => (flags & contactFlagTeleLoc) != 0;
   bool get teleEnvEnabled => (flags & contactFlagTeleEnv) != 0;
+
+  /// This contact may run remote CLI (TXT type 3) commands on our radio (#887).
+  bool get remoteCliAllowed => (flags & contactFlagRemoteCliAllowed) != 0;
 }

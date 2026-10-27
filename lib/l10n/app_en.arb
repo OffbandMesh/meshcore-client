@@ -24,6 +24,7 @@
   "common_share": "Share",
   "common_copy": "Copy",
   "common_retry": "Retry",
+  "common_stop": "Stop",
   "common_hide": "Hide",
   "common_remove": "Remove",
   "common_enable": "Enable",
@@ -112,6 +113,29 @@
   "scanner_connecting": "Connecting...",
   "scanner_disconnecting": "Disconnecting...",
   "scanner_notConnected": "Not connected",
+  "scanner_reconnecting": "Reconnecting to {deviceName} (attempt {attempt} of {maxAttempts})",
+  "@scanner_reconnecting": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "attempt": {
+        "type": "int"
+      },
+      "maxAttempts": {
+        "type": "int"
+      }
+    }
+  },
+  "scanner_reconnectGaveUp": "Couldn't reach {deviceName}",
+  "@scanner_reconnectGaveUp": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectBusy": "Busy with another connection. Try again in a moment.",
   "scanner_connectedTo": "Connected to {deviceName}",
   "@scanner_connectedTo": {
     "placeholders": {
@@ -159,6 +183,74 @@
   "scanner_enableBluetooth": "Enable Bluetooth",
   "device_quickSwitch": "Quick switch",
   "device_meshcore": "MeshCore",
+  "deviceCli_title": "Device CLI",
+  "deviceCli_remoteTitle": "Remote CLI",
+  "@deviceCli_remoteTitle": {
+    "description": "Title of the CLI console when it targets a remote companion contact (#999); the contact's name is the subtitle."
+  },
+  "deviceCli_entrySubtitle": "Run commands on the connected radio",
+  "deviceCli_nameRejected": "Not sent - name can't contain: {chars}",
+  "@deviceCli_nameRejected": {
+    "description": "Console row when a `set name` command is blocked client-side; {chars} is the offending characters, space-separated.",
+    "placeholders": {
+      "chars": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_commandHint": "command...",
+  "deviceCli_emptyHint": "Commands run on the connected device",
+  "deviceCli_noReply": "{command}: no reply in {seconds} s",
+  "@deviceCli_noReply": {
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_remoteNoReply": "{command}: no reply in {seconds} s. This radio may not allow remote CLI from you, or is unreachable. Not retried.",
+  "@deviceCli_remoteNoReply": {
+    "description": "Console row when a remote-CLI command to a companion times out (#891). A companion that has not granted remote CLI simply never replies, so this explains the silence and that the command was sent once, not retried.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_remoteUnsupported": "{command}: not sent. Your radio's firmware doesn't support remote CLI.",
+  "@deviceCli_remoteUnsupported": {
+    "description": "Console row when the connected radio refuses to send a remote-CLI command because its firmware predates TXT_TYPE_CLI_COMMAND (#999). Nothing was transmitted.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_sendFailed": "Send failed: {error}",
+  "@deviceCli_sendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deviceCli_truncatedByDevice": "reply truncated by the device",
+  "deviceCli_secretLongPressToCopy": "secret, long-press to copy",
+  "deviceCli_secretCopied": "Secret copied to clipboard",
+  "deviceCli_latencyMs": "{ms} ms",
+  "@deviceCli_latencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
   "settings_title": "Settings",
   "settings_deviceInfo": "Device Info",
   "settings_appSettings": "App Settings",
@@ -176,6 +268,18 @@
   "settings_nodeNameNotSet": "Not set",
   "settings_nodeNameHint": "Enter node name",
   "settings_nodeNameUpdated": "Name updated",
+  "settings_nodeNameInvalidChars": "Name can't contain: {chars}",
+  "@settings_nodeNameInvalidChars": {
+    "description": "Shown when a device name contains characters the firmware rejects; {chars} is the offending characters, space-separated.",
+    "placeholders": {
+      "chars": {
+        "type": "String"
+      }
+    }
+  },
+  "settings_syncQueuedMessages": "Sync queued messages now",
+  "settings_syncQueuedMessagesSubtitle": "Force-pull messages the radio is holding, diagnostic for #51 (radio reports a count but the app shows none). Logs the flow for diagnostics.",
+  "settings_syncQueuedMessagesRequested": "Requested queued-message drain (force)",
   "settings_radioSettings": "Radio Settings",
   "settings_radioSettingsSubtitle": "Frequency, power, spreading factor",
   "settings_radioSettingsUpdated": "Radio settings updated",
@@ -200,6 +304,91 @@
   "settings_locationIntervalInvalid": "Interval must be at least 60 seconds, and less than 86400 seconds.",
   "settings_latitude": "Latitude",
   "settings_longitude": "Longitude",
+  "settings_locationCategorySubtitle": "GPS, coordinates, and reporting",
+  "settings_locationCoordinates": "Coordinates",
+  "settings_locationNotSet": "Not set",
+  "settings_locationReportInterval": "Position reporting interval",
+  "settings_locationEveryMinutes": "{minutes, plural, =1{Every minute} other{Every {minutes} minutes}}",
+  "@settings_locationEveryMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_locationEverySeconds": "Every {seconds} seconds",
+  "@settings_locationEverySeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsModeLabel": "GPS",
+  "settings_gpsModeOff": "Off",
+  "settings_gpsModeOn": "On",
+  "settings_gpsModePowerSave": "Power save",
+  "settings_gpsActivityOff": "GPS is off",
+  "settings_gpsActivityOn": "GPS is on",
+  "settings_gpsActivitySearching": "Searching for a fix",
+  "settings_gpsActivitySleeping": "Sleeping between fixes",
+  "settings_gpsActivityBackedOff": "Backed off",
+  "settings_gpsOffDetail": "Showing the last stored position",
+  "settings_gpsNextTryMinutes": "{minutes, plural, =1{Next try in 1 min} other{Next try in {minutes} min}}",
+  "@settings_gpsNextTryMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsNextTrySeconds": "Next try in {seconds} s",
+  "@settings_gpsNextTrySeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsLastFixMinutes": "{minutes, plural, =0{Last fix just now} =1{Last fix 1 min ago} other{Last fix {minutes} min ago}}",
+  "@settings_gpsLastFixMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsSatellites": "{count, plural, =1{1 satellite} other{{count} satellites}}",
+  "@settings_gpsSatellites": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_gpsQuery": "Query",
+  "settings_gpsReading": "Reading GPS settings…",
+  "settings_gpsSleepTitle": "Sleep between fix attempts",
+  "settings_gpsSleepDefault": "Firmware default, minimum 5 minutes",
+  "settings_gpsSleepFieldLabel": "Seconds between attempts",
+  "settings_gpsSleepFieldHint": "0 for the firmware default. The radio raises anything under 300 to 300.",
+  "settings_gpsSleepInvalid": "Enter a whole number of seconds, 0 or more.",
+  "settings_buttonActions": "Button actions",
+  "settings_buttonActionsSubtitle": "Assign what the button does",
+  "settings_badgeScreen": "Screen",
+  "settings_badgeScreenSubtitle": "Text size, screen off, time zone",
+  "settings_badgeBattery": "Battery",
+  "settings_badgeBatterySubtitle": "100% at {mv} mV",
+  "@settings_badgeBatterySubtitle": {
+    "placeholders": {
+      "mv": {
+        "type": "int"
+      }
+    }
+  },
+  "settings_badgeBatteryReading": "Reading from the radio",
+  "settings_buzzerTones": "Buzzer and tones",
+  "settings_buzzerTonesSubtitle": "When this radio beeps",
   "settings_contactSettings": "Contact Settings",
   "settings_contactSettingsSubtitle": "Settings for how contacts are added.",
   "settings_privacyMode": "Privacy Mode",
@@ -598,6 +787,27 @@
     }
   },
   "contact_info": "Contact Info",
+  "contact_rename": "Rename",
+  "contact_renameTitle": "Custom name",
+  "contact_renameHint": "Your name for this node",
+  "contact_renameExplain": "Only you see this. The node keeps its own name, and adverts keep that up to date.",
+  "contact_renameClear": "Clear",
+  "contact_renameTooLong": "Keep it under {max} characters",
+  "@contact_renameTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "contact_nodeCallsItself": "Node name: {name}",
+  "@contact_nodeCallsItself": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "contact_settings": "Contact Settings",
   "contact_telemetry": "Telemetry",
   "contact_lastSeen": "Last seen",
@@ -608,6 +818,12 @@
   "contact_teleLocSubtitle": "Allow sharing location data",
   "contact_teleEnv": "Telemetry Environment",
   "contact_teleEnvSubtitle": "Allow sharing environment sensor data",
+  "contact_remoteCli": "Remote CLI",
+  "contact_remoteCliSubtitle": "Let this contact run CLI commands on your radio",
+  "contact_cliConsole": "CLI console",
+  "@contact_cliConsole": {
+    "description": "Chat app-bar menu action on a companion contact that opens the remote CLI console targeting that contact (#999)."
+  },
   "channels_title": "Channels",
   "channels_noChannelsConfigured": "No channels configured",
   "channels_addPublicChannel": "Add Public Channel",
@@ -2849,6 +3065,8 @@
   "block_settingsTitle": "Blocked",
   "block_settingsSubtitle": "Users you've blocked",
   "block_none": "No blocked users",
+  "block_noRadio": "No radio connected",
+  "block_noRadioHint": "Blocks belong to the radio that holds them. Connect a radio to see and change its blocked list.",
   "block_keysSection": "Blocked contacts",
   "block_namesSection": "Blocked names",
   "block_namesHint": "Name-only blocks (channel senders). Each upgrades to a full block once we learn their key.",
@@ -3189,5 +3407,139 @@
         "type": "int"
       }
     }
+  },
+  "discoverRegions_title": "Discover Regions",
+  "discoverRegions_subtitle": "Find the flood regions this repeater carries.",
+  "discoverRegions_loading": "Discovering regions from {name}...",
+  "@discoverRegions_loading": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_source": "Regions carried by {name}",
+  "@discoverRegions_source": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_empty": "{name} advertises no flood regions.",
+  "@discoverRegions_empty": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_timeout": "No response from {name}. The repeater may be out of range.",
+  "@discoverRegions_timeout": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "discoverRegions_error": "Could not discover regions.",
+  "discoverRegions_retry": "Retry",
+  "setRegionScope_menu": "Set Region Scope",
+  "setRegionScope_title": "Region scope for {channel}",
+  "@setRegionScope_title": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "setRegionScope_discover": "Discover from repeater",
+  "setRegionScope_none": "None (unscoped)",
+  "setRegionScope_save": "Save",
+  "setRegionScope_searchRepeaters": "Search repeaters",
+  "setRegionScope_pathNote": "You can only discover regions from a repeater you have a stored path to.",
+  "setRegionScope_noPath": "No stored path",
+  "storage_title": "Storage",
+  "storage_databaseSize": "Message database: {size}",
+  "@storage_databaseSize": {
+    "description": "Current size of the message database on this device (#962).",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_staleHint": "When your history moves to the new format, the old copy is kept for 30 days and then cleared on its own. You can clear it now instead.",
+  "@storage_staleHint": {
+    "description": "Explains what the Clear Stale History action does (#962)."
+  },
+  "storage_clearStaleNow": "Clear Stale History Now",
+  "storage_working": "Clearing...",
+  "storage_resultNothing": "Nothing to clear.",
+  "storage_resultCleared": "Cleared {count} old copies, {size} returned.",
+  "@storage_resultCleared": {
+    "description": "Result of a successful stale-history clear (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_resultRefused": "Kept {count} that could not be verified. Your messages are intact; nothing was deleted for those.",
+  "@storage_resultRefused": {
+    "description": "Reported when the clear kept a copy back because its messages could not be verified against the new format (#962, owner decision: the button reports refusals rather than only logging them).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_confirmTitle": "Clear stale history?",
+  "storage_confirmBody": "This removes {count} old copies of history that has already moved to the new format, freeing about {size}.",
+  "@storage_confirmBody": {
+    "description": "Body of the confirmation shown before clearing stale history. The size is approximate because VACUUM's real figure depends on page rounding (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "storage_confirmSafe": "Your messages are not affected. All {count} stay.",
+  "@storage_confirmSafe": {
+    "description": "Reassurance in the clear confirmation: this deletes duplicate copies, not history (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_confirmIrreversible": "This cannot be undone.",
+  "storage_confirmKeptBack": "{count} will be kept back because its messages could not be verified. This cannot be undone.",
+  "@storage_confirmKeptBack": {
+    "description": "Shown when the preview already knows a copy will be refused, so the user hears it before the press rather than after (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_confirmAction": "Clear {count} copies",
+  "@storage_confirmAction": {
+    "description": "Confirm button. Carries the count so the scope is the last thing read before the tap (#962).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "storage_resultFailed": "Could not finish, and some old copies may already have been cleared. Nothing was deleted that was not verified first, so your messages are intact.",
+  "@storage_resultFailed": {
+    "description": "Shown when the clear threw. It must not claim nothing happened, because the sweep deletes per key and may have cleared some before failing (#962)."
   }
 }
