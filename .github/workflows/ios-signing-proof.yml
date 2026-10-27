@@ -1,0 +1,123 @@
+name: iOS signing proof
+
+# Proves, on the same macOS runner image the signed iOS lane will use, that a
+# .p12 packed the way tools/ios-signing/ios-signing.ps1 packs it imports into a
+# keychain with its private key paired to its certificate (#1016, epic #1012).
+#
+# Uses a THROWAWAY self-signed certificate generated here, every run. No real
+# identity, no secret, no private key in the repository. Nothing in this job can
+# reach the apple-signing Environment.
+#
+# Why it exists: OpenSSL 3 (which the owner's Windows script uses) writes .p12
+# files with PBES2/AES-256 and a SHA-256 MAC by default; older macOS keychain
+# tooling has refused that format. The script packs the legacy format
+# (3DES, SHA-1 MAC) instead, and this job is what shows the choice works.
+
+on:
+  pull_request:
+    paths:
+      - "tools/ios-signing/**"
+      - ".github/workflows/ios-signing-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p12-import:
+    runs-on: macos-latest
+    env:
+      CN: "Offband CI throwaway"
+    steps:
+      - name: Locate OpenSSL 3
+        run: |
+          set -eu
+          PREFIX="$(brew --prefix openssl@3 2>/dev/null || true)"
+          OPENSSL="${PREFIX}/bin/openssl"
+          if [ -z "${PREFIX}" ] || [ ! -x "${OPENSSL}" ]; then
+            echo "::error::Homebrew openssl@3 not found on this runner; cannot reproduce the Windows script's OpenSSL 3 output."
+            exit 1
+          fi
+          "${OPENSSL}" version
+          echo "OPENSSL=${OPENSSL}" >> "$GITHUB_ENV"
+
+      - name: Make a throwaway certificate and pack it both ways
+        run: |
+          set -eu
+          umask 077
+          W="${RUNNER_TEMP}/p12"
+          mkdir -p "$W"
+          PW="$("${OPENSSL}" rand -hex 16)"
+          echo "::add-mask::${PW}"
+          echo "P12_PW=${PW}" >> "$GITHUB_ENV"
+          echo "W=${W}" >> "$GITHUB_ENV"
+          "${OPENSSL}" req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$W/k.pem" -out "$W/c.pem" -subj "/CN=${CN}"
+          # The OpenSSL 3 default, for the record only.
+          "${OPENSSL}" pkcs12 -export -inkey "$W/k.pem" -in "$W/c.pem" -name "${CN}" \
+            -out "$W/default.p12" -passout "pass:${PW}"
+          # The format the owner's script produces. Keep these flags identical
+          # to tools/ios-signing/ios-signing.ps1.
+          "${OPENSSL}" pkcs12 -export -inkey "$W/k.pem" -in "$W/c.pem" -name "${CN}" \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+            -out "$W/legacy.p12" -passout "pass:${PW}"
+          for f in default legacy; do
+            test -s "$W/$f.p12" || { echo "::error::$f.p12 was not written"; exit 1; }
+            echo "== $f.p12 =="
+            "${OPENSSL}" pkcs12 -info -noout -in "$W/$f.p12" -passin "pass:${PW}" 2>&1 | grep -E "MAC:|Encrypted data|Shrouded"
+          done
+
+      - name: Temporary keychain
+        run: |
+          set -eu
+          KC="${RUNNER_TEMP}/proof.keychain-db"
+          KP="$("${OPENSSL}" rand -hex 16)"
+          echo "::add-mask::${KP}"
+          security create-keychain -p "${KP}" "${KC}"
+          security set-keychain-settings -lut 600 "${KC}"
+          security unlock-keychain -p "${KP}" "${KC}"
+          echo "KC=${KC}" >> "$GITHUB_ENV"
+
+      # The check that must be able to fail. If a wrong password were accepted,
+      # every result below would be meaningless.
+      - name: "Negative: wrong password is refused"
+        run: |
+          set -u
+          if security import "${W}/legacy.p12" -k "${KC}" -P "not-the-password" -T /usr/bin/codesign; then
+            echo "::error::A wrong password was accepted. This proof cannot be trusted."
+            exit 1
+          fi
+          echo "Refused, as required."
+
+      - name: "Positive: legacy .p12 imports with its key paired"
+        run: |
+          set -eu
+          security import "${W}/legacy.p12" -k "${KC}" -P "${P12_PW}" -T /usr/bin/codesign
+          security find-certificate -c "${CN}" "${KC}" > /dev/null
+          IDS="$(security find-identity "${KC}")"
+          echo "${IDS}"
+          if ! printf '%s\n' "${IDS}" | grep -q "${CN}"; then
+            echo "::error::Certificate imported but no identity: the private key did not pair with it."
+            exit 1
+          fi
+          echo "Legacy .p12 imported with key and certificate paired."
+
+      - name: "Record: does the OpenSSL 3 default import here too?"
+        run: |
+          set -u
+          KC2="${RUNNER_TEMP}/default.keychain-db"
+          security create-keychain -p tmp "${KC2}"
+          security unlock-keychain -p tmp "${KC2}"
+          if security import "${W}/default.p12" -k "${KC2}" -P "${P12_PW}" -T /usr/bin/codesign; then
+            echo "::notice::The OpenSSL 3 default format also imports on this runner image."
+          else
+            echo "::notice::The OpenSSL 3 default format is REFUSED on this runner image; the legacy format is required."
+          fi
+          security delete-keychain "${KC2}" || true
+
+      - name: Clean up
+        if: always()
+        run: |
+          [ -n "${KC:-}" ] && security delete-keychain "${KC}" || true
+          [ -n "${W:-}" ] && rm -rf "${W}" || true
+          echo "Throwaway keychain and files removed."
