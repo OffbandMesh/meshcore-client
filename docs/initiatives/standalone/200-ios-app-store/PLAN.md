@@ -4,7 +4,7 @@
 |---|---|
 | **Feature** | [#200](https://github.com/OffbandMesh/meshcore-client/issues/200) · Citadel `meshcore-open-in0` |
 | **Serves** | Standalone. Sibling of the Google Play release (#159/#160), built on the CI matrix of #312. |
-| **Status** | Draft. Approved when this PR merges. |
+| **Status** | Owner-approved 2026-10-27 ("Plan approved. We'll adapt as we learn more."). In force when this PR merges. |
 | **Owner** | @Strycher |
 | **Last updated** | 2026-10-27 |
 
@@ -59,7 +59,7 @@ Research is on [#958](https://github.com/OffbandMesh/meshcore-client/issues/958)
 
 ## 3. Epics
 
-Epic issues are created when this plan is approved, before its PR merges, so `epic_chain` is never empty at merge (the #962 lesson). #959, #960 and #961 become their children.
+Epic issues, created 2026-10-27 on approval and before this PR, so `epic_chain` is never empty at merge (the #962 lesson): [#1012](https://github.com/OffbandMesh/meshcore-client/issues/1012) A, [#1013](https://github.com/OffbandMesh/meshcore-client/issues/1013) B, [#1014](https://github.com/OffbandMesh/meshcore-client/issues/1014) C, [#1015](https://github.com/OffbandMesh/meshcore-client/issues/1015) D, all sub-issues of #200, Citadel `meshcore-open-zgf`, `-s1b`, `-ywm`, `-3gp` chained A to D. #959 is a child of B; #960 and #961 are children of D.
 
 ### Epic A: the Windows signing toolchain, proven on a Mac runner
 
@@ -135,7 +135,7 @@ File overlap: B1 and B3 both touch workflows (`build.yml`, `release-signed.yml`)
 
 ```grant-terms
 {
-  "epic_chain": [],
+  "epic_chain": [1012, 1013, 1014, 1015],
   "chain": true,
   "verification": { "mode": "owner" },
   "merge": { "budget": 4, "basis": "one merge per Epic: A signing toolchain, B signed IPA and TestFlight lane, C App Review package, D Integration Testing; tasks are commits on each Epic branch, so there is no per-task PR" },
@@ -145,7 +145,7 @@ File overlap: B1 and B3 both touch workflows (`build.yml`, `release-signed.yml`)
 }
 ```
 
-`epic_chain` is filled with the four Epic issue numbers when they are created on approval, before this PR merges.
+`epic_chain` holds Epics A to D, #1012 to #1015, in order.
 
 **Basis for the expiry,** stated plainly: 168 hours is the maximum, and it is probably **not enough**. Enrollment review, API approval and beta review are all Apple's clock. Expect one re-mint when Epic B starts.
 
@@ -184,10 +184,12 @@ No branch proceeds. There is deliberately **no** "skip upload" or dry-run input:
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | Where does each upload's build number come from? | The CI run number, stamped at build time: always unique, never a commit | The pubspec `+N`, matching Android, but every beta then needs a pubspec commit | ⭐ A | |
-| 2 | CoreScope sends packet hashes to `map.okimesh.org`, a server you help run. Declare it? | Declare nothing | Declare "Other Data, not linked to the user, App Functionality" | ⭐ B, safe to take unread | |
-| 3 | The support URL App Review requires | A small `offband.org/support` page (`offband-site` work) | The privacy page's contact line | ⭐ A | |
-| 4 | Should the GitHub release wait on the iOS upload? | No: an Apple outage cannot block Android and desktop | Yes: all platforms or none | ⭐ A | |
+| 1 | Where does each upload's build number come from? | The CI run number, stamped at build time: always unique, never a commit | The pubspec `+N`, matching Android, but every beta then needs a pubspec commit | ⭐ A | A |
+| 2 | CoreScope sends packet hashes to `map.okimesh.org`, a server you help run. Declare it? | Declare nothing | Declare "Other Data, not linked to the user, App Functionality" | ⭐ B, safe to take unread | B |
+| 3 | The support URL App Review requires | A small `offband.org/support` page (`offband-site` work) | The privacy page's contact line | ⭐ A | A |
+| 4 | Should the GitHub release wait on the iOS upload? | No: an Apple outage cannot block Android and desktop | Yes: all platforms or none | ⭐ A | A |
+
+The owner approved the plan without naming options, so the recommendations stand, recorded on #200 as reversible.
 
 Decided already, not choices: Individual enrollment; seller is the legal name; non-trader; France out; public TestFlight link, never email invites; iPhone-only listing; `support@offband.org` as the Apple Account email; Codemagic as fallback only (#957).
 
