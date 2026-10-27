@@ -1,0 +1,3 @@
+Offband Meshcore 1.7.0
+
+Message history moves to a faster storage format on first launch. After updating, earlier versions of the app cannot open it. Each radio now keeps its own contacts, blocks, and notification settings. The contact list follows your radio, with no phantom contacts. Give any contact a custom name. Region scoping for channels, a tidier Settings, and a steadier Bluetooth reconnect.
