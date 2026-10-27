@@ -29,6 +29,8 @@ jobs:
     env:
       CN: "Offband CI throwaway"
     steps:
+      - uses: actions/checkout@v4
+
       - name: Locate OpenSSL 3
         run: |
           set -eu
@@ -101,6 +103,28 @@ jobs:
             exit 1
           fi
           echo "Legacy .p12 imported with key and certificate paired."
+
+      # The owner's script itself, not a copy of its flags: run its selftest
+      # under PowerShell on this runner and import what it produced (#1017).
+      - name: "Script: ios-signing.ps1 selftest output imports"
+        run: |
+          set -eu
+          command -v pwsh > /dev/null || { echo "::error::pwsh not found on this runner"; exit 1; }
+          OUT="${RUNNER_TEMP}/selftest"
+          mkdir -p "${OUT}"
+          OPENSSL="${OPENSSL}" SELFTEST_OUT="${OUT}" pwsh -NoProfile -File tools/ios-signing/ios-signing.ps1 selftest
+          test -s "${OUT}/selftest.p12" || { echo "::error::selftest produced no .p12"; exit 1; }
+          SPW="$(cat "${OUT}/selftest-password.txt")"
+          echo "::add-mask::${SPW}"
+          security import "${OUT}/selftest.p12" -k "${KC}" -P "${SPW}" -T /usr/bin/codesign
+          IDS="$(security find-identity "${KC}")"
+          if ! printf '%s\n' "${IDS}" | grep -q "Offband Meshcore Distribution"; then
+            echo "${IDS}"
+            echo "::error::The script's .p12 imported but its key did not pair with its certificate."
+            exit 1
+          fi
+          rm -rf "${OUT}"
+          echo "The script's own .p12 imports with key and certificate paired."
 
       - name: "Record: does the OpenSSL 3 default import here too?"
         run: |
