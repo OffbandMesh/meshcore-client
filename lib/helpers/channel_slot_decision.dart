@@ -38,9 +38,10 @@ class ChannelSlotDecision {
 ///   handed slot 0 as a consolation, which is the old `return 0` bug and is
 ///   where Public normally lives.
 ///
-/// Callers pass the connector's `isSyncingChannels`, not `hasLoadedChannels`:
-/// the latter stays false after a *failed* sync while the cached list is
-/// restored into use, so gating on it would refuse forever on a flaky link.
+/// Callers pass the connector's `isChannelTableBusy` (a sync, or a write the
+/// radio has not answered yet), not `hasLoadedChannels`: the latter stays false
+/// after a *failed* sync while the cached list is restored into use, so gating
+/// on it would refuse forever on a flaky link.
 ///
 /// An absent index genuinely means a free slot, because the connector never
 /// adds an empty channel to its list.

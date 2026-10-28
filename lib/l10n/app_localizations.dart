@@ -3235,7 +3235,7 @@ abstract class AppLocalizations {
   /// No description provided for @channels_slotBusySyncing.
   ///
   /// In en, this message translates to:
-  /// **'Still reading channels from the radio. Try adding again in a moment.'**
+  /// **'The radio is still updating its channel list. Try again in a moment.'**
   String get channels_slotBusySyncing;
 
   /// No description provided for @channels_slotsAllFull.
@@ -3249,6 +3249,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The Public channel is already on this radio.'**
   String get channels_publicAlreadyAdded;
+
+  /// The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.'**
+  String get channels_writeOccupied;
+
+  /// The radio answered a channel write with an error other than slot-occupied. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused the change, so the channel is as it was.'**
+  String get channels_writeRejected;
+
+  /// A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not confirm the change. Check the channel list before trying again.'**
+  String get channels_writeNoReply;
 
   /// No description provided for @channels_sortBy.
   ///

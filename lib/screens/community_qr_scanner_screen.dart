@@ -231,8 +231,9 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     //
     // This used to skip the channel silently when the radio was full and then
     // show a green "joined" toast, which told the user everything had worked
-    // when the channel had not been added (#1021). A refusal now explains
-    // itself, and only a real success shows the green confirmation.
+    // when the channel had not been added (#1021). A refusal, or a write the
+    // radio did not confirm (#1026), now explains itself, and only a confirmed
+    // write shows the green confirmation.
     var channelRefused = false;
     if (addPublicChannel && context.mounted) {
       final connector = context.read<MeshCoreConnector>();
@@ -242,7 +243,10 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
       } else {
         final psk = community.deriveCommunityPublicPsk();
         final channelName = '${community.name} Public';
-        connector.setChannel(slot, channelName, psk);
+        final result = await connector.setChannel(slot, channelName, psk);
+        if (context.mounted) {
+          channelRefused = explainUnconfirmedChannelWrite(context, result);
+        }
       }
     }
 
@@ -288,7 +292,7 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     // No slot is chosen here. It used to be, and that is the same bug the
     // channels screen had: the index was picked before the confirmation
     // dialog below and written after it, so a channel sync during the
-    // confirmation (setChannel itself starts one) could leave it pointing at
+    // confirmation (a channel write starts one) could leave it pointing at
     // an occupied slot. The slot is now chosen after the user confirms.
     if (!context.mounted) return;
     final confirmed = await showDialog<bool>(
@@ -313,7 +317,14 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
       // Refused: the persistent message explains why. Stay on this screen so
       // the user can retry, rather than popping away from the explanation.
       if (slot == null) return;
-      connector.setChannel(slot, channel.name, channel.psk);
+      final result = await connector.setChannel(
+        slot,
+        channel.name,
+        channel.psk,
+      );
+      if (!context.mounted) return;
+      // Not confirmed: stay on this screen with the explanation showing.
+      if (explainUnconfirmedChannelWrite(context, result)) return;
       showDismissibleSnackBar(
         context,
         content: Text(context.l10n.channels_qrAdded(channel.name)),
