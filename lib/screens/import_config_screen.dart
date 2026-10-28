@@ -323,6 +323,8 @@ String _reasonText(BuildContext context, StockConfigImportIssue reason) {
       return l10n.importConfig_reasonAlreadyPresent;
     case StockConfigImportIssue.noFreeSlot:
       return l10n.importConfig_reasonNoFreeSlot;
+    case StockConfigImportIssue.channelsSyncing:
+      return l10n.importConfig_reasonChannelsSyncing;
     case StockConfigImportIssue.notWritable:
       return l10n.importConfig_reasonNotWritable;
   }

@@ -7502,12 +7502,6 @@ abstract class AppLocalizations {
   /// **'Invalid QR code'**
   String get channels_invalidQr;
 
-  /// No description provided for @channels_noFreeSlot.
-  ///
-  /// In en, this message translates to:
-  /// **'No free channel slot'**
-  String get channels_noFreeSlot;
-
   /// No description provided for @channels_qrAddConfirm.
   ///
   /// In en, this message translates to:
@@ -9501,6 +9495,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'no free channel slot on the device'**
   String get importConfig_reasonNoFreeSlot;
+
+  /// Skip reason: the channel list was mid-sync, so no slot could be trusted to be free (#1021).
+  ///
+  /// In en, this message translates to:
+  /// **'channels were still being read from the radio; import again in a moment'**
+  String get importConfig_reasonChannelsSyncing;
 
   /// Failure reason: the file did not contain the section (#576).
   ///
