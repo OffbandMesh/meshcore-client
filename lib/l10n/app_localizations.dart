@@ -3232,6 +3232,24 @@ abstract class AppLocalizations {
   /// **'Public channel added'**
   String get channels_publicChannelAdded;
 
+  /// No description provided for @channels_slotBusySyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Still reading channels from the radio. Try adding again in a moment.'**
+  String get channels_slotBusySyncing;
+
+  /// No description provided for @channels_slotsAllFull.
+  ///
+  /// In en, this message translates to:
+  /// **'All {count} channel slots are in use. Delete a channel first.'**
+  String channels_slotsAllFull(int count);
+
+  /// No description provided for @channels_publicAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'The Public channel is already on this radio.'**
+  String get channels_publicAlreadyAdded;
+
   /// No description provided for @channels_sortBy.
   ///
   /// In en, this message translates to:
