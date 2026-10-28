@@ -1761,6 +1761,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get channels_publicChannelAdded => '공개 채널 추가';
 
   @override
+  String get channels_slotBusySyncing =>
+      'Still reading channels from the radio. Try adding again in a moment.';
+
+  @override
+  String channels_slotsAllFull(int count) {
+    return 'All $count channel slots are in use. Delete a channel first.';
+  }
+
+  @override
+  String get channels_publicAlreadyAdded =>
+      'The Public channel is already on this radio.';
+
+  @override
   String get channels_sortBy => '정렬 기준 선택';
 
   @override

@@ -1030,6 +1030,16 @@
     }
   },
   "channels_publicChannelAdded": "Public channel added",
+  "channels_slotBusySyncing": "Still reading channels from the radio. Try adding again in a moment.",
+  "channels_slotsAllFull": "All {count} channel slots are in use. Delete a channel first.",
+  "@channels_slotsAllFull": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channels_publicAlreadyAdded": "The Public channel is already on this radio.",
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",
   "channels_sortAZ": "A-Z",

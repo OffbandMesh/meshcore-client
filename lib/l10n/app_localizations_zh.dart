@@ -1747,6 +1747,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channels_publicChannelAdded => '已添加公共频道';
 
   @override
+  String get channels_slotBusySyncing =>
+      'Still reading channels from the radio. Try adding again in a moment.';
+
+  @override
+  String channels_slotsAllFull(int count) {
+    return 'All $count channel slots are in use. Delete a channel first.';
+  }
+
+  @override
+  String get channels_publicAlreadyAdded =>
+      'The Public channel is already on this radio.';
+
+  @override
   String get channels_sortBy => '排序方式';
 
   @override

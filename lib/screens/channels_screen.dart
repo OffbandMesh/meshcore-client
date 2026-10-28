@@ -30,6 +30,7 @@ import '../widgets/channel_notify_mode.dart';
 import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
+import '../helpers/channel_slot_decision.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channel_chat_screen.dart';
 import 'community_qr_scanner_screen.dart';
@@ -814,10 +815,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
   void _showAddChannelDialog(BuildContext context) {
     final connector = context.read<MeshCoreConnector>();
-    final nextIndex = _findNextAvailableIndex(
-      connector.channels,
-      connector.maxChannels,
-    );
+    // No slot is chosen here. It used to be, and that was the bug: the channel
+    // list is emptied for the duration of a sync, so an index picked when this
+    // dialog opened could point at an occupied slot by the time Add was
+    // pressed. Each handler now calls _allocateChannelSlot at the write (#1021).
     final hasPublicChannel = connector.channels.any((c) => c.isPublicChannel);
     int? selectedOption;
     final nameController = TextEditingController();
@@ -920,19 +921,22 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   );
                                   return;
                                 }
+                                final slot = _allocateChannelSlot(
+                                  dialogContext,
+                                  connector,
+                                );
+                                // Refused: leave the dialog open so the user
+                                // can retry once the sync finishes.
+                                if (slot == null) return;
                                 final random = Random.secure();
                                 final psk = Uint8List(16);
                                 for (int i = 0; i < 16; i++) {
                                   psk[i] = random.nextInt(256);
                                 }
                                 Navigator.pop(dialogContext);
-                                await connector.setChannel(
-                                  nextIndex,
-                                  name,
-                                  psk,
-                                );
+                                await connector.setChannel(slot, name, psk);
                                 await channelMessageStore.clearChannelMessages(
-                                  nextIndex,
+                                  slot,
                                 );
                                 if (context.mounted) {
                                   showDismissibleSnackBar(
@@ -1016,8 +1020,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   );
                                   return;
                                 }
+                                final slot = _allocateChannelSlot(
+                                  dialogContext,
+                                  connector,
+                                );
+                                if (slot == null) return;
                                 Navigator.pop(dialogContext);
-                                connector.setChannel(nextIndex, name, psk);
+                                connector.setChannel(slot, name, psk);
                                 if (context.mounted) {
                                   showDismissibleSnackBar(
                                     context,
@@ -1047,11 +1056,16 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                       Expanded(
                         child: FilledButton(
                           onPressed: () {
+                            final slot = _allocateChannelSlot(
+                              dialogContext,
+                              connector,
+                            );
+                            if (slot == null) return;
                             final psk = Channel.parsePskHex(
                               Channel.publicChannelPsk,
                             );
                             Navigator.pop(dialogContext);
-                            connector.setChannel(nextIndex, 'Public', psk);
+                            connector.setChannel(slot, 'Public', psk);
                             if (context.mounted) {
                               showDismissibleSnackBar(
                                 context,
@@ -1229,14 +1243,19 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   _loadCommunities();
                                 }
 
+                                // The screen's context, not the dialog's: the
+                                // hashtag store write above is awaited, so the
+                                // dialog may already be gone by here.
+                                if (!context.mounted) return;
+                                final slot = _allocateChannelSlot(
+                                  context,
+                                  connector,
+                                );
+                                if (slot == null) return;
                                 if (dialogContext.mounted) {
                                   Navigator.pop(dialogContext);
                                 }
-                                connector.setChannel(
-                                  nextIndex,
-                                  channelName,
-                                  psk,
-                                );
+                                connector.setChannel(slot, channelName, psk);
                                 if (context.mounted) {
                                   showDismissibleSnackBar(
                                     context,
@@ -1355,17 +1374,28 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 // Save to store
                                 await _communityStore.addCommunity(community);
 
-                                // Optionally add the community public channel to the device
-                                if (addPublicChannel) {
-                                  final psk = community
-                                      .deriveCommunityPublicPsk();
-                                  final channelName =
-                                      '${community.name} Public';
-                                  connector.setChannel(
-                                    nextIndex,
-                                    channelName,
-                                    psk,
+                                // Optionally add the community public channel to the device.
+                                // The community itself is already saved above,
+                                // so a refused slot skips only the channel
+                                // write and never loses the community. Uses the
+                                // screen's context, not the dialog's: this runs
+                                // after an await and the dialog may be gone.
+                                if (addPublicChannel && context.mounted) {
+                                  final slot = _allocateChannelSlot(
+                                    context,
+                                    connector,
                                   );
+                                  if (slot != null) {
+                                    final psk = community
+                                        .deriveCommunityPublicPsk();
+                                    final channelName =
+                                        '${community.name} Public';
+                                    connector.setChannel(
+                                      slot,
+                                      channelName,
+                                      psk,
+                                    );
+                                  }
                                 }
 
                                 if (dialogContext.mounted) {
@@ -1843,20 +1873,74 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   }
 
   void _addPublicChannel(BuildContext context, MeshCoreConnector connector) {
+    // This used to write slot 0 unconditionally, with no occupancy check, so
+    // it overwrote whatever was there (#1021). Public is identified by its PSK
+    // (`Channel.isPublicChannel`), not by its index, so it has no claim on
+    // slot 0 and can live anywhere.
+    if (connector.channels.any((c) => c.isPublicChannel)) {
+      _showChannelBlockedMessage(
+        context,
+        context.l10n.channels_publicAlreadyAdded,
+      );
+      return;
+    }
+    final slot = _allocateChannelSlot(context, connector);
+    if (slot == null) return;
     final psk = Channel.parsePskHex(Channel.publicChannelPsk);
-    connector.setChannel(0, 'Public', psk);
+    connector.setChannel(slot, 'Public', psk);
     showDismissibleSnackBar(
       context,
       content: Text(context.l10n.channels_publicChannelAdded),
     );
   }
 
-  int _findNextAvailableIndex(List<Channel> channels, int maxChannels) {
-    final usedIndices = channels.map((c) => c.index).toSet();
-    for (int i = 0; i < maxChannels; i++) {
-      if (!usedIndices.contains(i)) return i;
+  /// A slot that is safe to write right now, or null after explaining why not.
+  ///
+  /// Call this at the moment of the write and never earlier. The connector
+  /// empties `channels` for the duration of a channel sync, so a slot chosen
+  /// when a dialog opened can look free when it is not; that is what lost
+  /// Public in #1021.
+  ///
+  /// The decision itself lives in [decideChannelSlot] so it can be tested
+  /// without a widget and shared with the QR and config-import paths. This
+  /// wrapper only turns a refusal into something the user can read.
+  ///
+  /// The owner's ruling is that the unsafe write is blocked but the control
+  /// stays live: a greyed-out button prevents the damage and tells the user
+  /// nothing. So both refusals return null *and* say what is wrong.
+  int? _allocateChannelSlot(BuildContext context, MeshCoreConnector connector) {
+    final decision = decideChannelSlot(
+      channels: connector.channels,
+      maxChannels: connector.maxChannels,
+      // isSyncingChannels, not hasLoadedChannels: the latter stays false after
+      // a FAILED sync while the cached list is restored, so gating on it would
+      // make adding a channel impossible on a flaky link.
+      isSyncing: connector.isSyncingChannels,
+    );
+    switch (decision.refusal) {
+      case ChannelSlotRefusal.syncing:
+        _showChannelBlockedMessage(
+          context,
+          context.l10n.channels_slotBusySyncing,
+        );
+        return null;
+      case ChannelSlotRefusal.full:
+        _showChannelBlockedMessage(
+          context,
+          context.l10n.channels_slotsAllFull(connector.maxChannels),
+        );
+        return null;
+      case null:
+        return decision.slot;
     }
-    return 0;
+  }
+
+  /// A refusal the user has to be able to read and act on, so it persists.
+  ///
+  /// `showDismissibleSnackBar` defaults to `persist: false` and a 4 second
+  /// toast, which SAFELANE 6 rules out for an error.
+  void _showChannelBlockedMessage(BuildContext context, String message) {
+    showDismissibleSnackBar(context, content: Text(message), persist: true);
   }
 
   void _showManageCommunitiesDialog(BuildContext context) {
