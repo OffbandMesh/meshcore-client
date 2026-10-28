@@ -4441,9 +4441,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get channels_invalidQr => 'Invalid QR code';
 
   @override
-  String get channels_noFreeSlot => 'No free channel slot';
-
-  @override
   String channels_qrAddConfirm(String name) {
     return 'Add channel \"$name\"?';
   }
@@ -5684,6 +5681,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get importConfig_reasonNoFreeSlot =>
       'no free channel slot on the device';
+
+  @override
+  String get importConfig_reasonChannelsSyncing =>
+      'channels were still being read from the radio; import again in a moment';
 
   @override
   String get importConfig_reasonAbsentFromFile => 'not present in this file';

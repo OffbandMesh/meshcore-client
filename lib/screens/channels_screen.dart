@@ -30,7 +30,7 @@ import '../widgets/channel_notify_mode.dart';
 import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
-import '../helpers/channel_slot_decision.dart';
+import '../helpers/channel_slot_ui.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channel_chat_screen.dart';
 import 'community_qr_scanner_screen.dart';
@@ -1878,7 +1878,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     // (`Channel.isPublicChannel`), not by its index, so it has no claim on
     // slot 0 and can live anywhere.
     if (connector.channels.any((c) => c.isPublicChannel)) {
-      _showChannelBlockedMessage(
+      showChannelBlockedMessage(
         context,
         context.l10n.channels_publicAlreadyAdded,
       );
@@ -1894,54 +1894,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 
-  /// A slot that is safe to write right now, or null after explaining why not.
-  ///
-  /// Call this at the moment of the write and never earlier. The connector
-  /// empties `channels` for the duration of a channel sync, so a slot chosen
-  /// when a dialog opened can look free when it is not; that is what lost
-  /// Public in #1021.
-  ///
-  /// The decision itself lives in [decideChannelSlot] so it can be tested
-  /// without a widget and shared with the QR and config-import paths. This
-  /// wrapper only turns a refusal into something the user can read.
-  ///
-  /// The owner's ruling is that the unsafe write is blocked but the control
-  /// stays live: a greyed-out button prevents the damage and tells the user
-  /// nothing. So both refusals return null *and* say what is wrong.
-  int? _allocateChannelSlot(BuildContext context, MeshCoreConnector connector) {
-    final decision = decideChannelSlot(
-      channels: connector.channels,
-      maxChannels: connector.maxChannels,
-      // isSyncingChannels, not hasLoadedChannels: the latter stays false after
-      // a FAILED sync while the cached list is restored, so gating on it would
-      // make adding a channel impossible on a flaky link.
-      isSyncing: connector.isSyncingChannels,
-    );
-    switch (decision.refusal) {
-      case ChannelSlotRefusal.syncing:
-        _showChannelBlockedMessage(
-          context,
-          context.l10n.channels_slotBusySyncing,
-        );
-        return null;
-      case ChannelSlotRefusal.full:
-        _showChannelBlockedMessage(
-          context,
-          context.l10n.channels_slotsAllFull(connector.maxChannels),
-        );
-        return null;
-      case null:
-        return decision.slot;
-    }
-  }
-
-  /// A refusal the user has to be able to read and act on, so it persists.
-  ///
-  /// `showDismissibleSnackBar` defaults to `persist: false` and a 4 second
-  /// toast, which SAFELANE 6 rules out for an error.
-  void _showChannelBlockedMessage(BuildContext context, String message) {
-    showDismissibleSnackBar(context, content: Text(message), persist: true);
-  }
+  /// Thin alias for the shared allocator, kept so the five call sites in this
+  /// file read the same as before. The logic lives in
+  /// `helpers/channel_slot_ui.dart` so this screen, the QR scanner and config
+  /// import all answer "which slot is free?" the same way (#1021).
+  int? _allocateChannelSlot(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) => allocateChannelSlotOrExplain(context, connector);
 
   void _showManageCommunitiesDialog(BuildContext context) {
     showModalBottomSheet(

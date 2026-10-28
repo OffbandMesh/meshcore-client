@@ -2524,7 +2524,6 @@
   "channels_scanQrDesc": "Add a community or channel from a QR code",
   "channels_scanQrInstructions": "Point at a MeshCore QR code",
   "channels_invalidQr": "Invalid QR code",
-  "channels_noFreeSlot": "No free channel slot",
   "channels_qrAddConfirm": "Add channel \"{name}\"?",
   "@channels_qrAddConfirm": {
     "placeholders": {
@@ -3414,6 +3413,10 @@
   "importConfig_reasonNoFreeSlot": "no free channel slot on the device",
   "@importConfig_reasonNoFreeSlot": {
     "description": "Skip reason: every channel slot is occupied (#576)."
+  },
+  "importConfig_reasonChannelsSyncing": "channels were still being read from the radio; import again in a moment",
+  "@importConfig_reasonChannelsSyncing": {
+    "description": "Skip reason: the channel list was mid-sync, so no slot could be trusted to be free (#1021)."
   },
   "importConfig_reasonAbsentFromFile": "not present in this file",
   "@importConfig_reasonAbsentFromFile": {

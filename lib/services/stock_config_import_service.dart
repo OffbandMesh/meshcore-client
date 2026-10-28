@@ -47,6 +47,10 @@ enum StockConfigImportIssue {
   /// Every channel slot on the device is occupied.
   noFreeSlot,
 
+  /// The channel list was being re-read from the radio, so no slot could be
+  /// trusted to be free. Importing again once it finishes will work (#1021).
+  channelsSyncing,
+
   /// We have no supported way to write this value to the device.
   notWritable,
 }
@@ -274,6 +278,7 @@ class StockConfigImportService {
       existing: _connector.channels,
       incoming: incoming,
       maxChannels: _connector.maxChannels,
+      isSyncing: _connector.isSyncingChannels,
     );
     for (final assignment in plan.assignments) {
       await _connector.setChannel(
@@ -357,11 +362,25 @@ class ChannelImportPlan {
 /// New channels go into the lowest free slot. Stock's file has no index field,
 /// so incoming order is the only ordering information there is, and slots
 /// already occupied are left alone.
+///
+/// While [isSyncing] is true nothing is planned. The connector empties its
+/// channel list for the duration of a sync, so [existing] would look empty and
+/// every incoming channel would be written over slots that are in fact
+/// occupied, Public included (#1021). Each channel is reported as skipped
+/// instead, so the user sees why and can import again. [isSyncing] is required
+/// so a caller cannot forget it and get the unsafe behavior by default.
 ChannelImportPlan planChannelImport({
   required List<Channel> existing,
   required List<StockChannel> incoming,
   required int maxChannels,
+  required bool isSyncing,
 }) {
+  if (isSyncing) {
+    return ChannelImportPlan(const [], [
+      for (final channel in incoming)
+        SkippedChannel(channel.name, StockConfigImportIssue.channelsSyncing),
+    ]);
+  }
   final live = existing.where((c) => !c.isEmpty).toList();
   final takenSlots = live.map((c) => c.index).toSet();
   final psks = live.map((c) => c.pskHex).toSet();

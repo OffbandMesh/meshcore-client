@@ -28,6 +28,7 @@ void main() {
           existing: [live(0, 'Public', 0x11)],
           incoming: [incoming('Weather', 0x22)],
           maxChannels: 40,
+          isSyncing: false,
         );
 
         expect(plan.assignments, hasLength(1));
@@ -41,6 +42,7 @@ void main() {
         existing: [live(0, 'Public', 0x11)],
         incoming: [incoming('Renamed', 0x11)],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments, isEmpty);
@@ -55,6 +57,7 @@ void main() {
         existing: [live(0, 'Public', 0x11)],
         incoming: [incoming('Public', 0x99)],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments, isEmpty);
@@ -72,6 +75,7 @@ void main() {
         ],
         incoming: [incoming('Emergency', 0x33)],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments.single.slot, 1);
@@ -86,6 +90,7 @@ void main() {
           incoming('Third', 0x44),
         ],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments.map((a) => a.slot), [1, 2, 3]);
@@ -101,6 +106,7 @@ void main() {
         existing: [live(0, 'A', 0x11), live(1, 'B', 0x22)],
         incoming: [incoming('C', 0x33), incoming('D', 0x44)],
         maxChannels: 2,
+        isSyncing: false,
       );
 
       expect(plan.assignments, isEmpty);
@@ -116,6 +122,7 @@ void main() {
         existing: const [],
         incoming: [incoming('Dupe', 0x55), incoming('Dupe', 0x55)],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments, hasLength(1));
@@ -127,10 +134,47 @@ void main() {
         existing: [live(0, 'Public', 0x11)],
         incoming: const [],
         maxChannels: 40,
+        isSyncing: false,
       );
 
       expect(plan.assignments, isEmpty);
       expect(plan.skipped, isEmpty);
+    });
+
+    // #1021: the connector empties its channel list for the length of a sync,
+    // so mid-sync `existing` looks empty. Planning then would write every
+    // incoming channel over slots that are really occupied, starting at 0.
+    test('mid-sync nothing is written, even into slots that look free', () {
+      final plan = planChannelImport(
+        existing: const [],
+        incoming: [incoming('Weather', 0x22), incoming('Emergency', 0x33)],
+        maxChannels: 40,
+        isSyncing: true,
+      );
+
+      expect(plan.assignments, isEmpty);
+      expect(plan.skipped.map((s) => s.name), ['Weather', 'Emergency']);
+      expect(
+        plan.skipped.map((s) => s.reason),
+        everyElement(StockConfigImportIssue.channelsSyncing),
+      );
+    });
+
+    test('mid-sync every channel is reported as syncing, not as present', () {
+      // A partial list cannot prove a channel is already there either, so
+      // "already present" would be a guess. Syncing is the true reason.
+      final plan = planChannelImport(
+        existing: [live(0, 'Public', 0x11)],
+        incoming: [incoming('Public', 0x11)],
+        maxChannels: 40,
+        isSyncing: true,
+      );
+
+      expect(plan.assignments, isEmpty);
+      expect(
+        plan.skipped.single.reason,
+        StockConfigImportIssue.channelsSyncing,
+      );
     });
   });
 
