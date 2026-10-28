@@ -1804,7 +1804,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get channels_slotBusySyncing =>
-      'Still reading channels from the radio. Try adding again in a moment.';
+      'The radio is still updating its channel list. Try again in a moment.';
 
   @override
   String channels_slotsAllFull(int count) {
@@ -1814,6 +1814,18 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get channels_publicAlreadyAdded =>
       'The Public channel is already on this radio.';
+
+  @override
+  String get channels_writeOccupied =>
+      'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.';
+
+  @override
+  String get channels_writeRejected =>
+      'The radio refused the change, so the channel is as it was.';
+
+  @override
+  String get channels_writeNoReply =>
+      'The radio did not confirm the change. Check the channel list before trying again.';
 
   @override
   String get channels_sortBy => 'Sortera efter';

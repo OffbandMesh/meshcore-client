@@ -29,10 +29,11 @@ int? allocateChannelSlotOrExplain(
   final decision = decideChannelSlot(
     channels: connector.channels,
     maxChannels: connector.maxChannels,
-    // isSyncingChannels, not hasLoadedChannels: the latter stays false after a
-    // FAILED sync while the cached list is restored, so gating on it would make
-    // adding a channel impossible on a flaky link.
-    isSyncing: connector.isSyncingChannels,
+    // Not hasLoadedChannels: that stays false after a FAILED sync while the
+    // cached list is restored, so gating on it would make adding a channel
+    // impossible on a flaky link. Busy also covers a write the radio has not
+    // answered yet (#1026): until it does, the list does not show its slot.
+    isSyncing: connector.isChannelTableBusy,
   );
   switch (decision.refusal) {
     case ChannelSlotRefusal.syncing:
@@ -56,4 +57,37 @@ int? allocateChannelSlotOrExplain(
 /// which SAFELANE 6 rules out for an error.
 void showChannelBlockedMessage(BuildContext context, String message) {
   showDismissibleSnackBar(context, content: Text(message), persist: true);
+}
+
+/// Explains a channel write the radio did not confirm, and returns true if it
+/// did. A caller shows its own success message only when this returns false,
+/// so nothing claims success before the radio has said OK (#1026).
+///
+/// A success toast shown after this would replace the explanation (a newer
+/// toast replaces the visible one), so callers must not show one.
+bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
+  final l10n = context.l10n;
+  final message = switch (result) {
+    ChannelWrite.ok => null,
+    ChannelWrite.occupied => l10n.channels_writeOccupied,
+    ChannelWrite.rejected => l10n.channels_writeRejected,
+    ChannelWrite.noReply => l10n.channels_writeNoReply,
+  };
+  if (message == null) return false;
+  showChannelBlockedMessage(context, message);
+  return true;
+}
+
+/// For an edit or delete: refuses while the channel list is being re-read or
+/// a write is unanswered, and says so. Returns true if it refused.
+///
+/// Replies are matched to commands by order, so a write sent during a sync
+/// could take one of the sync's replies as its own.
+bool refuseWhileChannelTableBusy(
+  BuildContext context,
+  MeshCoreConnector connector,
+) {
+  if (!connector.isChannelTableBusy) return false;
+  showChannelBlockedMessage(context, context.l10n.channels_slotBusySyncing);
+  return true;
 }

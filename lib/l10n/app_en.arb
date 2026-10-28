@@ -1030,7 +1030,7 @@
     }
   },
   "channels_publicChannelAdded": "Public channel added",
-  "channels_slotBusySyncing": "Still reading channels from the radio. Try adding again in a moment.",
+  "channels_slotBusySyncing": "The radio is still updating its channel list. Try again in a moment.",
   "channels_slotsAllFull": "All {count} channel slots are in use. Delete a channel first.",
   "@channels_slotsAllFull": {
     "placeholders": {
@@ -1040,6 +1040,18 @@
     }
   },
   "channels_publicAlreadyAdded": "The Public channel is already on this radio.",
+  "channels_writeOccupied": "The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.",
+  "@channels_writeOccupied": {
+    "description": "The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026)."
+  },
+  "channels_writeRejected": "The radio refused the change, so the channel is as it was.",
+  "@channels_writeRejected": {
+    "description": "The radio answered a channel write with an error other than slot-occupied. Persistent (#1026)."
+  },
+  "channels_writeNoReply": "The radio did not confirm the change. Check the channel list before trying again.",
+  "@channels_writeNoReply": {
+    "description": "A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026)."
+  },
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",
   "channels_sortAZ": "A-Z",

@@ -211,6 +211,25 @@ enum IdentityTransfer {
   noReply,
 }
 
+/// How a channel write (`CMD_SET_CHANNEL`) ended, as the radio reported it.
+/// (#1026)
+enum ChannelWrite {
+  /// The radio answered OK.
+  ok,
+
+  /// The radio refused because a different channel holds the slot
+  /// (`ERR_CODE_BAD_STATE`, OffbandMesh/meshcore-firmware#1864). That channel
+  /// is still there, intact.
+  occupied,
+
+  /// The radio refused for another reason, e.g. a slot index it does not have.
+  rejected,
+
+  /// Not connected, or no reply before the timeout. The write may or may not
+  /// have landed.
+  noReply,
+}
+
 /// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
 /// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
 class IdentityExportResult {
@@ -7114,32 +7133,17 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  Future<void> setChannel(int index, String name, Uint8List psk) async {
-    if (!isConnected) return;
+  /// How long a channel write waits for the radio's OK or ERR. (#1026)
+  @visibleForTesting
+  Duration channelWriteReplyTimeout = const Duration(seconds: 5);
 
-    // Persisted channel history is keyed by the channel's PSK identity (#194),
-    // so reassigning this slot to a different channel cannot surface the old
-    // occupant's messages THERE. Two slot-keyed remnants still can, and both
-    // are handled when the slot changes occupant (different PSK):
-    //  - legacy slot-index keys (pre-#194) would be adopted onto the new
-    //    occupant by the store's one-time migration; purge them (#193/#1063).
-    //  - the in-memory conversation map is slot-keyed; drop this slot's entry.
-    // The old occupant's PSK-keyed history is deliberately left intact: if
-    // that channel is ever re-added (any slot), its history comes back
-    // (#1063). A rename (same PSK) keeps everything.
-    final existing = _findChannelByIndex(index);
-    final sameChannel = existing != null && listEquals(existing.psk, psk);
+  int _channelWritesInFlight = 0;
 
-    await sendFrame(buildSetChannelFrame(index, name, psk));
-
-    if (!sameChannel) {
-      await _channelMessageStore.clearLegacySlotHistory(index);
-      _channelMessages.remove(index);
-    }
-
-    // Refresh channels after setting
-    await getChannels(force: true);
-  }
+  /// True while the channel list cannot be trusted to show which slots are
+  /// free: a sync is re-reading it, or a write has not been answered yet. A
+  /// slot chosen against it could already be taken. (#1021, #1026)
+  bool get isChannelTableBusy =>
+      _isSyncingChannels || _channelWritesInFlight > 0;
 
   /// Writes the client's cached channel list back onto the radio (#1060).
   ///
@@ -7165,47 +7169,222 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'ChannelSync',
     );
 
-    var sent = 0;
-    for (final channel in toRestore) {
-      if (!isConnected) break;
-      await sendFrame(
-        buildSetChannelFrame(channel.index, channel.name, channel.psk),
-      );
-      sent++;
-      // Space the writes. On BLE [sendFrame] prefers write-without-response,
-      // which returns once the frame reaches the OS and not once the radio has
-      // taken it, so an unpaced loop can overrun the radio and lose channels
-      // with no error anywhere. The USB branch of [sendFrame] already spaces
-      // its own frames for exactly this reason; BLE has no such pause.
-      if (sent < toRestore.length) {
-        await Future<void>.delayed(_channelRestoreFrameGap);
+    // Counted as a write in flight for its whole length, so an add made while
+    // it runs is refused instead of choosing a slot this is about to fill
+    // (#1021, #1026).
+    _channelWritesInFlight++;
+    try {
+      var sent = 0;
+      for (final channel in toRestore) {
+        if (!isConnected) break;
+        await sendFrame(
+          buildSetChannelFrame(channel.index, channel.name, channel.psk),
+        );
+        sent++;
+        // Space the writes. On BLE [sendFrame] prefers write-without-response,
+        // which returns once the frame reaches the OS and not once the radio
+        // has taken it, so an unpaced loop can overrun the radio and lose
+        // channels with no error anywhere. The USB branch of [sendFrame]
+        // already spaces its own frames for exactly this reason; BLE has no
+        // such pause.
+        if (sent < toRestore.length) {
+          await Future<void>.delayed(_channelRestoreFrameGap);
+        }
       }
-    }
 
-    // The radio now holds these again, so a fresh sync should confirm them and
-    // the erased-slot block clears itself on the next pass.
-    //
-    // This deliberately does NOT report how many the radio confirmed:
-    // [getChannels] returns once the first request is away, not once the sync
-    // has finished, so counting confirmations here would read a list the radio
-    // has not answered for yet and report 0 every time. The authoritative
-    // feedback is the erased-slot banner, which is re-derived on every sync and
-    // therefore stays up if some writes did not land.
-    await getChannels(force: true);
-    return sent;
+      // The radio now holds these again, so a fresh sync should confirm them
+      // and the erased-slot block clears itself on the next pass.
+      //
+      // This deliberately does NOT report how many the radio confirmed:
+      // [getChannels] returns once the first request is away, not once the
+      // sync has finished, so counting confirmations here would read a list
+      // the radio has not answered for yet and report 0 every time. The
+      // authoritative feedback is the erased-slot banner, which is re-derived
+      // on every sync and therefore stays up if some writes did not land.
+      await getChannels(force: true);
+      return sent;
+    } finally {
+      _channelWritesInFlight--;
+    }
   }
 
-  Future<void> deleteChannel(int index) async {
-    if (!isConnected) return;
+  /// Writes [name] and [psk] into slot [index] and reports what the radio said.
+  ///
+  /// [refresh] re-reads the channel list afterwards. A caller writing several
+  /// channels passes false and refreshes once at the end, because a write sent
+  /// during a sync cannot tell its reply from the sync's.
+  Future<ChannelWrite> setChannel(
+    int index,
+    String name,
+    Uint8List psk, {
+    bool refresh = true,
+  }) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    return _setChannel(
+      index,
+      name,
+      psk,
+      occupantPsk: _findChannelByIndex(index)?.psk,
+      refresh: refresh,
+    );
+  }
 
-    // Delete by setting empty name and zero PSK
-    await sendFrame(buildSetChannelFrame(index, '', Uint8List(16)));
-    // Clear stored messages for this channel
-    await _channelMessageStore.clearChannelMessages(index);
-    // Clear in-memory messages for this channel
+  /// Writes an edit of [channel]. A rename keeps the key and is a plain write.
+  /// A new key is clear-then-add: firmware with
+  /// OffbandMesh/meshcore-firmware#1864 refuses a different channel over an
+  /// occupied slot, and that is what a new key in place is.
+  ///
+  /// A new key is a slot reassignment for history purposes, the same as
+  /// before the clear-then-add: the old key's PSK-keyed history is kept, so
+  /// it comes back if that key is ever re-added (#1063).
+  Future<ChannelWrite> editChannel(
+    Channel channel,
+    String name,
+    Uint8List psk,
+  ) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    if (listEquals(channel.psk, psk)) {
+      return _setChannel(
+        channel.index,
+        name,
+        psk,
+        occupantPsk: channel.psk,
+        refresh: true,
+      );
+    }
+    _channelWritesInFlight++;
+    try {
+      final cleared = await _writeChannelSlot(channel.index, '', Uint8List(16));
+      if (cleared != ChannelWrite.ok) {
+        await getChannels(force: true);
+        return cleared;
+      }
+      await _retireSlotOccupant(channel.index);
+      return await _setChannel(
+        channel.index,
+        name,
+        psk,
+        occupantPsk: null,
+        refresh: true,
+      );
+    } finally {
+      _channelWritesInFlight--;
+    }
+  }
+
+  Future<ChannelWrite> deleteChannel(int index, {bool refresh = true}) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    _channelWritesInFlight++;
+    try {
+      // A slot is deleted by writing an empty name and a zero PSK. Its history
+      // goes outright (the true-delete path, #1063), once the radio has said
+      // OK: a refused delete leaves the channel, and it keeps its history.
+      final result = await _writeChannelSlot(index, '', Uint8List(16));
+      if (result == ChannelWrite.ok) {
+        await _channelMessageStore.clearChannelMessages(index);
+        _channelMessages.remove(index);
+      }
+      if (refresh) await getChannels(force: true);
+      return result;
+    } finally {
+      _channelWritesInFlight--;
+    }
+  }
+
+  Future<ChannelWrite> _setChannel(
+    int index,
+    String name,
+    Uint8List psk, {
+    required Uint8List? occupantPsk,
+    required bool refresh,
+  }) async {
+    _channelWritesInFlight++;
+    try {
+      // A rename (same PSK) keeps everything; a different PSK retires the
+      // slot's previous occupant (see [_retireSlotOccupant]).
+      final sameChannel = occupantPsk != null && listEquals(occupantPsk, psk);
+
+      final result = await _writeChannelSlot(index, name, psk);
+
+      // Only after the radio says OK. A refused write leaves the slot's
+      // channel in place, and its slot-keyed state has to stay with it. (#1026)
+      if (result == ChannelWrite.ok && !sameChannel) {
+        await _retireSlotOccupant(index);
+      }
+
+      // Re-read on every outcome: after a refusal the list we chose the slot
+      // from was wrong, and after no reply nobody knows what the slot holds.
+      if (refresh) await getChannels(force: true);
+      return result;
+    } finally {
+      _channelWritesInFlight--;
+    }
+  }
+
+  /// Sends one `CMD_SET_CHANNEL` and waits for the radio's OK or ERR, using
+  /// the generic-ack queue the channel-message sends already use.
+  ///
+  /// That queue matches replies to commands by order, which holds because the
+  /// firmware answers commands one at a time in the order they arrive.
+  Future<ChannelWrite> _writeChannelSlot(
+    int index,
+    String name,
+    Uint8List psk,
+  ) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    final reply = Completer<int?>();
+    final pending = _PendingCommandAck(
+      commandCode: cmdSetChannel,
+      reply: reply,
+    );
+    // Queued before the frame goes out, so a fast reply cannot arrive first.
+    _pendingGenericAckQueue.add(pending);
+    try {
+      await sendFrame(buildSetChannelFrame(index, name, psk));
+    } catch (e) {
+      _pendingGenericAckQueue.remove(pending);
+      _appDebugLogService?.error(
+        'Channel write to slot $index was not sent: $e',
+        tag: 'ChannelWrite',
+      );
+      return ChannelWrite.noReply;
+    }
+    final int? errCode;
+    try {
+      errCode = await reply.future.timeout(channelWriteReplyTimeout);
+    } on TimeoutException {
+      // Dropped so a late or lost reply cannot be matched to the next command.
+      _pendingGenericAckQueue.remove(pending);
+      _appDebugLogService?.warn(
+        'Radio did not answer the channel write to slot $index',
+        tag: 'ChannelWrite',
+      );
+      return ChannelWrite.noReply;
+    }
+    if (errCode == null) return ChannelWrite.ok;
+    _appDebugLogService?.warn(
+      'Radio refused the channel write to slot $index (error $errCode)',
+      tag: 'ChannelWrite',
+    );
+    return errCode == errCodeBadState
+        ? ChannelWrite.occupied
+        : ChannelWrite.rejected;
+  }
+
+  /// Drops the slot-keyed remnants of a slot's previous occupant once the slot
+  /// has been given to a different channel.
+  ///
+  /// Persisted channel history is keyed by the channel's PSK identity (#194),
+  /// so reassigning this slot to a different channel cannot surface the old
+  /// occupant's messages THERE. Two slot-keyed remnants still can:
+  ///  - legacy slot-index keys (pre-#194) would be adopted onto the new
+  ///    occupant by the store's one-time migration; purge them (#193/#1063).
+  ///  - the in-memory conversation map is slot-keyed; drop this slot's entry.
+  /// The old occupant's PSK-keyed history is deliberately left intact: if
+  /// that channel is ever re-added (any slot), its history comes back (#1063).
+  Future<void> _retireSlotOccupant(int index) async {
+    await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
-    // Refresh channels after deleting
-    await getChannels(force: true);
   }
 
   // --- Offband GPS query (CMD_OFFBAND_GPS / RESP_CODE_OFFBAND_GPS = 0xC1) (#135)
@@ -8421,6 +8600,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final failedAck = _pendingGenericAckQueue.removeAt(0);
+    failedAck.answer(errCode);
     if (failedAck.commandCode != cmdSendChannelTxtMsg ||
         failedAck.channelSendQueueId == null) {
       return;
@@ -10379,6 +10559,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final pendingAck = _pendingGenericAckQueue.removeAt(0);
+    pendingAck.answer(null);
     if (pendingAck.commandCode != cmdSendChannelTxtMsg ||
         pendingAck.channelSendQueueId == null) {
       return;
@@ -11957,7 +12138,20 @@ class _PendingCommandAck {
   final int commandCode;
   final String? channelSendQueueId;
 
-  _PendingCommandAck({required this.commandCode, this.channelSendQueueId});
+  /// Completed with null for OK or with the error code for ERR, for a caller
+  /// that waits on the reply. (#1026)
+  final Completer<int?>? reply;
+
+  _PendingCommandAck({
+    required this.commandCode,
+    this.channelSendQueueId,
+    this.reply,
+  });
+
+  void answer(int? errCode) {
+    final waiter = reply;
+    if (waiter != null && !waiter.isCompleted) waiter.complete(errCode);
+  }
 }
 
 /// A `0xC5` request waiting for its reply.

@@ -74,8 +74,9 @@ class StockConfigImportResult {
 
   /// Sections whose commands were **sent** to the device without error.
   ///
-  /// This is not device confirmation. Apart from the identity import, which
-  /// waits for a real OK or ERR, the firmware's generic OK for these commands
+  /// This is not device confirmation. Apart from the identity import and the
+  /// channel writes, which wait for a real OK or ERR, the firmware's generic OK
+  /// for these commands
   /// is not currently awaited, so a frame lost or refused after it left our
   /// side would still land here. Wiring per-command confirmation is tracked
   /// separately; until then this set means "sent", and the UI says so rather
@@ -92,7 +93,9 @@ class StockConfigImportResult {
   /// send count and not a confirmed count.
   final int contactsWritten;
 
-  /// Channels whose write command was sent. Same caveat as [contactsWritten].
+  /// Channels the radio confirmed writing. Unlike [contactsWritten] this is a
+  /// confirmed count: a channel write waits for the radio's OK, and one it
+  /// refused or never answered is in [skippedChannels] instead (#1026).
   final int channelsAdded;
 
   bool get isComplete => failed.isEmpty && skippedChannels.isEmpty;
@@ -278,17 +281,38 @@ class StockConfigImportService {
       existing: _connector.channels,
       incoming: incoming,
       maxChannels: _connector.maxChannels,
-      isSyncing: _connector.isSyncingChannels,
+      isSyncing: _connector.isChannelTableBusy,
     );
+    // Each write is answered before the next goes out, and the list is
+    // re-read once at the end. A re-read after every write would put the next
+    // write in the middle of a sync, where its reply cannot be told from the
+    // sync's (#1026).
+    var added = 0;
     for (final assignment in plan.assignments) {
-      await _connector.setChannel(
+      final result = await _connector.setChannel(
         assignment.slot,
         assignment.channel.name,
         assignment.channel.secret,
+        refresh: false,
       );
+      if (result == ChannelWrite.ok) {
+        added++;
+      } else {
+        skipped.add(
+          SkippedChannel(
+            assignment.channel.name,
+            result == ChannelWrite.noReply
+                ? StockConfigImportIssue.noReply
+                : StockConfigImportIssue.rejected,
+          ),
+        );
+      }
+    }
+    if (plan.assignments.isNotEmpty) {
+      await _connector.getChannels(force: true);
     }
     skipped.addAll(plan.skipped);
-    return plan.assignments.length;
+    return added;
   }
 
   /// Upserts every contact. The firmware's add-or-update command keys on the

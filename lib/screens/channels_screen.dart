@@ -934,18 +934,31 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   psk[i] = random.nextInt(256);
                                 }
                                 Navigator.pop(dialogContext);
-                                await connector.setChannel(slot, name, psk);
-                                await channelMessageStore.clearChannelMessages(
+                                final result = await connector.setChannel(
                                   slot,
+                                  name,
+                                  psk,
                                 );
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(name),
-                                    ),
-                                  );
+                                // Only on OK: a refused write leaves another
+                                // channel in this slot, and this would wipe
+                                // that channel's history (#1026).
+                                if (result == ChannelWrite.ok) {
+                                  await channelMessageStore
+                                      .clearChannelMessages(slot);
                                 }
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
+                                }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(name),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_create),
                             ),
@@ -992,7 +1005,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                         children: [
                           Expanded(
                             child: FilledButton(
-                              onPressed: () {
+                              onPressed: () async {
                                 final name = nameController.text.trim();
                                 final pskHex = pskController.text.trim();
                                 if (name.isEmpty) {
@@ -1026,15 +1039,24 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 );
                                 if (slot == null) return;
                                 Navigator.pop(dialogContext);
-                                connector.setChannel(slot, name, psk);
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(name),
-                                    ),
-                                  );
+                                final result = await connector.setChannel(
+                                  slot,
+                                  name,
+                                  psk,
+                                );
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
                                 }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(name),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_add),
                             ),
@@ -1055,7 +1077,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     children: [
                       Expanded(
                         child: FilledButton(
-                          onPressed: () {
+                          onPressed: () async {
                             final slot = _allocateChannelSlot(
                               dialogContext,
                               connector,
@@ -1065,15 +1087,24 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                               Channel.publicChannelPsk,
                             );
                             Navigator.pop(dialogContext);
-                            connector.setChannel(slot, 'Public', psk);
-                            if (context.mounted) {
-                              showDismissibleSnackBar(
-                                context,
-                                content: Text(
-                                  context.l10n.channels_publicChannelAdded,
-                                ),
-                              );
+                            final result = await connector.setChannel(
+                              slot,
+                              'Public',
+                              psk,
+                            );
+                            if (!context.mounted) return;
+                            if (explainUnconfirmedChannelWrite(
+                              context,
+                              result,
+                            )) {
+                              return;
                             }
+                            showDismissibleSnackBar(
+                              context,
+                              content: Text(
+                                context.l10n.channels_publicChannelAdded,
+                              ),
+                            );
                           },
                           child: Text(dialogContext.l10n.common_add),
                         ),
@@ -1255,17 +1286,26 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 if (dialogContext.mounted) {
                                   Navigator.pop(dialogContext);
                                 }
-                                connector.setChannel(slot, channelName, psk);
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(
-                                        channelName,
-                                      ),
-                                    ),
-                                  );
+                                final result = await connector.setChannel(
+                                  slot,
+                                  channelName,
+                                  psk,
+                                );
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
                                 }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(
+                                      channelName,
+                                    ),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_add),
                             ),
@@ -1380,24 +1420,19 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 // write and never loses the community. Uses the
                                 // screen's context, not the dialog's: this runs
                                 // after an await and the dialog may be gone.
+                                int? slot;
+                                var channelRefused = false;
                                 if (addPublicChannel && context.mounted) {
-                                  final slot = _allocateChannelSlot(
+                                  slot = _allocateChannelSlot(
                                     context,
                                     connector,
                                   );
-                                  if (slot != null) {
-                                    final psk = community
-                                        .deriveCommunityPublicPsk();
-                                    final channelName =
-                                        '${community.name} Public';
-                                    connector.setChannel(
-                                      slot,
-                                      channelName,
-                                      psk,
-                                    );
-                                  }
+                                  channelRefused = slot == null;
                                 }
 
+                                // Closed before the write, which now waits for
+                                // the radio: an open dialog would let a second
+                                // tap create the community twice.
                                 if (dialogContext.mounted) {
                                   Navigator.pop(dialogContext);
                                 }
@@ -1405,13 +1440,34 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 // Refresh communities list
                                 _loadCommunities();
 
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.community_created(name),
-                                    ),
+                                if (slot != null) {
+                                  final result = await connector.setChannel(
+                                    slot,
+                                    '${community.name} Public',
+                                    community.deriveCommunityPublicPsk(),
                                   );
+                                  if (context.mounted) {
+                                    channelRefused =
+                                        explainUnconfirmedChannelWrite(
+                                          context,
+                                          result,
+                                        );
+                                  }
+                                }
+
+                                if (context.mounted) {
+                                  // A refusal's message is showing and
+                                  // persists; this toast would replace it
+                                  // (#1026). The QR below still shows: the
+                                  // community was created either way.
+                                  if (!channelRefused) {
+                                    showDismissibleSnackBar(
+                                      context,
+                                      content: Text(
+                                        context.l10n.community_created(name),
+                                      ),
+                                    );
+                                  }
 
                                   // Show QR code dialog
                                   await QrCodeShareDialog.show(
@@ -1711,6 +1767,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                   );
                   return;
                 }
+                if (refuseWhileChannelTableBusy(dialogContext, connector)) {
+                  return;
+                }
 
                 final Uint8List psk;
                 if (channelType == ChannelType.hashtag) {
@@ -1732,7 +1791,16 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
                 Navigator.pop(dialogContext);
                 try {
-                  await connector.setChannel(channel.index, name, psk);
+                  final result = await connector.editChannel(
+                    channel,
+                    name,
+                    psk,
+                  );
+                  if (result != ChannelWrite.ok) {
+                    if (!context.mounted) return;
+                    explainUnconfirmedChannelWrite(context, result);
+                    return;
+                  }
                   await connector.setChannelCyr2LatEnabled(
                     channel.index,
                     cyr2latEnabled,
@@ -1834,13 +1902,21 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ),
           TextButton(
             onPressed: () async {
+              if (refuseWhileChannelTableBusy(dialogContext, connector)) {
+                return;
+              }
               Navigator.pop(dialogContext);
               try {
-                await connector.deleteChannel(channel.index);
+                final result = await connector.deleteChannel(channel.index);
 
-                await channelMessageStore.clearChannelMessages(channel.index);
+                // Only on OK: if the radio kept the channel, it keeps its
+                // history too (#1026).
+                if (result == ChannelWrite.ok) {
+                  await channelMessageStore.clearChannelMessages(channel.index);
+                }
 
                 if (!context.mounted) return;
+                if (explainUnconfirmedChannelWrite(context, result)) return;
 
                 showDismissibleSnackBar(
                   context,
@@ -1872,7 +1948,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 
-  void _addPublicChannel(BuildContext context, MeshCoreConnector connector) {
+  Future<void> _addPublicChannel(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) async {
     // This used to write slot 0 unconditionally, with no occupancy check, so
     // it overwrote whatever was there (#1021). Public is identified by its PSK
     // (`Channel.isPublicChannel`), not by its index, so it has no claim on
@@ -1887,7 +1966,9 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     final slot = _allocateChannelSlot(context, connector);
     if (slot == null) return;
     final psk = Channel.parsePskHex(Channel.publicChannelPsk);
-    connector.setChannel(slot, 'Public', psk);
+    final result = await connector.setChannel(slot, 'Public', psk);
+    if (!context.mounted) return;
+    if (explainUnconfirmedChannelWrite(context, result)) return;
     showDismissibleSnackBar(
       context,
       content: Text(context.l10n.channels_publicChannelAdded),
@@ -2108,23 +2189,42 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ),
           TextButton(
             onPressed: () async {
+              if (communityChannels.isNotEmpty &&
+                  refuseWhileChannelTableBusy(dialogContext, connector)) {
+                return;
+              }
               Navigator.pop(dialogContext);
 
-              // Delete all community channels from the device
+              // Delete all community channels from the device. Each delete is
+              // answered before the next goes out, and the list is re-read
+              // once at the end: a re-read between deletes would put the next
+              // one in the middle of a sync, where its reply cannot be told
+              // from the sync's (#1026).
+              ChannelWrite? failure;
               for (final channel in communityChannels) {
-                await connector.deleteChannel(channel.index);
+                final result = await connector.deleteChannel(
+                  channel.index,
+                  refresh: false,
+                );
+                if (result != ChannelWrite.ok) failure ??= result;
+              }
+              if (communityChannels.isNotEmpty) {
+                await connector.getChannels(force: true);
               }
 
               // Remove community from store
               await _communityStore.removeCommunity(community.id);
               _loadCommunities();
 
-              if (context.mounted) {
-                showDismissibleSnackBar(
-                  context,
-                  content: Text(context.l10n.community_deleted(community.name)),
-                );
+              if (!context.mounted) return;
+              if (failure != null &&
+                  explainUnconfirmedChannelWrite(context, failure)) {
+                return;
               }
+              showDismissibleSnackBar(
+                context,
+                content: Text(context.l10n.community_deleted(community.name)),
+              );
             },
             child: Text(
               dialogContext.l10n.community_delete,
