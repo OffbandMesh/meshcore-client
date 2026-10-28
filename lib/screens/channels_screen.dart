@@ -1956,13 +1956,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     // it overwrote whatever was there (#1021). Public is identified by its PSK
     // (`Channel.isPublicChannel`), not by its index, so it has no claim on
     // slot 0 and can live anywhere.
-    if (connector.channels.any((c) => c.isPublicChannel)) {
-      showChannelBlockedMessage(
-        context,
-        context.l10n.channels_publicAlreadyAdded,
-      );
-      return;
-    }
+    if (refusePublicAlreadyOnRadio(context, connector)) return;
     final slot = _allocateChannelSlot(context, connector);
     if (slot == null) return;
     final psk = Channel.parsePskHex(Channel.publicChannelPsk);

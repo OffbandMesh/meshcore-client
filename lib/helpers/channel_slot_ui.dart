@@ -78,6 +78,19 @@ bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
   return true;
 }
 
+/// Refuses a second Public channel, and says so. Returns true if it refused.
+///
+/// Public is identified by its PSK (`Channel.isPublicChannel`), not by slot 0,
+/// so it can live in any slot and this is the only duplicate check it needs.
+bool refusePublicAlreadyOnRadio(
+  BuildContext context,
+  MeshCoreConnector connector,
+) {
+  if (!connector.channels.any((c) => c.isPublicChannel)) return false;
+  showChannelBlockedMessage(context, context.l10n.channels_publicAlreadyAdded);
+  return true;
+}
+
 /// For an edit or delete: refuses while the channel list is being re-read or
 /// a write is unanswered, and says so. Returns true if it refused.
 ///
