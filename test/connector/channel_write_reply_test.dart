@@ -11,6 +11,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
+import 'package:meshcore_open/helpers/channel_slot_decision.dart';
 import 'package:meshcore_open/models/channel.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
@@ -205,5 +206,48 @@ void main() {
       expect(setFrames(), hasLength(1));
       expect(connector.channelMessagesForTest.containsKey(3), isTrue);
     });
+  });
+
+  // #1024: after a FAILED sync the cached list is restored but
+  // hasLoadedChannels stays false. Gating adds on hasLoadedChannels would lock
+  // the user out of adding channels on a flaky link, so the table has to read
+  // as usable here, driven through the real sync rather than asserted.
+  group('after a failed sync', () {
+    List<int> channelInfo(int index, String name, int fill) => [
+      respCodeChannelInfo,
+      index,
+      ...name.codeUnits,
+      ...List<int>.filled(32 - name.length, 0),
+      ...psk(fill),
+    ];
+
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    test(
+      'the restored list is not busy, and an add gets a free slot',
+      () async {
+        await connector.getChannels(maxChannels: 2, force: true);
+        connector.handleFrameForTest(channelInfo(0, 'Public', 0x11));
+        await settle();
+        connector.handleFrameForTest(channelInfo(1, 'Weather', 0x22));
+        await settle();
+        expect(connector.hasLoadedChannels, isTrue);
+
+        connector.sendFrameOverrideForTest = (_) =>
+            throw Exception('link lost');
+        await connector.getChannels(maxChannels: 2, force: true);
+        await settle();
+
+        expect(connector.hasLoadedChannels, isFalse);
+        expect(connector.channels.map((c) => c.index), unorderedEquals([0, 1]));
+        expect(connector.isChannelTableBusy, isFalse);
+        final decision = decideChannelSlot(
+          channels: connector.channels,
+          maxChannels: 3,
+          isSyncing: connector.isChannelTableBusy,
+        );
+        expect(decision.slot, 2);
+      },
+    );
   });
 }
