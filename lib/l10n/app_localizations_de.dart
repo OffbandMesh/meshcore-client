@@ -311,6 +311,14 @@ class AppLocalizationsDe extends AppLocalizations {
       'Bitte aktivieren Sie Bluetooth, um nach Geräten zu suchen.';
 
   @override
+  String get scanner_scanFailedLocationOff =>
+      'Location is off, so Android won\'t let the app scan for Bluetooth radios. Turn on Location in your phone\'s quick settings, then tap Scan again.';
+
+  @override
+  String get scanner_scanFailedGeneric =>
+      'Could not start the Bluetooth scan. Tap Scan to try again. If it keeps failing, turn Bluetooth off and on.';
+
+  @override
   String get scanner_connectFailedTransient =>
       'The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.';
 
