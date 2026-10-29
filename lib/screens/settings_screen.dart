@@ -154,8 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
-    // the About version row. Selects narrowly so the category list only rebuilds
-    // when the flag flips, not on every connector update (same reason as above).
+    // the Device Info Build row. Selects narrowly so the category list only
+    // rebuilds when the flag flips, not on every connector update (same reason
+    // as above).
     final experimentalUnlocked = context.select<AppSettingsService, bool>(
       (s) => s.settings.experimentalUnlocked,
     );

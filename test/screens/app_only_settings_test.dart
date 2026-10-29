@@ -79,18 +79,25 @@ Future<AppLocalizations> _openFromScanner(WidgetTester tester) async {
   return l10n;
 }
 
-/// Run the real-IO export in the real zone and wait for it to settle, either
-/// at the share sheet or at a message on screen.
-Future<void> _tapShareAndSettle(WidgetTester tester, String label) async {
-  final before = _shared.length;
-  await tester.runAsync(() async {
-    await tester.tap(find.text(label));
-    for (var i = 0; i < 100 && _shared.length == before; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
-  });
-  await tester.pump();
+/// Tap Share in the real zone, where the export's file IO can run, then let
+/// it progress frame by frame until [done] holds. The ceiling is generous so
+/// a slow runner waits rather than flakes; a run that never gets there fails
+/// on the caller's next expectation.
+Future<void> _tapShareUntil(
+  WidgetTester tester,
+  String label,
+  bool Function() done,
+) async {
+  await tester.runAsync(() => tester.tap(find.text(label)));
+  for (var i = 0; i < 300 && !done(); i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+  }
 }
+
+bool _shown(String text) => find.text(text).evaluate().isNotEmpty;
 
 /// Drain ScannerScreen's dispose-time disconnect before teardown.
 Future<void> _unmount(WidgetTester tester) async {
@@ -214,7 +221,11 @@ void main() {
       await tester.pumpAndSettle();
 
       final sharesBefore = _shared.length;
-      await _tapShareAndSettle(tester, l10n.debugLog_shareLog);
+      await _tapShareUntil(
+        tester,
+        l10n.debugLog_shareLog,
+        () => _shared.length > sharesBefore,
+      );
 
       expect(_shared.length, sharesBefore + 1);
       final logDir = FileLogService.instance.logDir!.path;
@@ -239,7 +250,12 @@ void main() {
       await tester.tap(find.text(l10n.settings_debug));
       await tester.pumpAndSettle();
 
-      await _tapShareAndSettle(tester, l10n.debugLog_shareLog);
+      await _tapShareUntil(
+        tester,
+        l10n.debugLog_shareLog,
+        () => _shown(l10n.debugLog_exportFailed),
+      );
+      // Finish the entrance animation, which is what starts the timeout.
       await tester.pump(const Duration(seconds: 1));
       expect(find.text(l10n.debugLog_exportFailed), findsOneWidget);
 
@@ -266,7 +282,11 @@ void main() {
       await tester.pumpAndSettle();
 
       final sharesBefore = _shared.length;
-      await _tapShareAndSettle(tester, l10n.debugLog_shareLog);
+      await _tapShareUntil(
+        tester,
+        l10n.debugLog_shareLog,
+        () => _shown(l10n.debugLog_logUnavailable),
+      );
       await tester.pump(const Duration(seconds: 1));
       expect(_shared.length, sharesBefore, reason: 'nothing to hand over');
       expect(find.text(l10n.debugLog_logUnavailable), findsOneWidget);

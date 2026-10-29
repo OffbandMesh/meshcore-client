@@ -103,8 +103,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
     ).push(MaterialPageRoute(builder: (_) => const AppOnlySettingsScreen()));
     // A connection that completed while settings were open routed nowhere,
     // because this screen was not the current route. Route in now, as the
-    // connection listener would have.
+    // connection listener would have, and under the same condition: only if
+    // this screen is current again, not covered by some other route. The
+    // settings route is already out of the "present" set by the time its
+    // future completes, so it does not count against that check.
     if (mounted &&
+        (ModalRoute.of(context)?.isCurrent ?? true) &&
         _connector.state == MeshCoreConnectionState.connected &&
         !_routingIntoApp) {
       _routeIntoApp();
