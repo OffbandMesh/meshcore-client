@@ -664,6 +664,18 @@ abstract class AppLocalizations {
   /// **'Please turn on Bluetooth to scan for devices'**
   String get scanner_bluetoothOffMessage;
 
+  /// Shown when a Bluetooth scan is refused because system Location is off (Android 11 and below) (#1033).
+  ///
+  /// In en, this message translates to:
+  /// **'Location is off, so Android won\'t let the app scan for Bluetooth radios. Turn on Location in your phone\'s quick settings, then tap Scan again.'**
+  String get scanner_scanFailedLocationOff;
+
+  /// Shown for any other failure to start a Bluetooth scan; the raw error goes to the log only (#1033).
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the Bluetooth scan. Tap Scan to try again. If it keeps failing, turn Bluetooth off and on.'**
+  String get scanner_scanFailedGeneric;
+
   /// Human-readable text for an Android GATT 133 connect failure after the bounded retry also failed (#698).
   ///
   /// In en, this message translates to:

@@ -158,6 +158,14 @@
   "scanner_scan": "Scan",
   "scanner_bluetoothOff": "Bluetooth is off",
   "scanner_bluetoothOffMessage": "Please turn on Bluetooth to scan for devices",
+  "scanner_scanFailedLocationOff": "Location is off, so Android won't let the app scan for Bluetooth radios. Turn on Location in your phone's quick settings, then tap Scan again.",
+  "@scanner_scanFailedLocationOff": {
+    "description": "Shown when a Bluetooth scan is refused because system Location is off (Android 11 and below) (#1033)."
+  },
+  "scanner_scanFailedGeneric": "Could not start the Bluetooth scan. Tap Scan to try again. If it keeps failing, turn Bluetooth off and on.",
+  "@scanner_scanFailedGeneric": {
+    "description": "Shown for any other failure to start a Bluetooth scan; the raw error goes to the log only (#1033)."
+  },
   "scanner_connectFailedTransient": "The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.",
   "@scanner_connectFailedTransient": {
     "description": "Human-readable text for an Android GATT 133 connect failure after the bounded retry also failed (#698)."
