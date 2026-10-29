@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/utils/gpx_export.dart';
 import 'package:provider/provider.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
@@ -21,7 +19,9 @@ import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
 import 'settings/settings_shell.dart';
+import 'settings/about_view.dart';
 import 'settings/app_settings_view.dart';
+import 'settings/debug_logs_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
@@ -30,8 +30,6 @@ import 'settings/badge_screen_view.dart';
 import 'settings/device_ui_view.dart';
 import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
-import 'app_debug_log_screen.dart';
-import 'ble_debug_log_screen.dart';
 import 'device_cli_screen.dart';
 import 'export_config_screen.dart';
 import 'import_config_screen.dart';
@@ -80,7 +78,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBatteryVoltage = false;
-  String _appVersion = '';
 
   // #509 hidden unlock: 7 taps on the version row within a rolling window
   // reveals the Experimental settings section.
@@ -94,23 +91,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Timer? _versionHintTimer;
 
   @override
-  void initState() {
-    super.initState();
-    _loadVersionInfo();
-  }
-
-  @override
   void dispose() {
     _versionHintTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadVersionInfo() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    if (!mounted) return;
-    setState(() {
-      _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-    });
   }
 
   void _handleUnlockTap() {
@@ -263,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsCategory(
         icon: Icons.info_outline,
         title: l10n.settings_about,
-        builder: _aboutPane,
+        builder: (_) => const AboutView(),
       ),
     ];
   }
@@ -877,108 +860,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // About is its own top-level Settings category (#525/#526), no longer a card
-  // in the Debug pane. Outbound links (offband.org / Play / donate) added by
-  // #527 between the info block and the licenses row.
-  Widget _aboutPane(BuildContext context) {
-    final l10n = context.l10n;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(l10n.appTitle),
-                subtitle: Text(
-                  l10n.settings_aboutVersion(
-                    _appVersion.isEmpty ? l10n.common_loading : _appVersion,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l10n.settings_aboutDescription),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.settings_aboutLegalese,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.settings_aboutPresetsAttribution,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(l10n.settings_aboutWebsite),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.shop_outlined),
-                title: Text(l10n.settings_aboutPlayStore),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl(
-                  'https://play.google.com/store/apps/details?id=app.offband.meshcore',
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.favorite_outline),
-                title: Text(l10n.settings_aboutDonate),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org/donate'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: Text(l10n.settings_aboutLicenses),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: l10n.appTitle,
-                  applicationVersion: _appVersion.isEmpty ? null : _appVersion,
-                  applicationLegalese: l10n.settings_aboutLegalese,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _openExternalUrl(String url) async {
-    try {
-      if (await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      )) {
-        return;
-      }
-    } catch (_) {
-      // fall through to the failure message
-    }
-    if (mounted) {
-      showDismissibleSnackBar(
-        context,
-        content: Text(context.l10n.settings_aboutLinkFailed),
-      );
-    }
-  }
-
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
-    final settingsService = context.watch<AppSettingsService>();
     // #884: the Device CLI console is offered only when the connected radio
     // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
     // at the upstream-1.18 absorb). select() so only this gate flipping
@@ -1010,67 +893,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const Divider(height: 1),
           ],
-          SwitchListTile(
-            secondary: const Icon(Icons.bug_report_outlined),
-            title: Text(l10n.appSettings_appDebugLogging),
-            subtitle: Text(l10n.appSettings_appDebugLoggingSubtitle),
-            value: settingsService.settings.appDebugLogEnabled,
-            onChanged: (value) async {
-              try {
-                await settingsService.setAppDebugLogEnabled(value);
-              } catch (_) {
-                if (context.mounted) {
-                  showDismissibleSnackBar(
-                    context,
-                    content: const Text(
-                      'Could not change debug logging. Please try again.',
-                    ),
-                  );
-                }
-                return;
-              }
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(
-                  value
-                      ? l10n.appSettings_appDebugLoggingEnabled
-                      : l10n.appSettings_appDebugLoggingDisabled,
-                ),
-                duration: const Duration(seconds: 2),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.bluetooth_outlined),
-            title: Text(l10n.settings_companionDebugLog),
-            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BleDebugLogScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.code_outlined),
-            title: Text(l10n.settings_appDebugLog),
-            subtitle: Text(l10n.settings_appDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AppDebugLogScreen(),
-                ),
-              );
-            },
-          ),
+          // The app-level rows, shared with the scanner's app-only settings
+          // (#693). The rows below them need the radio and stay here only.
+          const DebugLogTiles(),
           const Divider(height: 1),
           // Serial capture (#430). English-only for now; localization follow-up.
           ListTile(

@@ -1049,6 +1049,7 @@
   "debugLog_shareSubject": "Offband Meshcore logs",
   "debugLog_logSaved": "Log saved",
   "debugLog_logUnavailable": "No log available to export",
+  "debugLog_exportFailed": "Couldn't share the log. Please try again.",
   "debugLog_copied": "Debug log copied",
   "debugLog_bleCopied": "BLE log copied",
   "debugLog_noEntries": "No debug logs yet",

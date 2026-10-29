@@ -1941,6 +1941,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get debugLog_logUnavailable => 'No log available to export';
 
   @override
+  String get debugLog_exportFailed =>
+      'Couldn\'t share the log. Please try again.';
+
+  @override
   String get debugLog_copied => 'Journal de débogage copié';
 
   @override
