@@ -3454,6 +3454,12 @@ abstract class AppLocalizations {
   /// **'No log available to export'**
   String get debugLog_logUnavailable;
 
+  /// No description provided for @debugLog_exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share the log. Please try again.'**
+  String get debugLog_exportFailed;
+
   /// No description provided for @debugLog_copied.
   ///
   /// In en, this message translates to:

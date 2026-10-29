@@ -13,6 +13,7 @@ import '../widgets/battery_optimization_banner.dart';
 import '../widgets/device_tile.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channels_screen.dart';
+import 'settings/app_only_settings_screen.dart';
 import 'tcp_screen.dart';
 import 'usb_screen.dart';
 
@@ -58,17 +59,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         // out of it either. The first-connect path for those transports is not
         // affected: their own screen sits on top while connecting, so
         // isCurrentRoute is false here and they still navigate themselves.
-        _changedNavigation = true;
-        _routingIntoApp = true;
-        if (mounted) {
-          Navigator.of(context)
-              .push(
-                MaterialPageRoute(builder: (context) => const ChannelsScreen()),
-              )
-              .then((_) {
-                if (mounted) _routingIntoApp = false;
-              });
-        }
+        _routeIntoApp();
       }
     };
 
@@ -90,6 +81,34 @@ class _ScannerScreenState extends State<ScannerScreen> {
         appLogger.warn('Adapter state stream error: $e', tag: 'ScannerScreen');
       },
     );
+  }
+
+  void _routeIntoApp() {
+    _changedNavigation = true;
+    _routingIntoApp = true;
+    if (mounted) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (context) => const ChannelsScreen()))
+          .then((_) {
+            if (mounted) _routingIntoApp = false;
+          });
+    }
+  }
+
+  /// App-level settings, reachable with no radio so a user whose radio will
+  /// not connect can still share the log (#693).
+  Future<void> _openAppSettings() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AppOnlySettingsScreen()));
+    // A connection that completed while settings were open routed nowhere,
+    // because this screen was not the current route. Route in now, as the
+    // connection listener would have.
+    if (mounted &&
+        _connector.state == MeshCoreConnectionState.connected &&
+        !_routingIntoApp) {
+      _routeIntoApp();
+    }
   }
 
   @override
@@ -121,6 +140,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
         title: AdaptiveAppBarTitle(context.l10n.scanner_title),
         centerTitle: true,
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: context.l10n.settings_title,
+            onPressed: _openAppSettings,
+          ),
+        ],
       ),
       body: BatteryOptimizationBanner(
         child: SafeArea(
