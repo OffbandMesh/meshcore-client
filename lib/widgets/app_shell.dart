@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -89,6 +90,15 @@ class AppShell extends StatefulWidget {
     return AppShellBackAction.background;
   }
 
+  /// iOS has no system Back, so a pushed detail must keep the edge swipe, which
+  /// Flutter disables while `PopScope.canPop` is false. A top-level tab stays
+  /// blocked: a swipe there would land on the scanner (#1052).
+  @visibleForTesting
+  static bool canSwipeBack({
+    required TargetPlatform platform,
+    required bool isTopLevel,
+  }) => platform == TargetPlatform.iOS && !isTopLevel;
+
   /// Hamburger for a top-level tab's app-bar leading, used when the nav panel
   /// is NOT pinned (transient drawer). Top-level tabs must set
   /// `automaticallyImplyLeading: false` and use this instead, so the pinned
@@ -154,7 +164,10 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: AppShell.canSwipeBack(
+        platform: defaultTargetPlatform,
+        isTopLevel: widget.isTopLevel,
+      ),
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         _handleBack();

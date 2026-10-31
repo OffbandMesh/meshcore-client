@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -180,6 +181,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       setState(() => _unreadDividerMessageId = null);
     }
   }
+
+  bool get _isTouchPlatform =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
 
   void _onTextFieldFocusChange() {
     if (_textFieldFocusNode.hasFocus && mounted) {
@@ -417,19 +422,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
       appBarBuilder: (context, pinned) => AppBar(
-        // Pinned: the panel is already docked, so no hamburger is needed.
-        // Unpinned: this is a pushed route, so Scaffold would put a back arrow
-        // in this slot; the explicit hamburger replaces it. System back still
-        // pops to the channel list.
-        leading: pinned
-            ? null
-            : Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  tooltip: context.l10n.channels_title,
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
-              ),
+        // Explicit, because with a drawer present Scaffold would put a hamburger
+        // here, and iOS has no system back to fall back on (#1052).
+        leading: const BackButton(),
         title: Row(
           children: [
             _channelIcon(_currentChannel),
@@ -468,6 +463,15 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         centerTitle: false,
         bottom: const SyncProgressAppBarBottom(),
         actions: [
+          // Pinned: the panel is already docked, so no button is needed.
+          if (!pinned)
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                tooltip: context.l10n.channels_title,
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
           const RadioStatsIconButton(),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -551,145 +555,160 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         child: Column(
           children: [
             Expanded(
-              child: Consumer<MeshCoreConnector>(
-                builder: (context, connector, child) {
-                  final messages = connector.getChannelMessages(
-                    _currentChannel,
-                  );
-                  final blockService = context.watch<BlockService>();
-                  final visibleMessages = messages
-                      .where(
-                        (m) =>
-                            !_isChannelSenderHidden(m, connector, blockService),
-                      )
-                      .toList();
-
-                  if (visibleMessages.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _currentChannel.isPublicChannel
-                                ? Icons.public
-                                : Icons.tag,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            context.l10n.chat_noMessages,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            context.l10n.chat_sendMessageToStart,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
+              // A touch outside a text field does not dismiss the keyboard on
+              // mobile, and the keyboard hides the bottom bar (#1052).
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _textFieldFocusNode.unfocus,
+                child: Consumer<MeshCoreConnector>(
+                  builder: (context, connector, child) {
+                    final messages = connector.getChannelMessages(
+                      _currentChannel,
                     );
-                  }
+                    final blockService = context.watch<BlockService>();
+                    final visibleMessages = messages
+                        .where(
+                          (m) => !_isChannelSenderHidden(
+                            m,
+                            connector,
+                            blockService,
+                          ),
+                        )
+                        .toList();
 
-                  // Reverse messages so newest appear at bottom with reverse: true
-                  final reversedMessages = visibleMessages.reversed.toList();
-                  final itemCount =
-                      reversedMessages.length + (_isLoadingOlder ? 1 : 0);
-
-                  // Auto-scroll to bottom if user is already at bottom
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_channelSkipNextBottomSnap) {
-                      _channelSkipNextBottomSnap = false;
-                      return;
+                    if (visibleMessages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _currentChannel.isPublicChannel
+                                  ? Icons.public
+                                  : Icons.tag,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              context.l10n.chat_noMessages,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              context.l10n.chat_sendMessageToStart,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
                     }
-                    _scrollController.scrollToBottomIfAtBottom();
-                  });
 
-                  return Stack(
-                    children: [
-                      ChatZoomWrapper(
-                        child: ListView.builder(
-                          reverse: true, // List grows from bottom up
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(8),
-                          itemCount: itemCount,
-                          itemBuilder: (context, index) {
-                            // Loading indicator now appears at end (bottom) of reversed list
-                            if (_isLoadingOlder && index == itemCount - 1) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                    // Reverse messages so newest appear at bottom with reverse: true
+                    final reversedMessages = visibleMessages.reversed.toList();
+                    final itemCount =
+                        reversedMessages.length + (_isLoadingOlder ? 1 : 0);
+
+                    // Auto-scroll to bottom if user is already at bottom
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_channelSkipNextBottomSnap) {
+                        _channelSkipNextBottomSnap = false;
+                        return;
+                      }
+                      _scrollController.scrollToBottomIfAtBottom();
+                    });
+
+                    return Stack(
+                      children: [
+                        ChatZoomWrapper(
+                          child: ListView.builder(
+                            reverse: true, // List grows from bottom up
+                            controller: _scrollController,
+                            keyboardDismissBehavior: _isTouchPlatform
+                                ? ScrollViewKeyboardDismissBehavior.onDrag
+                                : ScrollViewKeyboardDismissBehavior.manual,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: itemCount,
+                            itemBuilder: (context, index) {
+                              // Loading indicator now appears at end (bottom) of reversed list
+                              if (_isLoadingOlder && index == itemCount - 1) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   ),
+                                );
+                              }
+                              final messageIndex = index;
+                              final message = reversedMessages[messageIndex];
+                              if (!_messageKeys.containsKey(
+                                message.messageId,
+                              )) {
+                                _messageKeys[message.messageId] = GlobalKey();
+                              }
+                              final isUnreadAnchor =
+                                  _unreadDividerMessageId != null &&
+                                  message.messageId == _unreadDividerMessageId;
+                              // Day divider above the first message of each
+                              // calendar day. List is reversed, so the older
+                              // neighbour is at index+1.
+                              final olderIdx = messageIndex + 1;
+                              final showDayDivider =
+                                  olderIdx >= reversedMessages.length ||
+                                  !_isSameDay(
+                                    message.timestamp,
+                                    reversedMessages[olderIdx].timestamp,
+                                  );
+                              return Container(
+                                key: _messageKeys[message.messageId]!,
+                                child: Builder(
+                                  builder: (context) {
+                                    final textScale = context
+                                        .select<ChatTextScaleService, double>(
+                                          (service) => service.scale,
+                                        );
+                                    final bubble = _buildMessageBubble(
+                                      message,
+                                      textScale,
+                                    );
+                                    if (!showDayDivider && !isUnreadAnchor) {
+                                      return bubble;
+                                    }
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (showDayDivider)
+                                          _buildDayDivider(
+                                            context,
+                                            message.timestamp,
+                                          ),
+                                        if (isUnreadAnchor)
+                                          const UnreadDivider(),
+                                        bubble,
+                                      ],
+                                    );
+                                  },
                                 ),
                               );
-                            }
-                            final messageIndex = index;
-                            final message = reversedMessages[messageIndex];
-                            if (!_messageKeys.containsKey(message.messageId)) {
-                              _messageKeys[message.messageId] = GlobalKey();
-                            }
-                            final isUnreadAnchor =
-                                _unreadDividerMessageId != null &&
-                                message.messageId == _unreadDividerMessageId;
-                            // Day divider above the first message of each
-                            // calendar day. List is reversed, so the older
-                            // neighbour is at index+1.
-                            final olderIdx = messageIndex + 1;
-                            final showDayDivider =
-                                olderIdx >= reversedMessages.length ||
-                                !_isSameDay(
-                                  message.timestamp,
-                                  reversedMessages[olderIdx].timestamp,
-                                );
-                            return Container(
-                              key: _messageKeys[message.messageId]!,
-                              child: Builder(
-                                builder: (context) {
-                                  final textScale = context
-                                      .select<ChatTextScaleService, double>(
-                                        (service) => service.scale,
-                                      );
-                                  final bubble = _buildMessageBubble(
-                                    message,
-                                    textScale,
-                                  );
-                                  if (!showDayDivider && !isUnreadAnchor) {
-                                    return bubble;
-                                  }
-                                  return Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (showDayDivider)
-                                        _buildDayDivider(
-                                          context,
-                                          message.timestamp,
-                                        ),
-                                      if (isUnreadAnchor) const UnreadDivider(),
-                                      bubble,
-                                    ],
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                            },
+                          ),
                         ),
-                      ),
-                      JumpToBottomButton(scrollController: _scrollController),
-                    ],
-                  );
-                },
+                        JumpToBottomButton(scrollController: _scrollController),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
             _buildMessageComposer(),

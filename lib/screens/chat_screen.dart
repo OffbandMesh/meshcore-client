@@ -533,6 +533,12 @@ class _ChatScreenState extends State<ChatScreen> {
       child: ListView.builder(
         reverse: true, // List grows from bottom up
         controller: _scrollController,
+        // A touch outside a text field does not dismiss the keyboard on mobile.
+        keyboardDismissBehavior:
+            defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.android
+            ? ScrollViewKeyboardDismissBehavior.onDrag
+            : ScrollViewKeyboardDismissBehavior.manual,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
         itemCount: itemCount,
         itemBuilder: (context, index) {
