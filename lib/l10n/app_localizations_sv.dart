@@ -9,7 +9,7 @@ class AppLocalizationsSv extends AppLocalizations {
   AppLocalizationsSv([String locale = 'sv']) : super(locale);
 
   @override
-  String get appTitle => 'Offband Meshcore';
+  String get appTitle => 'Offband MeshCore';
 
   @override
   String get nav_contacts => 'Kontakter';
@@ -854,7 +854,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String settings_aboutVersion(String version) {
-    return 'Offband Meshcore version $version';
+    return 'Offband MeshCore version $version';
   }
 
   @override
@@ -1917,7 +1917,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get debugLog_downloadLog => 'Download logs';
 
   @override
-  String get debugLog_shareSubject => 'Offband Meshcore logs';
+  String get debugLog_shareSubject => 'Offband MeshCore logs';
 
   @override
   String get debugLog_logSaved => 'Log saved';

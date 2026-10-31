@@ -68,6 +68,9 @@ macos/Flutter/GeneratedPluginRegistrant.swift
 **/ios/Flutter/Flutter.framework
 **/ios/Flutter/Flutter.podspec
 
+# Apple account paperwork, kept local
+docs/Apple/
+
 # Android
 .gradle/
 **/android/.gradle/

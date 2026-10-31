@@ -22,7 +22,7 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
 
     <application
-        android:label="Offband Meshcore"
+        android:label="Offband MeshCore"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service

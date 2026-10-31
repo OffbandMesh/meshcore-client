@@ -1,0 +1,25 @@
+name: TestFlight
+
+# A signed build uploaded to App Store Connect, on demand (#1039, epic #1013).
+# Dispatch it from a `v*` tag or `main`: the apple-signing Environment refuses
+# any other ref. NEVER add a `pull_request` trigger; see ios-signed.yml.
+
+on:
+  workflow_dispatch:
+  # TestFlight builds for the owner's hardware pass, before the Epics merge
+  # (#1047). Removed before this branch merges.
+  push:
+    branches:
+      - feat/1014-ios-app-review
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    uses: ./.github/workflows/ios-signed.yml
+    secrets: inherit

@@ -6,7 +6,7 @@
 - [x] Xcode installed
 - [x] Apple Transporter app installed
 - [x] App icons ready (1024x1024px)
-- [x] Bundle ID configured: `app.offband.meshcore`
+- [x] Bundle ID configured: `app.offband.meshcore.ios`
 
 ## Step 1: Register Bundle Identifier
 
@@ -15,8 +15,8 @@
 3. Select **"App IDs"** → Continue
 4. Select **"App"** → Continue
 5. Fill in:
-   - **Description**: Offband Meshcore
-   - **Bundle ID**: Explicit - `app.offband.meshcore`
+   - **Description**: Offband MeshCore
+   - **Bundle ID**: Explicit - `app.offband.meshcore.ios`
    - **Capabilities**: Leave defaults (or add as needed)
 6. Click **Continue** → **Register**
 
@@ -28,9 +28,9 @@
 4. Click the **"+"** button → **"New App"**
 5. Fill in the form:
    - **Platforms**: iOS
-   - **Name**: Offband Meshcore
+   - **Name**: Offband MeshCore
    - **Primary Language**: English (U.S.)
-   - **Bundle ID**: Select `app.offband.meshcore` from dropdown
+   - **Bundle ID**: Select `app.offband.meshcore.ios` from dropdown
    - **SKU**: `meshcore-open-001` (or any unique identifier)
    - **User Access**: Full Access
 6. Click **"Create"**
@@ -86,7 +86,7 @@ The IPA will be created at: `build/ios/ipa/meshcore_open.ipa`
 
 3. Fill in **Description**:
    ```
-   Offband Meshcore is a Flutter client for MeshCore LoRa mesh networking devices.
+   Offband MeshCore is a Flutter client for MeshCore LoRa mesh networking devices.
 
    Features:
    - BLE connectivity to MeshCore devices
@@ -105,7 +105,7 @@ The IPA will be created at: `build/ios/ipa/meshcore_open.ipa`
 ### Version Information
 1. **What's New in This Version**:
    ```
-   Initial release of Offband Meshcore
+   Initial release of Offband MeshCore
 
    - BLE device connectivity
    - Mesh network messaging
@@ -241,4 +241,4 @@ Distribution:
 For issues with:
 - **App Store Process**: [Apple Developer Support](https://developer.apple.com/contact/)
 - **Flutter Build Issues**: [Flutter GitHub](https://github.com/flutter/flutter/issues)
-- **Offband Meshcore App**: [GitHub Issues](https://github.com/OffbandMesh/meshcore-client/issues)
+- **Offband MeshCore App**: [GitHub Issues](https://github.com/OffbandMesh/meshcore-client/issues)

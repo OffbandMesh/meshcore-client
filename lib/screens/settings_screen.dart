@@ -18,6 +18,7 @@ import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
+import '../utils/platform_info.dart';
 import 'settings/settings_shell.dart';
 import 'settings/about_view.dart';
 import 'settings/app_settings_view.dart';
@@ -232,7 +233,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_actions,
         builder: _actionsPane,
       ),
-      if (experimentalUnlocked)
+      // App Store guideline 2.5.19 bars hidden features, so iOS has no unlock
+      // and never shows this section (#1051).
+      if (experimentalUnlocked && !PlatformInfo.isIOS)
         SettingsCategory(
           icon: Icons.science_outlined,
           title: l10n.settings_experimental,
@@ -712,7 +715,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               l10n.settings_infoBuild,
               BuildInfo.stamp,
               copyValue: BuildInfo.stamp,
-              onTap: _handleUnlockTap,
+              onTap: PlatformInfo.isIOS ? null : _handleUnlockTap,
             ),
             if (_versionHint != null)
               Padding(

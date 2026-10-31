@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../helpers/snack_bar_builder.dart';
 import '../../l10n/l10n.dart';
+import '../../utils/platform_info.dart';
 
 /// The About pane: app identity, version, outbound links and licenses.
 ///
@@ -79,20 +80,24 @@ class _AboutViewState extends State<AboutView> {
                 trailing: const Icon(Icons.open_in_new, size: 18),
                 onTap: () => _openExternalUrl('https://offband.org'),
               ),
-              ListTile(
-                leading: const Icon(Icons.shop_outlined),
-                title: Text(l10n.settings_aboutPlayStore),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl(
-                  'https://play.google.com/store/apps/details?id=app.offband.meshcore',
+              // App Store guideline 2.3.10 bars naming other marketplaces (#1048).
+              if (!PlatformInfo.isIOS)
+                ListTile(
+                  leading: const Icon(Icons.shop_outlined),
+                  title: Text(l10n.settings_aboutPlayStore),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => _openExternalUrl(
+                    'https://play.google.com/store/apps/details?id=app.offband.meshcore',
+                  ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.favorite_outline),
-                title: Text(l10n.settings_aboutDonate),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org/donate'),
-              ),
+              // Hidden on iOS for the first App Store submission (#1051).
+              if (!PlatformInfo.isIOS)
+                ListTile(
+                  leading: const Icon(Icons.favorite_outline),
+                  title: Text(l10n.settings_aboutDonate),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => _openExternalUrl('https://offband.org/donate'),
+                ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.description_outlined),

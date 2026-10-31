@@ -316,7 +316,7 @@ class MeshCoreApp extends StatelessWidget {
       child: Consumer<AppSettingsService>(
         builder: (context, settingsService, child) {
           return MaterialApp(
-            title: 'Offband Meshcore',
+            title: 'Offband MeshCore',
             debugShowCheckedModeBanner: false,
             localizationsDelegates: const [
               AppLocalizations.delegate,

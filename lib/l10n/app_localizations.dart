@@ -133,7 +133,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Offband Meshcore'**
+  /// **'Offband MeshCore'**
   String get appTitle;
 
   /// No description provided for @nav_contacts.
@@ -349,7 +349,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanner_title.
   ///
   /// In en, this message translates to:
-  /// **'Offband Meshcore'**
+  /// **'Offband MeshCore'**
   String get scanner_title;
 
   /// No description provided for @connectionChoiceUsbLabel.
@@ -1579,7 +1579,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_aboutVersion.
   ///
   /// In en, this message translates to:
-  /// **'Offband Meshcore v{version}'**
+  /// **'Offband MeshCore v{version}'**
   String settings_aboutVersion(String version);
 
   /// No description provided for @settings_aboutLegalese.
@@ -1591,7 +1591,7 @@ abstract class AppLocalizations {
   /// No description provided for @settings_aboutDescription.
   ///
   /// In en, this message translates to:
-  /// **'Offband Meshcore is an open-source client for MeshCore LoRa mesh networking devices.'**
+  /// **'Offband MeshCore is an open-source client for MeshCore LoRa mesh networking devices.'**
   String get settings_aboutDescription;
 
   /// No description provided for @settings_aboutLicenses.
@@ -3451,7 +3451,7 @@ abstract class AppLocalizations {
   /// No description provided for @debugLog_shareSubject.
   ///
   /// In en, this message translates to:
-  /// **'Offband Meshcore logs'**
+  /// **'Offband MeshCore logs'**
   String get debugLog_shareSubject;
 
   /// No description provided for @debugLog_logSaved.

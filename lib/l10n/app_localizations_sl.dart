@@ -9,7 +9,7 @@ class AppLocalizationsSl extends AppLocalizations {
   AppLocalizationsSl([String locale = 'sl']) : super(locale);
 
   @override
-  String get appTitle => 'Offband Meshcore';
+  String get appTitle => 'Offband MeshCore';
 
   @override
   String get nav_contacts => 'Stiki';
@@ -1923,7 +1923,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get debugLog_downloadLog => 'Download logs';
 
   @override
-  String get debugLog_shareSubject => 'Offband Meshcore logs';
+  String get debugLog_shareSubject => 'Offband MeshCore logs';
 
   @override
   String get debugLog_logSaved => 'Log saved';

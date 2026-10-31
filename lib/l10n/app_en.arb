@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Offband Meshcore",
+  "appTitle": "Offband MeshCore",
   "nav_contacts": "Contacts",
   "nav_channels": "Channels",
   "nav_map": "Map",
@@ -50,7 +50,7 @@
   },
   "common_autoRefresh": "Autorefresh",
   "common_interval": "Interval",
-  "scanner_title": "Offband Meshcore",
+  "scanner_title": "Offband MeshCore",
   "connectionChoiceUsbLabel": "USB",
   "connectionChoiceBluetoothLabel": "Bluetooth",
   "connectionChoiceTcpLabel": "TCP",
@@ -455,7 +455,7 @@
   "settings_appDebugLog": "App Debug Log",
   "settings_appDebugLogSubtitle": "Application debug messages",
   "settings_about": "About",
-  "settings_aboutVersion": "Offband Meshcore v{version}",
+  "settings_aboutVersion": "Offband MeshCore v{version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {
@@ -464,7 +464,7 @@
     }
   },
   "settings_aboutLegalese": "© 2026 Offband. Based on MeshCore Open by zjs81, MIT licensed.",
-  "settings_aboutDescription": "Offband Meshcore is an open-source client for MeshCore LoRa mesh networking devices.",
+  "settings_aboutDescription": "Offband MeshCore is an open-source client for MeshCore LoRa mesh networking devices.",
   "settings_aboutLicenses": "View licenses",
   "settings_aboutWebsite": "Offband website",
   "settings_aboutPlayStore": "Google Play",
@@ -1054,7 +1054,7 @@
   "debugLog_shareLog": "Share logs",
   "debugLog_saveLog": "Save logs",
   "debugLog_downloadLog": "Download logs",
-  "debugLog_shareSubject": "Offband Meshcore logs",
+  "debugLog_shareSubject": "Offband MeshCore logs",
   "debugLog_logSaved": "Log saved",
   "debugLog_logUnavailable": "No log available to export",
   "debugLog_exportFailed": "Couldn't share the log. Please try again.",
