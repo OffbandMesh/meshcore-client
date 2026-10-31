@@ -16,13 +16,13 @@ All on the web, signed in as the Account Holder. About 20 minutes.
 2. **Ask for API access.** App Store Connect, **Users and Access**, **Integrations**, **Request Access**, tick the box, **Submit**. Apple reviews this case by case, so it is done first and waited on.
 3. **Register the app's identifier.** developer.apple.com, **Certificates, Identifiers & Profiles**, **Identifiers**, the **+** button, **App IDs**, **Continue**, type **App**, **Continue**.
    - Description: `Offband Meshcore`
-   - **Explicit**, Bundle ID: `app.offband.meshcore`
+   - **Explicit**, Bundle ID: `app.offband.meshcore.ios`
    - Leave the capabilities as they are. **Continue**, **Register**.
 4. **Create the app record.** App Store Connect, **Apps**, **+**, **New App**.
    - Platform: **iOS** only
    - Name: `Offband Meshcore`
    - Primary language: English (U.S.)
-   - Bundle ID: pick `app.offband.meshcore` from the list
+   - Bundle ID: pick `app.offband.meshcore.ios` from the list
    - SKU: `offband-meshcore-ios`
    - User Access: **Full Access**, then **Create**.
 5. **Set availability without France.** In the new app, **Pricing and Availability**, **App Availability**, **Set Up Availability**, **Specific Countries or Regions**. Select all, then **untick France**. Also tick the box at the bottom for future countries, **Next**, **Confirm**.
@@ -54,7 +54,7 @@ pwsh .\tools\ios-signing\ios-signing.ps1 make-p12 -Cer "$HOME\Downloads\distribu
 
 You will see `Done. Signing bundle made and checked`. If you see `STOPPED: This certificate was not issued for the private key`, the `.cer` is from a different request; use the one made from step 1.
 
-**4. Create the provisioning profile.** developer.apple.com, **Profiles**, **+**, under Distribution **App Store Connect**, **Continue**, App ID `app.offband.meshcore`, **Continue**, select the certificate from step 2, **Continue**, name `Offband App Store`, **Generate**, **Download**.
+**4. Create the provisioning profile.** developer.apple.com, **Profiles**, **+**, under Distribution **App Store Connect**, **Continue**, App ID `app.offband.meshcore.ios`, **Continue**, select the certificate from step 2, **Continue**, name `Offband App Store`, **Generate**, **Download**.
 
 **5. Create the upload key.** App Store Connect, **Users and Access**, **Integrations**, **Team Keys**, **Generate API Key**, name `offband-ci-upload`, access **Developer**, **Generate**. Then **Download** the key. **Apple lets you download it only once.** It is a file named `AuthKey_` followed by letters and numbers, ending `.p8`. On the same page, copy the **Issuer ID** shown above the key list.
 
