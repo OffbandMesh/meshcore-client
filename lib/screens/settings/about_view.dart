@@ -90,12 +90,14 @@ class _AboutViewState extends State<AboutView> {
                     'https://play.google.com/store/apps/details?id=app.offband.meshcore',
                   ),
                 ),
-              ListTile(
-                leading: const Icon(Icons.favorite_outline),
-                title: Text(l10n.settings_aboutDonate),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org/donate'),
-              ),
+              // Hidden on iOS for the first App Store submission (#1051).
+              if (!PlatformInfo.isIOS)
+                ListTile(
+                  leading: const Icon(Icons.favorite_outline),
+                  title: Text(l10n.settings_aboutDonate),
+                  trailing: const Icon(Icons.open_in_new, size: 18),
+                  onTap: () => _openExternalUrl('https://offband.org/donate'),
+                ),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.description_outlined),

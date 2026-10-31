@@ -23,14 +23,8 @@ WHAT YOU MAY NOTICE
 - Map tiles come from OpenStreetMap. Line-of-sight checks send the path's coordinates to Open-Meteo for elevation data.
 - The app does not read the phone's GPS. Positions on the map come from radios.
 
-HIDDEN SECTION, DISCLOSED UNDER GUIDELINE 2.5.19
-With a radio connected, tapping the Build row in Settings seven times reveals an Experimental section. It holds diagnostics for this project's developers, and an opt-in feature that shows how many mesh observers heard a sent channel message, by asking the public server map.okimesh.org about that packet's hash. Everything in it is off by default. It is declared in the app's privacy details.
-
 USER-GENERATED CONTENT
 Messages are sent radio to radio. There is no Offband server holding them, so we cannot see, filter or remove them. Users can block a contact from the Contacts screen or a sender from a channel. That drops the contact's direct messages and hides the sender's channel messages. There is no in-app report button, because no one operates a service to receive or act on a report; users can write to support@offband.org. GIF search is limited to Giphy's G rating.
-
-DONATION LINK
-"Donate or sponsor" in About opens offband.org in the browser. It unlocks nothing, and the app has no purchases.
 
 ENCRYPTION
 The app uses standard AES, SHA-256 and HMAC from open-source libraries. Export compliance was answered in App Store Connect. The source code is public: https://github.com/OffbandMesh/meshcore-client
@@ -54,8 +48,6 @@ Before recording, make sure nothing private is visible: use a test channel, a te
 | 8 | The map, with a node showing | Map |
 | 9 | Scanning a QR code | The camera permission's reason |
 | 10 | Turning on translation and translating a message, if the model is already downloaded | The on-device model |
-| 11 | Settings, showing the Experimental section unlocked and off | The disclosure above |
-
 Upload it unlisted, somewhere that needs no sign-in to watch, and put that link in the notes.
 
 ## The beta review
