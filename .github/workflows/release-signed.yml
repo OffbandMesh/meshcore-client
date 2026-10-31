@@ -334,7 +334,7 @@ jobs:
           else
             gh release create "${TAG}" \
               --draft \
-              --title "Offband Meshcore ${VERSION}" \
+              --title "Offband MeshCore ${VERSION}" \
               --notes-file "${NOTES}" \
               "${PRERELEASE_FLAG}"
             gh release upload "${TAG}" out/*

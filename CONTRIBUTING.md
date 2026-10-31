@@ -1,4 +1,4 @@
-# How to contribute to Offband Meshcore
+# How to contribute to Offband MeshCore
 
 Before submitting any pull requests (PR), please review the following information.
 

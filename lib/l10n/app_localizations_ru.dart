@@ -9,7 +9,7 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
-  String get appTitle => 'Offband Meshcore';
+  String get appTitle => 'Offband MeshCore';
 
   @override
   String get nav_contacts => 'Контакты';
@@ -121,7 +121,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get common_interval => 'Интервал';
 
   @override
-  String get scanner_title => 'Offband Meshcore';
+  String get scanner_title => 'Offband MeshCore';
 
   @override
   String get connectionChoiceUsbLabel => 'USB';
@@ -864,7 +864,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String settings_aboutVersion(String version) {
-    return 'Offband Meshcore v$version';
+    return 'Offband MeshCore v$version';
   }
 
   @override
@@ -1935,7 +1935,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get debugLog_downloadLog => 'Download logs';
 
   @override
-  String get debugLog_shareSubject => 'Offband Meshcore logs';
+  String get debugLog_shareSubject => 'Offband MeshCore logs';
 
   @override
   String get debugLog_logSaved => 'Log saved';

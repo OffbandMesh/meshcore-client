@@ -136,7 +136,7 @@ class GpxExport {
       // 1. Build GPX content (your existing logic – unchanged here)
       final gpx = Gpx()
         ..version = '1.1'
-        ..creator = 'Offband Meshcore exporter'
+        ..creator = 'Offband MeshCore exporter'
         ..metadata = Metadata(
           name: name,
           desc: description,
