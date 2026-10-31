@@ -19,6 +19,7 @@ Direct messages and group channels over the mesh, contacts, a map of nodes that 
 WHAT YOU MAY NOTICE
 - Bluetooth permission: used only to talk to the radio. It stays connected in the background (bluetooth-central) so messages arrive with the screen off.
 - Camera permission: used only to scan QR codes for contacts and communities.
+- Notification permission: alerts for incoming messages.
 - Offline translation: optional. A language model is downloaded from Hugging Face only if the user turns translation on, and it runs on the device. This is why the app contains an on-device inference library.
 - Map tiles come from OpenStreetMap. Line-of-sight checks send the path's coordinates to Open-Meteo for elevation data.
 - The app does not read the phone's GPS. Positions on the map come from radios.
