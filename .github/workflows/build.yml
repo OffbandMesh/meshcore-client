@@ -152,6 +152,32 @@ jobs:
       - name: Assert the app holds its native-asset frameworks (#1037)
         if: needs.classify.outputs.docs_only != 'true'
         run: bash .github/scripts/ios-assert-frameworks.sh build/ios/iphoneos/Runner.app
+      # ios-signed.yml cannot run on a PR, so its output check is proven here,
+      # with no secrets: every case that must not count as success (#1040).
+      - name: "Negative: the altool check refuses anything but success"
+        if: needs.classify.outputs.docs_only != 'true'
+        run: |
+          set -u
+          T="${RUNNER_TEMP}/altool"
+          mkdir -p "${T}"
+          printf 'UPLOAD SUCCEEDED with no errors\n' > "${T}/ok.txt"
+          printf '*** Error: Unable to upload\n' > "${T}/error.txt"
+          printf 'UPLOAD SUCCEEDED\nERROR: partial\n' > "${T}/mixed.txt"
+          printf 'something else\n' > "${T}/silent.txt"
+          : > "${T}/empty.txt"
+          CHECK=.github/scripts/ios-altool-check.sh
+          bash "${CHECK}" upload 0 "${T}/ok.txt" || { echo "::error::A clean upload was refused."; exit 1; }
+          for f in error mixed silent empty; do
+            if bash "${CHECK}" upload 0 "${T}/${f}.txt"; then
+              echo "::error::Exit 0 with '${f}' output was accepted."
+              exit 1
+            fi
+          done
+          if bash "${CHECK}" upload 1 "${T}/ok.txt"; then
+            echo "::error::A non-zero exit was accepted."
+            exit 1
+          fi
+          echo "Refused every bad case, as required."
 
   linux:
     # PINNED, not ubuntu-latest (#929). GitHub moved ubuntu-latest from 24.04
