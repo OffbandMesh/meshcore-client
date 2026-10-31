@@ -6,14 +6,14 @@
 | **Serves** | Standalone. Sibling of the Google Play release (#159/#160), built on the CI matrix of #312. |
 | **Status** | Owner-approved 2026-10-27 ("Plan approved. We'll adapt as we learn more."). In force when this PR merges. |
 | **Owner** | @Strycher |
-| **Last updated** | 2026-10-27 |
+| **Last updated** | 2026-10-31 |
 
 ## At a glance
 
 - **What:** Offband Meshcore on the App Store for iPhone, every territory except France, under the owner's Individual account.
 - **Why now:** iOS users have no way to run Offband. The web build needs Web Bluetooth, which no iOS browser has, so the App Store is the only path.
 - **How:** Epic A builds the Windows signing toolchain and proves its output imports on a Mac runner; Epic B builds the signed IPA and TestFlight upload lane; Epic C prepares everything App Review reads; Epic D is the owner's hardware pass, the demo video and the submission.
-- **Done when:** the app is approved and live, the listing shows no data collected, and the owner's hardware pass on family iPhones and iPads passed.
+- **Done when:** the app is approved and live, the listing's privacy label matches C2, and the owner's hardware pass on family iPhones and iPads passed.
 
 ## 1. Diagnosis
 
@@ -30,12 +30,12 @@ Research is on [#958](https://github.com/OffbandMesh/meshcore-client/issues/958)
 | 7 | No location purpose string is needed. | No location plugin in `pubspec.yaml` or `lib/` `[verified]` | Map positions come from radios. Bluetooth and camera strings are present. |
 | 8 | Signed releases already run on `v*` tags and manual dispatch, with secrets scoped to one job behind a required reviewer. | `release-signed.yml`: only `android` uses Environment `release-signing`; `release` needs `[android, windows, linux]` `[verified]` | iOS copies this pattern in its **own** Environment, and must not be able to block the GitHub release. |
 | 9 | App Store Connect API access needs its own approval. | "The Account Holder must request access... reviewed and approved on a case-by-case basis." Key downloadable once. `[verified]` | A separate owner wait, requested on day one after enrollment. |
-| 10 | Apple documents `openssl` as a CSR source, and Flutter documents `altool` upload with an API key. | Apple CSR page; docs.flutter.dev/deployment/ios `[verified]` | The Windows-only path is real. Key size `[hypothesis: RSA 2048]`; `.p8` location for `altool` `[hypothesis]`. |
+| 10 | Apple documents `openssl` as a CSR source, and Flutter documents `altool` upload with an API key. | Apple CSR page; docs.flutter.dev/deployment/ios `[verified]` | The Windows-only path is real. Apple's upload page lists Developer among the roles that can upload `[verified]`; that a team key with that role uploads through `altool` `[hypothesis: B5 proves it]`. Key size `[hypothesis: RSA 2048]`; `.p8` location for `altool` `[hypothesis]`. |
 | 11 | OpenSSL 3 writes `.p12` files older macOS tooling has refused. | Owner's box has OpenSSL 3.5.7 via Git for Windows `[verified]`; import compatibility `[hypothesis: untested]` | Must be proven on a runner, and can be, with a throwaway fixture, before enrollment. |
 | 12 | With France excluded, Apple needs **no** export document. | Standard algorithms not from Apple's OS need only the French declaration, and only for France `[verified]` | No CCATS, no French form. France is out by owner decision (#957). |
-| 13 | The shipped binary likely falls outside the US EAR. | 15 CFR 734.3 Note plus 742.15(b): public source, standard crypto, no notification `[verified text]`; the reading `[hypothesis]` | Holds only while **every** binary is built from public source. A standing rule below. |
+| 13 | The shipped binary likely falls outside the US EAR. | 15 CFR 734.3 Note plus 742.15(b): public source, standard crypto, no notification `[verified text]`; the reading `[hypothesis]`, an engineer's reading and not legal advice | Holds only while **every** binary is built from public source. A standing rule below. Whether to have counsel confirm it is the owner's call. |
 | 14 | `ITSAppUsesNonExemptEncryption` cannot be set safely in advance. | The questionnaire appears only inside App Store Connect `[verified: no public text]` | Answer it once on the first build, then pin Info.plist to the outcome. |
-| 15 | The privacy label is most likely "Data Not Collected". | Apple's "collect" needs retention by you or by vendor code in the app; Offband's calls are plain HTTP with no vendor code `[verified definitions]`, reading `[hypothesis]` | CoreScope is the one host to weigh, see choice 2. |
+| 15 | The privacy label declares CoreScope, and the other hosts are likely not "collection". | Apple's "collect" needs retention by you or by vendor code in the app; Offband's calls are plain HTTP with no vendor code `[verified definitions]`, reading `[hypothesis]` | CoreScope is declared per choice 2, so the listing will not read "Data Not Collected". C2 settles the rest host by host. |
 | 16 | The privacy policy has five iOS gaps. | `offband-site/content/privacy.md`: no CoreScope, no GitHub raw, Android-only deletion and permissions, no support page `[verified]` | Lives in the `offband-site` repo, so it is a dependency, not a task here. |
 | 17 | App Review asks for hardware evidence. | "If features require... specific hardware, be prepared to provide a demo video or the hardware." `[verified]` | A demo video recorded from the TestFlight build on a family iPhone. |
 | 18 | A public TestFlight link is external testing. | "When you add the first build... it gets sent to App Review... only for the first build." `[verified]` | One beta review before family devices can install. |
@@ -68,10 +68,10 @@ Buildable and testable **before enrollment**, because its proof uses a throwaway
 | Task | Pts |
 |---|---|
 | **A1 · Prove the trap first:** a PR-triggered CI job on `macos-latest` that generates a **throwaway self-signed** certificate on the runner, packs it as both the OpenSSL 3 default and the legacy `.p12`, and imports into a temporary keychain. The legacy one must import with key and certificate paired; a wrong password must be refused, so the check is shown able to fail; the default's result is recorded. **Changed from the first draft's committed fixture:** generating on the runner means no private key, even a dummy one, ever lands in this public repository. | 3 |
-| **A2 · `tools/ios-signing/ios-signing.ps1`,** PowerShell only, calling `openssl` from Git for Windows. `new-csr` writes key and CSR to `%USERPROFILE%\.offband-ios\`, outside the repo. `make-p12` builds the legacy-format `.p12` from Apple's `.cer`, with a generated password it never prints. `set-secrets` base64-encodes each file and pipes it into `gh secret set --env apple-signing`. Run end to end by me against the fixture before the owner sees it. | 4 |
+| **A2 · `tools/ios-signing/ios-signing.ps1`,** PowerShell only, calling `openssl` from Git for Windows. `new-csr` writes key and CSR to `%USERPROFILE%\.offband-ios\`, or the folder given with `-WorkDir`, outside the repo. `make-p12` builds the legacy-format `.p12` from Apple's `.cer`, with a generated password it never prints. `set-secrets` base64-encodes each file and pipes it into `gh secret set --env apple-signing`. Run end to end by me against the fixture before the owner sees it. | 4 |
 | **A3 · The `apple-signing` Environment** with the owner as required reviewer, matching `release-signing`. A repository setting, so it is a Tier-2 step: named rollback `gh api -X DELETE repos/OffbandMesh/meshcore-client/environments/apple-signing`, owner's word first, verified after. | 1 |
 | **A4 · Owner runbook** for rounds 2 and 3 (section 5): paste-ready PowerShell, what each line does, what he will see. No step asks him to type text. | 2 |
-| **A5 · Epic verification:** A1 green on the legacy fixture and red on the default one; the script's output imports. | 1 |
+| **A5 · Epic verification:** A1 green on the legacy `.p12` and refusing a wrong password; the default format's result recorded, whichever way it goes; the script's output imports. | 1 |
 
 ### Epic B: the signed IPA and TestFlight lane
 
@@ -80,10 +80,10 @@ Needs the real certificate, profile and API key, so it waits on owner rounds 2 a
 | Task | Pts |
 |---|---|
 | **B1 · Close the compile job's gaps** in `build.yml`'s `ios` job and the project: `TARGETED_DEVICE_FAMILY = 1`, native assets enabled, Giphy define written. Plus an assertion that the built `.app` actually contains the `sqlite3` and `llamadart` frameworks, made to fail first by building without native assets. | 3 |
-| **B2 · `ios-signed.yml`,** a `workflow_call` workflow in Environment `apple-signing`: decode secrets (stop if any is empty), temporary keychain, install profile, write `ExportOptions.plist` (App Store Connect, manual signing, team, profile), `flutter build ipa` with `--build-name` from pubspec and `--build-number` per choice 1, the framework assertion again on the IPA, then `xcrun altool --upload-app`. Keychain and key files removed with `if: always()`. | 4 |
+| **B2 · `ios-signed.yml`,** a `workflow_call` workflow in Environment `apple-signing`: decode secrets (stop if any is empty), temporary keychain, install profile, write `ExportOptions.plist` (App Store Connect, manual signing, team, profile), `flutter build ipa` with `--build-name` from pubspec and `--build-number` per choice 1, the framework assertion again on the IPA, a `codesign` check that the app inside the IPA is signed by the Apple Distribution certificate (made to fail first against a wrong name, matching the Android fingerprint pin), then `altool` validation and upload, both always run. Keychain and key files removed with `if: always()`. | 4 |
 | **B3 · Callers:** `testflight.yml` on `workflow_dispatch`, and an `ios` job in `release-signed.yml` after `gate`. **`release` does not depend on it**, per choice 4. Neither workflow gains a `pull_request` trigger. | 3 |
-| **B4 · Read `man altool` on the runner** for the `.p8` location and failure reporting, and parse the upload output so an error that exits 0 still fails the job. | 2 |
-| **B5 · Epic verification:** one build uploaded from the Epic branch and visible in App Store Connect with the expected version and build number. The first run uses a `push` trigger keyed to this Epic's exact branch name, inert anywhere else. | 2 |
+| **B4 · Read `man altool` on the runner** for the `.p8` location, failure reporting, and the current validate and upload subcommands (`--validate-app`, and whether `--upload-app` or `--upload-package` is current), and parse the upload output so an error that exits 0 still fails the job. | 2 |
+| **B5 · Epic verification:** one build uploaded from the Epic branch and visible in App Store Connect with the expected version and build number. The first run uses a `push` trigger keyed to this Epic's exact branch name, inert anywhere else. `apple-signing` allows only branch `main` and tag `v*`, so it would refuse that branch, and a manual dispatch from it too: the owner adds that one branch to the Environment for B5 and removes it after, verified by API read-back each way. After merge, `testflight.yml` is dispatched from a `v*` tag or `main`. | 2 |
 
 ### Epic C: everything App Review reads
 
@@ -127,10 +127,10 @@ File overlap: B1 and B3 both touch workflows (`build.yml`, `release-signed.yml`)
 
 | Round | When | What |
 |---|---|---|
-| 1 | Now, account settling | Email to `support@offband.org`, a trusted number no other account uses, then Enroll Now in the Apple Developer app (#957). |
-| 2 | Enrollment confirmed | Request App Store Connect API access; register the `app.offband.meshcore.ios` identifier; create the app record; availability with France unchecked; declare non-trader. |
-| 3 | API access approved | Generate the team key; run the script's `new-csr`; create the Distribution certificate; run `make-p12`; create the App Store profile; run `set-secrets`. |
-| 4 | First TestFlight build | Answer the export questionnaire; enter the privacy answers from C2; set up the public link. |
+| 1 | Done 2026-10-30 | Enrollment in the Apple Developer Program (#957). |
+| 2 | Done 2026-10-31 | Request App Store Connect API access; register the `app.offband.meshcore.ios` identifier; create the app record; availability with France unchecked; declare non-trader. |
+| 3 | Done 2026-10-31 | Generate the team key; run the script's `new-csr`; create the Distribution certificate; run `make-p12`; create the App Store profile; run `set-secrets`. |
+| 4 | First TestFlight build | Add the Epic B branch to `apple-signing` for B5, then remove it. Answer the export questionnaire; enter the privacy answers from C2; set up the public link. |
 | 5 | Beta review passed | The hardware pass, the video, and the word to submit. |
 
 ```grant-terms
@@ -157,7 +157,8 @@ File overlap: B1 and B3 both touch workflows (`build.yml`, `release-signed.yml`)
 | `.p12` import fails | whether the certificate is usable | **stop** |
 | Profile UUID or name cannot be read | which profile to sign with | **stop** |
 | The built `.app` or IPA lacks a native-asset framework | whether storage and translation work | **stop** |
-| `altool` output contains an error, whatever its exit code | whether the upload landed | **stop** |
+| `altool` output contains an error, whatever its exit code | whether the validation passed or the upload landed | **stop** |
+| The IPA's signing identity cannot be read or is not the Distribution certificate | what was signed | **stop** |
 | Apple rejects a duplicate build number | whether this build is new | **stop** |
 | `ios-signing.ps1`: `openssl` not found, or a step's output file is missing | whether the step worked | **stop**, printing what was expected and where |
 | `set-secrets`: the file to encode does not exist | what would be stored | **stop**, never setting an empty secret |
@@ -168,7 +169,8 @@ No branch proceeds. There is deliberately **no** "skip upload" or dry-run input:
 
 - **Named command:** `flutter analyze` and `flutter test`, unchanged, plus each Epic's CI run linked in its PR.
 - **Acceptance bar:**
-  - A1's import check red on the default `.p12`, green on the legacy one.
+  - A1's import check green on the legacy `.p12` and refusing a wrong password, with the default format's result recorded.
+  - B2's signing check red against a wrong certificate name, green against the real one.
   - B1's framework assertion red without native assets, green with them.
   - A build in App Store Connect with the expected version and build number.
   - D1's positive and negative cases all at their expected result on a real iPhone.
