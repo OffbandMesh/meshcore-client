@@ -6,7 +6,7 @@
 - [x] Xcode installed
 - [x] Apple Transporter app installed
 - [x] App icons ready (1024x1024px)
-- [x] Bundle ID configured: `app.offband.meshcore`
+- [x] Bundle ID configured: `app.offband.meshcore.ios`
 
 ## Step 1: Register Bundle Identifier
 
@@ -16,7 +16,7 @@
 4. Select **"App"** → Continue
 5. Fill in:
    - **Description**: Offband Meshcore
-   - **Bundle ID**: Explicit - `app.offband.meshcore`
+   - **Bundle ID**: Explicit - `app.offband.meshcore.ios`
    - **Capabilities**: Leave defaults (or add as needed)
 6. Click **Continue** → **Register**
 
@@ -30,7 +30,7 @@
    - **Platforms**: iOS
    - **Name**: Offband Meshcore
    - **Primary Language**: English (U.S.)
-   - **Bundle ID**: Select `app.offband.meshcore` from dropdown
+   - **Bundle ID**: Select `app.offband.meshcore.ios` from dropdown
    - **SKU**: `meshcore-open-001` (or any unique identifier)
    - **User Access**: Full Access
 6. Click **"Create"**
