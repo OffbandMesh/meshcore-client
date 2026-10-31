@@ -1,0 +1,302 @@
+name: iOS signed build and upload
+
+# Builds a signed IPA and uploads it to App Store Connect (#1038, epic #1013).
+# Called by testflight.yml and release-signed.yml.
+#
+# SECURITY: this repo is PUBLIC, and this job holds the Apple Distribution key
+# and the App Store Connect API key.
+#
+#   - NEVER call this from a `pull_request` workflow. A PR (incl. from a fork)
+#     must never run a job that can read these secrets.
+#   - Only this job references the `apple-signing` Environment, so only it
+#     receives them, and only after the required reviewer approves.
+#   - Secret files live in RUNNER_TEMP or the key folder altool reads, and are
+#     removed with `if: always()`.
+#   - Values are passed via env:, never on a command line, never echoed.
+#
+# There is deliberately no dry-run or skip-upload input. A switch that lets this
+# go green without doing its job is the shape of the #904 override. A TestFlight
+# upload is private, so the lane proves itself by really uploading.
+#
+# Every step stops on the first thing it cannot confirm.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  BUNDLE_ID: app.offband.meshcore.ios
+
+jobs:
+  ios-signed:
+    runs-on: macos-latest
+    environment: apple-signing # required-reviewer gate; do not remove
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the signing secrets are present
+        env:
+          APPLE_DIST_P12_BASE64: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          APPLE_PROFILE_BASE64: ${{ secrets.APPLE_PROFILE_BASE64 }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set -eu
+          missing=0
+          for name in APPLE_DIST_P12_BASE64 APPLE_DIST_P12_PASSWORD APPLE_PROFILE_BASE64 \
+                      ASC_API_KEY_P8_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Secret ${name} is empty or absent in this run."
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Temporary keychain with the Distribution identity
+        env:
+          APPLE_DIST_P12_BASE64: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+        run: |
+          set -eu
+          umask 077
+          KC="${RUNNER_TEMP}/signing.keychain-db"
+          KP="$(openssl rand -hex 16)"
+          echo "::add-mask::${KP}"
+          echo "KC=${KC}" >> "$GITHUB_ENV"
+          security create-keychain -p "${KP}" "${KC}"
+          security set-keychain-settings -lut 21600 "${KC}"
+          security unlock-keychain -p "${KP}" "${KC}"
+          P12="${RUNNER_TEMP}/dist.p12"
+          printf '%s' "${APPLE_DIST_P12_BASE64}" | base64 --decode > "${P12}"
+          security import "${P12}" -k "${KC}" -P "${APPLE_DIST_P12_PASSWORD}" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "${P12}"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${KP}" "${KC}" > /dev/null
+          security list-keychains -d user -s "${KC}" $(security list-keychains -d user | tr -d '"')
+          IDENTITIES="$(security find-identity -v -p codesigning "${KC}")"
+          COUNT="$(printf '%s\n' "${IDENTITIES}" | grep -c '"Apple Distribution: ' || true)"
+          if [ "${COUNT}" != "1" ]; then
+            echo "::error::Expected one Apple Distribution identity in the keychain, found ${COUNT}."
+            exit 1
+          fi
+          IDENTITY="$(printf '%s\n' "${IDENTITIES}" | sed -n 's/.*"\(Apple Distribution: .*\)".*/\1/p')"
+          # Holds the owner's legal name, and env values appear in public step logs.
+          echo "::add-mask::${IDENTITY}"
+          echo "IDENTITY=${IDENTITY}" >> "$GITHUB_ENV"
+          echo "Keychain ready with one Apple Distribution identity."
+
+      - name: Install the provisioning profile
+        env:
+          APPLE_PROFILE_BASE64: ${{ secrets.APPLE_PROFILE_BASE64 }}
+        run: |
+          set -eu
+          umask 077
+          PROFILE="${RUNNER_TEMP}/dist.mobileprovision"
+          printf '%s' "${APPLE_PROFILE_BASE64}" | base64 --decode > "${PROFILE}"
+          PLIST="${RUNNER_TEMP}/profile.plist"
+          security cms -D -i "${PROFILE}" > "${PLIST}"
+          PB=/usr/libexec/PlistBuddy
+          UUID="$("${PB}" -c 'Print :UUID' "${PLIST}")"
+          NAME="$("${PB}" -c 'Print :Name' "${PLIST}")"
+          TEAM="$("${PB}" -c 'Print :TeamIdentifier:0' "${PLIST}")"
+          APP_ID="$("${PB}" -c 'Print :Entitlements:application-identifier' "${PLIST}")"
+          if [ -z "${UUID}" ] || [ -z "${NAME}" ] || [ -z "${TEAM}" ]; then
+            echo "::error::Could not read the profile's UUID, name and team."
+            exit 1
+          fi
+          if [ "${APP_ID}" != "${TEAM}.${BUNDLE_ID}" ]; then
+            echo "::error::The profile is for ${APP_ID}, not ${TEAM}.${BUNDLE_ID}."
+            exit 1
+          fi
+          # Xcode 16 and later read the second folder; older versions the first.
+          for dir in "${HOME}/Library/MobileDevice/Provisioning Profiles" \
+                     "${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "${dir}"
+            cp "${PROFILE}" "${dir}/${UUID}.mobileprovision"
+          done
+          rm -f "${PROFILE}" "${PLIST}"
+          {
+            echo "PROFILE_UUID=${UUID}"
+            echo "PROFILE_NAME=${NAME}"
+            echo "TEAM=${TEAM}"
+          } >> "$GITHUB_ENV"
+          echo "Profile '${NAME}' installed for ${BUNDLE_ID}."
+
+      # Only Runner's Release config includes this xcconfig, so CocoaPods targets
+      # keep their own signing. Written here, not committed: the project stays
+      # free of a team and profile, and the compile job in build.yml is untouched.
+      - name: Apply manual signing and write ExportOptions.plist
+        run: |
+          set -eu
+          {
+            echo ""
+            echo "CODE_SIGN_STYLE = Manual"
+            echo "DEVELOPMENT_TEAM = ${TEAM}"
+            echo "PROVISIONING_PROFILE_SPECIFIER = ${PROFILE_NAME}"
+            echo "CODE_SIGN_IDENTITY = Apple Distribution"
+            echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution"
+          } >> ios/Flutter/Release.xcconfig
+          OPTIONS="${RUNNER_TEMP}/ExportOptions.plist"
+          PB=/usr/libexec/PlistBuddy
+          "${PB}" -c 'Add :method string app-store-connect' \
+                  -c 'Add :destination string export' \
+                  -c 'Add :signingStyle string manual' \
+                  -c 'Add :signingCertificate string Apple Distribution' \
+                  -c "Add :teamID string ${TEAM}" \
+                  -c 'Add :provisioningProfiles dict' \
+                  -c "Add :provisioningProfiles:${BUNDLE_ID} string ${PROFILE_NAME}" \
+                  "${OPTIONS}"
+          echo "OPTIONS=${OPTIONS}" >> "$GITHUB_ENV"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
+
+      # The build number is the run ID, not the run number: testflight.yml and
+      # release-signed.yml each count their own runs, so run numbers collide
+      # between them, and Apple refuses a duplicate. A re-run reuses its ID, so
+      # Apple refuses that too, which stops the job rather than hiding anything.
+      - name: Build the signed IPA
+        run: |
+          set -eu
+          BUILD_NAME="$(grep -E '^version:' pubspec.yaml | head -1 | sed 's/version:[[:space:]]*//' | sed 's/+.*//' | tr -d '[:space:]')"
+          BUILD_NUMBER="${GITHUB_RUN_ID}"
+          if [ -z "${BUILD_NAME}" ]; then
+            echo "::error::Could not read the version from pubspec.yaml."
+            exit 1
+          fi
+          echo "BUILD_NAME=${BUILD_NAME}" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
+          echo "Building ${BUILD_NAME} (${BUILD_NUMBER})."
+          flutter build ipa --release --no-pub \
+            --build-name="${BUILD_NAME}" \
+            --build-number="${BUILD_NUMBER}" \
+            --dart-define-from-file=dart_defines.json \
+            --export-options-plist="${OPTIONS}"
+
+      - name: Unpack the IPA
+        run: |
+          set -eu
+          COUNT="$(ls build/ios/ipa/*.ipa 2>/dev/null | wc -l | tr -d ' ')"
+          if [ "${COUNT}" != "1" ]; then
+            echo "::error::Expected one IPA in build/ios/ipa, found ${COUNT}."
+            exit 1
+          fi
+          IPA="$(ls build/ios/ipa/*.ipa)"
+          echo "IPA=${IPA}" >> "$GITHUB_ENV"
+          UNPACKED="${RUNNER_TEMP}/ipa"
+          mkdir -p "${UNPACKED}"
+          unzip -q "${IPA}" -d "${UNPACKED}"
+          echo "APP=${UNPACKED}/Payload/Runner.app" >> "$GITHUB_ENV"
+
+      - name: Assert the IPA holds its native-asset frameworks (#1037)
+        run: bash .github/scripts/ios-assert-frameworks.sh "${APP}"
+
+      - name: Assert the IPA's identity and version
+        run: |
+          set -eu
+          PB=/usr/libexec/PlistBuddy
+          for pair in "CFBundleIdentifier=${BUNDLE_ID}" \
+                      "CFBundleShortVersionString=${BUILD_NAME}" \
+                      "CFBundleVersion=${BUILD_NUMBER}"; do
+            KEY="${pair%%=*}"
+            WANT="${pair#*=}"
+            GOT="$("${PB}" -c "Print :${KEY}" "${APP}/Info.plist")"
+            if [ "${GOT}" != "${WANT}" ]; then
+              echo "::error::${KEY} is '${GOT}', expected '${WANT}'."
+              exit 1
+            fi
+          done
+          echo "Identity and version are as expected."
+
+      # A green build does not prove what signed it, the same reason the Android
+      # job pins its certificate. The check runs against a wrong name first, so
+      # it is shown able to fail on every run.
+      - name: Verify the IPA is signed by the Distribution certificate
+        run: |
+          set -eu
+          codesign --verify --deep --strict "${APP}"
+          INFO="$(codesign -dvv "${APP}" 2>&1)"
+          if printf '%s\n' "${INFO}" | grep -qxF "Authority=Apple Distribution: Not This Team (XXXXXXXXXX)"; then
+            echo "::error::The signing check accepted a wrong certificate name."
+            exit 1
+          fi
+          if ! printf '%s\n' "${INFO}" | grep -qxF "Authority=${IDENTITY}"; then
+            echo "::error::The IPA is not signed by the Apple Distribution identity in the keychain."
+            exit 1
+          fi
+          if ! printf '%s\n' "${INFO}" | grep -qxF "TeamIdentifier=${TEAM}"; then
+            echo "::error::The IPA's team is not the profile's team."
+            exit 1
+          fi
+          echo "IPA signing verified."
+
+      - name: Install the App Store Connect API key
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          set -eu
+          umask 077
+          KEY_DIR="${HOME}/.appstoreconnect/private_keys"
+          mkdir -p "${KEY_DIR}"
+          printf '%s' "${ASC_API_KEY_P8_BASE64}" | base64 --decode > "${KEY_DIR}/AuthKey_${ASC_API_KEY_ID}.p8"
+
+      # On the runner's own tool, so the key folder and subcommands are read, not
+      # recalled (#1040). Prints only documentation.
+      - name: Record what altool documents here
+        run: |
+          xcrun altool --version || true
+          man altool 2>/dev/null | col -b | grep -n -i -E 'private_keys|--validate-app|--upload-app|--upload-package' || true
+
+      - name: Validate with App Store Connect
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set +e
+          OUT="${RUNNER_TEMP}/altool-validate.txt"
+          xcrun altool --validate-app -f "${IPA}" -t ios \
+            --apiKey "${ASC_API_KEY_ID}" --apiIssuer "${ASC_API_ISSUER_ID}" > "${OUT}" 2>&1
+          CODE=$?
+          set -e
+          cat "${OUT}"
+          bash .github/scripts/ios-altool-check.sh validate "${CODE}" "${OUT}"
+
+      - name: Upload to App Store Connect
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set +e
+          OUT="${RUNNER_TEMP}/altool-upload.txt"
+          xcrun altool --upload-app -f "${IPA}" -t ios \
+            --apiKey "${ASC_API_KEY_ID}" --apiIssuer "${ASC_API_ISSUER_ID}" > "${OUT}" 2>&1
+          CODE=$?
+          set -e
+          cat "${OUT}"
+          bash .github/scripts/ios-altool-check.sh upload "${CODE}" "${OUT}"
+          echo "Uploaded ${BUILD_NAME} (${BUILD_NUMBER})."
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          [ -n "${KC:-}" ] && security delete-keychain "${KC}" || true
+          rm -rf "${HOME}/.appstoreconnect/private_keys"
+          rm -f "${HOME}/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision
+          rm -f "${HOME}/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.mobileprovision
+          rm -f dart_defines.json "${RUNNER_TEMP}/dist.p12" "${RUNNER_TEMP}/dist.mobileprovision" "${RUNNER_TEMP}/profile.plist"
+          echo "Signing material removed."
