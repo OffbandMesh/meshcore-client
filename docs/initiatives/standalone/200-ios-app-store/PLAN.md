@@ -26,7 +26,7 @@ Research is on [#958](https://github.com/OffbandMesh/meshcore-client/issues/958)
 | 3 | Native assets are not enabled for iOS. | linux, macos and windows run `flutter config --enable-native-assets` to bundle `sqlite3` and `llamadart` (#445); `ios` does not. `project.pbxproj` already carries a build phase for `io.flutter.flutter.native-assets.*` frameworks `[verified]` | The largest "compiles but does not work" risk: storage or translation missing at runtime. `[hypothesis: untested]` |
 | 4 | The project targets iPhone **and** iPad. | `TARGETED_DEVICE_FAMILY = "1,2"` (`project.pbxproj:438`) `[verified]` | Contradicts the iPhone-only decision, and would require iPad screenshots. iPhone-only apps still run on iPad. `[hypothesis: standard iPadOS compatibility mode]` |
 | 5 | Signing is Automatic with no team. | `CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` (`project.pbxproj:468`) `[verified]` | The signed lane must supply manual signing at build time. |
-| 6 | The bundle id is already correct and frozen. | `PRODUCT_BUNDLE_IDENTIFIER = app.offband.meshcore` (`project.pbxproj:456`) `[verified]` | Nothing to change; it gets registered, not edited. |
+| 6 | The iOS bundle id differs from Android's. | Apple refused `app.offband.meshcore` as not available, and the owner's team did not hold it `[verified: owner screenshots 2026-10-31]`. The owner created the app as `app.offband.meshcore.ios` | The Xcode project moves to the new id. Android stays `app.offband.meshcore`. Who holds the original is unknown. |
 | 7 | No location purpose string is needed. | No location plugin in `pubspec.yaml` or `lib/` `[verified]` | Map positions come from radios. Bluetooth and camera strings are present. |
 | 8 | Signed releases already run on `v*` tags and manual dispatch, with secrets scoped to one job behind a required reviewer. | `release-signed.yml`: only `android` uses Environment `release-signing`; `release` needs `[android, windows, linux]` `[verified]` | iOS copies this pattern in its **own** Environment, and must not be able to block the GitHub release. |
 | 9 | App Store Connect API access needs its own approval. | "The Account Holder must request access... reviewed and approved on a case-by-case basis." Key downloadable once. `[verified]` | A separate owner wait, requested on day one after enrollment. |
@@ -128,7 +128,7 @@ File overlap: B1 and B3 both touch workflows (`build.yml`, `release-signed.yml`)
 | Round | When | What |
 |---|---|---|
 | 1 | Now, account settling | Email to `support@offband.org`, a trusted number no other account uses, then Enroll Now in the Apple Developer app (#957). |
-| 2 | Enrollment confirmed | Request App Store Connect API access; register the `app.offband.meshcore` identifier; create the app record; availability with France unchecked; declare non-trader. |
+| 2 | Enrollment confirmed | Request App Store Connect API access; register the `app.offband.meshcore.ios` identifier; create the app record; availability with France unchecked; declare non-trader. |
 | 3 | API access approved | Generate the team key; run the script's `new-csr`; create the Distribution certificate; run `make-p12`; create the App Store profile; run `set-secrets`. |
 | 4 | First TestFlight build | Answer the export questionnaire; enter the privacy answers from C2; set up the public link. |
 | 5 | Beta review passed | The hardware pass, the video, and the word to submit. |
