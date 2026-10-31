@@ -144,7 +144,8 @@ jobs:
         run: |
           set -u
           mkdir -p "${RUNNER_TEMP}/empty.app/Frameworks"
-          if bash .github/scripts/ios-assert-frameworks.sh "${RUNNER_TEMP}/empty.app"; then
+          # Output discarded: its ::error lines would annotate a passing job.
+          if bash .github/scripts/ios-assert-frameworks.sh "${RUNNER_TEMP}/empty.app" > /dev/null; then
             echo "::error::The framework assertion passed on an empty app."
             exit 1
           fi
@@ -168,12 +169,12 @@ jobs:
           CHECK=.github/scripts/ios-altool-check.sh
           bash "${CHECK}" upload 0 "${T}/ok.txt" || { echo "::error::A clean upload was refused."; exit 1; }
           for f in error mixed silent empty; do
-            if bash "${CHECK}" upload 0 "${T}/${f}.txt"; then
+            if bash "${CHECK}" upload 0 "${T}/${f}.txt" > /dev/null; then
               echo "::error::Exit 0 with '${f}' output was accepted."
               exit 1
             fi
           done
-          if bash "${CHECK}" upload 1 "${T}/ok.txt"; then
+          if bash "${CHECK}" upload 1 "${T}/ok.txt" > /dev/null; then
             echo "::error::A non-zero exit was accepted."
             exit 1
           fi

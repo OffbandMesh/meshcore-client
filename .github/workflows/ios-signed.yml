@@ -162,8 +162,6 @@ jobs:
         env:
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
-      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
-        run: flutter config --enable-native-assets
 
       # The build number is the run ID, not the run number: testflight.yml and
       # release-signed.yml each count their own runs, so run numbers collide
