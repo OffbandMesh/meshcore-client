@@ -6,6 +6,10 @@ name: TestFlight
 
 on:
   workflow_dispatch:
+  # First real run only (#1041). Removed once it has proven the lane.
+  push:
+    branches:
+      - feat/1013-ios-signed-lane
 
 permissions:
   contents: read
