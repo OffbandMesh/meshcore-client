@@ -27,7 +27,7 @@ HIDDEN SECTION, DISCLOSED UNDER GUIDELINE 2.5.19
 With a radio connected, tapping the Build row in Settings seven times reveals an Experimental section. It holds diagnostics for this project's developers, and an opt-in feature that shows how many mesh observers heard a sent channel message, by asking the public server map.okimesh.org about that packet's hash. Everything in it is off by default. It is declared in the app's privacy details.
 
 USER-GENERATED CONTENT
-Messages are sent radio to radio. There is no Offband server holding them, so we cannot see, filter or remove them. Users can block a contact from the Contacts screen, which drops that contact's direct messages. GIF search is limited to Giphy's G rating. Users can reach us at support@offband.org and through the support page.
+Messages are sent radio to radio. There is no Offband server holding them, so we cannot see, filter or remove them. Users can block a contact from the Contacts screen or a sender from a channel. That drops the contact's direct messages and hides the sender's channel messages. There is no in-app report button, because no one operates a service to receive or act on a report; users can write to support@offband.org. GIF search is limited to Giphy's G rating.
 
 DONATION LINK
 "Donate or sponsor" in About opens offband.org in the browser. It unlocks nothing, and the app has no purchases.

@@ -41,7 +41,7 @@ CHAT
 Direct messages and named group channels. See whether a message was delivered and the route it took across the mesh.
 
 CONTACTS AND CHANNELS
-Keep your contacts in groups and mark favorites. Share contacts and join communities with QR codes. Block a contact to stop their direct messages.
+Keep your contacts in groups and mark favorites. Share contacts and join communities with QR codes. Block a contact or channel sender to stop seeing their messages.
 
 MAP
 See nodes that report a position, and trace the path a message traveled. Download map areas ahead of time, and check line of sight between two points.
