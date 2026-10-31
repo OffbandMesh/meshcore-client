@@ -131,8 +131,27 @@ jobs:
         if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
         if: needs.classify.outputs.docs_only != 'true'
-      - run: flutter build ios --release --no-codesign --no-pub
+      - name: Write dart_defines.json
         if: needs.classify.outputs.docs_only != 'true'
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - run: flutter build ios --release --no-codesign --no-pub --dart-define-from-file=dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
+      # The assertion must be able to fail, so it runs against an empty app first.
+      - name: "Negative: the framework assertion refuses an empty app"
+        if: needs.classify.outputs.docs_only != 'true'
+        run: |
+          set -u
+          mkdir -p "${RUNNER_TEMP}/empty.app/Frameworks"
+          if bash .github/scripts/ios-assert-frameworks.sh "${RUNNER_TEMP}/empty.app"; then
+            echo "::error::The framework assertion passed on an empty app."
+            exit 1
+          fi
+          echo "Refused, as required."
+      - name: Assert the app holds its native-asset frameworks (#1037)
+        if: needs.classify.outputs.docs_only != 'true'
+        run: bash .github/scripts/ios-assert-frameworks.sh build/ios/iphoneos/Runner.app
 
   linux:
     # PINNED, not ubuntu-latest (#929). GitHub moved ubuntu-latest from 24.04
