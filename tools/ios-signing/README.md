@@ -4,7 +4,7 @@ For Feature #200 (Apple App Store). These are the only steps that need the Accou
 
 **Before you start any round:** PowerShell 7 (`pwsh`), Git for Windows, and the GitHub CLI signed in. The script lives in this repository; run it from the repository folder.
 
-**What never happens:** no password, key or certificate is printed, typed or pasted into chat. The script keeps every secret file in `<your user folder>\.offband-ios`, outside the repository.
+**What never happens:** no password, key or certificate is printed, typed or pasted into chat. The script keeps every secret file in `<your user folder>\.offband-ios`, outside the repository. To keep them with your other keys instead, add `-WorkDir "<that folder>"` to every script command below and use that folder wherever this page says `.offband-ios`.
 
 ---
 
