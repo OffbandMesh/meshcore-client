@@ -125,8 +125,9 @@ function Build-P12([string]$Dir, [string]$CerPath) {
     $pw = New-Password
     [System.IO.File]::WriteAllText($pwFile, $pw)
     # Legacy PKCS#12 encryption (3DES, SHA-1 MAC). OpenSSL 3's default is
-    # AES-256 with a SHA-256 MAC, which older macOS keychain tooling refuses.
-    # Keep these flags identical to .github/workflows/ios-signing-proof.yml.
+    # AES-256 with a SHA-256 MAC, reported as refused by older macOS keychain
+    # tooling. .github/workflows/ios-signing-proof.yml records what the runner
+    # does with each. Keep these flags identical to that workflow.
     Invoke-OpenSsl @('pkcs12', '-export', '-inkey', $key, '-in', $pem, '-name', $CommonName,
         '-keypbe', 'PBE-SHA1-3DES', '-certpbe', 'PBE-SHA1-3DES', '-macalg', 'sha1',
         '-out', $p12, '-passout', "file:$pwFile") | Out-Null

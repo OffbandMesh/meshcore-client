@@ -76,7 +76,7 @@ Tell the session "round 3 done".
 
 | Secret | When it changes |
 |---|---|
-| `APPLE_DIST_P12_BASE64`, `APPLE_DIST_P12_PASSWORD` | When the Distribution certificate expires or is revoked: repeat round 3 steps 1 to 4 and 6 in a fresh folder |
+| `APPLE_DIST_P12_BASE64`, `APPLE_DIST_P12_PASSWORD` | When the Distribution certificate expires or is revoked: repeat round 3 steps 1 to 4 and 6 with `-WorkDir` set to a new, empty folder, and keep the old folder until the new certificate has signed a build |
 | `APPLE_PROFILE_BASE64` | Whenever the certificate changes, or the profile expires |
 | `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID` | Only if the key is lost or exposed: revoke it in App Store Connect and repeat step 5 and 6 |
 | `ASC_API_ISSUER_ID` | Fixed for the account |
