@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/channel.dart';
+import 'package:meshcore_open/models/channel_message.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -171,6 +172,66 @@ void main() {
 
       expect(c.channels.single.unreadCount, 7);
       expect(c.slotIdentityChanges, isEmpty);
+    },
+  );
+
+  test(
+    'in-memory messages do not follow a slot across an identity change (#1063)',
+    () async {
+      final c = _connector();
+      c.seedCachedChannelsForTest([_channel(0, 'OldChannel', 70)]);
+      c.channelMessagesForTest[0] = [
+        ChannelMessage(
+          senderName: 'x',
+          text: 'old occupant message',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1000),
+          isOutgoing: false,
+          channelIndex: 0,
+          messageId: 'old1',
+        ),
+      ];
+
+      await c.getChannels(maxChannels: 1);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 0, name: 'NewChannel', pskSeed: 10),
+      );
+      // Settle the sync completion and the unawaited history reload.
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        c.channelMessagesForTest[0] ?? const <ChannelMessage>[],
+        isEmpty,
+        reason:
+            "the old occupant's conversation must not render under the new "
+            'channel; the slot reloads from the NEW identity\'s (empty) store',
+      );
+    },
+  );
+
+  test(
+    'in-memory messages stay when the slot keeps the same channel',
+    () async {
+      final c = _connector();
+      c.seedCachedChannelsForTest([_channel(0, 'Keep', 10)]);
+      c.channelMessagesForTest[0] = [
+        ChannelMessage(
+          senderName: 'x',
+          text: 'kept',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1000),
+          isOutgoing: false,
+          channelIndex: 0,
+          messageId: 'k1',
+        ),
+      ];
+
+      await c.getChannels(maxChannels: 1);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 0, name: 'Keep', pskSeed: 10),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(c.channelMessagesForTest[0]!.single.text, 'kept');
     },
   );
 

@@ -6414,6 +6414,13 @@ class MeshCoreConnector extends ChangeNotifier {
           '"${prior.name}" -> "${fresh.name}"',
           tag: 'ChannelSync',
         );
+        // #1063: the in-memory conversation is the one per-slot message store
+        // left (persisted history is PSK-keyed, #194). Drop the old occupant's
+        // messages so they cannot render under the new channel, then reload
+        // this slot from the store; the resolver now sees the fresh list, so
+        // the load reads the NEW identity's own history.
+        _channelMessages.remove(fresh.index);
+        unawaited(_loadChannelMessages(fresh.index));
       }
     }
 
@@ -6574,19 +6581,23 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> setChannel(int index, String name, Uint8List psk) async {
     if (!isConnected) return;
 
-    // Channel history is stored keyed by the reusable slot [index], not by the
-    // channel's PSK. If this slot is being (re)assigned to a different channel
-    // than the one whose history is stored here, clear the stale history so a
-    // previous occupant's messages (e.g. #echo) don't surface under the newly
-    // added channel. Preserve only when the slot already holds the SAME channel
-    // (same PSK), e.g. a rename. (#193)
+    // Persisted channel history is keyed by the channel's PSK identity (#194),
+    // so reassigning this slot to a different channel cannot surface the old
+    // occupant's messages THERE. Two slot-keyed remnants still can, and both
+    // are handled when the slot changes occupant (different PSK):
+    //  - legacy slot-index keys (pre-#194) would be adopted onto the new
+    //    occupant by the store's one-time migration; purge them (#193/#1063).
+    //  - the in-memory conversation map is slot-keyed; drop this slot's entry.
+    // The old occupant's PSK-keyed history is deliberately left intact: if
+    // that channel is ever re-added (any slot), its history comes back
+    // (#1063). A rename (same PSK) keeps everything.
     final existing = _findChannelByIndex(index);
     final sameChannel = existing != null && listEquals(existing.psk, psk);
 
     await sendFrame(buildSetChannelFrame(index, name, psk));
 
     if (!sameChannel) {
-      await _channelMessageStore.clearChannelMessages(index);
+      await _channelMessageStore.clearLegacySlotHistory(index);
       _channelMessages.remove(index);
     }
 
