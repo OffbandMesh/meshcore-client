@@ -59,20 +59,22 @@ void main() {
   });
 
   group('firmwareSupportsPktHash gate', () {
-    test('requires both the cap bit and ver >= 22', () {
-      expect(firmwareSupportsPktHash(0x08, 22), isTrue);
-      expect(firmwareSupportsPktHash(0x08, 23), isTrue);
-      expect(firmwareSupportsPktHash(0x08, 21), isFalse); // version too low
-      expect(firmwareSupportsPktHash(0x00, 22), isFalse); // bit clear
-      expect(firmwareSupportsPktHash(null, 22), isFalse); // no byte 2
-      expect(firmwareSupportsPktHash(0x08, null), isFalse); // no version
+    // #1065: this used to also require `FIRMWARE_VER_CODE >= 22`, which went
+    // false on the rollback to 14. The cap bit is the whole gate now; caps
+    // byte 2 only exists from the version that added offset 84, so the bit
+    // already dates the firmware, and stock radios are excluded by the
+    // population classifier rather than by a version floor.
+    test('requires the cap bit, and nothing else', () {
+      expect(firmwareSupportsPktHash(0x08), isTrue);
+      expect(firmwareSupportsPktHash(0x00), isFalse); // bit clear
+      expect(firmwareSupportsPktHash(null), isFalse); // no byte 2
     });
 
     test('ignores unrelated bits', () {
       // 0x0A = button-matrix (0x02) + pkt-hash (0x08) both set.
-      expect(firmwareSupportsPktHash(0x0A, 22), isTrue);
+      expect(firmwareSupportsPktHash(0x0A), isTrue);
       // Only notify-scope (0x01) set: pkt-hash bit clear.
-      expect(firmwareSupportsPktHash(0x01, 22), isFalse);
+      expect(firmwareSupportsPktHash(0x01), isFalse);
     });
   });
 }
