@@ -1771,6 +1771,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     }
     // end transform
 
+    // Refuse before clearing so the draft survives the refusal.
+    if (_refuseIfSlotUnconfirmed(connector)) return;
+
     _textController.clear();
     _cancelReply();
     _textFieldFocusNode.requestFocus();
@@ -1781,6 +1784,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       translatedLanguageCode: translatedLanguageCode,
       translationModelId: translationModelId,
     );
+  }
+
+  /// #1063: an outgoing write on a slot this connection has not confirmed
+  /// would persist under an unknown identity and be orphaned, so refuse at
+  /// the attempt and say why (a sync can confirm the slot seconds later, so
+  /// greying the composer would mislead).
+  bool _refuseIfSlotUnconfirmed(MeshCoreConnector connector) {
+    if (connector.canSendOnChannel(_currentChannel.index)) return false;
+    showDismissibleSnackBar(
+      context,
+      content: Text(context.l10n.channel_slotUnconfirmedSendBlocked),
+      backgroundColor: Theme.of(context).colorScheme.error,
+      persist: true,
+    );
+    return true;
   }
 
   /// One-click reply quoting the route a message took, hop count + path,
@@ -1816,6 +1834,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     if (connector.isChannelCyr2LatEnabled(_currentChannel.index)) {
       text = Cyr2Lat.encode(text);
     }
+    if (_refuseIfSlotUnconfirmed(connector)) return;
     connector.sendChannelMessage(_currentChannel, text);
   }
 
@@ -2051,10 +2070,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   void _retryChannelMessage(ChannelMessage message) {
-    context.read<MeshCoreConnector>().sendChannelMessage(
-      _currentChannel,
-      message.text,
-    );
+    final connector = context.read<MeshCoreConnector>();
+    if (_refuseIfSlotUnconfirmed(connector)) return;
+    connector.sendChannelMessage(_currentChannel, message.text);
     showDismissibleSnackBar(
       context,
       content: Text(context.l10n.chat_sendingAgain),
@@ -2229,6 +2247,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       message.text,
     );
     final reactionText = ReactionHelper.encodeReaction(hash, emojiIndex);
+    if (_refuseIfSlotUnconfirmed(connector)) return;
     connector.sendChannelMessage(_currentChannel, reactionText);
   }
 

@@ -593,9 +593,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
   // #1062: ingress barrier. Live channel traffic is held while this
   // connection's channel list is not yet synced, then flushed, so a message
-  // is never filed against a guessed slot map.
+  // is never filed against a guessed slot map. Held MESSAGE frames are keyed
+  // by the radio that delivered them (#1063 review): they survive reconnects
+  // because the radio already popped them, but a switch to a DIFFERENT radio
+  // must not flush them into its conversations. A parked radio's frames flush
+  // when that radio next completes a sync; '' holds frames from before the
+  // connection identified itself and is adopted by the next flush.
   bool _channelListSynced = false;
-  final List<Uint8List> _heldChannelMsgFrames = [];
+  final Map<String, List<Uint8List>> _heldChannelMsgFramesByRadio = {};
+  List<Uint8List> get _heldChannelMsgFrames =>
+      _heldChannelMsgFramesByRadio.putIfAbsent(selfPublicKeyHex, () => []);
   final List<Uint8List> _heldRawChannelFrames = [];
   static const int _maxHeldChannelFrames = 64;
 
@@ -2355,9 +2362,24 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     if (allMessages.isNotEmpty) {
       // Keep only the most recent N messages in memory to bound memory usage
-      final windowedMessages = allMessages.length > _messageWindowSize
-          ? allMessages.sublist(allMessages.length - _messageWindowSize)
-          : allMessages;
+      final windowedMessages = List<ChannelMessage>.from(
+        allMessages.length > _messageWindowSize
+            ? allMessages.sublist(allMessages.length - _messageWindowSize)
+            : allMessages,
+      );
+
+      // A message can land in memory while this load is reading the store
+      // (the slot-identity reload racing a flushed held frame, #1063 review).
+      // The store save merges, so disk already has it; keep it visible too
+      // instead of clobbering the list with the pre-arrival history.
+      final current = _channelMessages[channelIndex];
+      if (current != null) {
+        for (final m in current) {
+          if (_findChannelRepeatIndex(windowedMessages, m) < 0) {
+            windowedMessages.add(m);
+          }
+        }
+      }
 
       _channelMessages[channelIndex] = windowedMessages;
       notifyListeners();
@@ -4198,8 +4220,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _previousChannelsCache.clear();
     // #1062: a new connection starts with an unconfirmed list. Held MESSAGE
     // frames are kept: the radio already popped them from its queue, so they
-    // exist nowhere else, and the next confirmed sync files them. Raw sniff
-    // frames are lossy observations; a dead connection's are stale.
+    // exist nowhere else, and the holding radio's next confirmed sync files
+    // them (per-radio, so a radio switch cannot leak them, #1063 review).
+    // Raw sniff frames are lossy observations; a dead connection's are stale.
     _channelListSynced = false;
     _unconfirmedChannelSlots.clear();
     _slotIdentityChanges.clear();
@@ -5733,6 +5756,14 @@ class MeshCoreConnector extends ChangeNotifier {
     return ts;
   }
 
+  /// Whether an outgoing write for [channelIndex] is allowed (#1063 review).
+  /// False while this connection has not confirmed the slot: the PSK resolver
+  /// would return null and the persisted copy would fall back to the legacy
+  /// slot-index key, orphaning it (adoption only runs on an empty PSK key).
+  /// Callers must refuse the write and tell the user why, not grey a button.
+  bool canSendOnChannel(int channelIndex) =>
+      _channelListSynced && !_unconfirmedChannelSlots.contains(channelIndex);
+
   Future<void> sendChannelMessage(
     Channel channel,
     String text, {
@@ -5741,6 +5772,16 @@ class MeshCoreConnector extends ChangeNotifier {
     String? translationModelId,
   }) async {
     if (!isConnected || text.isEmpty) return;
+    if (!canSendOnChannel(channel.index)) {
+      // Fail closed at the write, loudly: the message would persist under an
+      // unknown identity. The UI surfaces this via [canSendOnChannel].
+      _appDebugLogService?.error(
+        'Refused to send on channel slot ${channel.index}: the slot is not '
+        'confirmed by this connection (#1063). Retry the channel sync.',
+        tag: 'ChannelSync',
+      );
+      return;
+    }
 
     // Check if this is a reaction - if so, process it immediately instead of adding as a message
     final reactionInfo = ReactionHelper.parseReaction(text);
@@ -6512,6 +6553,14 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Runs after [_channelListSynced] flips true, so the handlers file against
   /// the fresh list; a frame whose slot is still unconfirmed re-holds.
   void _flushHeldChannelFrames() {
+    // Frames held before this connection learned its radio key belong to this
+    // connection (nothing flows before the handshake); adopt them first.
+    if (selfPublicKeyHex.isNotEmpty) {
+      final unattributed = _heldChannelMsgFramesByRadio.remove('');
+      if (unattributed != null) {
+        _heldChannelMsgFrames.insertAll(0, unattributed);
+      }
+    }
     if (_heldChannelMsgFrames.isEmpty && _heldRawChannelFrames.isEmpty) return;
     final msgFrames = List<Uint8List>.from(_heldChannelMsgFrames);
     final rawFrames = List<Uint8List>.from(_heldRawChannelFrames);

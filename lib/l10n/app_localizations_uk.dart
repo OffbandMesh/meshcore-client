@@ -2131,6 +2131,10 @@ class AppLocalizationsUk extends AppLocalizations {
       'Not connected to a radio, so this sender can\'t be added yet';
 
   @override
+  String get channel_slotUnconfirmedSendBlocked =>
+      'Message not sent: the radio hasn\'t confirmed this channel slot yet. Retry the channel sync, then send again.';
+
+  @override
   String channel_senderAddFailed(String error) {
     return 'Couldn\'t add this sender: $error';
   }

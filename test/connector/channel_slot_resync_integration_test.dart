@@ -288,4 +288,128 @@ void main() {
     expect(decision.pskHex, beta.pskHex);
     expect(decision.mode, ChannelNotifyMode.off);
   });
+
+  test(
+    'identity-change reload does not hide a message flushed meanwhile',
+    () async {
+      // Beta builds history at slot 1, then moves to slot 0. A live message for
+      // slot 0 arrives MID-resync (held), so the flush files it while the
+      // identity-change reload is still reading the store. Both must be visible
+      // afterwards: the reload merges, it does not clobber (#1063 review).
+      await syncWith([_channel(0, 'Alpha', 10), _channel(1, 'Beta', 30)]);
+      c.handleFrameForTest(
+        _v3ChannelMsgFrame(channelIdx: 1, text: 'B: beta history'),
+      );
+      await _settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await c.getChannels(force: true, maxChannels: 2);
+      // Mid-resync: the barrier is closed, so this is held, and the flush will
+      // file it in the same turn that starts the slot-0 reload.
+      c.handleFrameForTest(
+        _v3ChannelMsgFrame(channelIdx: 0, text: 'B: live during sync'),
+      );
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 0, name: 'Beta', pskSeed: 30),
+      );
+      await _settle(2);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 1, name: 'Alpha', pskSeed: 10),
+      );
+      await _settle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await _settle();
+
+      final slot0Texts =
+          (c.channelMessagesForTest[0] ?? const <ChannelMessage>[])
+              .map((m) => m.text)
+              .toSet();
+      expect(
+        slot0Texts,
+        containsAll(<String>{'beta history', 'live during sync'}),
+        reason:
+            'the reload must merge with what the flush just filed, '
+            'not clobber it',
+      );
+    },
+  );
+
+  test(
+    'outgoing send to an unconfirmed slot is refused, not orphaned',
+    () async {
+      final alpha = _channel(0, 'Alpha', 10);
+      final beta = _channel(1, 'Beta', 30);
+      c.seedCachedChannelsForTest([alpha, beta]);
+
+      // Slot 0 confirms, slot 1 never does.
+      await c.getChannels(maxChannels: 2);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 0, name: 'Alpha', pskSeed: 10),
+      );
+      await _settle(2);
+      for (var i = 0; i <= 3; i++) {
+        c.handleChannelSyncTimeoutForTest(1);
+        await _settle(2);
+      }
+      await _settle();
+      expect(c.unconfirmedChannelSlots, {1});
+      expect(c.canSendOnChannel(0), isTrue);
+      expect(c.canSendOnChannel(1), isFalse);
+
+      final sentFrames = <Uint8List>[];
+      c.sendFrameOverrideForTest = sentFrames.add;
+      await c.sendChannelMessage(beta, 'must not be written');
+      await _settle();
+
+      expect(sentFrames, isEmpty, reason: 'nothing may go to the radio');
+      expect(
+        c.channelMessagesForTest[1] ?? const <ChannelMessage>[],
+        isEmpty,
+        reason:
+            'the refused message must not be filed (a persisted copy would '
+            'fall back to the legacy slot-index key and be orphaned)',
+      );
+    },
+  );
+
+  test(
+    'held frames never cross radios; they flush when their radio returns',
+    () async {
+      // Radio X delivers a message before its list is confirmed; the frame is
+      // held. The user then connects radio Y: Y's sync must NOT flush X's frame
+      // into Y's conversations. When X reconnects and syncs, the frame files.
+      final radioX = Uint8List.fromList(List<int>.generate(32, (i) => i));
+      final radioY = Uint8List.fromList(List<int>.generate(32, (i) => 99 + i));
+
+      c.handleFrameForTest(
+        _v3ChannelMsgFrame(channelIdx: 0, text: 'A: from X'),
+      );
+      await _settle();
+
+      // Switch to radio Y and complete its sync.
+      c.resetConnectionHandshakeStateForTest();
+      c.setConnectedForTest();
+      c.setSelfPublicKeyForTest(radioY);
+      c.wireMessageStoreForTest();
+      await syncWith([_channel(0, 'Gamma', 70)]);
+      expect(
+        c.channelMessagesForTest[0] ?? const <ChannelMessage>[],
+        isEmpty,
+        reason: "radio X's held frame must not file into radio Y's channel",
+      );
+
+      // Back to radio X: its held frame now files against its own list.
+      c.resetConnectionHandshakeStateForTest();
+      c.setConnectedForTest();
+      c.setSelfPublicKeyForTest(radioX);
+      c.wireMessageStoreForTest();
+      await syncWith([_channel(0, 'Alpha', 10)]);
+      expect(
+        (c.channelMessagesForTest[0] ?? const <ChannelMessage>[]).map(
+          (m) => m.text,
+        ),
+        ['from X'],
+      );
+    },
+  );
 }

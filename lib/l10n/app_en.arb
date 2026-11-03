@@ -1205,6 +1205,7 @@
     }
   },
   "channel_senderAddNotConnected": "Not connected to a radio, so this sender can't be added yet",
+  "channel_slotUnconfirmedSendBlocked": "Message not sent: the radio hasn't confirmed this channel slot yet. Retry the channel sync, then send again.",
   "channel_senderAddFailed": "Couldn't add this sender: {error}",
   "@channel_senderAddFailed": {
     "placeholders": {
