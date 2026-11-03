@@ -539,9 +539,9 @@ bool firmwareSupportsOffbandGps(int? offbandCaps) => offbandCaps != null;
 
 /// `OFFBAND_CAP_BLOCK` bit (bit 1) in the `offband_caps` byte of the device-info
 /// reply: an Offband radio that persists a block list and drops blocked DMs at
-/// receive (firmware PR #247, `FIRMWARE_VER_CODE 15`). Unlike the loose GPS
-/// presence-gate above, block requires the **explicit bit** set AND
-/// `FIRMWARE_VER_CODE >= 15`; absent → app-only mode (no sync, no firmware drop).
+/// receive (firmware PR #247). Unlike the loose GPS presence-gate above, block
+/// requires the **explicit bit** set; absent → app-only mode (no sync, no
+/// firmware drop). The bit alone, never the version code (#1065).
 const int offbandCapBlock = 0x02;
 
 /// `OFFBAND_CAP_FEM_LNA` bit (bit 2) in the `offband_caps` byte: this radio can
@@ -559,25 +559,33 @@ const int offbandCapFemLna = 0x04;
 // POPULATION INVARIANT (#875-#877): every `offbandCaps`-anchored gate below is
 // safe against stock 1.18+ devices ONLY because the connector nulls the caps
 // bytes unless the population classifier corroborates the fork layout
-// (device_population.dart). The ver-code floors in these gates are FORK
-// contract numbers; stock reuses 14+ with different meanings, so a bare
-// `firmwareVerCode >=` comparison may only be added for codes BELOW 14
-// (pre-split, same meaning everywhere: see supportsCompanionRadioStats >= 8
-// and firmwareSupportsRegionScope >= 13) or behind a caps-anchored gate here.
+// (device_population.dart).
+//
+// NO CAPS-ANCHORED GATE MAY READ FIRMWARE_VER_CODE (#1065, owner ruling). The
+// code rolled back to 14 to resolve the 1.18.0 collision, so a fork contract
+// number is not a capability signal: a floor of >= 15, >= 17 or >= 22 goes
+// false on firmware that genuinely has the feature. Those three floors were
+// removed here, and they were never what protected stock radios -- the
+// classifier is, by nulling the caps bytes a stock reply never carries.
+// Capability is the BIT, which is also self-dating, since firmware predating a
+// feature cannot set that feature's bit.
+//
+// The only surviving `firmwareVerCode >=` comparisons are the BITLESS ones for
+// pre-split codes, which mean the same thing upstream and in the fork and have
+// no bit to fall back on: supportsCompanionRadioStats >= 8 and
+// firmwareSupportsRegionScope >= 13. Do not add another.
 
 bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
     offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
 
-bool firmwareSupportsOffbandBlock(int? offbandCaps, int? firmwareVerCode) =>
-    offbandCaps != null &&
-    (offbandCaps & offbandCapBlock) != 0 &&
-    (firmwareVerCode ?? 0) >= 15;
+bool firmwareSupportsOffbandBlock(int? offbandCaps) =>
+    offbandCaps != null && (offbandCaps & offbandCapBlock) != 0;
 
 /// Caplog serial-capture capability (firmware #427). The bit is compile-time
 /// static in device-info, so it's reliable across reboots, the client re-reads
 /// it on reconnect and never has to race a STATUS probe. Bit 5 (0x08/0x10 are
-/// reserved for WiFi-companion #365 / display-config); requires FIRMWARE_VER_CODE
-/// >= 17, the version that introduced it.
+/// reserved for WiFi-companion #365 / display-config). Gated on the bit alone,
+/// never the version code (#1065).
 const int offbandCapCaplog = 0x20;
 
 /// `offband_caps` BYTE 2 bits (device-info frame offset 84, firmware #508).
@@ -637,10 +645,8 @@ bool firmwareSupportsScreenSettings(int? offbandCaps2) =>
 bool firmwareSupportsGpsMode(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2GpsMode) != 0;
 
-bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
-    offbandCaps != null &&
-    (offbandCaps & offbandCapCaplog) != 0 &&
-    (firmwareVerCode ?? 0) >= 17;
+bool firmwareSupportsOffbandCaplog(int? offbandCaps) =>
+    offbandCaps != null && (offbandCaps & offbandCapCaplog) != 0;
 
 /// Packet-hash query capability (firmware #611, cap byte 2 bit 3). Lets the
 /// client ask firmware for the authoritative on-air hash of a channel message
@@ -649,13 +655,12 @@ bool firmwareSupportsOffbandCaplog(int? offbandCaps, int? firmwareVerCode) =>
 /// PR merges; confirm against it before release.
 const int offbandCap2PktHash = 0x08;
 
-/// True iff this radio supports the 0xC6 packet-hash query. Requires both the
-/// cap-byte-2 bit AND FIRMWARE_VER_CODE >= 22. The client must never emit 0xC6
-/// unless this is true.
-bool firmwareSupportsPktHash(int? offbandCaps2, int? firmwareVerCode) =>
-    offbandCaps2 != null &&
-    (offbandCaps2 & offbandCap2PktHash) != 0 &&
-    (firmwareVerCode ?? 0) >= 22;
+/// True iff this radio supports the 0xC6 packet-hash query: the cap-byte-2 bit
+/// and nothing else (#1065). The client must never emit 0xC6 unless this is
+/// true. Caps byte 2 only exists from the version that added device-info offset
+/// 84, so the bit's presence already dates the firmware.
+bool firmwareSupportsPktHash(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2PktHash) != 0;
 
 /// 0xC6 CMD_OFFBAND_PKT_HASH (firmware #611). Client-issued query, never a push;
 /// the stock channel-send OK reply is untouched.

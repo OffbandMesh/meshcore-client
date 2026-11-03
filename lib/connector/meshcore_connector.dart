@@ -974,8 +974,7 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? get deviceUiErrorSurface => _deviceUiErrorSurface;
 
   /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
-  bool get supportsPktHash =>
-      firmwareSupportsPktHash(_offbandCaps2, _firmwareVerCode);
+  bool get supportsPktHash => firmwareSupportsPktHash(_offbandCaps2);
 
   /// Whether to fetch CoreScope observer counts for outgoing channel messages:
   /// firmware supports the hash query AND the owner enabled the feature.
@@ -1771,8 +1770,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether the connected radio persists a block list + drops blocked DMs
   /// (Offband firmware, capability-gated). Absent → app-local block only.
-  bool get supportsOffbandBlock =>
-      firmwareSupportsOffbandBlock(_offbandCaps, _firmwareVerCode);
+  bool get supportsOffbandBlock => firmwareSupportsOffbandBlock(_offbandCaps);
 
   /// True when the radio's block store hit `MAX_BLOCKED_KEYS` (32) and rejected
   /// an ADD (ok=0). Local block still applies; those keys just aren't portable.
@@ -1787,8 +1785,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Never shortcut this to a model or version check.
   bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
 
-  bool get supportsOffbandCaplog =>
-      firmwareSupportsOffbandCaplog(_offbandCaps, _firmwareVerCode);
+  bool get supportsOffbandCaplog => firmwareSupportsOffbandCaplog(_offbandCaps);
 
   /// Current FEM LNA state as last reported by the radio, or null if unknown
   /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.

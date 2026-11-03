@@ -91,7 +91,7 @@ void main() {
     test('byte-1 gate predicates are unaffected by byte 2', () {
       final caps1 = MeshCoreConnector.parseOffbandCaps(frame);
       expect(firmwareSupportsOffbandFemLna(caps1), isTrue);
-      expect(firmwareSupportsOffbandBlock(caps1, 15), isTrue);
+      expect(firmwareSupportsOffbandBlock(caps1), isTrue);
     });
 
     test('all three tail fields are independent', () {
