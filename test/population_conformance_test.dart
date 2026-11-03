@@ -204,7 +204,6 @@ void main() {
       expect(connector.supportsPktHash, f.pktHash, reason: 'pkt hash 0xC6');
       expect(
         ObserverConfigClient.supportsConfig(
-          firmwareVerCode: connector.firmwareVerCode ?? 0,
           offbandCaps: connector.offbandCaps ?? 0,
         ),
         f.observerConfig,

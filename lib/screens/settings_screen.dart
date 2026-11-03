@@ -165,10 +165,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // A blanket context.watch here rebuilt the whole settings screen on every
     // sync frame, thrashing the UI thread and slowing the channel sync (#81).
     final showObserver = context.select<MeshCoreConnector, bool>(
-      (c) => ObserverConfigClient.supportsConfig(
-        firmwareVerCode: c.firmwareVerCode ?? 0,
-        offbandCaps: c.offbandCaps ?? 0,
-      ),
+      (c) =>
+          ObserverConfigClient.supportsConfig(offbandCaps: c.offbandCaps ?? 0),
     );
     // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
     // the About version row. Selects narrowly so the category list only rebuilds
