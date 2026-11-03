@@ -1576,6 +1576,22 @@ class AppLocalizationsPt extends AppLocalizations {
   String get channels_searchChannels => 'Pesquisar canais...';
 
   @override
+  String channels_unconfirmedSlots(String slots) {
+    return 'The radio did not confirm channel slot(s) $slots. Those channels are unknown until a sync succeeds.';
+  }
+
+  @override
+  String get channels_retrySync => 'Retry sync';
+
+  @override
+  String channels_slotIdentityChanged(String changes) {
+    return 'Channel layout changed on the radio: $changes';
+  }
+
+  @override
+  String get common_dismiss => 'Dismiss';
+
+  @override
   String get channels_noChannelsFound => 'Nenhum canal encontrado';
 
   @override
