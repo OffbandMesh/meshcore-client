@@ -12,6 +12,13 @@ Status: BUILT and machine-verified; PRs opened on the owner's word (decision bel
 ## Gap found by the integration tests (fixed in `2a9d1e16`)
 Epic A's flush documented that a held frame for a still-unconfirmed slot re-holds, but the handler only gated on the list-level barrier: after a PARTIAL sync completed, a held message for an unconfirmed slot would have filed by raw index against an unknown identity and persisted under the legacy index key. `_handleIncomingChannelMessage` now re-holds such frames until a sync confirms the slot. This is the "prove the check can fail" discipline paying for itself; the flaky-sync scenario below fails without the fix.
 
+## Gemini adversarial gate (gemini-2.5-pro, 2026-11-03, at the pre-push stack head)
+Four findings, all addressed before push:
+1. **HIGH, unbounded held frames:** cap deliberately NOT added (held frames are popped messages; dropping one is guaranteed loss; growth is traffic-bounded at <=172 bytes/frame and drains on the next confirming sync). Verifying it exposed a sharper defect the review did not name: held frames survived a radio SWITCH and would have flushed into the other radio's conversations. Fixed: held message frames are keyed per radio and flush only when their own radio completes a sync.
+2. **MEDIUM, identity-change reload race:** confirmed for in-memory state only (saves merge by identity, #343). Fixed: `_loadChannelMessages` merges messages that arrived during the disk read instead of clobbering.
+3. **MEDIUM, outgoing send on an unconfirmed slot orphans the persisted copy:** confirmed. Fixed: `sendChannelMessage` refuses the write (fail closed, logged) and the chat screen shows a persistent error at every send path. New English UI string, untranslated.json regenerated.
+4. **Test gaps:** three integration tests added (race, refused send, cross-radio hold); with the three guards behaviorally disabled, exactly those three fail (+3 -3).
+
 ## Evidence
 Machine verification, all on the stacked branch:
 - `flutter analyze` clean on every touched file.
@@ -21,7 +28,7 @@ Machine verification, all on the stacked branch:
   2. **Manual device-side reorder:** a message persisted under Alpha's PSK follows Alpha to its new slot after the re-sync; nothing renders under Beta.
   3. **Flaky sync mid-reconnect:** a message for a never-confirmed slot is held, not filed by raw index, and no notify decision is made for it; after a confirming re-sync it files once, against the right PSK and mode.
 - **Negative evidence:** with Epic B's drop/reload and the slot-level re-hold reverted in the working tree, all three scenarios fail (`+0 -3`) on exactly the guarded assertions; restored, all pass. The checks can fail.
-- Full suite at Epic B: 1791 passed / 1 skipped, exit 0. Full suite at Epic C: 1794 passed / 1 skipped, exit 0.
+- Full suite at Epic B: 1791 passed / 1 skipped, exit 0. Full suite at Epic C: 1794 passed / 1 skipped, exit 0. Full suite at the pushed head (post-rebase, post-review fixes): 1807 passed / 1 skipped, exit 0.
 
 ## Decisions logged
 - Epic B re-scope approved by the owner 2026-11-03 ("Agree, proceed"); storage was already PSK-keyed since #194, so no migration was needed.
