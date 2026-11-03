@@ -3730,6 +3730,12 @@ abstract class AppLocalizations {
   /// **'Not connected to a radio, so this sender can\'t be added yet'**
   String get channel_senderAddNotConnected;
 
+  /// No description provided for @channel_slotUnconfirmedSendBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Message not sent: the radio hasn\'t confirmed this channel slot yet. Retry the channel sync, then send again.'**
+  String get channel_slotUnconfirmedSendBlocked;
+
   /// No description provided for @channel_senderAddFailed.
   ///
   /// In en, this message translates to:
