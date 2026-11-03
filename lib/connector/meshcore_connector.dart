@@ -66,6 +66,7 @@ import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
 import '../storage/channel_region_scope_store.dart';
+import 'offband_channel_notify.dart';
 import 'offband_device_ui.dart';
 import 'offband_screen_settings.dart';
 import 'offband_tones.dart';
@@ -419,6 +420,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Classification? _classification;
   int? _offbandCaps2;
+  int? _offbandCaps3;
   bool? _femLnaEnabled;
   ButtonMatrix? _buttonMatrix;
   String? _lastDeviceUiSuppression;
@@ -428,6 +430,12 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? _pendingDeviceUiWrite;
   GpsModeState? _gpsModeState;
   final Map<int, ChannelTune> _channelTunes = {};
+
+  /// Slot index to the radio's own notify mode for that channel (#544).
+  /// Written only from a device reply, and cleared per radio like every other
+  /// device-UI surface. Slot-derived state: #1061's identity diff must reset
+  /// it when a slot's PSK changes, or it describes the wrong channel.
+  final Map<int, RadioChannelNotify> _channelNotifyModes = {};
   final Map<ToneEvent, EventToneState> _eventTones = {};
   final Map<int, TuneSlotInfo> _tuneSlots = {};
   ScreenSettingsState? _screenSettings;
@@ -936,6 +944,17 @@ class MeshCoreConnector extends ChangeNotifier {
   /// an error: every radio predating #508 reports null here. (#480)
   int? get offbandCaps2 => _offbandCaps2;
 
+  /// Third `offband_caps` bitfield (frame offset 87, #544). Null when the frame
+  /// is too short, which means "no byte-3 capabilities" and is never an error.
+  /// No bit is allocated from it yet; byte 2 filled up at `0x80`.
+  int? get offbandCaps3 => _offbandCaps3;
+
+  /// Whether this radio stores a per-channel notify mode for its own buzzer
+  /// (#544). Says nothing about the app's per-channel notify setting, which is
+  /// independent and needs no radio.
+  bool get supportsChannelNotify =>
+      firmwareSupportsChannelNotify(_offbandCaps2);
+
   /// Whether this radio exposes a configurable button-action matrix (#474).
   bool get supportsButtonMatrix => firmwareSupportsButtonMatrix(_offbandCaps2);
 
@@ -959,6 +978,12 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// The tune the radio reported for [channel], or null if not read yet.
   ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
+
+  /// The radio's notify mode for [channel], or null until the radio has
+  /// reported it. Null is "not yet known", distinct from
+  /// [RadioChannelNotify.unset], which is the radio saying no choice is set.
+  RadioChannelNotify? channelNotifyFor(int channel) =>
+      _channelNotifyModes[channel];
 
   /// The tune the radio reported for [event], or null if not read yet.
   EventToneState? eventTone(ToneEvent event) => _eventTones[event];
@@ -1145,6 +1170,39 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'DeviceUI',
     );
     await sendFrame(buildChannelTuneSetFrame(channel, tune));
+  }
+
+  /// Ask the radio which notify mode [channel] has for its own buzzer (#544).
+  ///
+  /// Nothing here touches the app's per-channel notify setting: that drives
+  /// the phone, this drives the radio, and they are independent.
+  Future<void> requestChannelNotify(int channel) async {
+    if (!_deviceUiGateOpen('chnotify GET', advertised: supportsChannelNotify)) {
+      return;
+    }
+    _appDebugLogService?.info(
+      'chnotify GET -> [0xC5][0x18][$channel]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelNotifyGetFrame(channel));
+  }
+
+  /// Set the radio's notify mode for [channel]. Local state follows the
+  /// device's re-read reply, never the request, so a refused choice is never
+  /// shown as saved.
+  Future<void> setChannelNotify(int channel, RadioChannelNotify mode) async {
+    if (!_deviceUiGateOpen('chnotify SET', advertised: supportsChannelNotify)) {
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.channelNotify;
+    _appDebugLogService?.info(
+      'chnotify SET -> ch=$channel mode=${mode.name} '
+      'stored=${mode.stored} [0xC5][0x19]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelNotifySetFrame(channel, mode));
   }
 
   /// Ask the radio how GPS is running (#969).
@@ -1487,6 +1545,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _buttonMatrix = null;
     _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
+    _channelNotifyModes.clear();
     _deviceUiError = null;
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = null;
@@ -1532,6 +1591,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleChannelTuneReply(tune);
       return;
     }
+    final chNotify = parseChannelNotifyReply(frame);
+    if (chNotify != null) {
+      _handleChannelNotifyReply(
+        chNotify,
+        isWrite: frame[1] == offbandUiChannelNotifySet,
+      );
+      return;
+    }
     final tunes = parseTuneReply(frame);
     if (tunes != null) {
       _handleTuneReply(tunes);
@@ -1570,6 +1637,7 @@ class MeshCoreConnector extends ChangeNotifier {
       DeviceUiSurface.tunePlay => 'Tune preview',
       DeviceUiSurface.tuneSlot => 'Tune slot',
       DeviceUiSurface.screenSettings => 'Screen settings',
+      DeviceUiSurface.channelNotify => 'Radio channel notifications',
       null => 'Device UI request',
     };
     _appDebugLogService?.warn(
@@ -1619,6 +1687,27 @@ class MeshCoreConnector extends ChangeNotifier {
       'scroff=${s.screenOffStored}/${s.screenOffSeconds}s tz=${s.timeZone} '
       'batt=${s.batteryFullStored}/${s.batteryFullMv}mV '
       'pinned=${s.batteryPinned}',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  /// The radio reported its own notify mode for one channel (#544).
+  ///
+  /// This writes the RADIO's state only. It deliberately does not read or
+  /// write the app's per-channel notify setting: the two are independent, and
+  /// a test asserts that a reply here leaves the app store untouched.
+  void _handleChannelNotifyReply(
+    RadioChannelNotifyReply reply, {
+    required bool isWrite,
+  }) {
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.channelNotify) {
+      _pendingDeviceUiWrite = null;
+    }
+    _channelNotifyModes[reply.channel] = reply.mode;
+    _appDebugLogService?.info(
+      'chnotify reply: ch=${reply.channel} mode=${reply.mode.name} '
+      '(${isWrite ? 'write confirmed' : 'read'})',
       tag: 'DeviceUI',
     );
     notifyListeners();
@@ -4402,6 +4491,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // until the next device-info lands (Gemini review, task #876).
     _offbandCaps = null;
     _offbandCaps2 = null;
+    _offbandCaps3 = null;
     _femLnaEnabled = null;
     _blockListRetryTimer?.cancel();
     // Per-connection debounce timers must die with the connection so a timer
@@ -7878,6 +7968,22 @@ class MeshCoreConnector extends ChangeNotifier {
   static int? parseOffbandCaps2(Uint8List frame) =>
       frame.length >= 85 ? frame[84] : null;
 
+  /// Third `offband_caps` byte, at frame offset **87** (#544).
+  ///
+  /// Byte 2 filled up when the per-channel notify bit took `0x80`, so firmware
+  /// appends a third. It sits at 87 and NOT at 85, because 85 and 86 are
+  /// already `ui_led_enabled` and `ui_display_mode`: the same fixed-absolute
+  /// offset rule that put byte 2 at 84 rather than beside byte 1. Reading 85
+  /// as byte 3 would parse the LED state as a capability bitmask.
+  ///
+  /// Null on any firmware sending a shorter frame, which means "no byte-3
+  /// capabilities" and is never an error. Length-gated, never version-gated
+  /// (#1065). No bit is allocated from it yet.
+  static int? parseOffbandCaps3(Uint8List frame) =>
+      frame.length >= offbandCaps3MinFrameLength
+      ? frame[offbandCaps3Offset]
+      : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -7947,10 +8053,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _femLnaEnabled = parseFemLnaState(frame);
       // Second caps byte rides at offset 84, past the FEM state byte (#480).
       _offbandCaps2 = parseOffbandCaps2(frame);
+      // Third caps byte at offset 87, past ui_led_enabled (85) and
+      // ui_display_mode (86). Byte 2 filled up at 0x80 (#544).
+      _offbandCaps3 = parseOffbandCaps3(frame);
     } else {
       _offbandCaps = null;
       _femLnaEnabled = null;
       _offbandCaps2 = null;
+      _offbandCaps3 = null;
     }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
