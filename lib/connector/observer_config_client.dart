@@ -91,9 +91,6 @@ class ObserverConfigClient {
   static const int cmdConfig = 0xC0;
   static const int respConfig = 0xC0;
 
-  /// Command exists iff FIRMWARE_VER_CODE >= this AND the capability bit is set.
-  static const int minVerCode = 14;
-
   /// Bit 0 of the `offband_caps` byte appended to the device-info reply.
   static const int capWifiObserver = 0x01;
 
@@ -117,16 +114,19 @@ class ObserverConfigClient {
   /// Number of MQTT broker slots (firmware OFFBAND_MAX_BROKERS).
   static const int brokerSlotCount = 10;
 
-  /// True iff the device advertises config support: version gate AND the
+  /// True iff the device advertises config support: the
   /// `OFFBAND_CAP_WIFI_OBSERVER` bit in the device-info `offband_caps` byte.
-  /// The WHOLE command (display included) is observer-gated, so both must hold.
-  static bool supportsConfig({
-    required int firmwareVerCode,
-    required int offbandCaps,
-  }) {
-    return firmwareVerCode >= minVerCode &&
-        (offbandCaps & capWifiObserver) != 0;
-  }
+  /// The WHOLE command (display included) is observer-gated.
+  ///
+  /// The bit alone, never `FIRMWARE_VER_CODE` (#1065). This used to also
+  /// require `>= 14`, mirroring firmware's `OFFBAND_CONFIG_MIN_VER`, which left
+  /// it passing at zero margin once the code rolled back onto 14. The bit is a
+  /// sounder signal than the floor ever was: caps byte 1 exists only on fork
+  /// replies, which are the only ones that carry the `0xC0` command, and a
+  /// build without the observer backend compiled in leaves the bit clear
+  /// whatever it reports as its version.
+  static bool supportsConfig({required int offbandCaps}) =>
+      (offbandCaps & capWifiObserver) != 0;
 
   // --- Request builders -----------------------------------------------------
 
