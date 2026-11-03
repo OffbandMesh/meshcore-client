@@ -566,10 +566,26 @@ const int offbandCapFemLna = 0x04;
 // Capability is the BIT, which is also self-dating, since firmware predating a
 // feature cannot set that feature's bit.
 //
-// The only surviving `firmwareVerCode >=` comparisons are the BITLESS ones for
-// pre-split codes, which mean the same thing upstream and in the fork and have
-// no bit to fall back on: supportsCompanionRadioStats >= 8 and
-// firmwareSupportsRegionScope >= 13. Do not add another.
+// TWO READS SURVIVE, as a deliberate exception the owner ratified on
+// 2026-11-03, tracked for removal in #1066: supportsCompanionRadioStats >= 8
+// and firmwareSupportsRegionScope >= 13. They are KEPT, not overlooked.
+//
+// Both gate STOCK companion-protocol features, and a stock reply is exactly 82
+// bytes (device_population.dart), so it carries no capability byte at all --
+// there is no bit to read on a stock radio at any version, and the fork cannot
+// make upstream advertise one. The classifier cannot substitute either: stock
+// 1.16 (no region) and 1.17 (region) both land in stockLegacy. Dropping these
+// two floors is also not behaviour-neutral: stats would read true off a
+// malformed 3-byte frame, and region scope would emit frames to a pre-1.17
+// radio that ignores them (both pinned by tests).
+//
+// They are safe for now only because 8 and 13 sit BELOW the conflated 14-22
+// range. A future renumbering through 13 would silently switch region scope off
+// on hardware that has it, which is exactly the #1065 failure. See #1066.
+//
+// Do not add another, and do not quietly delete these two either: #1066 owns
+// that, and it needs a decision (firmware caps bits, making both features
+// fork-only, or probing instead of predicting), not a patch.
 
 bool firmwareSupportsOffbandFemLna(int? offbandCaps) =>
     offbandCaps != null && (offbandCaps & offbandCapFemLna) != 0;
@@ -747,6 +763,10 @@ const int defaultScopeNameField = 31;
 /// regions discovery relies on; `CMD_SET_FLOOD_SCOPE_KEY` sub-0 is older (8+) and
 /// sub-1 unscoped is 12+, both covered by 13. Fail-closed: the client must never
 /// emit a region frame when this is false. (#813)
+///
+/// One of the two surviving ver-code reads (#1066). This is a STOCK feature and
+/// a stock radio advertises no capability byte, so there is no bit to gate on.
+/// See the POPULATION INVARIANT note above before touching it.
 bool firmwareSupportsRegionScope(int? firmwareVerCode) =>
     (firmwareVerCode ?? 0) >= 13;
 
