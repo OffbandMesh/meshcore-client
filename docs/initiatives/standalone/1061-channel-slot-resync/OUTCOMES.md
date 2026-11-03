@@ -1,15 +1,15 @@
 # Feature #1061 channel slot resync truth: OUTCOMES
 
-Status: BUILT and machine-verified; awaiting the owner's hardware test, then PRs. Branch stack: `feat/1062-channel-sync-truth` (Epic A) ← `feat/1063-message-state-hardening` (Epics B + C).
+Status: BUILT and machine-verified; PRs opened on the owner's word (decision below), validation moves to live testing after merge. Branch stack: `feat/1062-channel-sync-truth` (Epic A) ← `feat/1063-message-state-hardening` (Epics B + C), rebased onto dev `180c01e6`.
 
 ## What was built
 | Epic | Commit | Content |
 |---|---|---|
-| A #1062 | `c2f599e3` | fail-closed atomic sync (no backfill, unconfirmed slots tracked + bannered with Retry, cache kept on holes), ingress barrier (messages held unbounded, raw sniffs bounded 64, flush post-sync), per-slot PSK identity diff (UI notice + warn log), unread preserved only on same PSK, fail-closed `_findChannelByIndex`, notification suppression for unconfirmed slots, self-retry on failed live sync |
-| B #1063 | `0d19c3c7` | in-memory conversation dropped + reloaded under the new PSK on slot identity change; setChannel reassignment clear narrowed to legacy slot keys (PSK history survives re-add; deleteChannel keeps the full clear); write-side index fallback escalated to an error naming the orphaning consequence; stale #193-era comments corrected, setChannel/resolver interplay documented |
-| C #1064 | `0f8fcce1` | the three integration scenarios below, the notify-decision test probe, store wiring test hook, and one fix the tests exposed (next section) |
+| A #1062 | `da08b7eb` | fail-closed atomic sync (no backfill, unconfirmed slots tracked + bannered with Retry, cache kept on holes), ingress barrier (messages held unbounded, raw sniffs bounded 64, flush post-sync), per-slot PSK identity diff (UI notice + warn log), unread preserved only on same PSK, fail-closed `_findChannelByIndex`, notification suppression for unconfirmed slots, self-retry on failed live sync |
+| B #1063 | `b658fe14` | in-memory conversation dropped + reloaded under the new PSK on slot identity change; setChannel reassignment clear narrowed to legacy slot keys (PSK history survives re-add; deleteChannel keeps the full clear); write-side index fallback escalated to an error naming the orphaning consequence; stale #193-era comments corrected, setChannel/resolver interplay documented |
+| C #1064 | `2a9d1e16` | the three integration scenarios below, the notify-decision test probe, store wiring test hook, and one fix the tests exposed (next section) |
 
-## Gap found by the integration tests (fixed in `0f8fcce1`)
+## Gap found by the integration tests (fixed in `2a9d1e16`)
 Epic A's flush documented that a held frame for a still-unconfirmed slot re-holds, but the handler only gated on the list-level barrier: after a PARTIAL sync completed, a held message for an unconfirmed slot would have filed by raw index against an unknown identity and persisted under the legacy index key. `_handleIncomingChannelMessage` now re-holds such frames until a sync confirms the slot. This is the "prove the check can fail" discipline paying for itself; the flaky-sync scenario below fails without the fix.
 
 ## Evidence
@@ -27,11 +27,12 @@ Machine verification, all on the stacked branch:
 - Epic B re-scope approved by the owner 2026-11-03 ("Agree, proceed"); storage was already PSK-keyed since #194, so no migration was needed.
 - Already-miskeyed rows from the #1060 window stay as-is: not mechanically separable, and the owner's standing history-loss bar is deliberately low. Say the word and a per-radio clear can be added instead.
 - setChannel reassignment now PRESERVES the outgoing occupant's PSK-keyed history (only legacy slot keys are purged). Re-adding a channel later restores its messages; this strengthens #194's intent and the diff is one call site, flagged for owner review on the Epic B PR.
+- Owner, 2026-11-03 in chat: "I don't have a way to reproduce right now. Push/pr if the work is done, we will validate in live testing." The pre-PR hardware gate is waived for this feature; validation moves to live testing. Merges still require the explicit per-PR grant.
 
 ## Open until the owner closes them
-- Hardware test of the combined stack (the #1060 recovery sequence on the T1000e: wipe, re-import, reconnect, one sync).
+- Live-testing validation after merge (the #1060 recovery sequence: wipe, re-import, reconnect, one sync). The owner cannot reproduce on demand right now, so this is observational.
 - The user-reported problem the owner logged this feature against: its one-liner / issue number is still pending and will be linked under #1063/#1064 when provided.
-- PRs + merges after the hardware pass (stacked: A into dev, B+C into A's branch or rebased per owner preference).
-- #1060 closes only after the owner confirms on hardware.
+- Merges of the stacked PRs (A into dev, then B+C) on the owner's explicit grant.
+- #1060 closes only after the owner confirms the fix in live use.
 
 Agent: TurquoiseBridge (session 82d77b2f)
