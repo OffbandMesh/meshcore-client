@@ -860,6 +860,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
   CompanionRadioStats? get latestRadioStats => _latestRadioStats;
 
+  /// One of the two surviving ver-code reads (#1066). A stock feature, and a
+  /// stock radio advertises no capability byte, so there is no bit to gate on.
+  /// The `?? 0` is what keeps a malformed frame from lighting this up. See the
+  /// POPULATION INVARIANT note in meshcore_protocol.dart before touching it.
   bool get supportsCompanionRadioStats => (_firmwareVerCode ?? 0) >= 8;
 
   bool get radioStatsAirActivityPulse {
