@@ -3290,6 +3290,16 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setSelfPublicKeyForTest(Uint8List key) => _selfPublicKey = key;
 
+  /// Wires the channel message store the way the SELF_INFO handshake does
+  /// (device scoping + PSK resolver), so integration tests (#1064) exercise
+  /// the real PSK-keyed persistence path. Call after [setSelfPublicKeyForTest].
+  @visibleForTesting
+  void wireMessageStoreForTest() {
+    _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
+    _channelMessageStore.channelPskResolver = (index) =>
+        _findChannelByIndex(index)?.pskHex;
+  }
+
   @visibleForTesting
   static bool shouldResetStateAfterTcpConnectAbort({
     required MeshCoreConnectionState state,
@@ -4067,6 +4077,20 @@ class MeshCoreConnector extends ChangeNotifier {
   /// When set, [sendFrame] hands frames here instead of a transport.
   @visibleForTesting
   void Function(Uint8List data)? sendFrameOverrideForTest;
+
+  /// Observes [_maybeNotifyChannelMessage]'s decision: the slot, the display
+  /// label, and the PSK + mode the notification was evaluated against (null
+  /// psk/mode = suppressed because the slot was unconfirmed). Lets tests
+  /// assert notify routing (#1064) without reaching the NotificationService
+  /// singleton.
+  @visibleForTesting
+  void Function(
+    int channelIndex,
+    String channelName,
+    String? pskHex,
+    ChannelNotifyMode? mode,
+  )?
+  channelNotifyProbeForTest;
 
   @visibleForTesting
   void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
@@ -9401,11 +9425,18 @@ class MeshCoreConnector extends ChangeNotifier {
         'unconfirmed, its notify mode cannot be resolved',
         tag: 'ChannelSync',
       );
+      channelNotifyProbeForTest?.call(channelIndex, label, null, null);
       return;
     }
     final mode = _appSettingsService!.channelNotifyMode(
       devicePrefix: selfPublicKeyHex,
       pskHex: slotChannel?.pskHex,
+    );
+    channelNotifyProbeForTest?.call(
+      channelIndex,
+      label,
+      slotChannel?.pskHex,
+      mode,
     );
     switch (mode) {
       case ChannelNotifyMode.off:
@@ -9453,6 +9484,20 @@ class MeshCoreConnector extends ChangeNotifier {
     }
     final parsed = ChannelMessage.fromFrame(frame);
     if (parsed != null && parsed.channelIndex != null) {
+      // #1062 fail-closed, slot-level: the list is synced but THIS slot never
+      // confirmed. Filing by index would attach the message to an unknown
+      // identity and persist it under the legacy index key, so re-hold until
+      // a sync confirms the slot (found by the #1064 integration tests).
+      if (isConnected &&
+          _unconfirmedChannelSlots.contains(parsed.channelIndex)) {
+        _holdChannelFrame(
+          _heldChannelMsgFrames,
+          frame,
+          'message',
+          bounded: false,
+        );
+        return;
+      }
       // Device-composed (outgoing) messages legitimately carry our own name and
       // no path; don't let the self-echo guard drop them (#429 part B).
       if (!parsed.isOutgoing &&
