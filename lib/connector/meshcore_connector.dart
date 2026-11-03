@@ -579,6 +579,38 @@ class MeshCoreConnector extends ChangeNotifier {
   int _totalChannelsToRequest = 0;
   List<Channel> _previousChannelsCache = [];
   static const int _maxChannelSyncRetries = 3;
+
+  // #1062: fail-closed channel sync. A slot the device never answered for is
+  // UNKNOWN: tracked here, surfaced to the UI, and never backfilled from a
+  // previous list (that backfill is how a stale slot map misrouted
+  // notifications and conversations, #1060).
+  final Set<int> _unconfirmedChannelSlots = {};
+
+  /// Device slots this connection's sync could not confirm. Non-empty means
+  /// the channel list has holes the UI must surface (#1062).
+  Set<int> get unconfirmedChannelSlots =>
+      Set.unmodifiable(_unconfirmedChannelSlots);
+
+  // #1062: ingress barrier. Live channel traffic is held while this
+  // connection's channel list is not yet synced, then flushed, so a message
+  // is never filed against a guessed slot map.
+  bool _channelListSynced = false;
+  final List<Uint8List> _heldChannelMsgFrames = [];
+  final List<Uint8List> _heldRawChannelFrames = [];
+  static const int _maxHeldChannelFrames = 64;
+
+  /// Human-readable per-slot identity changes found by the latest completed
+  /// sync (old name -> new name). Surfaced once by the channels screen (#1062).
+  final List<String> _slotIdentityChanges = [];
+  List<String> get slotIdentityChanges =>
+      List.unmodifiable(_slotIdentityChanges);
+
+  /// User dismissed the slot-identity-change notice (#1062).
+  void acknowledgeSlotIdentityChanges() {
+    _slotIdentityChanges.clear();
+    notifyListeners();
+  }
+
   static const int _channelSyncTimeoutMs = 2000; // 2 second timeout per channel
   static const Duration _batteryPollInterval = Duration(seconds: 120);
 
@@ -4039,6 +4071,20 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
 
+  // #1062 test hooks: drive the sync timeout path without real timers, seed
+  // the offline cache, and observe the fail-closed slot lookup.
+  @visibleForTesting
+  void handleChannelSyncTimeoutForTest(int channelIndex) =>
+      _handleChannelSyncTimeout(channelIndex);
+
+  @visibleForTesting
+  void seedCachedChannelsForTest(List<Channel> channels) {
+    _cachedChannels = List<Channel>.from(channels);
+  }
+
+  @visibleForTesting
+  Channel? findChannelByIndexForTest(int index) => _findChannelByIndex(index);
+
   @visibleForTesting
   void setAppDebugLogServiceForTest(AppDebugLogService service) =>
       _appDebugLogService = service;
@@ -4126,6 +4172,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _nextChannelIndexToRequest = 0;
     _totalChannelsToRequest = 0;
     _previousChannelsCache.clear();
+    // #1062: a new connection starts with an unconfirmed list. Held MESSAGE
+    // frames are kept: the radio already popped them from its queue, so they
+    // exist nowhere else, and the next confirmed sync files them. Raw sniff
+    // frames are lossy observations; a dead connection's are stale.
+    _channelListSynced = false;
+    _unconfirmedChannelSlots.clear();
+    _slotIdentityChanges.clear();
+    _heldRawChannelFrames.clear();
   }
 
   bool get _shouldAutoReconnect =>
@@ -6233,6 +6287,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _isLoadingChannels = true;
     _isSyncingChannels = true;
     _hasLoadedChannels = false;
+    // Re-engage the ingress barrier for the duration of the sync: filing
+    // against a list that is mid-replacement is the same hazard as filing
+    // against a stale one (#1062).
+    _channelListSynced = false;
+    _unconfirmedChannelSlots.clear();
     _previousChannelsCache = List<Channel>.from(_channels);
     _channels.clear();
     _nextChannelIndexToRequest = 0;
@@ -6253,6 +6312,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _cleanupChannelSync(completed: false);
       return;
     }
+
+    // Queued continuations from retries can land after the sync already
+    // finished; without this guard they re-enter _completeChannelSync against
+    // the reset counters (#1062).
+    if (!_isSyncingChannels) return;
 
     if (_channelSyncInFlight) return;
 
@@ -6298,25 +6362,17 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelSyncInFlight = false;
       unawaited(_requestNextChannel());
     } else {
-      // Max retries reached for this channel, restore from cache and move to next
-      debugPrint(
-        '[ChannelSync] Max retries reached for channel $channelIndex, attempting cache restore',
+      // Max retries reached: the slot's contents are UNKNOWN. It used to be
+      // restored from the previous list here, which silently pinned a
+      // pre-reconfiguration channel at this index and misrouted notifications
+      // and conversations (#1060). Fail closed instead: leave the slot empty,
+      // record it, surface it (#1062).
+      _unconfirmedChannelSlots.add(channelIndex);
+      _appDebugLogService?.error(
+        'Channel sync: device never answered for slot $channelIndex; '
+        'slot left unknown, not restored from cache',
+        tag: 'ChannelSync',
       );
-
-      // Try to restore this channel from cache
-      try {
-        final cachedChannel = _previousChannelsCache.firstWhere(
-          (c) => c.index == channelIndex,
-        );
-        if (!cachedChannel.isEmpty) {
-          _channels.add(cachedChannel);
-          debugPrint(
-            '[ChannelSync] Restored channel $channelIndex (${cachedChannel.name}) from cache',
-          );
-        }
-      } catch (e) {
-        // No cached channel found, that's okay
-      }
 
       // Move to next channel
       _nextChannelIndexToRequest++;
@@ -6331,25 +6387,66 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelSyncTimeout?.cancel();
 
     debugPrint(
-      '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels',
+      '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels'
+      '${_unconfirmedChannelSlots.isEmpty ? '' : ', unconfirmed slots: $_unconfirmedChannelSlots'}',
     );
 
     _cleanupChannelSync(completed: true);
 
-    // Cache channels for offline use
-    _cachedChannels = List<Channel>.from(_channels);
-    unawaited(
-      _channelStore.saveChannels(_channels).catchError((Object e) {
-        _appDebugLogService?.error(
-          'Failed to persist channels (channel sync): $e',
-          tag: 'ChannelStore',
+    // #1062: per-slot identity diff against the last persisted truth. A slot
+    // whose PSK changed got a different channel; say so once instead of
+    // letting per-slot state ride across identities.
+    _slotIdentityChanges.clear();
+    for (final fresh in _channels) {
+      final prior = _cachedChannels.cast<Channel?>().firstWhere(
+        (c) => c?.index == fresh.index,
+        orElse: () => null,
+      );
+      if (prior != null &&
+          !prior.isEmpty &&
+          !fresh.isEmpty &&
+          prior.pskHex != fresh.pskHex) {
+        _slotIdentityChanges.add(
+          'slot ${fresh.index}: ${prior.name} -> ${fresh.name}',
         );
-      }),
-    );
+        _appDebugLogService?.warn(
+          'Channel slot ${fresh.index} changed identity on the radio: '
+          '"${prior.name}" -> "${fresh.name}"',
+          tag: 'ChannelSync',
+        );
+      }
+    }
+
+    if (_unconfirmedChannelSlots.isEmpty) {
+      // Full confirmation: the fresh list is the truth, replace the cache.
+      _cachedChannels = List<Channel>.from(_channels);
+      unawaited(
+        _channelStore.saveChannels(_channels).catchError((Object e) {
+          _appDebugLogService?.error(
+            'Failed to persist channels (channel sync): $e',
+            tag: 'ChannelStore',
+          );
+        }),
+      );
+    } else {
+      // Holes: keep the last fully-confirmed persisted list for offline use
+      // rather than overwriting it with a partial one. The holes are surfaced
+      // via [unconfirmedChannelSlots] and lookups for those slots fail closed.
+      _appDebugLogService?.error(
+        'Channel sync finished with unconfirmed slots '
+        '$_unconfirmedChannelSlots; cached list NOT overwritten. '
+        'Retry the sync to confirm them.',
+        tag: 'ChannelSync',
+      );
+    }
     _recalculateCachedChannelsUnreadTotal();
 
     // Apply ordering and notify UI
     _applyChannelOrder();
+
+    // #1062: open the ingress barrier and file what arrived mid-sync.
+    _channelListSynced = true;
+    _flushHeldChannelFrames();
     notifyListeners();
 
     // #839: one-time migration of the pre-per-radio notify state into THIS
@@ -6380,6 +6477,50 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
+  /// Replays channel traffic held while the list was unconfirmed (#1062).
+  /// Runs after [_channelListSynced] flips true, so the handlers file against
+  /// the fresh list; a frame whose slot is still unconfirmed re-holds.
+  void _flushHeldChannelFrames() {
+    if (_heldChannelMsgFrames.isEmpty && _heldRawChannelFrames.isEmpty) return;
+    final msgFrames = List<Uint8List>.from(_heldChannelMsgFrames);
+    final rawFrames = List<Uint8List>.from(_heldRawChannelFrames);
+    _heldChannelMsgFrames.clear();
+    _heldRawChannelFrames.clear();
+    _appDebugLogService?.info(
+      'Channel list synced; filing ${msgFrames.length} held message frame(s) '
+      'and ${rawFrames.length} held raw frame(s)',
+      tag: 'ChannelSync',
+    );
+    for (final f in msgFrames) {
+      _handleIncomingChannelMessage(f);
+    }
+    for (final f in rawFrames) {
+      _handleLogRxData(f);
+    }
+  }
+
+  /// Holds a frame behind the ingress barrier. Message frames are pull-based
+  /// replies the radio has already popped from its queue, so they are NEVER
+  /// dropped (the hold only lives for the seconds a sync takes). Raw sniff
+  /// frames are lossy by nature and stay bounded: overflow drops the oldest
+  /// and says so loudly (#1062).
+  void _holdChannelFrame(
+    List<Uint8List> queue,
+    Uint8List frame,
+    String kind, {
+    required bool bounded,
+  }) {
+    if (bounded && queue.length >= _maxHeldChannelFrames) {
+      queue.removeAt(0);
+      _appDebugLogService?.error(
+        'Held-$kind queue overflow while the channel list is unconfirmed; '
+        'dropped the oldest held frame',
+        tag: 'ChannelSync',
+      );
+    }
+    queue.add(Uint8List.fromList(frame));
+  }
+
   void _cleanupChannelSync({required bool completed}) {
     _isSyncingChannels = false;
     _channelSyncInFlight = false;
@@ -6406,6 +6547,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Keep cache on failure/disconnection for future attempts
     if (!completed) {
+      // #1062: a failed sync on a live connection leaves the ingress barrier
+      // closed with nothing scheduled to open it; retry rather than letting
+      // held messages starve. (A dead connection re-syncs on reconnect.)
+      if (isConnected) {
+        _channelsChangedDebounce?.cancel();
+        _channelsChangedDebounce = Timer(
+          const Duration(seconds: 3),
+          () => unawaited(getChannels(force: true)),
+        );
+      }
       notifyListeners();
     }
   }
@@ -9229,9 +9380,21 @@ class MeshCoreConnector extends ChangeNotifier {
     // Per-channel notification level, keyed by the channel's PSK identity so
     // the setting survives a rename and does not follow a reused slot (#259).
     // Evaluated against resolvedText so a translated mention still matches.
+    // #1062: an unknown slot means an unknown PSK means an unknowable mode;
+    // fail closed (no notification) rather than defaulting to noisy.
+    final slotChannel = _findChannelByIndex(channelIndex);
+    if (slotChannel == null &&
+        _unconfirmedChannelSlots.contains(channelIndex)) {
+      _appDebugLogService?.warn(
+        'Suppressing notification for channel slot $channelIndex: slot is '
+        'unconfirmed, its notify mode cannot be resolved',
+        tag: 'ChannelSync',
+      );
+      return;
+    }
     final mode = _appSettingsService!.channelNotifyMode(
       devicePrefix: selfPublicKeyHex,
-      pskHex: _findChannelByIndex(channelIndex)?.pskHex,
+      pskHex: slotChannel?.pskHex,
     );
     switch (mode) {
       case ChannelNotifyMode.off:
@@ -9265,6 +9428,17 @@ class MeshCoreConnector extends ChangeNotifier {
     // before any potentially long async work (like translation/notifications).
     if (_isSyncingQueuedMessages) {
       _handleQueuedMessageReceived();
+    }
+    // #1062 ingress barrier: never file a message against a channel list that
+    // this connection has not confirmed; hold it and flush post-sync.
+    if (isConnected && !_channelListSynced) {
+      _holdChannelFrame(
+        _heldChannelMsgFrames,
+        frame,
+        'message',
+        bounded: false,
+      );
+      return;
     }
     final parsed = ChannelMessage.fromFrame(frame);
     if (parsed != null && parsed.channelIndex != null) {
@@ -9338,11 +9512,16 @@ class MeshCoreConnector extends ChangeNotifier {
       final channelHash = payload.readByte();
       final encrypted = Uint8List.fromList(payload.readRemainingBytes());
 
-      // Use cached channels as fallback if live channels not yet loaded
-      final channelsToSearch = _channels.isNotEmpty
-          ? _channels
-          : _cachedChannels;
-      for (final channel in channelsToSearch) {
+      // #1062 ingress barrier: a raw frame is filed by matching its channel
+      // hash against the CLIENT's list and reusing that object's index, so a
+      // stale or mid-sync list files it into the wrong conversation. Hold
+      // until this connection's list is confirmed; never match the offline
+      // cache (its indexes may describe a layout the radio no longer has).
+      if (!_channelListSynced) {
+        _holdChannelFrame(_heldRawChannelFrames, frame, 'raw', bounded: true);
+        return;
+      }
+      for (final channel in _channels) {
         if (channel.isEmpty) continue;
         final hash = _computeChannelHash(channel.psk);
         if (hash != channelHash) continue;
@@ -9645,12 +9824,14 @@ class MeshCoreConnector extends ChangeNotifier {
       '[ChannelSync] Received channel ${channel.index}: ${channel.isEmpty ? "empty" : channel.name}',
     );
 
-    // Preserve unread count from cached channel
+    // Preserve unread count from the cached channel, but only when the slot
+    // still holds the SAME channel. An unread count following the slot across
+    // an identity change is another channel's count (#1062).
     final cachedChannel = _cachedChannels.cast<Channel?>().firstWhere(
       (c) => c?.index == channel.index,
       orElse: () => null,
     );
-    if (cachedChannel != null) {
+    if (cachedChannel != null && cachedChannel.pskHex == channel.pskHex) {
       channel.unreadCount = cachedChannel.unreadCount;
     }
 
@@ -9750,6 +9931,10 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Channel? _findChannelByIndex(int index) {
+    // #1062: an unconfirmed slot's contents are unknown. Returning the cached
+    // occupant here is how a stale identity (wrong PSK, wrong name) attached
+    // itself to live traffic; fail closed instead.
+    if (_unconfirmedChannelSlots.contains(index)) return null;
     return _channels.cast<Channel?>().firstWhere(
           (c) => c?.index == index,
           orElse: () => null,

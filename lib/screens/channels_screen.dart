@@ -187,6 +187,41 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
             return Column(
               children: [
+                // #1062: persistent, undismissable while true. A slot the
+                // radio never confirmed means its channel is unknown; a
+                // 4-second toast is not an error surface (SAFELANE 6).
+                if (connector.unconfirmedChannelSlots.isNotEmpty)
+                  MaterialBanner(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.errorContainer,
+                    content: Text(
+                      context.l10n.channels_unconfirmedSlots(
+                        connector.unconfirmedChannelSlots.toList().join(', '),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            unawaited(connector.getChannels(force: true)),
+                        child: Text(context.l10n.channels_retrySync),
+                      ),
+                    ],
+                  ),
+                if (connector.slotIdentityChanges.isNotEmpty)
+                  MaterialBanner(
+                    content: Text(
+                      context.l10n.channels_slotIdentityChanged(
+                        connector.slotIdentityChanges.join('; '),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: connector.acknowledgeSlotIdentityChanges,
+                        child: Text(context.l10n.common_dismiss),
+                      ),
+                    ],
+                  ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: TextField(
