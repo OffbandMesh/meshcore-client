@@ -27,6 +27,19 @@ const int offbandUiChannelNotifySet = 0x19;
 /// channel. If 0 meant a real mode, every untouched channel in the field would
 /// silently adopt it. The shipped `ChannelTune` byte uses the same convention
 /// for the same reason, so the two are consistent on the wire.
+///
+/// `[verified 2026-11-04 against firmware src/helpers/ChannelNotify.h on
+/// epic/606-channel-notify: kChanNotifyUnset = 0, kChanNotifyAll = 1,
+/// kChanNotifyMentions = 2, kChanNotifyOff = 3, kChanNotifyCount = 4.]`
+/// The contract calls these All / Self / None plus "follow the device
+/// setting"; that is the same encoding in different words, with "Self" being
+/// [mentions] and "follow" being [unset].
+///
+/// Firmware validates a SET with `stored < kChanNotifyCount`, i.e. `mode < 4`
+/// and nothing else. That is why a rotation SET on `0x18`/`0x19` was silent
+/// corruption rather than a refused command: every rotation value in 0 to 3
+/// passes as a valid notify mode and writes to the channel at that slot. See
+/// `offband_indicators.dart`, which now uses `0x1A`/`0x1B`.
 enum RadioChannelNotify {
   /// No per-channel choice: the radio's device-wide scope answers instead.
   unset(0x00),
