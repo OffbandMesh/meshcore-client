@@ -1305,246 +1305,183 @@ class _ContactsScreenState extends State<ContactsScreen>
     final isBlocked = blockService.isBlocked(contact.publicKeyHex);
     final isSelf = blockService.isSelf(contact.publicKeyHex);
 
+    // Scrolls rather than clipping: a room server's 10 items outgrow the
+    // sheet's height on a small phone or at a large text size. (#1075)
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Stock parity: any node can carry a custom name, and the node's
-            // own name stays underneath where the user can still see it. (#750)
-            ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline),
-              title: Text(context.l10n.contact_rename),
-              subtitle: contact.customName == null
-                  ? null
-                  : Text(
-                      context.l10n.contact_nodeCallsItself(
-                        contact.receivedName,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Stock parity: any node can carry a custom name, and the node's
+              // own name stays underneath where the user can still see it. (#750)
+              ListTile(
+                leading: const Icon(Icons.drive_file_rename_outline),
+                title: Text(context.l10n.contact_rename),
+                subtitle: contact.customName == null
+                    ? null
+                    : Text(
+                        context.l10n.contact_nodeCallsItself(
+                          contact.receivedName,
+                        ),
                       ),
-                    ),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showContactRenameDialog(context, contact);
-              },
-            ),
-            // Same destination as the chat ellipsis -> Contact settings (#351).
-            // Kept above the destructive Block tile, which stays below.
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: Text(context.l10n.contact_settings),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showContactSettingsDialog(context, contact);
-              },
-            ),
-            // Blocking your own node is never meaningful (#250).
-            if (!isSelf)
-              ListTile(
-                leading: Icon(
-                  isBlocked ? Icons.check_circle_outline : Icons.block,
-                  color: isBlocked ? null : Colors.red.shade700,
-                ),
-                title: Text(
-                  isBlocked
-                      ? context.l10n.block_unblock
-                      : context.l10n.block_block,
-                ),
-                onTap: () async {
-                  Navigator.pop(sheetContext);
-                  if (isBlocked) {
-                    await blockService.unblock(contact.publicKeyHex);
-                  } else {
-                    await blockService.block(contact.publicKeyHex);
-                  }
-                },
-              ),
-            if (isRepeater) ...[
-              ListTile(
-                leading: const Icon(Icons.radar, color: Colors.green),
-                title: Text(context.l10n.contacts_pathTrace),
-                onTap: () async {
-                  final connector = context.read<MeshCoreConnector>();
-                  final navigator = Navigator.of(context);
-                  final l10n = context.l10n;
-                  final hw = connector.pathHashByteWidth;
-                  final hopBytes = PathHelper.traceHopBytes(hw);
-
-                  String hopsToHex(List<int> hops) => hops
-                      .map((b) => b.toRadixString(16).padLeft(2, '0'))
-                      .join();
-
-                  // A committed route is stored non-zero; a flood route is
-                  // all-zero = "no real route". (#150)
-                  final committed = contact.pathBytesForDisplay;
-                  final hasRoute =
-                      committed.isNotEmpty && committed.any((b) => b != 0);
-
-                  Uint8List? path;
-                  var flip = false;
-                  var title = l10n.contacts_repeaterPing;
-
-                  if (hasRoute) {
-                    // Firmware already committed a route through the mesh.
-                    path = committed;
-                    flip = true;
-                    title = l10n.contacts_repeaterPathTrace;
-                  } else {
-                    // No committed route. Ask the passive topology oracle for a
-                    // route inferred from traffic we've already heard. (#186)
-                    final inferred = connector.topology?.inferRoute(
-                      contact.publicKey,
-                    );
-                    final direct =
-                        (inferred?.isEmpty ?? false) ||
-                        connector.directRepeaters.any(
-                          (r) => r.matchesPathStart(contact.publicKey),
-                        );
-                    if (direct) {
-                      // A one-hop ping reaches a direct neighbour.
-                      path = Uint8List.fromList(
-                        contact.publicKey.sublist(0, hopBytes),
-                      );
-                    } else {
-                      // Confirm-first: pre-fill the route builder with the
-                      // inferred route when we have one, else an empty builder.
-                      // The user always confirms, we never fire a silent guess.
-                      // (#186; replaces the old strongest-repeater guess.)
-                      final suggested =
-                          (inferred != null && inferred.isNotEmpty)
-                          ? inferred.map(hopsToHex).join(',')
-                          : null;
-                      String? suggestedLabel;
-                      if (inferred != null && inferred.isNotEmpty) {
-                        // Resolve the inferred hops to repeater/contact NAMES so
-                        // the user can read + verify the route instead of hex.
-                        // (#186)
-                        final names = PathHelper.resolvePathNames(
-                          inferred.expand((h) => h).toList(),
-                          connector.allContacts,
-                          hw,
-                        );
-                        suggestedLabel =
-                            '${l10n.pathTrace_you} → $names → ${contact.name}';
-                      }
-                      final picked = await PathSelectionDialog.show(
-                        context,
-                        availableContacts: connector.allContacts
-                            .where(
-                              (c) => c.publicKeyHex != contact.publicKeyHex,
-                            )
-                            .toList(),
-                        pathHashByteWidth: hw,
-                        initialPath: suggested,
-                        suggestedRouteLabel: suggestedLabel,
-                        title: l10n.contacts_repeaterPathTrace,
-                      );
-                      if (picked == null || picked.isEmpty) return; // cancelled
-                      path = picked;
-                      flip = true;
-                      final fh = picked.length >= hopBytes
-                          ? picked.sublist(0, hopBytes)
-                          : picked;
-                      title = l10n.contacts_repeaterPathTraceVia(
-                        hopsToHex(fh).toUpperCase(),
-                      );
-                    }
-                  }
-
-                  navigator.push(
-                    MaterialPageRoute(
-                      builder: (context) => PathTraceMapScreen(
-                        title: title,
-                        path: path!,
-                        flipPathAround: flip,
-                        targetContact: contact,
-                        pathHashByteWidth: hw,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.cell_tower, color: Colors.orange),
-                title: Text(context.l10n.contacts_manageRepeater),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _showRepeaterLogin(context, contact);
+                  showContactRenameDialog(context, contact);
                 },
               ),
-            ] else if (isRoom) ...[
+              // Same destination as the chat ellipsis -> Contact settings (#351).
+              // Kept above the destructive Block tile, which stays below.
               ListTile(
-                leading: const Icon(Icons.radar, color: Colors.green),
-                title: Text(context.l10n.contacts_pathTrace),
-                onTap: () {
-                  final hw = context
-                      .read<MeshCoreConnector>()
-                      .pathHashByteWidth;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PathTraceMapScreen(
-                        title: contact.pathBytesForDisplay.isNotEmpty
-                            ? context.l10n.contacts_roomPathTrace
-                            : context.l10n.contacts_roomPing,
-                        path: contact.pathBytesForDisplay.isNotEmpty
-                            ? contact.pathBytesForDisplay
-                            : Uint8List.fromList(
-                                contact.publicKey.sublist(
-                                  0,
-                                  PathHelper.traceHopBytes(hw),
-                                ),
-                              ),
-                        flipPathAround: contact.pathBytesForDisplay.isNotEmpty,
-                        targetContact: contact,
-                        pathHashByteWidth: hw,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.room, color: Colors.blue),
-                title: Text(context.l10n.contacts_roomLogin),
+                leading: const Icon(Icons.settings_outlined),
+                title: Text(context.l10n.contact_settings),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _showRoomLogin(context, contact, RoomLoginDestination.chat);
+                  showContactSettingsDialog(context, contact);
                 },
               ),
-              ListTile(
-                leading: const Icon(
-                  Icons.room_preferences,
-                  color: Colors.orange,
-                ),
-                title: Text(context.l10n.room_management),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showRoomLogin(
-                    context,
-                    contact,
-                    RoomLoginDestination.management,
-                  );
-                },
-              ),
-            ] else ...[
-              // Sensors run the same admin login and CLI as repeaters
-              // (stock SensorMesh), so they share the repeater admin hub (#745).
-              if (contact.type == advTypeSensor)
+              // Blocking your own node is never meaningful (#250).
+              if (!isSelf)
                 ListTile(
-                  leading: const Icon(
-                    Icons.sensors_outlined,
-                    color: Colors.orange,
+                  leading: Icon(
+                    isBlocked ? Icons.check_circle_outline : Icons.block,
+                    color: isBlocked ? null : Colors.red.shade700,
                   ),
-                  title: Text(context.l10n.contacts_manageSensor),
+                  title: Text(
+                    isBlocked
+                        ? context.l10n.block_unblock
+                        : context.l10n.block_block,
+                  ),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+                    if (isBlocked) {
+                      await blockService.unblock(contact.publicKeyHex);
+                    } else {
+                      await blockService.block(contact.publicKeyHex);
+                    }
+                  },
+                ),
+              if (isRepeater) ...[
+                ListTile(
+                  leading: const Icon(Icons.radar, color: Colors.green),
+                  title: Text(context.l10n.contacts_pathTrace),
+                  onTap: () async {
+                    final connector = context.read<MeshCoreConnector>();
+                    final navigator = Navigator.of(context);
+                    final l10n = context.l10n;
+                    final hw = connector.pathHashByteWidth;
+                    final hopBytes = PathHelper.traceHopBytes(hw);
+
+                    String hopsToHex(List<int> hops) => hops
+                        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                        .join();
+
+                    // A committed route is stored non-zero; a flood route is
+                    // all-zero = "no real route". (#150)
+                    final committed = contact.pathBytesForDisplay;
+                    final hasRoute =
+                        committed.isNotEmpty && committed.any((b) => b != 0);
+
+                    Uint8List? path;
+                    var flip = false;
+                    var title = l10n.contacts_repeaterPing;
+
+                    if (hasRoute) {
+                      // Firmware already committed a route through the mesh.
+                      path = committed;
+                      flip = true;
+                      title = l10n.contacts_repeaterPathTrace;
+                    } else {
+                      // No committed route. Ask the passive topology oracle for a
+                      // route inferred from traffic we've already heard. (#186)
+                      final inferred = connector.topology?.inferRoute(
+                        contact.publicKey,
+                      );
+                      final direct =
+                          (inferred?.isEmpty ?? false) ||
+                          connector.directRepeaters.any(
+                            (r) => r.matchesPathStart(contact.publicKey),
+                          );
+                      if (direct) {
+                        // A one-hop ping reaches a direct neighbour.
+                        path = Uint8List.fromList(
+                          contact.publicKey.sublist(0, hopBytes),
+                        );
+                      } else {
+                        // Confirm-first: pre-fill the route builder with the
+                        // inferred route when we have one, else an empty builder.
+                        // The user always confirms, we never fire a silent guess.
+                        // (#186; replaces the old strongest-repeater guess.)
+                        final suggested =
+                            (inferred != null && inferred.isNotEmpty)
+                            ? inferred.map(hopsToHex).join(',')
+                            : null;
+                        String? suggestedLabel;
+                        if (inferred != null && inferred.isNotEmpty) {
+                          // Resolve the inferred hops to repeater/contact NAMES so
+                          // the user can read + verify the route instead of hex.
+                          // (#186)
+                          final names = PathHelper.resolvePathNames(
+                            inferred.expand((h) => h).toList(),
+                            connector.allContacts,
+                            hw,
+                          );
+                          suggestedLabel =
+                              '${l10n.pathTrace_you} → $names → ${contact.name}';
+                        }
+                        final picked = await PathSelectionDialog.show(
+                          context,
+                          availableContacts: connector.allContacts
+                              .where(
+                                (c) => c.publicKeyHex != contact.publicKeyHex,
+                              )
+                              .toList(),
+                          pathHashByteWidth: hw,
+                          initialPath: suggested,
+                          suggestedRouteLabel: suggestedLabel,
+                          title: l10n.contacts_repeaterPathTrace,
+                        );
+                        if (picked == null || picked.isEmpty)
+                          return; // cancelled
+                        path = picked;
+                        flip = true;
+                        final fh = picked.length >= hopBytes
+                            ? picked.sublist(0, hopBytes)
+                            : picked;
+                        title = l10n.contacts_repeaterPathTraceVia(
+                          hopsToHex(fh).toUpperCase(),
+                        );
+                      }
+                    }
+
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder: (context) => PathTraceMapScreen(
+                          title: title,
+                          path: path!,
+                          flipPathAround: flip,
+                          targetContact: contact,
+                          pathHashByteWidth: hw,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cell_tower, color: Colors.orange),
+                  title: Text(context.l10n.contacts_manageRepeater),
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _showRepeaterLogin(context, contact);
                   },
                 ),
-              if (contact.pathLength > 0)
+              ] else if (isRoom) ...[
                 ListTile(
                   leading: const Icon(Icons.radar, color: Colors.green),
-                  title: Text(context.l10n.contacts_chatTraceRoute),
+                  title: Text(context.l10n.contacts_pathTrace),
                   onTap: () {
                     final hw = context
                         .read<MeshCoreConnector>()
@@ -1553,11 +1490,19 @@ class _ContactsScreenState extends State<ContactsScreen>
                       context,
                       MaterialPageRoute(
                         builder: (context) => PathTraceMapScreen(
-                          title: context.l10n.contacts_pathTraceTo(
-                            contact.name,
-                          ),
-                          path: contact.pathBytesForDisplay,
-                          flipPathAround: true,
+                          title: contact.pathBytesForDisplay.isNotEmpty
+                              ? context.l10n.contacts_roomPathTrace
+                              : context.l10n.contacts_roomPing,
+                          path: contact.pathBytesForDisplay.isNotEmpty
+                              ? contact.pathBytesForDisplay
+                              : Uint8List.fromList(
+                                  contact.publicKey.sublist(
+                                    0,
+                                    PathHelper.traceHopBytes(hw),
+                                  ),
+                                ),
+                          flipPathAround:
+                              contact.pathBytesForDisplay.isNotEmpty,
                           targetContact: contact,
                           pathHashByteWidth: hw,
                         ),
@@ -1565,61 +1510,124 @@ class _ContactsScreenState extends State<ContactsScreen>
                     );
                   },
                 ),
+                ListTile(
+                  leading: const Icon(Icons.room, color: Colors.blue),
+                  title: Text(context.l10n.contacts_roomLogin),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showRoomLogin(context, contact, RoomLoginDestination.chat);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.room_preferences,
+                    color: Colors.orange,
+                  ),
+                  title: Text(context.l10n.room_management),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showRoomLogin(
+                      context,
+                      contact,
+                      RoomLoginDestination.management,
+                    );
+                  },
+                ),
+              ] else ...[
+                // Sensors run the same admin login and CLI as repeaters
+                // (stock SensorMesh), so they share the repeater admin hub (#745).
+                if (contact.type == advTypeSensor)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.sensors_outlined,
+                      color: Colors.orange,
+                    ),
+                    title: Text(context.l10n.contacts_manageSensor),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _showRepeaterLogin(context, contact);
+                    },
+                  ),
+                if (contact.pathLength > 0)
+                  ListTile(
+                    leading: const Icon(Icons.radar, color: Colors.green),
+                    title: Text(context.l10n.contacts_chatTraceRoute),
+                    onTap: () {
+                      final hw = context
+                          .read<MeshCoreConnector>()
+                          .pathHashByteWidth;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PathTraceMapScreen(
+                            title: context.l10n.contacts_pathTraceTo(
+                              contact.name,
+                            ),
+                            path: contact.pathBytesForDisplay,
+                            flipPathAround: true,
+                            targetContact: contact,
+                            pathHashByteWidth: hw,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.chat),
+                  title: Text(context.l10n.contacts_openChat),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openChat(context, contact);
+                  },
+                ),
+              ],
               ListTile(
-                leading: const Icon(Icons.chat),
-                title: Text(context.l10n.contacts_openChat),
+                leading: Icon(
+                  isFavorite ? Icons.star : Icons.star_border,
+                  color: Colors.amber[700],
+                ),
+                title: Text(
+                  isFavorite
+                      ? context.l10n.listFilter_removeFromFavorites
+                      : context.l10n.listFilter_addToFavorites,
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await connector.setContactFlags(
+                    contact,
+                    isFavorite: !isFavorite,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy),
+                title: Text(context.l10n.contacts_ShareContact),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _openChat(context, contact);
+                  _contactExport(contact.publicKey);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.connect_without_contact),
+                title: Text(context.l10n.contacts_ShareContactZeroHop),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _contactZeroHop(contact.publicKey);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: Text(
+                  context.l10n.contacts_deleteContact,
+                  style: const TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _confirmDelete(context, connector, contact);
                 },
               ),
             ],
-            ListTile(
-              leading: Icon(
-                isFavorite ? Icons.star : Icons.star_border,
-                color: Colors.amber[700],
-              ),
-              title: Text(
-                isFavorite
-                    ? context.l10n.listFilter_removeFromFavorites
-                    : context.l10n.listFilter_addToFavorites,
-              ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await connector.setContactFlags(
-                  contact,
-                  isFavorite: !isFavorite,
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: Text(context.l10n.contacts_ShareContact),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _contactExport(contact.publicKey);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.connect_without_contact),
-              title: Text(context.l10n.contacts_ShareContactZeroHop),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _contactZeroHop(contact.publicKey);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: Text(
-                context.l10n.contacts_deleteContact,
-                style: const TextStyle(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _confirmDelete(context, connector, contact);
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );

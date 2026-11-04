@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshcore_open/l10n/app_localizations.dart';
 import 'package:meshcore_open/widgets/translated_message_content.dart';
 
 Future<void> _pump(WidgetTester tester, String text) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: TranslatedMessageContent(
           displayText: text,
@@ -34,6 +37,41 @@ void main() {
       await _pump(tester, '@[Alice] and @[Bob]');
       expect(find.text('@Alice'), findsOneWidget);
       expect(find.text('@Bob'), findsOneWidget);
+    });
+  });
+
+  group('TranslatedMessageContent links beside a mention (#1074)', () {
+    const url = 'https://example.org';
+
+    testWidgets('a link in a reply opens the confirm dialog', (tester) async {
+      await _pump(tester, '@[Bob] $url');
+      expect(find.text('@Bob'), findsOneWidget);
+
+      await tester.tapOnText(find.textRange.ofSubstring(url));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.widgetWithText(AlertDialog, url), findsOneWidget);
+    });
+
+    testWidgets('a link between two mentions opens the confirm dialog', (
+      tester,
+    ) async {
+      await _pump(tester, '@[Alice] see $url @[Bob]');
+
+      await tester.tapOnText(find.textRange.ofSubstring(url));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(AlertDialog, url), findsOneWidget);
+    });
+
+    testWidgets('plain text beside a mention opens nothing', (tester) async {
+      await _pump(tester, '@[Bob] no link here');
+
+      await tester.tapOnText(find.textRange.ofSubstring('no link here'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
     });
   });
 

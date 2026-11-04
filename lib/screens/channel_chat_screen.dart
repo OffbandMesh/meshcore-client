@@ -769,37 +769,41 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) {
         final l10n = sheetContext.l10n;
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: _buildAvatar(message.senderName),
-                title: Text(message.senderName),
-                subtitle: ambiguous
-                    ? Text(
-                        l10n.channel_senderMultipleMatches(candidates.length),
-                      )
-                    : null,
-              ),
-              const Divider(height: 1),
-              ..._buildSenderContactEntries(sheetContext, message),
-              ListTile(
-                leading: Icon(Icons.block, color: Colors.red.shade700),
-                title: Text(l10n.block_sender),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _blockChannelSender(message);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: Text(l10n.common_cancel),
-                onTap: () => Navigator.pop(sheetContext),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: _buildAvatar(message.senderName),
+                  title: Text(message.senderName),
+                  subtitle: ambiguous
+                      ? Text(
+                          l10n.channel_senderMultipleMatches(candidates.length),
+                        )
+                      : null,
+                ),
+                const Divider(height: 1),
+                ..._buildSenderContactEntries(sheetContext, message),
+                ListTile(
+                  leading: Icon(Icons.block, color: Colors.red.shade700),
+                  title: Text(l10n.block_sender),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockChannelSender(message);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.close),
+                  title: Text(l10n.common_cancel),
+                  onTap: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -2092,134 +2096,138 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply),
-              title: Text(context.l10n.chat_reply),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _setReplyingTo(message);
-              },
-            ),
-            if (message.pathBytes.isNotEmpty)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.alt_route),
-                title: Text(context.l10n.chat_replyWithRoute),
+                leading: const Icon(Icons.reply),
+                title: Text(context.l10n.chat_reply),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _sendRouteReply(message);
+                  _setReplyingTo(message);
                 },
               ),
-            if (PlatformInfo.isDesktop)
+              if (message.pathBytes.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: Text(context.l10n.chat_replyWithRoute),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _sendRouteReply(message);
+                  },
+                ),
+              if (PlatformInfo.isDesktop)
+                ListTile(
+                  leading: const Icon(Icons.route),
+                  title: Text(context.l10n.chat_path),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showMessagePathInfo(message);
+                  },
+                ),
+              // Offer resend on an outgoing channel message until a repeater
+              // repeats it back (repeatCount > 0). The radio-ack checkmark
+              // (status == sent) does NOT mean a repeat was heard, so gate on the
+              // repeat-back, not status. Channel sends aren't auto-retried, so
+              // this is the only recovery path. (#256, #555)
+              if (message.isOutgoing && message.repeatCount == 0)
+                ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: Text(context.l10n.message_sendAgain),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _retryChannelMessage(message);
+                  },
+                ),
+              // CoreScope observer count refresh (#524), owner feature. A large,
+              // reliable tap target vs the small inline badge.
+              if (message.isOutgoing && message.onAirHash != null)
+                ListTile(
+                  leading: const Icon(Icons.cloud_outlined),
+                  title: Text(context.l10n.channel_coreScopeRefresh),
+                  subtitle: message.coreScopeObserverCount != null
+                      ? Text(_coreScopeLabel(message))
+                      : null,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _refreshCoreScope(message);
+                  },
+                ),
+              // Can't react to your own messages
+              if (!message.isOutgoing)
+                ListTile(
+                  leading: const Icon(Icons.add_reaction_outlined),
+                  title: Text(context.l10n.chat_addReaction),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showEmojiPicker(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.route),
-                title: Text(context.l10n.chat_path),
+                leading: const Icon(Icons.copy),
+                title: Text(context.l10n.common_copy),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _showMessagePathInfo(message);
+                  _copyMessageText(message.text);
                 },
               ),
-            // Offer resend on an outgoing channel message until a repeater
-            // repeats it back (repeatCount > 0). The radio-ack checkmark
-            // (status == sent) does NOT mean a repeat was heard, so gate on the
-            // repeat-back, not status. Channel sends aren't auto-retried, so
-            // this is the only recovery path. (#256, #555)
-            if (message.isOutgoing && message.repeatCount == 0)
+              if (canTranslateMessage)
+                ListTile(
+                  leading: const Icon(Icons.translate),
+                  title: Text(context.l10n.translation_translateMessage),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    unawaited(
+                      context.read<MeshCoreConnector>().translateChannelMessage(
+                        _currentChannel.index,
+                        message,
+                        manualTranslation: true,
+                      ),
+                    );
+                  },
+                ),
+              if (!message.isOutgoing)
+                ListTile(
+                  leading: const Icon(Icons.mark_chat_unread_outlined),
+                  title: Text(context.l10n.chat_markAsUnread),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _markAsUnread(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.refresh),
-                title: Text(context.l10n.message_sendAgain),
-                onTap: () {
+                leading: const Icon(Icons.delete_outline),
+                title: Text(context.l10n.common_delete),
+                onTap: () async {
                   Navigator.pop(sheetContext);
-                  _retryChannelMessage(message);
+                  await _deleteMessage(message);
                 },
               ),
-            // CoreScope observer count refresh (#524), owner feature. A large,
-            // reliable tap target vs the small inline badge.
-            if (message.isOutgoing && message.onAirHash != null)
+              // Same sender contact actions the avatar tap offers (#468), so
+              // long-press remains a superset of every gesture on the message.
+              if (!message.isOutgoing) ...[
+                const Divider(height: 1),
+                ..._buildSenderContactEntries(sheetContext, message),
+                ListTile(
+                  leading: Icon(Icons.block, color: Colors.red.shade700),
+                  title: Text(context.l10n.block_sender),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockChannelSender(message);
+                  },
+                ),
+              ],
               ListTile(
-                leading: const Icon(Icons.cloud_outlined),
-                title: Text(context.l10n.channel_coreScopeRefresh),
-                subtitle: message.coreScopeObserverCount != null
-                    ? Text(_coreScopeLabel(message))
-                    : null,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _refreshCoreScope(message);
-                },
-              ),
-            // Can't react to your own messages
-            if (!message.isOutgoing)
-              ListTile(
-                leading: const Icon(Icons.add_reaction_outlined),
-                title: Text(context.l10n.chat_addReaction),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showEmojiPicker(message);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: Text(context.l10n.common_copy),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _copyMessageText(message.text);
-              },
-            ),
-            if (canTranslateMessage)
-              ListTile(
-                leading: const Icon(Icons.translate),
-                title: Text(context.l10n.translation_translateMessage),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  unawaited(
-                    context.read<MeshCoreConnector>().translateChannelMessage(
-                      _currentChannel.index,
-                      message,
-                      manualTranslation: true,
-                    ),
-                  );
-                },
-              ),
-            if (!message.isOutgoing)
-              ListTile(
-                leading: const Icon(Icons.mark_chat_unread_outlined),
-                title: Text(context.l10n.chat_markAsUnread),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _markAsUnread(message);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: Text(context.l10n.common_delete),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await _deleteMessage(message);
-              },
-            ),
-            // Same sender contact actions the avatar tap offers (#468), so
-            // long-press remains a superset of every gesture on the message.
-            if (!message.isOutgoing) ...[
-              const Divider(height: 1),
-              ..._buildSenderContactEntries(sheetContext, message),
-              ListTile(
-                leading: Icon(Icons.block, color: Colors.red.shade700),
-                title: Text(context.l10n.block_sender),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _blockChannelSender(message);
-                },
+                leading: const Icon(Icons.close),
+                title: Text(context.l10n.common_cancel),
+                onTap: () => Navigator.pop(sheetContext),
               ),
             ],
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: Text(context.l10n.common_cancel),
-              onTap: () => Navigator.pop(sheetContext),
-            ),
-          ],
+          ),
         ),
       ),
     );
