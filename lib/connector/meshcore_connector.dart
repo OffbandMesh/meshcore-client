@@ -6470,6 +6470,20 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
+  /// Read the radio's own notify mode for every channel slot it reported
+  /// (#544 B3). One GET per slot, on the shipped one-entry-per-frame pattern.
+  ///
+  /// Only reached on a completed sync, so every slot here is one the device
+  /// answered for. A channel the radio never reported is simply not in
+  /// [_channels] and is therefore never addressed.
+  Future<void> _readChannelNotifyModes() async {
+    if (!supportsChannelNotify) return;
+    for (final channel in List<Channel>.from(_channels)) {
+      if (!isConnected) return;
+      await requestChannelNotify(channel.index);
+    }
+  }
+
   void _cleanupChannelSync({required bool completed}) {
     _isSyncingChannels = false;
     _channelSyncInFlight = false;
@@ -6492,6 +6506,13 @@ class MeshCoreConnector extends ChangeNotifier {
 
     if (isConnected) {
       _startPostChannelInitialQueuedMessageSync();
+      // #544 B3: the radio's per-channel notify modes are keyed by slot, so
+      // they can only be read once the device has actually answered for the
+      // slots. Deliberately only on `completed`: the failure branch above
+      // restores a CACHED list, and addressing a slot from a cache is the
+      // guessed-slot error this must not make. When #1061 lands its stricter
+      // confirmed-list barrier, this moves onto it.
+      if (completed) unawaited(_readChannelNotifyModes());
     }
 
     // Keep cache on failure/disconnection for future attempts

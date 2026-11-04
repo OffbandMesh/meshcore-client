@@ -1592,7 +1592,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get channels_unmuteChannel => 'Vklopi obvestila kanala';
 
   @override
-  String get channels_notifications => 'Notifications';
+  String get channels_notifications => 'Phone notifications';
 
   @override
   String get channels_notifyAll => 'All messages';
@@ -1602,6 +1602,24 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get channels_notifyOff => 'Off';
+
+  @override
+  String get channels_radioSound => 'Radio sound';
+
+  @override
+  String get channels_radioSoundUnset => 'Not set';
+
+  @override
+  String channels_radioSoundFollows(String scope) {
+    return 'Follows the radio: $scope';
+  }
+
+  @override
+  String get channels_radioSoundMutedByRadio =>
+      'Silent: the radio is set to None';
+
+  @override
+  String get channels_radioSoundReading => 'Reading from the radio';
 
   @override
   String get channels_deleteChannel => 'Pošlji kanal';

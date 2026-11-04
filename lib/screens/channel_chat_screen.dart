@@ -31,6 +31,7 @@ import '../services/corescope_service.dart';
 import '../services/region_discovery_service.dart';
 import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
@@ -474,6 +475,8 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
             onSelected: (value) {
               if (value == 'notifications') {
                 showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'radioSound') {
+                showRadioChannelNotifyDialog(context, _currentChannel);
               } else if (value == 'radioTone') {
                 final connector = context.read<MeshCoreConnector>();
                 requestChannelRadioTone(connector, _currentChannel.index);
@@ -507,6 +510,22 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   ],
                 ),
               ),
+              // #544: the RADIO's sound for this channel. Separate from
+              // Notifications above, which is the phone's; the two are
+              // independent settings and neither reads the other.
+              if (radioChannelNotifySupported(
+                context.read<MeshCoreConnector>(),
+              ))
+                const PopupMenuItem(
+                  value: 'radioSound',
+                  child: Row(
+                    children: [
+                      Icon(Icons.volume_up_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Radio sound'),
+                    ],
+                  ),
+                ),
               if (context.read<MeshCoreConnector>().supportsTunes)
                 const PopupMenuItem(
                   value: 'radioTone',

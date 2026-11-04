@@ -27,6 +27,7 @@ import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -535,6 +536,35 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 }
               },
             ),
+            // The radio's own sound setting for this channel (#544), named
+            // apart from Notifications, which is the phone's. These are two
+            // independent settings over two outputs: neither reads the other.
+            // Gated on caps byte 2 0x80.
+            if (radioChannelNotifySupported(context.read<MeshCoreConnector>()))
+              Builder(
+                builder: (tileContext) {
+                  final live = tileContext.watch<MeshCoreConnector>();
+                  final effective = radioChannelNotifyEffective(
+                    tileContext,
+                    live.channelNotifyFor(channel.index),
+                    live.deviceNotifyScope,
+                  );
+                  return ListTile(
+                    leading: const Icon(Icons.volume_up_outlined),
+                    title: Text(tileContext.l10n.channels_radioSound),
+                    subtitle: Text(
+                      effective ?? tileContext.l10n.channels_radioSoundReading,
+                    ),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      if (parentContext.mounted) {
+                        showRadioChannelNotifyDialog(parentContext, channel);
+                      }
+                    },
+                  );
+                },
+              ),
             // The radio's own tone for this channel (#971), named apart from
             // Notifications, which is the phone's. Gated on caps byte 2 0x10.
             ChannelRadioToneTile(

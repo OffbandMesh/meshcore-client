@@ -2869,7 +2869,7 @@ abstract class AppLocalizations {
   /// No description provided for @channels_notifications.
   ///
   /// In en, this message translates to:
-  /// **'Notifications'**
+  /// **'Phone notifications'**
   String get channels_notifications;
 
   /// No description provided for @channels_notifyAll.
@@ -2889,6 +2889,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Off'**
   String get channels_notifyOff;
+
+  /// No description provided for @channels_radioSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio sound'**
+  String get channels_radioSound;
+
+  /// No description provided for @channels_radioSoundUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get channels_radioSoundUnset;
+
+  /// No description provided for @channels_radioSoundFollows.
+  ///
+  /// In en, this message translates to:
+  /// **'Follows the radio: {scope}'**
+  String channels_radioSoundFollows(String scope);
+
+  /// No description provided for @channels_radioSoundMutedByRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Silent: the radio is set to None'**
+  String get channels_radioSoundMutedByRadio;
+
+  /// No description provided for @channels_radioSoundReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading from the radio'**
+  String get channels_radioSoundReading;
 
   /// No description provided for @channels_deleteChannel.
   ///
