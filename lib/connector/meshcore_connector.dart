@@ -66,6 +66,7 @@ import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
 import '../storage/channel_region_scope_store.dart';
+import 'offband_capability_advert.dart';
 import 'offband_channel_notify.dart';
 import 'offband_device_ui.dart';
 import 'offband_screen_settings.dart';
@@ -420,8 +421,24 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Classification? _classification;
   int? _offbandCaps2;
-  int? _offbandCaps3;
   bool? _femLnaEnabled;
+
+  /// The `0xC5` `0x1C` capability advert for THIS radio (#1095).
+  ///
+  /// Tags accumulate across `TAG_CONTINUE` rounds, so this is the merged view
+  /// and not just the last frame. Null until a reply arrives.
+  OffbandCapabilityAdvert? _capabilityAdvert;
+  CapabilityAdvertState _advertState = CapabilityAdvertState.unknown;
+
+  /// A zero-payload `0x1C` request is in flight.
+  ///
+  /// Needed because `[0xC5][0x7F][0x05]` names no sub-code. The refusal is
+  /// claimed as "this radio predates the advert" only while this is set and no
+  /// device-UI WRITE is outstanding, so an error belonging to a write is never
+  /// stolen from it.
+  bool _advertRequestOutstanding = false;
+  int _advertContinuationRound = 0;
+  final Map<int, Uint8List> _advertTags = {};
   ButtonMatrix? _buttonMatrix;
   String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
@@ -983,16 +1000,60 @@ class MeshCoreConnector extends ChangeNotifier {
   /// an error: every radio predating #508 reports null here. (#480)
   int? get offbandCaps2 => _offbandCaps2;
 
-  /// Third `offband_caps` bitfield (frame offset 87, #544). Null when the frame
-  /// is too short, which means "no byte-3 capabilities" and is never an error.
-  /// No bit is allocated from it yet; byte 2 filled up at `0x80`.
-  int? get offbandCaps3 => _offbandCaps3;
+  /// This radio's capability advert, merged across continuation rounds (#1095).
+  /// Null until a `0x1C` reply arrives; see [capabilityAdvertState] to tell
+  /// "has not answered" apart from "does not have the mechanism".
+  OffbandCapabilityAdvert? get capabilityAdvert => _capabilityAdvert;
+
+  /// How far the advert handshake has got with this radio.
+  CapabilityAdvertState get capabilityAdvertState => _advertState;
 
   /// Whether this radio stores a per-channel notify mode for its own buzzer
-  /// (#544). Says nothing about the app's per-channel notify setting, which is
-  /// independent and needs no radio.
-  bool get supportsChannelNotify =>
-      firmwareSupportsChannelNotify(_offbandCaps2);
+  /// (#544, #1097). Says nothing about the app's per-channel notify setting,
+  /// which is independent and needs no radio.
+  ///
+  /// PRECEDENCE, not OR. Channel notify has two merged claims: caps2 `0x80`
+  /// and `TAG_CHAN_NOTIFY`. The contract does not state which wins, and both
+  /// single-source readings break on a real radio:
+  ///
+  /// - bit only: when the bit is retired under contract §4 ("their bits become
+  ///   tags and the bits are retired in the same change"), a radio advertising
+  ///   the tag with `0x80` clear would silently lose the control.
+  /// - tag only: firmware `4e5a6c85` has channel notify and caps2 `0x80` but
+  ///   predates `0x1C` entirely, so the already-flashed T1000-E would lose it.
+  ///
+  /// So an advert, once it arrives, is authoritative and the bit is ignored;
+  /// with no advert the bit answers, which is exactly the behaviour that
+  /// shipped before `0x1C` existed. Raised with FuchsiaCreek before coding
+  /// (Agent Mail 1449); one expression to invert if the ruling differs.
+  ///
+  /// While a request is still in flight the bit answers, so nothing regresses
+  /// in the window before the reply. A radio that sets the bit and omits the
+  /// tag is self-inconsistent and will flip the control off when the advert
+  /// lands, which is the correct reading of a firmware fault.
+  bool get supportsChannelNotify {
+    final advert = _capabilityAdvert;
+    if (advert != null) return advert.has(offbandInfoTagChanNotify);
+    return firmwareSupportsChannelNotify(_offbandCaps2);
+  }
+
+  /// Whether this radio's display can rotate (#1098, firmware #1990).
+  ///
+  /// Tag-gated ONLY, with no caps-bit fallback, and that is not an oversight:
+  /// rotation's sub-codes `0x1A`/`0x1B` were claimed in the same merge as the
+  /// advert itself, so no firmware exists that can rotate but cannot advertise.
+  /// It is deliberately NOT gated on caps2 `0x04` INDICATORS, which means
+  /// indicators and is a different capability.
+  bool get supportsDisplayRotation =>
+      _capabilityAdvert?.has(offbandInfoTagDisplayRotation) ?? false;
+
+  /// Outstanding-ACK capacity this radio reports (#1099, firmware #994/#1001).
+  ///
+  /// Carried in the advert by the contract §3 exception: one byte, fixed for
+  /// the build, no sub-code of its own. Null means the radio did not say, which
+  /// is not zero and is not an error.
+  int? get ackCapacity =>
+      _capabilityAdvert?.byteValue(offbandInfoTagAckCapacity);
 
   /// Whether this radio exposes a configurable button-action matrix (#474).
   bool get supportsButtonMatrix => firmwareSupportsButtonMatrix(_offbandCaps2);
@@ -1209,6 +1270,115 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'DeviceUI',
     );
     await sendFrame(buildChannelTuneSetFrame(channel, tune));
+  }
+
+  /// Ask this radio for its capability advert (#1095).
+  ///
+  /// One request per connect, sent from [_reconcileDeviceUi] once device-info
+  /// has landed, which is well past MTU negotiation. The client asks and the
+  /// device never pushes: `_att_mtu` is 23 until `onMTUChange` fires, so a
+  /// pushed advert would be truncated to a 20-byte payload as the NORMAL case.
+  ///
+  /// Not gated on [deviceUiCommandLanded]-style capability checks, because
+  /// this request is how capabilities become known.
+  Future<void> requestCapabilityAdvert() async {
+    if (!deviceUiCommandLanded) return;
+    if (!isConnected) return;
+    _advertRequestOutstanding = true;
+    _appDebugLogService?.info(
+      'advert GET -> [0xC5][0x1C] (zero payload)',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildCapabilityAdvertRequestFrame());
+  }
+
+  /// Continue a paged advert from [cursor].
+  Future<void> _requestCapabilityAdvertFrom(int cursor) async {
+    if (!isConnected) return;
+    _advertRequestOutstanding = true;
+    _appDebugLogService?.info(
+      'advert GET -> [0xC5][0x1C][0x${cursor.toRadixString(16).padLeft(2, '0')}] '
+      '(continuation $_advertContinuationRound)',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildCapabilityAdvertResumeFrame(cursor));
+  }
+
+  void _handleCapabilityAdvertReply(OffbandCapabilityAdvert advert) {
+    _advertRequestOutstanding = false;
+    if (advert.malformed) {
+      // Firmware must not split a record across frames, so this is a firmware
+      // fault. The records before the bad one are kept: a hidden feature is
+      // safe, discarding a whole good reply over one trailing byte is not.
+      _appDebugLogService?.warn(
+        'advert reply malformed, keeping the records before it: $advert',
+        tag: 'DeviceUI',
+      );
+    }
+    for (final entry in advert.tags.entries) {
+      _advertTags.putIfAbsent(entry.key, () => entry.value);
+    }
+
+    final cursor = advert.continueCursor;
+    if (cursor != null) {
+      _advertContinuationRound++;
+      if (_advertContinuationRound > offbandInfoMaxContinuations) {
+        // Bounded on purpose: an unbounded request loop driven by device data
+        // is a worse failure than a truncated capability list.
+        _appDebugLogService?.warn(
+          'advert continuation exceeded $offbandInfoMaxContinuations rounds, '
+          'settling on ${_advertTags.length} tag(s)',
+          tag: 'DeviceUI',
+        );
+      } else if (_advertTags.containsKey(cursor)) {
+        // A cursor pointing at a tag already in hand would loop forever.
+        _appDebugLogService?.warn(
+          'advert continuation cursor 0x${cursor.toRadixString(16).padLeft(2, '0')} '
+          'does not advance, settling on ${_advertTags.length} tag(s)',
+          tag: 'DeviceUI',
+        );
+      } else {
+        unawaited(_requestCapabilityAdvertFrom(cursor));
+        return;
+      }
+    }
+
+    _settleCapabilityAdvert(
+      OffbandCapabilityAdvert(tags: Map<int, Uint8List>.from(_advertTags)),
+    );
+  }
+
+  /// The advert is now known, either as tags or as "this radio predates it".
+  ///
+  /// Capability-gated surfaces are invisible when a gate is shut, which looks
+  /// exactly like a bug, so the resolved gates are logged alongside the raw
+  /// tags (the same reasoning as the caps logging in [_handleDeviceInfo]).
+  void _settleCapabilityAdvert(OffbandCapabilityAdvert? advert) {
+    _capabilityAdvert = advert;
+    _advertState = advert == null
+        ? CapabilityAdvertState.unsupported
+        : CapabilityAdvertState.advertised;
+    _appDebugLogService?.info(
+      'advert settled: '
+      '${advert ?? 'UNSUPPORTED, falling back to device-info offsets'}'
+      ' chanNotify=$supportsChannelNotify'
+      ' rotation=$supportsDisplayRotation'
+      ' ackCapacity=${ackCapacity ?? 'absent'}',
+      tag: 'DeviceUI',
+    );
+    // A tag-gated feature could not be asked for before now.
+    _reconcileAdvertisedDeviceUi();
+    notifyListeners();
+  }
+
+  /// Requests that could only be gated once the advert settled.
+  ///
+  /// Channel notify is re-driven here because its gate can change when the
+  /// advert lands, and its read is additionally held behind the confirmed
+  /// channel list; [_readChannelNotifyModes] enforces that barrier itself, so
+  /// calling it before the list is synced is a no-op rather than a guess.
+  void _reconcileAdvertisedDeviceUi() {
+    unawaited(_readChannelNotifyModes());
   }
 
   /// Ask the radio which notify mode [channel] has for its own buzzer (#544).
@@ -1593,9 +1763,18 @@ class MeshCoreConnector extends ChangeNotifier {
     _eventTones.clear();
     _tuneSlots.clear();
     _screenSettings = null;
+    _capabilityAdvert = null;
+    _advertState = CapabilityAdvertState.unknown;
+    _advertRequestOutstanding = false;
+    _advertContinuationRound = 0;
+    _advertTags.clear();
   }
 
   void _reconcileDeviceUi() {
+    // The advert goes FIRST and is gated on nothing: it is the mechanism by
+    // which capabilities are discovered, so gating it on a capability would be
+    // circular. Everything tag-gated is (re)driven from the reply.
+    unawaited(requestCapabilityAdvert());
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
     if (supportsGpsMode) requestGpsMode();
@@ -1618,6 +1797,11 @@ class MeshCoreConnector extends ChangeNotifier {
     final scope = parseNotifyScopeReply(frame);
     if (scope != null) {
       _handleNotifyScopeReply(scope);
+      return;
+    }
+    final advert = parseCapabilityAdvertReply(frame);
+    if (advert != null) {
+      _handleCapabilityAdvertReply(advert);
       return;
     }
     final gps = parseGpsModeReply(frame);
@@ -1660,6 +1844,18 @@ class MeshCoreConnector extends ChangeNotifier {
   /// write outstanding when it arrived; a refusal with none is still shown and
   /// logged, just not claimed by any one screen.
   void _handleDeviceUiError(OffbandUiReply reply) {
+    // A refusal of our zero-payload 0x1C request means this radio predates the
+    // advert, which is the NORMAL case for everything shipped so far and not a
+    // failure to show anyone. The frame names no sub-code, so it is claimed
+    // here only while an advert request is outstanding AND no write is: a write
+    // owns its own refusal, and stealing one would hide a real error.
+    if (_advertRequestOutstanding &&
+        _pendingDeviceUiWrite == null &&
+        reply.errorCode == offbandUiErrReasonMalformed) {
+      _advertRequestOutstanding = false;
+      _settleCapabilityAdvert(null);
+      return;
+    }
     final surface = _pendingDeviceUiWrite;
     _pendingDeviceUiWrite = null;
     _deviceUiErrorSurface = surface;
@@ -4592,8 +4788,14 @@ class MeshCoreConnector extends ChangeNotifier {
     // until the next device-info lands (Gemini review, task #876).
     _offbandCaps = null;
     _offbandCaps2 = null;
-    _offbandCaps3 = null;
     _femLnaEnabled = null;
+    // The advert dies with the connection for the same reason, so the next
+    // radio is never gated on this one's tags (#1095).
+    _capabilityAdvert = null;
+    _advertState = CapabilityAdvertState.unknown;
+    _advertRequestOutstanding = false;
+    _advertContinuationRound = 0;
+    _advertTags.clear();
     _blockListRetryTimer?.cancel();
     // Per-connection debounce timers must die with the connection so a timer
     // scheduled against this radio can't fire against the next one (#838 review).
@@ -8223,21 +8425,12 @@ class MeshCoreConnector extends ChangeNotifier {
   static int? parseOffbandCaps2(Uint8List frame) =>
       frame.length >= 85 ? frame[84] : null;
 
-  /// Third `offband_caps` byte, at frame offset **87** (#544).
-  ///
-  /// Byte 2 filled up when the per-channel notify bit took `0x80`, so firmware
-  /// appends a third. It sits at 87 and NOT at 85, because 85 and 86 are
-  /// already `ui_led_enabled` and `ui_display_mode`: the same fixed-absolute
-  /// offset rule that put byte 2 at 84 rather than beside byte 1. Reading 85
-  /// as byte 3 would parse the LED state as a capability bitmask.
-  ///
-  /// Null on any firmware sending a shorter frame, which means "no byte-3
-  /// capabilities" and is never an error. Length-gated, never version-gated
-  /// (#1065). No bit is allocated from it yet.
-  static int? parseOffbandCaps3(Uint8List frame) =>
-      frame.length >= offbandCaps3MinFrameLength
-      ? frame[offbandCaps3Offset]
-      : null;
+  // There is NO caps byte 3, and there will not be one. A third capability
+  // byte would have to be appended to upstream's device-info frame, which
+  // contract §2 forbids permanently: three features each computed offset 87 as
+  // "the next free byte" and each was right in isolation. Capabilities past
+  // caps2 `0x80` are TAGS in the `0xC5` `0x1C` advert, which cannot run out.
+  // (#1096; the removed reader was `parseOffbandCaps3` at offset 87.)
 
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
@@ -8308,14 +8501,12 @@ class MeshCoreConnector extends ChangeNotifier {
       _femLnaEnabled = parseFemLnaState(frame);
       // Second caps byte rides at offset 84, past the FEM state byte (#480).
       _offbandCaps2 = parseOffbandCaps2(frame);
-      // Third caps byte at offset 87, past ui_led_enabled (85) and
-      // ui_display_mode (86). Byte 2 filled up at 0x80 (#544).
-      _offbandCaps3 = parseOffbandCaps3(frame);
+      // Nothing is read past byte 84 here. Offset 87 is where three features
+      // collided; capabilities beyond caps2 live in the 0x1C advert (#1096).
     } else {
       _offbandCaps = null;
       _femLnaEnabled = null;
       _offbandCaps2 = null;
-      _offbandCaps3 = null;
     }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can

@@ -14,6 +14,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
+import 'package:meshcore_open/connector/offband_capability_advert.dart';
 import 'package:meshcore_open/connector/offband_channel_notify.dart';
 import 'package:meshcore_open/connector/offband_device_ui.dart';
 import 'package:meshcore_open/models/app_settings.dart';
@@ -224,39 +225,55 @@ void main() {
       expect(connector.supportsChannelNotify, isFalse);
     });
 
-    test('caps byte 3 reads offset 87', () {
-      connector.handleFrameForTest(
-        deviceInfo(caps2: 0x80, length: 88, caps3: 0x05),
-      );
-      expect(connector.offbandCaps3, 0x05);
-    });
+    test('NOTHING reads device-info offset 87 (#1096)', () {
+      // The permanent rule out of the collision: no Offband field is ever
+      // appended to upstream's device-info frame. Three features each computed
+      // 87 as the next free byte and each was right in isolation.
+      //
+      // Behavioural rather than a source grep, so it keeps holding if the read
+      // comes back spelled differently. Byte 87 is set to every bit, and every
+      // capability answer must be identical to the frame that has no byte 87
+      // at all.
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80, length: 85));
+      final capsWithout = connector.offbandCaps2;
+      final withoutByte87 = [
+        connector.supportsChannelNotify,
+        connector.supportsDisplayRotation,
+        connector.supportsButtonMatrix,
+        connector.supportsNotifyScope,
+        connector.supportsTunes,
+        connector.supportsGpsMode,
+        connector.supportsScreenSettings,
+      ];
+      final ackWithout = connector.ackCapacity;
 
-    test('caps byte 3 is null on any shorter frame', () {
-      for (final n in [85, 86, 87]) {
-        connector.handleFrameForTest(deviceInfo(caps2: 0x80, length: n));
-        expect(
-          connector.offbandCaps3,
-          isNull,
-          reason: 'a $n-byte frame carries no byte 3',
-        );
-      }
-    });
-
-    test('85 and 86 are not mistaken for byte 3', () {
-      // Those offsets are ui_led_enabled and ui_display_mode. Reading either
-      // as a capability mask is the failure this pins.
       connector.handleFrameForTest(
-        deviceInfo(
-          caps2: 0x80,
-          length: 88,
-          ledByte: 0xAA,
-          displayByte: 0xBB,
-          caps3: 0x01,
-        ),
+        deviceInfo(caps2: 0x80, length: 88, caps3: 0xFF),
       );
-      expect(connector.offbandCaps3, 0x01);
-      expect(connector.offbandCaps3, isNot(0xAA));
-      expect(connector.offbandCaps3, isNot(0xBB));
+
+      expect(
+        [
+          connector.supportsChannelNotify,
+          connector.supportsDisplayRotation,
+          connector.supportsButtonMatrix,
+          connector.supportsNotifyScope,
+          connector.supportsTunes,
+          connector.supportsGpsMode,
+          connector.supportsScreenSettings,
+        ],
+        withoutByte87,
+        reason: 'a byte at offset 87 changed a capability',
+      );
+      expect(connector.ackCapacity, ackWithout);
+      // The raw byte too, not only the named getters. Comparing getters alone
+      // is a hole: a leak into a caps bit that has no getter yet (0x04
+      // INDICATORS, for one) moves nothing this test can see. Caught by
+      // deliberately reintroducing such a read and watching this pass.
+      expect(
+        connector.offbandCaps2,
+        capsWithout,
+        reason: 'offset 87 contaminated the caps byte read at 84',
+      );
     });
 
     test('a stock-shaped radio exposes nothing, whatever its bytes', () {
@@ -266,7 +283,182 @@ void main() {
       connector.handleFrameForTest(stock);
 
       expect(connector.supportsChannelNotify, isFalse);
-      expect(connector.offbandCaps3, isNull);
+      expect(connector.supportsDisplayRotation, isFalse);
+      expect(connector.ackCapacity, isNull);
+    });
+  });
+
+  // ---- A4: advert precedence over the caps bit (#1097) ----------------------
+
+  group('A4 advert precedence', () {
+    /// A `0xC5` `0x1C` reply carrying [tags] as zero-length records.
+    Uint8List advertReply(List<int> tags) {
+      final f = <int>[cmdOffbandDeviceUi, offbandUiInfoGet];
+      for (final t in tags) {
+        f.addAll([t, 0x00]);
+      }
+      return Uint8List.fromList(f);
+    }
+
+    /// `[0xC5][0x7F][0x05]`: this radio does not implement the advert.
+    Uint8List advertUnsupported() => Uint8List.fromList([
+      cmdOffbandDeviceUi,
+      offbandUiErr,
+      offbandUiErrReasonMalformed,
+    ]);
+
+    test('the zero-payload advert request goes out on connect', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+      expect(
+        sent.any(
+          (f) =>
+              f.length == 2 &&
+              f[0] == cmdOffbandDeviceUi &&
+              f[1] == offbandUiInfoGet,
+        ),
+        isTrue,
+        reason:
+            'the request must be exactly two bytes to make err 5 mean '
+            '"predates the advert" rather than "malformed payload"',
+      );
+    });
+
+    test(
+      'before any answer the caps bit still decides, so nothing regresses',
+      () {
+        connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+        expect(connector.capabilityAdvertState, CapabilityAdvertState.unknown);
+        expect(connector.supportsChannelNotify, isTrue);
+      },
+    );
+
+    test('an advert WITH the tag grants it even with the caps bit clear', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x00));
+      expect(connector.supportsChannelNotify, isFalse);
+
+      connector.handleFrameForTest(advertReply([offbandInfoTagChanNotify]));
+
+      expect(connector.capabilityAdvertState, CapabilityAdvertState.advertised);
+      expect(
+        connector.supportsChannelNotify,
+        isTrue,
+        reason:
+            'once the bit is retired under contract section 4, the tag is '
+            'the only thing left saying the feature exists',
+      );
+    });
+
+    test('an advert WITHOUT the tag revokes it even with the caps bit set', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+      expect(connector.supportsChannelNotify, isTrue);
+
+      connector.handleFrameForTest(advertReply([offbandInfoTagAckCapacity]));
+
+      expect(connector.supportsChannelNotify, isFalse);
+    });
+
+    test('err 5 falls back to the caps bit, which is the flashed T1000-E', () {
+      // firmware 4e5a6c85 answers 0x18/0x19 and carries caps2 0x80, but
+      // predates 0x1C. Tag-only gating would take the control away from it.
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+      connector.handleFrameForTest(advertUnsupported());
+
+      expect(
+        connector.capabilityAdvertState,
+        CapabilityAdvertState.unsupported,
+      );
+      expect(connector.supportsChannelNotify, isTrue);
+    });
+
+    test('err 5 with the bit clear grants nothing', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x00));
+      connector.handleFrameForTest(advertUnsupported());
+
+      expect(connector.supportsChannelNotify, isFalse);
+      expect(connector.supportsDisplayRotation, isFalse);
+    });
+
+    test('rotation is tag-gated with NO caps-bit fallback', () {
+      // Deliberate: 0x1A/0x1B were claimed in the same merge as the advert, so
+      // no firmware can rotate but not advertise. INDICATORS 0x04 must not
+      // open it.
+      connector.handleFrameForTest(deviceInfo(caps2: 0x04));
+      expect(connector.supportsDisplayRotation, isFalse);
+
+      connector.handleFrameForTest(advertUnsupported());
+      expect(connector.supportsDisplayRotation, isFalse);
+
+      connector.handleFrameForTest(
+        advertReply([offbandInfoTagDisplayRotation]),
+      );
+      expect(connector.supportsDisplayRotation, isTrue);
+    });
+
+    test('ACK capacity comes from the tag value, and absence is not zero', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+      connector.handleFrameForTest(advertReply([offbandInfoTagChanNotify]));
+      expect(connector.ackCapacity, isNull);
+
+      connector.handleFrameForTest(
+        Uint8List.fromList([
+          cmdOffbandDeviceUi,
+          offbandUiInfoGet,
+          offbandInfoTagAckCapacity,
+          0x01,
+          0x20,
+        ]),
+      );
+      expect(connector.ackCapacity, 0x20);
+    });
+
+    test('an unknown tag does not disturb the known gates', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x00));
+      connector.handleFrameForTest(
+        Uint8List.fromList([
+          cmdOffbandDeviceUi,
+          offbandUiInfoGet,
+          0x5A,
+          0x02,
+          0xDE,
+          0xAD,
+          offbandInfoTagChanNotify,
+          0x00,
+        ]),
+      );
+      expect(connector.supportsChannelNotify, isTrue);
+      expect(connector.supportsDisplayRotation, isFalse);
+    });
+
+    test('a new device-info drops the previous radio advert', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x00));
+      connector.handleFrameForTest(advertReply([offbandInfoTagChanNotify]));
+      expect(connector.supportsChannelNotify, isTrue);
+
+      // A different radio, no advert answer yet.
+      connector.handleFrameForTest(deviceInfo(caps2: 0x00));
+
+      expect(connector.capabilityAdvertState, CapabilityAdvertState.unknown);
+      expect(
+        connector.supportsChannelNotify,
+        isFalse,
+        reason: "one radio's tags must never answer for another",
+      );
+    });
+
+    test('a refusal with a write outstanding belongs to the WRITE', () async {
+      // The error frame names no sub-code. Claiming it for the advert would
+      // hide a genuinely refused write and wrongly mark the radio as predating
+      // the advert.
+      connector.handleFrameForTest(deviceInfo(caps2: 0x80));
+      await connector.setChannelNotify(0, RadioChannelNotify.off);
+      connector.handleFrameForTest(advertUnsupported());
+
+      expect(
+        connector.capabilityAdvertState,
+        CapabilityAdvertState.unknown,
+        reason: 'the advert must not claim a write refusal',
+      );
+      expect(connector.deviceUiError, isNotNull);
     });
   });
 }

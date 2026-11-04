@@ -653,23 +653,20 @@ const int offbandCap2ScreenSettings = 0x40;
 /// meshcore-firmware#606). Firmware sets it where `PIN_BUZZER` is defined, so
 /// it is a per-unit answer: gate on the BIT, never on model or version.
 ///
-/// This is the LAST bit in caps byte 2. The change that spends it adds caps
-/// **byte 3** at device-info offset 87 ([parseOffbandCaps3Offset]); anything
-/// after this takes a bit from there.
+/// This is the LAST bit in caps byte 2, and there is NO byte 3.
+///
+/// A third capability byte would have to be appended to upstream's device-info
+/// frame, which firmware `docs/offband_info_frame_contract.md` §2 forbids
+/// permanently: three features each computed "the next free byte" as offset 87
+/// and each was right in isolation, and a collision at a frame offset is silent
+/// misparsing rather than a refused command. Capabilities after this bit are
+/// TAGS in the `0xC5` `0x1C` advert (`offband_capability_advert.dart`), which
+/// has no scarcity to run out of.
+///
+/// This bit itself is NOT the gate once a radio answers the advert: see
+/// `MeshCoreConnector.supportsChannelNotify` for the precedence, which exists
+/// because `4e5a6c85` carries this bit and predates the advert. (#1096, #1097)
 const int offbandCap2ChannelNotify = 0x80;
-
-/// Device-info offset of `offband_caps` BYTE 3, and the minimum frame length
-/// that carries it.
-///
-/// **87, not 85.** Firmware writes caps byte 2 at 84, then `ui_led_enabled` at
-/// 85 and `ui_display_mode` at 86 (`MyMesh.cpp` device-info builder). Reading
-/// byte 3 at 85 would parse the LED state as a capability bitmask, which is
-/// the exact mistake firmware's own comment warns about for byte 2.
-///
-/// Length-gated, never version-gated (#1065): absence means no byte-3
-/// capabilities, and is never an error.
-const int offbandCaps3Offset = 87;
-const int offbandCaps3MinFrameLength = 88;
 
 /// True iff this radio answers the `0xC5` tune sub-codes.
 bool firmwareSupportsTunes(int? offbandCaps2) =>
