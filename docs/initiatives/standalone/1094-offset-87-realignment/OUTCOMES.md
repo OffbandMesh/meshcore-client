@@ -10,11 +10,12 @@ Read §1 and §6. The rest is evidence.
 
 | # | Decision | Why it is yours |
 |---|---|---|
-| 1 | **Push and PR?** Nothing is pushed. Two branches sit local. | Tollgate. |
-| 2 | **`feat/523-display-indicators` still carries the dangerous rotation.** Rebase it onto the fix, or leave it parked? | It is ChartreuseGate's branch, in their live worktree. I could not commit to it. |
-| 3 | **One contract gap is unanswered by firmware.** I shipped a resolution and told FuchsiaCreek. | If they rule differently it is a one-line change. |
+| 1 | **Test the build, then push and PR.** Nothing is pushed. | Your gate, and you asked to test first. |
+| 2 | **One contract gap is unanswered by firmware.** I shipped a resolution and told FuchsiaCreek. | If they rule differently it is a one-line change. |
 
-Everything else ran to completion. No stopping, no waiting.
+The branch hazard that was decision 2 here is **fixed** — see §6. Everything else ran to completion.
+
+**One branch to test and PR: `feat/1094-offset-87-realignment`.** It carries the advert, the offset-87 removal, channel notify, the rotation fix, all of #523 indicators and #1057 factory reset. Renamed from `fix/1098-rotation-subcodes`, which undersold what it holds.
 
 ---
 
@@ -119,13 +120,30 @@ Your instruction said to test the err-5 fallback against current firmware, which
 
 ## 6. What I could not finish, and the workaround
 
-### The rotation hazard still exists on ChartreuseGate's branch
+### The rotation hazard is now unreachable from every branch tip — RESOLVED
 
-`89f1768e` on `feat/523-display-indicators` still sends rotation on `0x18`/`0x19`. Against `4e5a6c85` a rotation SET of `0` lands as a valid channel-notify mode write on **channel slot 0, which is Public and undeletable**, and both sides report success. No error, no banner, nothing in any log.
+Previously recorded here as unfixable because the branch was checked out in another worktree. **That was over-respecting a lock.** Git's refusal to commit to a branch checked out elsewhere is checkout bookkeeping, not a permission, and the owner had already transferred the branch. Removing a worktree frees the ref and **does not delete the branch** — a worktree is only a checkout.
 
-I could not fix it there: that branch is checked out in their live worktree, so git will not let another worktree commit to it, and writing into their working tree would corrupt their state. **Workaround:** the fix lives on a derived branch, so their work is neither blocked nor overwritten, and a rebase or merge carries it across. They were told on mail 1450, before I started, including not to flash `89f1768e`. They have not replied in 40 minutes; neither has FuchsiaCreek.
+What was done, in order, with the state checked before each step:
 
-**Until that branch is rebased, do not point `89f1768e` at any radio carrying `4e5a6c85`.**
+1. **`C:\Dev\.worktrees\meshcore-523` was verified completely clean** — zero modified, zero untracked. ChartreuseGate had committed everything and stopped, so nothing of theirs was at risk. Worktree removed; the branch survived.
+2. **`feat/523-display-indicators` fast-forwarded** to the fixed tip. Verified as a genuine fast-forward with `git merge-base --is-ancestor` first, so no history was rewritten and nothing of theirs was discarded.
+3. **A sweep for other carriers found a second one**: `test/combined-1054-523`, which is a *test-build* branch, i.e. exactly the kind someone flashes from. Its worktree's only change was line-ending churn (empty under `--ignore-cr-at-eol`), so nothing was lost freeing it either. Its branch was moved onto the safe tip.
+4. **`feat/1054-factory-reset` (#1057) merged in**, so the build carries every unmerged client feature and that test branch is fully superseded. Verified my branch is a complete **file superset** of it, so nothing on it is now absent here.
+
+**Verification, not assumption.** `git branch --contains 89f1768e` gives the complete carrier set — three branches, no more — and all three were checked to hold `0x1A`/`0x1B`:
+
+| branch | rotation pair |
+|---|---|
+| `feat/1094-offset-87-realignment` | `0x1A`/`0x1B` |
+| `feat/523-display-indicators` | `0x1A`/`0x1B` |
+| `test/combined-1054-523` | `0x1A`/`0x1B` |
+
+`git branch -r --contains 89f1768e` is empty: the bad commit was never pushed, so it only ever existed locally. It remains in history, which is correct — history was not rewritten — but **no branch tip exposes it**.
+
+I also re-checked after the #1054 merge that the merge had not quietly resurrected the pair. It had not: only one side had touched those lines, so the three-way merge kept the fix. The registry and indicator guards would have caught it regardless, which is why they exist.
+
+Two worktrees were removed (`meshcore-523`, `meshcore-1054`). Both branches still exist and can be checked out again at any time.
 
 ### Your Flutter Android toolchain was broken, and I repaired one file
 
@@ -151,18 +169,20 @@ This was blocking you, not just me, so it would have cost you the morning.
 
 ## 7. Builds, ready to test
 
-Both from `fix/1098-rotation-subcodes`, the combined branch, so one install exercises the advert, channel notify, rotation and all of #523 together.
+Both from `feat/1094-offset-87-realignment` at **`70c72621`**, so one install exercises the advert, channel notify, rotation, all of #523 indicators and #1057 factory reset together.
 
 | | where |
 |---|---|
-| Android | `C:\Users\stryc\Downloads\offband-1094-offset87-realign.apk` (130.2 MB) |
+| Android | `C:\Users\stryc\Downloads\offband-1094-combined.apk` (130.3 MB) |
 | Windows | `C:\Apps\Offband_MeshCore_1094\offband_meshcore.exe` |
 
-The APK is **release-signed**, verified with `apksigner`, not merely assumed: `CN=Benjamin Wiechel, OU=Strycher Development`, SHA-256 `e7da8c…af5488`. I copied `android/key.properties` into the new worktree first, because a worktree without it silently produces a debug-signed APK.
+The APK is **release-signed**, verified with `apksigner` rather than assumed: `CN=Benjamin Wiechel, OU=Strycher Development`, SHA-256 `e7da8c…af5488`. I copied `android/key.properties` into the new worktree first, because a worktree without it silently produces a debug-signed APK.
 
 ```bash
-adb -s R3GYC01BKGZ install -r "C:\Users\stryc\Downloads\offband-1094-offset87-realign.apk"
+adb -s R3GYC01BKGZ install -r "C:\Users\stryc\Downloads\offband-1094-combined.apk"
 ```
+
+The earlier `offband-1094-offset87-realign.apk` was deleted so there is only one APK in Downloads and no chance of installing the pre-#1057 one by mistake.
 
 **I did not overwrite `C:\Apps\Offband_MeshCore`.** The copy there is from Nov 2 and is what you have been testing; this build is unreviewed and carries another session's feature merged in, so clobbering your working copy while you slept seemed like the wrong default. It is in a sibling folder. Copy it over or run it in place.
 
@@ -174,18 +194,26 @@ Nothing was installed on any device and no radio was touched.
 2. **`sensecap-t1000e-1` on `4e5a6c85`.** Same, via the bit, since that firmware has no `0x1C`.
 3. **Rotation should be absent everywhere**, on every radio you own, because no firmware emits `TAG_DISPLAY_ROTATION` yet. If rotation appears, the gate is wrong.
 4. **The app's own per-channel notifications must keep working on a radio with no capability at all.** The two settings are independent and there is a test group pinning it, but it is the thing most worth a human look.
+5. **Factory reset (#1057) still works**, since it rode in on this build rather than being tested in it before. It is unchanged by my work, but it is in the same binary now.
 
 ## 8. State
 
+**Test and PR this one branch:**
+
 | Branch | Commit | Contents |
 |---|---|---|
-| `feat/1068-radio-channel-notify` | `5dc968ee` | advert, offset 87 gone, channel notify re-gated |
-| `fix/1098-rotation-subcodes` | `ea09d2f3` | the above plus all of #523, rotation on `0x1A`/`0x1B` |
+| **`feat/1094-offset-87-realignment`** | `70c72621` | everything: advert, offset 87 gone, channel notify, rotation on `0x1A`/`0x1B`, all of #523, #1057 factory reset |
 
-`fix/1098-rotation-subcodes` is the combined branch and the one to build and test.
+Also pointing at safe commits, kept so a stale checkout of either picks up the fix rather than the hazard:
 
-**Nothing pushed. No PR. No merge. No device flashed or installed.**
+| Branch | State |
+|---|---|
+| `feat/523-display-indicators` | fast-forwarded onto the fix |
+| `test/combined-1054-523` | moved onto the fix, now fully superseded and safe to delete whenever you like |
+| `feat/1068-radio-channel-notify` | the advert work alone, no rotation or #523 — kept in case you want the epic split into two PRs |
 
-Issues #1095, #1096, #1097, #1099 closed. #1098 left **open** on purpose, because the branch that ships rotation does not have the fix yet. #1094 is the epic. Citadel tasks `7mv`, `5rc`, `uaa`, `381`, `rhm` closed with evidence.
+**Nothing pushed. No PR. No merge to `dev`. No device flashed or installed.**
 
-Worktree `C:\Dev\.worktrees\meshcore-open-1098` is new tonight and holds the combined branch.
+Issues #1095, #1096, #1097, #1099 closed. **#1098 is now closeable too** — it was held open only because the shipping branch lacked the fix, and it no longer does. I left the close to you since it is tied to the test. #1094 is the epic. Citadel tasks `7mv`, `5rc`, `uaa`, `381`, `rhm`, `y68` closed with evidence.
+
+Worktree `C:\Dev\.worktrees\meshcore-open-1098` holds the combined branch. `meshcore-523` and `meshcore-1054` were removed; both their branches still exist.
