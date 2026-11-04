@@ -92,6 +92,29 @@ Every new guard was made to fail before I trusted it:
 
 I also deleted a registry test of my own that asserted a compile-time property it did not have. It was the same shape as the `isA<bool Function(int?)>` guard that lied to me yesterday.
 
+### Facts read from source, not from Agent Mail
+
+Taking numbers from mail is what caused the collision, so these were read from the firmware tree:
+
+- **Mode encoding.** `src/helpers/ChannelNotify.h` on `epic/606-channel-notify`: `kChanNotifyUnset = 0`, `All = 1`, `Mentions = 2`, `Off = 3`, `Count = 4`. The client enum already matched byte for byte. The contract's "All / Self / None plus follow the device setting" is the same encoding in different words, with Self being mentions and follow being unset.
+- **Why the collision was silent.** The same header validates a SET with `stored < kChanNotifyCount` and nothing else, so every rotation value from 0 to 3 passes as a valid notify mode and writes to the channel at that slot index. Slot 0 is Public.
+- **Every wire number** from `OffbandConfigProtocol.h` on `firmware-base` at `28785ebf`.
+
+### `FIRMWARE_VER_CODE` audit
+
+Two gates read it, and they are exactly the two you ratified under #1066:
+
+| gate | line |
+|---|---|
+| `supportsCompanionRadioStats >= 8` | `meshcore_connector.dart:931` |
+| `supportsRegionScope >= 13` | `meshcore_protocol.dart:801` |
+
+Both untouched. No new ver-code gating. The only other reference is a diagnostic log line, which is not a gate.
+
+### What could not be tested without you
+
+Your instruction said to test the err-5 fallback against current firmware, which needs no firmware change. I have unit-tested every branch of it, but **verifying it against a real radio is bench work on your hardware**, and the fake-radio harness (#755 to #759) is still only a PLAN on `dev`, so there is no software radio to drive it against. That one is a handoff, not a gap I could close overnight.
+
 ---
 
 ## 6. What I could not finish, and the workaround
