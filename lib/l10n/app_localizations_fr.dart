@@ -1580,6 +1580,22 @@ class AppLocalizationsFr extends AppLocalizations {
   String get channels_searchChannels => 'Rechercher des canaux...';
 
   @override
+  String channels_unconfirmedSlots(String slots) {
+    return 'The radio did not confirm channel slot(s) $slots. Those channels are unknown until a sync succeeds.';
+  }
+
+  @override
+  String get channels_retrySync => 'Retry sync';
+
+  @override
+  String channels_slotIdentityChanged(String changes) {
+    return 'Channel layout changed on the radio: $changes';
+  }
+
+  @override
+  String get common_dismiss => 'Dismiss';
+
+  @override
   String get channels_noChannelsFound => 'Aucun canal trouvé';
 
   @override
@@ -2140,6 +2156,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get channel_senderAddNotConnected =>
       'Not connected to a radio, so this sender can\'t be added yet';
+
+  @override
+  String get channel_slotUnconfirmedSendBlocked =>
+      'Message not sent: the radio hasn\'t confirmed this channel slot yet. Retry the channel sync, then send again.';
 
   @override
   String channel_senderAddFailed(String error) {

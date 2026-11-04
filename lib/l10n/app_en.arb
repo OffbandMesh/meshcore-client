@@ -836,6 +836,24 @@
   "channels_noChannelsConfigured": "No channels configured",
   "channels_addPublicChannel": "Add Public Channel",
   "channels_searchChannels": "Search channels...",
+  "channels_unconfirmedSlots": "The radio did not confirm channel slot(s) {slots}. Those channels are unknown until a sync succeeds.",
+  "@channels_unconfirmedSlots": {
+    "placeholders": {
+      "slots": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_retrySync": "Retry sync",
+  "channels_slotIdentityChanged": "Channel layout changed on the radio: {changes}",
+  "@channels_slotIdentityChanged": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      }
+    }
+  },
+  "common_dismiss": "Dismiss",
   "channels_noChannelsFound": "No channels found",
   "channels_channelIndex": "Channel {index}",
   "@channels_channelIndex": {
@@ -1199,6 +1217,7 @@
     }
   },
   "channel_senderAddNotConnected": "Not connected to a radio, so this sender can't be added yet",
+  "channel_slotUnconfirmedSendBlocked": "Message not sent: the radio hasn't confirmed this channel slot yet. Retry the channel sync, then send again.",
   "channel_senderAddFailed": "Couldn't add this sender: {error}",
   "@channel_senderAddFailed": {
     "placeholders": {

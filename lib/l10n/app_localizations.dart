@@ -2818,6 +2818,30 @@ abstract class AppLocalizations {
   /// **'Search channels...'**
   String get channels_searchChannels;
 
+  /// No description provided for @channels_unconfirmedSlots.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not confirm channel slot(s) {slots}. Those channels are unknown until a sync succeeds.'**
+  String channels_unconfirmedSlots(String slots);
+
+  /// No description provided for @channels_retrySync.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry sync'**
+  String get channels_retrySync;
+
+  /// No description provided for @channels_slotIdentityChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel layout changed on the radio: {changes}'**
+  String channels_slotIdentityChanged(String changes);
+
+  /// No description provided for @common_dismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get common_dismiss;
+
   /// No description provided for @channels_noChannelsFound.
   ///
   /// In en, this message translates to:
@@ -3735,6 +3759,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not connected to a radio, so this sender can\'t be added yet'**
   String get channel_senderAddNotConnected;
+
+  /// No description provided for @channel_slotUnconfirmedSendBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Message not sent: the radio hasn\'t confirmed this channel slot yet. Retry the channel sync, then send again.'**
+  String get channel_slotUnconfirmedSendBlocked;
 
   /// No description provided for @channel_senderAddFailed.
   ///
