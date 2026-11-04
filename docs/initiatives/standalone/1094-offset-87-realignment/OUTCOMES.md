@@ -149,7 +149,33 @@ This was blocking you, not just me, so it would have cost you the morning.
 
 ---
 
-## 7. State
+## 7. Builds, ready to test
+
+Both from `fix/1098-rotation-subcodes`, the combined branch, so one install exercises the advert, channel notify, rotation and all of #523 together.
+
+| | where |
+|---|---|
+| Android | `C:\Users\stryc\Downloads\offband-1094-offset87-realign.apk` (130.2 MB) |
+| Windows | `C:\Apps\Offband_MeshCore_1094\offband_meshcore.exe` |
+
+The APK is **release-signed**, verified with `apksigner`, not merely assumed: `CN=Benjamin Wiechel, OU=Strycher Development`, SHA-256 `e7da8c…af5488`. I copied `android/key.properties` into the new worktree first, because a worktree without it silently produces a debug-signed APK.
+
+```bash
+adb -s R3GYC01BKGZ install -r "C:\Users\stryc\Downloads\offband-1094-offset87-realign.apk"
+```
+
+**I did not overwrite `C:\Apps\Offband_MeshCore`.** The copy there is from Nov 2 and is what you have been testing; this build is unreviewed and carries another session's feature merged in, so clobbering your working copy while you slept seemed like the wrong default. It is in a sibling folder. Copy it over or run it in place.
+
+Nothing was installed on any device and no radio was touched.
+
+### What to look at first
+
+1. **A radio that predates the advert** (anything but `4e5a6c85`-era builds). The Radio sound control should still appear if caps2 `0x80` is set. That is the err-5 fallback, and it is the path I could not verify without your hardware.
+2. **`sensecap-t1000e-1` on `4e5a6c85`.** Same, via the bit, since that firmware has no `0x1C`.
+3. **Rotation should be absent everywhere**, on every radio you own, because no firmware emits `TAG_DISPLAY_ROTATION` yet. If rotation appears, the gate is wrong.
+4. **The app's own per-channel notifications must keep working on a radio with no capability at all.** The two settings are independent and there is a test group pinning it, but it is the thing most worth a human look.
+
+## 8. State
 
 | Branch | Commit | Contents |
 |---|---|---|
