@@ -70,31 +70,23 @@ void main() {
       expect(sent, isEmpty);
       expect(FactoryResetStore().load(), isNull);
     });
+  });
 
-    test('firmware older than ver code 7', () async {
+  // Owner ruling: no FIRMWARE_VER_CODE gating. A radio that cannot reset keeps
+  // its identity, so the next connect resolves the record as "not reset".
+  for (final verCode in [null, 0, 6]) {
+    test('ver code $verCode is never consulted: the reset is sent', () async {
+      await seedOldRadio();
       connector
         ..setConnectedForTest()
-        ..setFirmwareVerCodeForTest(6);
+        ..setFirmwareVerCodeForTest(verCode);
 
       final refusal = await connector.factoryResetDevice(deleteAppData: true);
 
-      expect(refusal, FactoryResetRefusal.unsupported);
-      expect(sent, isEmpty);
-      expect(FactoryResetStore().load(), isNull);
+      expect(refusal, isNull);
+      expect(sent, [buildFactoryResetFrame()]);
     });
-
-    test('unknown firmware version', () async {
-      connector
-        ..setConnectedForTest()
-        ..setFirmwareVerCodeForTest(null);
-
-      expect(
-        await connector.factoryResetDevice(deleteAppData: true),
-        FactoryResetRefusal.unsupported,
-      );
-      expect(sent, isEmpty);
-    });
-  });
+  }
 
   test('a sent reset records the pending wipe, keeps the data, and ends the '
       'session', () async {

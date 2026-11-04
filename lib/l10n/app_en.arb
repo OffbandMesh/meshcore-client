@@ -436,7 +436,6 @@
   "settings_factoryResetConfirm": "This erases everything on the radio: its identity, contacts, channels and settings. It can't be undone.",
   "settings_factoryResetDeleteAppData": "Also delete this radio's data stored in the app",
   "settings_factoryResetNotConnected": "Factory reset not sent: no radio is connected.",
-  "settings_factoryResetUnsupported": "Factory reset not sent: this radio's firmware is too old to support it.",
   "factoryResetSentTitle": "Factory reset sent",
   "factoryResetSentBody": "The radio is erasing itself and will restart with a new identity. Reconnect to it to finish.",
   "factoryResetSentBleBody": "The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer's Bluetooth settings, then reconnect to finish.",

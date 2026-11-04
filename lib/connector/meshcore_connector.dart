@@ -273,7 +273,7 @@ class ContactSyncShortfall {
 enum ContactKeyCheckResult { onRadio, notFound, unresolved }
 
 /// Why a factory reset was not sent. (#1054)
-enum FactoryResetRefusal { notConnected, unsupported }
+enum FactoryResetRefusal { notConnected }
 
 /// Where a factory reset stands, for the app-wide banner. (#1054)
 enum FactoryResetStatus {
@@ -6250,7 +6250,6 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!isConnected || deviceId == null || prefix == null) {
       return FactoryResetRefusal.notConnected;
     }
-    if ((_firmwareVerCode ?? 0) < 7) return FactoryResetRefusal.unsupported;
 
     await _factoryResetStore.save(
       PendingFactoryReset(

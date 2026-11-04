@@ -1188,8 +1188,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   content: Text(switch (refusal) {
                     FactoryResetRefusal.notConnected =>
                       l10n.settings_factoryResetNotConnected,
-                    FactoryResetRefusal.unsupported =>
-                      l10n.settings_factoryResetUnsupported,
                   }),
                   backgroundColor: Colors.red,
                   persist: true,

@@ -1504,12 +1504,6 @@ abstract class AppLocalizations {
   /// **'Factory reset not sent: no radio is connected.'**
   String get settings_factoryResetNotConnected;
 
-  /// No description provided for @settings_factoryResetUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'Factory reset not sent: this radio\'s firmware is too old to support it.'**
-  String get settings_factoryResetUnsupported;
-
   /// No description provided for @factoryResetSentTitle.
   ///
   /// In en, this message translates to:

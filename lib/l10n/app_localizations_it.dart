@@ -822,10 +822,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'Factory reset not sent: no radio is connected.';
 
   @override
-  String get settings_factoryResetUnsupported =>
-      'Factory reset not sent: this radio\'s firmware is too old to support it.';
-
-  @override
   String get factoryResetSentTitle => 'Factory reset sent';
 
   @override
