@@ -188,6 +188,8 @@ The earlier `offband-1094-offset87-realign.apk` was deleted so there is only one
 
 Nothing was installed on any device and no radio was touched.
 
+**One ordering nuance, checked rather than assumed.** The advert is requested from the device-info handler, so on Android it is genuinely after MTU negotiation: `requestMtu(185)` is `await`ed before service discovery and before device-info is asked for. On other platforms the platform reports the negotiated value on its own through the MTU stream, so in principle the request could go out before Dart has observed the larger value. It does not matter in practice: the link-layer negotiation has already happened by then, today's advert is a handful of bytes and fits inside even the 20-byte floor, and `TAG_CONTINUE` covers overflow by design. Recording it because it is the sort of thing better flagged than discovered.
+
 ### What to look at first
 
 1. **A radio that predates the advert** (anything but `4e5a6c85`-era builds). The Radio sound control should still appear if caps2 `0x80` is set. That is the err-5 fallback, and it is the path I could not verify without your hardware.
