@@ -18,6 +18,7 @@ import 'package:meshcore_open/connector/offband_capability_advert.dart';
 import 'package:meshcore_open/connector/offband_channel_notify.dart';
 import 'package:meshcore_open/connector/offband_device_ui.dart';
 import 'package:meshcore_open/models/app_settings.dart';
+import 'package:meshcore_open/models/channel.dart';
 import 'package:meshcore_open/services/app_settings_service.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
@@ -46,6 +47,55 @@ Uint8List deviceInfo({
   return f;
 }
 
+/// A RESP_CODE_CHANNEL_INFO frame. [pskSeed] makes each channel's PSK, and so
+/// its identity, distinct.
+Uint8List channelInfoFrame({
+  required int index,
+  required String name,
+  required int pskSeed,
+}) {
+  final frame = Uint8List(50);
+  frame[0] = respCodeChannelInfo;
+  frame[1] = index;
+  final nameBytes = name.codeUnits;
+  for (var i = 0; i < nameBytes.length && i < 31; i++) {
+    frame[2 + i] = nameBytes[i];
+  }
+  for (var i = 0; i < 16; i++) {
+    frame[34 + i] = (pskSeed + i) & 0xFF;
+  }
+  return frame;
+}
+
+/// A slot whose stored record was erased: flash reads back as 0xFF, so the
+/// name decodes to replacement characters and the PSK is all-ones (#1060).
+Uint8List erasedChannelInfoFrame(int index) {
+  final frame = Uint8List(50);
+  frame[0] = respCodeChannelInfo;
+  frame[1] = index;
+  for (var i = 2; i < 50; i++) {
+    frame[i] = 0xFF;
+  }
+  return frame;
+}
+
+/// A standalone Channel for tests that never sync a list, e.g. the capability
+/// gate, which must refuse before it ever looks a slot up.
+Channel testChannel(int index, {String name = 'ch', int pskSeed = 10}) =>
+    Channel(
+      index: index,
+      name: name,
+      psk: Uint8List.fromList(
+        List<int>.generate(16, (i) => (pskSeed + i) & 0xFF),
+      ),
+    );
+
+Future<void> settle([int turns = 25]) async {
+  for (var i = 0; i < turns; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 void main() {
   late OffbandDatabase db;
   late MeshCoreConnector connector;
@@ -68,6 +118,26 @@ void main() {
     await db.close();
   });
 
+  /// Drives a full channel sync so slot indices are confirmed. The radio's
+  /// notify modes are only meaningful past that barrier (#1062), and since
+  /// #1060 the client resolves every slot to a channel identity, so a test
+  /// that never syncs has no identities to resolve against.
+  Future<void> syncChannels(
+    List<({int index, String name, int seed})> arrangement,
+  ) async {
+    await connector.getChannels(force: true, maxChannels: arrangement.length);
+    for (final ch in arrangement) {
+      connector.handleFrameForTest(
+        channelInfoFrame(index: ch.index, name: ch.name, pskSeed: ch.seed),
+      );
+      await settle(2);
+    }
+    await settle();
+  }
+
+  Channel slot(int index) =>
+      connector.channels.firstWhere((c) => c.index == index);
+
   bool sentChannelNotify() => sent.any(
     (f) =>
         f.length >= 2 &&
@@ -81,10 +151,15 @@ void main() {
   group('A1 radio channel notify', () {
     test('the wire bytes are the documented ones', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'test', seed: 50),
+        (index: 2, name: 'wardriving', seed: 40),
+      ]);
       sent.clear();
 
       await connector.requestChannelNotify(2);
-      await connector.setChannelNotify(2, RadioChannelNotify.mentions);
+      await connector.setChannelNotify(slot(2), RadioChannelNotify.mentions);
 
       expect(
         sent,
@@ -95,49 +170,179 @@ void main() {
       );
     });
 
-    test('a reply sets that slot, and only that slot', () {
+    test('a reply sets that channel, and only that channel', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'test', seed: 50),
+        (index: 2, name: 'wardriving', seed: 40),
+      ]);
       connector.handleFrameForTest([0xC5, 0x18, 0x01, 0x02]);
 
-      expect(connector.channelNotifyFor(1), RadioChannelNotify.mentions);
-      expect(connector.channelNotifyFor(0), isNull);
-      expect(connector.channelNotifyFor(2), isNull);
+      expect(connector.channelNotifyFor(slot(1)), RadioChannelNotify.mentions);
+      expect(connector.channelNotifyFor(slot(0)), isNull);
+      expect(connector.channelNotifyFor(slot(2)), isNull);
     });
 
-    test('mode 0 is unset, and is distinct from Off', () {
+    test('mode 0 is unset, and is distinct from Off', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'test', seed: 50),
+      ]);
       connector.handleFrameForTest([0xC5, 0x18, 0x00, 0x00]);
       connector.handleFrameForTest([0xC5, 0x18, 0x01, 0x03]);
 
-      expect(connector.channelNotifyFor(0), RadioChannelNotify.unset);
-      expect(connector.channelNotifyFor(1), RadioChannelNotify.off);
+      expect(connector.channelNotifyFor(slot(0)), RadioChannelNotify.unset);
+      expect(connector.channelNotifyFor(slot(1)), RadioChannelNotify.off);
     });
 
     test('a write is not shown until the radio confirms it', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
-      await connector.setChannelNotify(3, RadioChannelNotify.off);
+      await syncChannels([(index: 3, name: 'wardriving', seed: 40)]);
+      await connector.setChannelNotify(slot(3), RadioChannelNotify.off);
 
-      expect(connector.channelNotifyFor(3), isNull);
+      expect(connector.channelNotifyFor(slot(3)), isNull);
 
       connector.handleFrameForTest([0xC5, 0x19, 0x03, 0x03]);
-      expect(connector.channelNotifyFor(3), RadioChannelNotify.off);
+      expect(connector.channelNotifyFor(slot(3)), RadioChannelNotify.off);
     });
 
-    test('an unknown mode byte is dropped, never guessed at', () {
+    test('an unknown mode byte is dropped, never guessed at', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([(index: 4, name: 'wardriving', seed: 40)]);
       connector.handleFrameForTest([0xC5, 0x18, 0x04, 0x09]);
 
-      expect(connector.channelNotifyFor(4), isNull);
+      expect(connector.channelNotifyFor(slot(4)), isNull);
       expect(parseChannelNotifyReply([0xC5, 0x18, 0x04, 0x09]), isNull);
     });
 
-    test('state does not survive a change of radio', () {
+    test('state does not survive a change of radio', () async {
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([(index: 1, name: 'wardriving', seed: 40)]);
+      final wardriving = slot(1);
       connector.handleFrameForTest([0xC5, 0x18, 0x01, 0x01]);
-      expect(connector.channelNotifyFor(1), RadioChannelNotify.all);
+      expect(connector.channelNotifyFor(wardriving), RadioChannelNotify.all);
 
       connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
-      expect(connector.channelNotifyFor(1), isNull);
+      expect(connector.channelNotifyFor(wardriving), isNull);
+    });
+
+    test(
+      'a reply for a slot with no confirmed channel is dropped, not stored',
+      () async {
+        connector.handleFrameForTest(
+          deviceInfo(caps2: offbandCap2ChannelNotify),
+        );
+        await syncChannels([(index: 0, name: 'Public', seed: 10)]);
+
+        // Slot 7 was never confirmed. Storing this against slot 7 is what let
+        // a later occupant of that slot inherit the mode (#1060).
+        connector.handleFrameForTest([0xC5, 0x18, 0x07, 0x03]);
+
+        expect(connector.channels.any((c) => c.index == 7), isFalse);
+        expect(connector.channelNotifyFor(slot(0)), isNull);
+      },
+    );
+  });
+
+  // ---- A5: the mode follows the channel, not the slot (#1060) --------------
+
+  group('A5 radio notify is keyed by channel identity', () {
+    test('a mode read for one channel does not appear on the channel that '
+        'later takes its slot', () async {
+      connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      // #wardriving sits in slot 1 and the radio reports it as Off.
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'wardriving', seed: 40),
+      ]);
+      final wardriving = slot(1);
+      connector.handleFrameForTest([0xC5, 0x18, 0x01, 0x03]);
+      expect(connector.channelNotifyFor(wardriving), RadioChannelNotify.off);
+
+      // A wipe and re-import puts a DIFFERENT channel in slot 1.
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'test', seed: 50),
+      ]);
+      final testCh = slot(1);
+
+      // The new occupant must not inherit #wardriving's Off. Before this
+      // fix the slot-keyed map handed it straight over, which is how a
+      // channel the owner had silenced started chirping again.
+      expect(testCh.pskHex, isNot(wardriving.pskHex));
+      expect(connector.channelNotifyFor(testCh), isNull);
+    });
+
+    test('a mode survives the channel moving to a different slot', () async {
+      connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'wardriving', seed: 40),
+      ]);
+      connector.handleFrameForTest([0xC5, 0x18, 0x01, 0x03]);
+
+      // Same channel, new slot.
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'test', seed: 50),
+        (index: 2, name: 'wardriving', seed: 40),
+      ]);
+
+      expect(connector.channelNotifyFor(slot(2)), RadioChannelNotify.off);
+      expect(connector.channelNotifyFor(slot(1)), isNull);
+    });
+
+    test(
+      'a write addresses the channel current slot, not a stale one',
+      () async {
+        connector.handleFrameForTest(
+          deviceInfo(caps2: offbandCap2ChannelNotify),
+        );
+        await syncChannels([
+          (index: 0, name: 'Public', seed: 10),
+          (index: 1, name: 'wardriving', seed: 40),
+        ]);
+        // A Channel captured while it was in slot 1, as a UI widget holds one.
+        final staleHandle = slot(1);
+
+        await syncChannels([
+          (index: 0, name: 'Public', seed: 10),
+          (index: 1, name: 'test', seed: 50),
+          (index: 2, name: 'wardriving', seed: 40),
+        ]);
+        sent.clear();
+
+        await connector.setChannelNotify(staleHandle, RadioChannelNotify.off);
+
+        // Addressed to slot 2, where #wardriving actually is now.
+        expect(
+          sent,
+          equals([
+            [0xC5, 0x19, 0x02, 0x03],
+          ]),
+        );
+      },
+    );
+
+    test('a write for a channel the radio does not hold is refused', () async {
+      connector.handleFrameForTest(deviceInfo(caps2: offbandCap2ChannelNotify));
+      await syncChannels([
+        (index: 0, name: 'Public', seed: 10),
+        (index: 1, name: 'wardriving', seed: 40),
+      ]);
+      final gone = slot(1);
+
+      // The channel is deleted on the radio.
+      await syncChannels([(index: 0, name: 'Public', seed: 10)]);
+      sent.clear();
+
+      await connector.setChannelNotify(gone, RadioChannelNotify.off);
+
+      expect(sent, isEmpty);
+      expect(connector.deviceUiError, isNotNull);
+      expect(connector.deviceUiErrorSurface, DeviceUiSurface.channelNotify);
     });
   });
 
@@ -211,7 +416,7 @@ void main() {
     test('without 0x80 no channel-notify frame is ever emitted', () async {
       connector.handleFrameForTest(deviceInfo(caps2: 0x40));
       await connector.requestChannelNotify(0);
-      await connector.setChannelNotify(0, RadioChannelNotify.off);
+      await connector.setChannelNotify(testChannel(0), RadioChannelNotify.off);
 
       expect(connector.supportsChannelNotify, isFalse);
       expect(sentChannelNotify(), isFalse);
@@ -450,7 +655,12 @@ void main() {
       // hide a genuinely refused write and wrongly mark the radio as predating
       // the advert.
       connector.handleFrameForTest(deviceInfo(caps2: 0x80));
-      await connector.setChannelNotify(0, RadioChannelNotify.off);
+      // The channel must really exist, so the write really goes out: a write
+      // refused for an unresolvable slot would also set deviceUiError and
+      // pass this test for the wrong reason.
+      await syncChannels([(index: 0, name: 'Public', seed: 10)]);
+      await connector.setChannelNotify(slot(0), RadioChannelNotify.off);
+      expect(sentChannelNotify(), isTrue);
       connector.handleFrameForTest(advertUnsupported());
 
       expect(

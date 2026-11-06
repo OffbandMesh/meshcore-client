@@ -2830,6 +2830,36 @@ abstract class AppLocalizations {
   /// **'Retry sync'**
   String get channels_retrySync;
 
+  /// No description provided for @channels_erasedSlots.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio has lost the channels in slot(s) {slots}; it reported them as erased. Your channel list here has been kept and was not overwritten.'**
+  String channels_erasedSlots(String slots);
+
+  /// No description provided for @channels_restoreToRadio.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore to radio'**
+  String get channels_restoreToRadio;
+
+  /// No description provided for @channels_restoreToRadioConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Write {count} channel(s) back to the radio: {names}. This replaces whatever those slots hold now.'**
+  String channels_restoreToRadioConfirm(int count, String names);
+
+  /// No description provided for @channels_restoreToRadioDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {count} channel(s) to the radio.'**
+  String channels_restoreToRadioDone(int count);
+
+  /// No description provided for @channels_restoreToRadioFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore the channel list: nothing cached to restore, or the radio is not connected.'**
+  String get channels_restoreToRadioFailed;
+
   /// No description provided for @channels_slotIdentityChanged.
   ///
   /// In en, this message translates to:

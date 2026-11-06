@@ -84,7 +84,7 @@ void showRadioChannelNotifyDialog(BuildContext context, Channel channel) {
         // State follows the radio's reply, never the tap: until the radio has
         // answered for this slot there is no current value to tick, and a
         // write that it refuses never appears as saved.
-        final current = live.channelNotifyFor(channel.index);
+        final current = live.channelNotifyFor(channel);
         final error = live.deviceUiErrorSurface == DeviceUiSurface.channelNotify
             ? live.deviceUiError
             : null;
@@ -132,7 +132,7 @@ void showRadioChannelNotifyDialog(BuildContext context, Channel channel) {
                   trailing: mode == current ? const Icon(Icons.check) : null,
                   onTap: () async {
                     Navigator.pop(dialogContext);
-                    await connector.setChannelNotify(channel.index, mode);
+                    await connector.setChannelNotify(channel, mode);
                   },
                 ),
             ],

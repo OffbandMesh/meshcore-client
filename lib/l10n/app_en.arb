@@ -845,6 +845,35 @@
     }
   },
   "channels_retrySync": "Retry sync",
+  "channels_erasedSlots": "The radio has lost the channels in slot(s) {slots}; it reported them as erased. Your channel list here has been kept and was not overwritten.",
+  "@channels_erasedSlots": {
+    "placeholders": {
+      "slots": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_restoreToRadio": "Restore to radio",
+  "channels_restoreToRadioConfirm": "Write {count} channel(s) back to the radio: {names}. This replaces whatever those slots hold now.",
+  "@channels_restoreToRadioConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_restoreToRadioDone": "Restored {count} channel(s) to the radio.",
+  "@channels_restoreToRadioDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channels_restoreToRadioFailed": "Could not restore the channel list: nothing cached to restore, or the radio is not connected.",
   "channels_slotIdentityChanged": "Channel layout changed on the radio: {changes}",
   "@channels_slotIdentityChanged": {
     "placeholders": {

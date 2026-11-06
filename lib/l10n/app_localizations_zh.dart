@@ -1513,6 +1513,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channels_retrySync => 'Retry sync';
 
   @override
+  String channels_erasedSlots(String slots) {
+    return 'The radio has lost the channels in slot(s) $slots; it reported them as erased. Your channel list here has been kept and was not overwritten.';
+  }
+
+  @override
+  String get channels_restoreToRadio => 'Restore to radio';
+
+  @override
+  String channels_restoreToRadioConfirm(int count, String names) {
+    return 'Write $count channel(s) back to the radio: $names. This replaces whatever those slots hold now.';
+  }
+
+  @override
+  String channels_restoreToRadioDone(int count) {
+    return 'Restored $count channel(s) to the radio.';
+  }
+
+  @override
+  String get channels_restoreToRadioFailed =>
+      'Could not restore the channel list: nothing cached to restore, or the radio is not connected.';
+
+  @override
   String channels_slotIdentityChanged(String changes) {
     return 'Channel layout changed on the radio: $changes';
   }

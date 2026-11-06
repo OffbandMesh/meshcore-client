@@ -452,7 +452,14 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Written only from a device reply, and cleared per radio like every other
   /// device-UI surface. Slot-derived state: #1061's identity diff must reset
   /// it when a slot's PSK changes, or it describes the wrong channel.
-  final Map<int, RadioChannelNotify> _channelNotifyModes = {};
+  // #1060/#544: keyed by channel PSK hex, NOT by slot index. The wire is
+  // slot-addressed, but a slot is not an identity: when a channel moves slots
+  // (wipe + re-import, manual reorder) a slot-keyed mode follows the SLOT and
+  // lands on whatever channel now sits there. That is how a channel set to
+  // None started chirping again. The slot is resolved at the wire edge only,
+  // and everything the client holds or shows is keyed by PSK, matching the
+  // app's own `channelNotifyModesByRadio` (#848) and PSK-keyed history (#194).
+  final Map<String, RadioChannelNotify> _channelNotifyModes = {};
   final Map<ToneEvent, EventToneState> _eventTones = {};
   final Map<int, TuneSlotInfo> _tuneSlots = {};
   ScreenSettingsState? _screenSettings;
@@ -615,6 +622,25 @@ class MeshCoreConnector extends ChangeNotifier {
   /// the channel list has holes the UI must surface (#1062).
   Set<int> get unconfirmedChannelSlots =>
       Set.unmodifiable(_unconfirmedChannelSlots);
+
+  // #1060: slots the device answered for with an ERASED record (all-0xFF).
+  // The device answering is not the same as the device having a channel: a
+  // reflash or a wipe leaves readable garbage, not silence. These are refused
+  // rather than adopted, and their presence blocks the cached-list overwrite
+  // below, because a cached list the user can still see is better data than
+  // erased flash.
+  final Set<int> _erasedChannelSlots = {};
+
+  /// Device slots that answered with an erased record on the latest sync.
+  /// Non-empty means the radio lost channel storage and the client is holding
+  /// its own cached list instead (#1060).
+  Set<int> get erasedChannelSlots => Set.unmodifiable(_erasedChannelSlots);
+
+  /// True when the radio reported erased slots and the client therefore kept a
+  /// cached channel list the radio no longer has. The UI offers a restore.
+  bool get canRestoreChannelsToRadio =>
+      _erasedChannelSlots.isNotEmpty &&
+      _cachedChannels.any((c) => !c.isUnusable);
 
   // #1062: ingress barrier. Live channel traffic is held while this
   // connection's channel list is not yet synced, then flushed, so a message
@@ -1082,8 +1108,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// The radio's notify mode for [channel], or null until the radio has
   /// reported it. Null is "not yet known", distinct from
   /// [RadioChannelNotify.unset], which is the radio saying no choice is set.
-  RadioChannelNotify? channelNotifyFor(int channel) =>
-      _channelNotifyModes[channel];
+  ///
+  /// Looked up by the channel's PSK identity, so a mode read for one channel
+  /// can never be shown against another that later occupies its slot (#1060).
+  RadioChannelNotify? channelNotifyFor(Channel channel) =>
+      _channelNotifyModes[channel.pskHex];
 
   /// The tune the radio reported for [event], or null if not read yet.
   EventToneState? eventTone(ToneEvent event) => _eventTones[event];
@@ -1399,19 +1428,53 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Set the radio's notify mode for [channel]. Local state follows the
   /// device's re-read reply, never the request, so a refused choice is never
   /// shown as saved.
-  Future<void> setChannelNotify(int channel, RadioChannelNotify mode) async {
+  /// The slot [channel] currently occupies on the radio, by PSK identity, or
+  /// null when the synced list does not hold it. The caller's own
+  /// [Channel.index] is deliberately not trusted: it may have been captured
+  /// before a re-sync moved the channel, and writing to a stale slot is how a
+  /// setting lands on the wrong channel (#1060).
+  int? _liveSlotFor(Channel channel) {
+    if (!_channelListSynced) return null;
+    for (final c in _channels) {
+      if (c.pskHex == channel.pskHex && !c.isUnusable) return c.index;
+    }
+    return null;
+  }
+
+  Future<void> setChannelNotify(
+    Channel channel,
+    RadioChannelNotify mode,
+  ) async {
     if (!_deviceUiGateOpen('chnotify SET', advertised: supportsChannelNotify)) {
+      return;
+    }
+    final slot = _liveSlotFor(channel);
+    if (slot == null) {
+      // Fail closed and visibly, per #1021's rule: refuse the write and say
+      // why, rather than addressing a slot whose occupant is unconfirmed.
+      _deviceUiError =
+          'This channel is not confirmed on the radio right now, so its '
+          'sound setting was not written. Refresh the channel list and try '
+          'again.';
+      _deviceUiErrorSurface = DeviceUiSurface.channelNotify;
+      _pendingDeviceUiWrite = null;
+      _appDebugLogService?.error(
+        'chnotify SET refused: "${channel.name}" (psk ${channel.pskHex}) '
+        'does not resolve to a confirmed slot; no frame sent',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
       return;
     }
     _deviceUiError = null;
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = DeviceUiSurface.channelNotify;
     _appDebugLogService?.info(
-      'chnotify SET -> ch=$channel mode=${mode.name} '
+      'chnotify SET -> ch=$slot "${channel.name}" mode=${mode.name} '
       'stored=${mode.stored} [0xC5][0x19]',
       tag: 'DeviceUI',
     );
-    await sendFrame(buildChannelNotifySetFrame(channel, mode));
+    await sendFrame(buildChannelNotifySetFrame(slot, mode));
   }
 
   /// Ask the radio how GPS is running (#969).
@@ -1939,10 +2002,27 @@ class MeshCoreConnector extends ChangeNotifier {
     if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.channelNotify) {
       _pendingDeviceUiWrite = null;
     }
-    _channelNotifyModes[reply.channel] = reply.mode;
+    // #1060: the wire gives a slot; the client stores an identity. Resolve the
+    // slot against the synced list and drop the reply if it cannot be
+    // resolved, rather than filing a mode under a slot number that may mean a
+    // different channel by the time anything reads it.
+    final channel = _findChannelByIndex(reply.channel);
+    if (channel == null || channel.isUnusable) {
+      _appDebugLogService?.warn(
+        'chnotify reply for slot ${reply.channel} '
+        '(mode=${reply.mode.name}) does not resolve to a known channel; '
+        'dropped rather than stored against a slot number',
+        tag: 'DeviceUI',
+      );
+      // A pending write was still cleared above, so the UI must be released
+      // from "saving" even though nothing was stored.
+      notifyListeners();
+      return;
+    }
+    _channelNotifyModes[channel.pskHex] = reply.mode;
     _appDebugLogService?.info(
-      'chnotify reply: ch=${reply.channel} mode=${reply.mode.name} '
-      '(${isWrite ? 'write confirmed' : 'read'})',
+      'chnotify reply: ch=${reply.channel} "${channel.name}" '
+      'mode=${reply.mode.name} (${isWrite ? 'write confirmed' : 'read'})',
       tag: 'DeviceUI',
     );
     notifyListeners();
@@ -4413,6 +4493,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _cachedChannels = List<Channel>.from(channels);
   }
 
+  /// The last fully-confirmed channel list this client persisted. Survives a
+  /// sync that found erased slots, which is what makes a restore possible
+  /// (#1060).
+  List<Channel> get cachedChannels => List.unmodifiable(_cachedChannels);
+
   @visibleForTesting
   Channel? findChannelByIndexForTest(int index) => _findChannelByIndex(index);
 
@@ -4510,6 +4595,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Raw sniff frames are lossy observations; a dead connection's are stale.
     _channelListSynced = false;
     _unconfirmedChannelSlots.clear();
+    _erasedChannelSlots.clear();
     _slotIdentityChanges.clear();
     _heldRawChannelFrames.clear();
   }
@@ -6649,6 +6735,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // against a stale one (#1062).
     _channelListSynced = false;
     _unconfirmedChannelSlots.clear();
+    _erasedChannelSlots.clear();
     _previousChannelsCache = List<Channel>.from(_channels);
     _channels.clear();
     _nextChannelIndexToRequest = 0;
@@ -6781,7 +6868,19 @@ class MeshCoreConnector extends ChangeNotifier {
       }
     }
 
-    if (_unconfirmedChannelSlots.isEmpty) {
+    if (_erasedChannelSlots.isNotEmpty) {
+      // #1060: the radio answered, but for erased slots. "Device is truth"
+      // assumes the device HAS the truth; erased flash is the device having
+      // lost it. Writing this over the cache would turn one-sided loss on the
+      // radio into total loss, so the cached list stands and the UI offers to
+      // push it back.
+      _appDebugLogService?.error(
+        'Channel sync found ERASED slots $_erasedChannelSlots. The radio has '
+        'lost those channels. Cached list NOT overwritten (${_cachedChannels.where((c) => !c.isUnusable).length} '
+        'channel(s) retained); use Restore to write them back to the radio.',
+        tag: 'ChannelSync',
+      );
+    } else if (_unconfirmedChannelSlots.isEmpty) {
       // Full confirmation: the fresh list is the truth, replace the cache.
       _cachedChannels = List<Channel>.from(_channels);
       unawaited(
@@ -6988,6 +7087,44 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Refresh channels after setting
     await getChannels(force: true);
+  }
+
+  /// Writes the client's cached channel list back onto the radio (#1060).
+  ///
+  /// For a radio that lost channel storage (reflash, wipe) the client's cache
+  /// is the only surviving copy. Each cached channel goes back to the slot it
+  /// came from, so PSK-keyed history and per-channel settings line up again.
+  ///
+  /// Frames are sent directly rather than through [setChannel] because that
+  /// re-syncs after every write; this re-syncs once at the end. Nothing here
+  /// clears history: the identities being restored are the ones that own it.
+  ///
+  /// Returns the number of channels written, or -1 when there was nothing to
+  /// restore or the link is down.
+  Future<int> restoreChannelsToRadio() async {
+    if (!isConnected) return -1;
+    final toRestore = _cachedChannels.where((c) => !c.isUnusable).toList();
+    if (toRestore.isEmpty) return -1;
+
+    _appDebugLogService?.info(
+      'Restoring ${toRestore.length} cached channel(s) to the radio: '
+      '${toRestore.map((c) => 'slot ${c.index} "${c.name}"').join(', ')}',
+      tag: 'ChannelSync',
+    );
+
+    var written = 0;
+    for (final channel in toRestore) {
+      if (!isConnected) break;
+      await sendFrame(
+        buildSetChannelFrame(channel.index, channel.name, channel.psk),
+      );
+      written++;
+    }
+
+    // The radio now holds these again, so a fresh sync should confirm them and
+    // the erased-slot block clears itself on the next pass.
+    await getChannels(force: true);
+    return written;
   }
 
   Future<void> deleteChannel(int index) async {
@@ -10250,6 +10387,22 @@ class MeshCoreConnector extends ChangeNotifier {
       '[ChannelSync] Received channel ${channel.index}: ${channel.isEmpty ? "empty" : channel.name}',
     );
 
+    // #1060: an erased record is the radio having LOST this slot, not the
+    // radio reporting a channel. Adopting it would render replacement
+    // characters as a channel name, and persisting it would destroy the
+    // client's own good copy. Refuse it here, loudly, and let the sync
+    // completion keep the cached list.
+    if (channel.isErased) {
+      if (_erasedChannelSlots.add(channel.index)) {
+        _appDebugLogService?.error(
+          'Channel slot ${channel.index} came back ERASED (all-0xFF name/PSK). '
+          'The radio has lost this channel. Refusing to adopt it, and the '
+          'cached channel list will NOT be overwritten.',
+          tag: 'ChannelSync',
+        );
+      }
+    }
+
     // Preserve unread count from the cached channel, but only when the slot
     // still holds the SAME channel. An unread count following the slot across
     // an identity change is another channel's count (#1062).
@@ -10269,8 +10422,9 @@ class MeshCoreConnector extends ChangeNotifier {
         _channelSyncInFlight = false;
         _channelSyncRetries = 0; // Reset retry counter on success
 
-        // Only add non-empty channels
-        if (!channel.isEmpty) {
+        // Only add slots that carry a usable channel. An erased slot is
+        // skipped exactly like an empty one (#1060).
+        if (!channel.isUnusable) {
           _channels.add(channel);
         }
 
@@ -10286,7 +10440,7 @@ class MeshCoreConnector extends ChangeNotifier {
           '[ChannelSync] Received unexpected channel ${channel.index}, expected $_nextChannelIndexToRequest',
         );
         // Add it anyway but don't advance sync
-        if (!channel.isEmpty &&
+        if (!channel.isUnusable &&
             !_channels.any((c) => c.index == channel.index)) {
           _channels.add(channel);
         }
@@ -10295,7 +10449,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     // Not syncing, or received unsolicited update - handle normally
-    if (!channel.isEmpty) {
+    if (!channel.isUnusable) {
       // Update or add channel
       final existingIndex = _channels.indexWhere(
         (c) => c.index == channel.index,
