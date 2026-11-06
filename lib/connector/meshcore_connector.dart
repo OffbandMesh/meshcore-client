@@ -619,6 +619,11 @@ class MeshCoreConnector extends ChangeNotifier {
   List<Channel> _previousChannelsCache = [];
   static const int _maxChannelSyncRetries = 3;
 
+  /// Gap between consecutive channel writes in [restoreChannelsToRadio], so a
+  /// multi-channel restore cannot outrun the radio. Matches the spacing the USB
+  /// branch of [sendFrame] already applies per frame (#1060).
+  static const Duration _channelRestoreFrameGap = Duration(milliseconds: 10);
+
   // #1062: fail-closed channel sync. A slot the device never answered for is
   // UNKNOWN: tracked here, surfaced to the UI, and never backfilled from a
   // previous list (that backfill is how a stale slot map misrouted
@@ -2542,7 +2547,24 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> loadCachedChannels() async {
-    _cachedChannels = await _channelStore.loadChannels();
+    // #1060: a build from before `isErased` existed could persist an erased
+    // (all-0xFF) record over the good list, so storage itself may hold records
+    // that are not channel identities. Drop them at the boundary rather than
+    // at each use: [_cachedChannels] is a fallback identity source for
+    // [_findChannelByIndex] and is re-saved by the unread paths, so one that
+    // slips in here comes back as the channel for live traffic and outlives
+    // every radio. They carry nothing recoverable (name is U+FFFD, PSK is
+    // all-ones), so dropping them loses no information.
+    final loaded = await _channelStore.loadChannels();
+    final usable = loaded.where((c) => !c.isUnusable).toList();
+    if (usable.length != loaded.length) {
+      _appDebugLogService?.warn(
+        'Dropped ${loaded.length - usable.length} unusable channel record(s) '
+        'from storage on load; a pre-#1060 build had persisted erased slots',
+        tag: 'ChannelSync',
+      );
+    }
+    _cachedChannels = usable;
     _recalculateCachedChannelsUnreadTotal();
   }
 
@@ -4464,6 +4486,12 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setContactSettingsKeyForTest(String radioKeyHex) =>
       _contactSettingsStore.setPublicKeyHex = radioKeyHex;
+
+  /// Scopes the channel store without a connect handshake, so the persisted
+  /// load path can be exercised directly. (#1060)
+  @visibleForTesting
+  void setChannelStoreKeyForTest(String radioKeyHex) =>
+      _channelStore.setPublicKeyHex = radioKeyHex;
 
   /// Feeds a device frame through the normal dispatch, so parse paths can be
   /// exercised without a radio. (#578)
@@ -7124,7 +7152,8 @@ class MeshCoreConnector extends ChangeNotifier {
   /// clears history: the identities being restored are the ones that own it.
   ///
   /// Returns the number of channels written, or -1 when there was nothing to
-  /// restore or the link is down.
+  /// restore or the link is down. Written is not the same as confirmed: the
+  /// erased-slot banner is what tells the user the radio took them.
   Future<int> restoreChannelsToRadio() async {
     if (!isConnected) return -1;
     final toRestore = _cachedChannels.where((c) => !c.isUnusable).toList();
@@ -7136,19 +7165,34 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'ChannelSync',
     );
 
-    var written = 0;
+    var sent = 0;
     for (final channel in toRestore) {
       if (!isConnected) break;
       await sendFrame(
         buildSetChannelFrame(channel.index, channel.name, channel.psk),
       );
-      written++;
+      sent++;
+      // Space the writes. On BLE [sendFrame] prefers write-without-response,
+      // which returns once the frame reaches the OS and not once the radio has
+      // taken it, so an unpaced loop can overrun the radio and lose channels
+      // with no error anywhere. The USB branch of [sendFrame] already spaces
+      // its own frames for exactly this reason; BLE has no such pause.
+      if (sent < toRestore.length) {
+        await Future<void>.delayed(_channelRestoreFrameGap);
+      }
     }
 
     // The radio now holds these again, so a fresh sync should confirm them and
     // the erased-slot block clears itself on the next pass.
+    //
+    // This deliberately does NOT report how many the radio confirmed:
+    // [getChannels] returns once the first request is away, not once the sync
+    // has finished, so counting confirmations here would read a list the radio
+    // has not answered for yet and report 0 every time. The authoritative
+    // feedback is the erased-slot banner, which is re-derived on every sync and
+    // therefore stays up if some writes did not land.
     await getChannels(force: true);
-    return written;
+    return sent;
   }
 
   Future<void> deleteChannel(int index) async {

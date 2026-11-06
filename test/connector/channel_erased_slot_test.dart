@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/channel.dart';
+import 'package:meshcore_open/storage/channel_store.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
@@ -244,5 +245,94 @@ void main() {
         expect(sent.where((f) => f[0] == cmdSetChannel), isEmpty);
       },
     );
+
+    // Adversarial review finding: on BLE sendFrame prefers write-without-
+    // response, so its await returns when the frame reaches the OS and not
+    // when the radio has taken it. An unpaced loop can therefore overrun the
+    // radio and drop channels with no error raised anywhere. The USB branch
+    // of sendFrame already spaces its frames; this loop must too.
+    test(
+      'consecutive channel writes are spaced, not fired in a tight loop',
+      () async {
+        c.seedCachedChannelsForTest([
+          _channel(0, 'Public', 10),
+          _channel(1, 'wardriving', 40),
+          _channel(2, 'test', 70),
+        ]);
+        sent.clear();
+
+        final sw = Stopwatch()..start();
+        final written = await c.restoreChannelsToRadio();
+        sw.stop();
+
+        expect(written, 3);
+        // Two gaps between three writes. A lower bound, so this asserts the
+        // pacing exists without pinning the exact duration.
+        expect(
+          sw.elapsedMilliseconds,
+          greaterThanOrEqualTo(20),
+          reason: 'three writes with no spacing would return almost instantly',
+        );
+      },
+    );
+  });
+
+  // Adversarial review finding: the guards added here stop an erased record
+  // being adopted from the WIRE, but a build from before they existed could
+  // already have persisted one. Storage is therefore an untrusted source too,
+  // and _cachedChannels is a fallback identity source for _findChannelByIndex
+  // as well as being re-saved by the unread paths, so one that slips in comes
+  // back as the channel for live traffic and outlives every radio.
+  group('erased records already sitting in storage', () {
+    const radioKey = 'aabbccddee';
+
+    test('are dropped on load, not adopted from the cache', () async {
+      final store = ChannelStore()..setPublicKeyHex = radioKey;
+      await store.saveChannels([
+        _channel(0, 'Public', 10),
+        Channel.fromFrame(_erasedFrame(1))!,
+        _channel(2, 'wardriving', 40),
+      ]);
+      // The store itself is faithful: it persisted exactly what it was given,
+      // which is how the bad record got there in the first place.
+      expect((await store.loadChannels()).length, 3);
+
+      c.setChannelStoreKeyForTest(radioKey);
+      await c.loadCachedChannels();
+
+      expect(c.cachedChannels.map((ch) => ch.name), ['Public', 'wardriving']);
+      expect(c.cachedChannels.any((ch) => ch.isUnusable), isFalse);
+    });
+
+    test('a clean stored list is loaded untouched', () async {
+      final store = ChannelStore()..setPublicKeyHex = radioKey;
+      await store.saveChannels([
+        _channel(0, 'Public', 10),
+        _channel(1, 'wardriving', 40),
+      ]);
+
+      c.setChannelStoreKeyForTest(radioKey);
+      await c.loadCachedChannels();
+
+      expect(c.cachedChannels.length, 2);
+      expect(c.cachedChannels.map((ch) => ch.name), ['Public', 'wardriving']);
+    });
+
+    test('an all-erased stored list leaves nothing to restore', () async {
+      final store = ChannelStore()..setPublicKeyHex = radioKey;
+      await store.saveChannels([
+        Channel.fromFrame(_erasedFrame(0))!,
+        Channel.fromFrame(_erasedFrame(1))!,
+      ]);
+
+      c.setChannelStoreKeyForTest(radioKey);
+      await c.loadCachedChannels();
+
+      expect(c.cachedChannels, isEmpty);
+      // Nothing usable cached means the restore is refused rather than
+      // writing erased records back onto the radio.
+      expect(await c.restoreChannelsToRadio(), -1);
+      expect(sent.where((f) => f[0] == cmdSetChannel), isEmpty);
+    });
   });
 }

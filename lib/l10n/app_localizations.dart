@@ -2908,6 +2908,12 @@ abstract class AppLocalizations {
   /// **'Could not restore the channel list: nothing cached to restore, or the radio is not connected.'**
   String get channels_restoreToRadioFailed;
 
+  /// No description provided for @channels_restoreToRadioPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {written} of {total} channel(s) came back after the restore. The radio did not take the rest. Try the restore again.'**
+  String channels_restoreToRadioPartial(int written, int total);
+
   /// No description provided for @channels_slotIdentityChanged.
   ///
   /// In en, this message translates to:

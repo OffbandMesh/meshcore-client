@@ -1566,6 +1566,11 @@ class AppLocalizationsZh extends AppLocalizations {
       'Could not restore the channel list: nothing cached to restore, or the radio is not connected.';
 
   @override
+  String channels_restoreToRadioPartial(int written, int total) {
+    return 'Only $written of $total channel(s) came back after the restore. The radio did not take the rest. Try the restore again.';
+  }
+
+  @override
   String channels_slotIdentityChanged(String changes) {
     return 'Channel layout changed on the radio: $changes';
   }

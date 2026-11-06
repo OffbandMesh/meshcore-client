@@ -887,7 +887,7 @@
       }
     }
   },
-  "channels_restoreToRadioDone": "Restored {count} channel(s) to the radio.",
+  "channels_restoreToRadioDone": "Wrote {count} channel(s) back to the radio. If the warning above stays, some did not take.",
   "@channels_restoreToRadioDone": {
     "placeholders": {
       "count": {
