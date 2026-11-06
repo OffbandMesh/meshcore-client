@@ -233,6 +233,7 @@ const int cmdGetContactByKey = 30;
 const int cmdGetChannel = 31;
 const int cmdSetChannel = 32;
 const int cmdSendTracePath = 36;
+const int cmdSetDevicePin = 37;
 const int cmdSetOtherParams = 38;
 const int cmdSendTelemetryReq = 39;
 const int cmdGetCustomVar = 40;
@@ -1440,6 +1441,18 @@ Uint8List buildSetCustomVarFrame(String value) {
   writer.writeByte(cmdSetCustomVar);
   writer.writeString(value);
   writer.writeByte(0);
+  return writer.toBytes();
+}
+
+// Build CMD_SET_DEVICE_PIN frame (#1100)
+// Format: [cmd][pin x4 LE]. Firmware accepts 0 (return to the build default,
+// which on display builds means a random per-session pin) or a 6-digit pin
+// 100000-999999, persists it and answers OK; anything else answers ERR
+// (companion_radio MyMesh.cpp, CMD_SET_DEVICE_PIN).
+Uint8List buildSetDevicePinFrame(int pin) {
+  final writer = BufferWriter();
+  writer.writeByte(cmdSetDevicePin);
+  writer.writeInt32LE(pin);
   return writer.toBytes();
 }
 
