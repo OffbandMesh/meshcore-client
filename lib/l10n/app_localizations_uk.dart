@@ -799,6 +799,37 @@ class AppLocalizationsUk extends AppLocalizations {
       'Ви впевнені, що хочете перезавантажити пристрій? Вас буде відключено.';
 
   @override
+  String get settings_blePin => 'BLE pairing PIN';
+
+  @override
+  String get settings_blePinDefault => 'Firmware default';
+
+  @override
+  String get settings_blePinHelp =>
+      '6 digits (100000-999999). New phones and PCs must enter it when pairing. Reset to default to return to the firmware\'s built-in behavior.';
+
+  @override
+  String get settings_blePinInvalid =>
+      'Enter a 6-digit PIN between 100000 and 999999';
+
+  @override
+  String settings_blePinSaved(String pin) {
+    return 'PIN set to $pin. Already-paired devices may need to forget the radio and pair again.';
+  }
+
+  @override
+  String get settings_blePinResetDone =>
+      'PIN reset to the firmware default. Already-paired devices may need to forget the radio and pair again.';
+
+  @override
+  String settings_blePinSendFailed(String error) {
+    return 'The PIN was not changed: sending to the radio failed ($error)';
+  }
+
+  @override
+  String get settings_blePinResetAction => 'Reset to default';
+
+  @override
   String get settings_debug => 'Налагодження';
 
   @override

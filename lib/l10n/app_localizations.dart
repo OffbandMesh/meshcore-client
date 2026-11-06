@@ -1474,6 +1474,54 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to reboot the device? You will be disconnected.'**
   String get settings_rebootDeviceConfirm;
 
+  /// No description provided for @settings_blePin.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE pairing PIN'**
+  String get settings_blePin;
+
+  /// No description provided for @settings_blePinDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware default'**
+  String get settings_blePinDefault;
+
+  /// No description provided for @settings_blePinHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'6 digits (100000-999999). New phones and PCs must enter it when pairing. Reset to default to return to the firmware\'s built-in behavior.'**
+  String get settings_blePinHelp;
+
+  /// No description provided for @settings_blePinInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a 6-digit PIN between 100000 and 999999'**
+  String get settings_blePinInvalid;
+
+  /// No description provided for @settings_blePinSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN set to {pin}. Already-paired devices may need to forget the radio and pair again.'**
+  String settings_blePinSaved(String pin);
+
+  /// No description provided for @settings_blePinResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN reset to the firmware default. Already-paired devices may need to forget the radio and pair again.'**
+  String get settings_blePinResetDone;
+
+  /// No description provided for @settings_blePinSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The PIN was not changed: sending to the radio failed ({error})'**
+  String settings_blePinSendFailed(String error);
+
+  /// No description provided for @settings_blePinResetAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to default'**
+  String get settings_blePinResetAction;
+
   /// No description provided for @settings_debug.
   ///
   /// In en, this message translates to:

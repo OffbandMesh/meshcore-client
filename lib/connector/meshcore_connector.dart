@@ -522,6 +522,13 @@ class MeshCoreConnector extends ChangeNotifier {
   static const int _defaultMaxChannels = 40;
   int _maxContacts = _defaultMaxContacts;
   int _maxChannels = _defaultMaxChannels;
+
+  /// The radio's configured BLE pairing pin from device info (#1100).
+  /// 0 = the firmware build default (on display builds that means a random
+  /// per-session pin shown on the device). Null until a device-info frame
+  /// long enough to carry it arrives.
+  int? _deviceBlePin;
+  int? get deviceBlePin => _deviceBlePin;
   int? _contactSyncTotal;
   int _contactSyncReceived = 0;
   bool _contactSyncUsesSinceFilter = false;
@@ -4409,6 +4416,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _unreadStore.setPublicKeyHex = '';
     _discoveryContactStore.setPublicKeyHex = '';
     storageService?.setPublicKeyHex = '';
+    // Device-scoped: the next radio's device info supplies its own pin (#1100).
+    _deviceBlePin = null;
     _applySelfKeyToBlockService();
   }
 
@@ -6687,6 +6696,21 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendCliCommand('set privacy ${enabled ? 'on' : 'off'}');
   }
 
+  /// Sets the radio's BLE pairing pin over CMD_SET_DEVICE_PIN (#1100).
+  /// [pin] is 0 (return to the firmware build default) or a 6-digit value;
+  /// the range mirrors firmware's own validation, which answers ERR outside
+  /// it. The OS bond becomes stale after a change: the UI tells the user a
+  /// forget/re-pair may be needed.
+  Future<void> setDevicePin(int pin) async {
+    if (!isConnected) return;
+    if (pin != 0 && (pin < 100000 || pin > 999999)) {
+      throw ArgumentError.value(pin, 'pin', 'must be 0 or a 6-digit pin');
+    }
+    await sendFrame(buildSetDevicePinFrame(pin));
+    _deviceBlePin = pin;
+    notifyListeners();
+  }
+
   Future<void> setTelemetryModeBase(
     int base,
     int location,
@@ -8569,6 +8593,14 @@ class MeshCoreConnector extends ChangeNotifier {
   // caps2 `0x80` are TAGS in the `0xC5` `0x1C` advert, which cannot run out.
   // (#1096; the removed reader was `parseOffbandCaps3` at offset 87.)
 
+  /// The configured BLE pairing pin, bytes 4..7 LE of device info's 8-byte
+  /// header, written unconditionally by the companion firmware right after
+  /// max contacts/channels (MyMesh.cpp, CMD_DEVICE_QUERY). Null only on a
+  /// frame too short to carry it. (#1100)
+  static int? parseDevicePin(Uint8List frame) => frame.length >= 8
+      ? frame[4] | (frame[5] << 8) | (frame[6] << 16) | (frame[7] << 24)
+      : null;
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -8667,6 +8699,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _reconcileGpsPolling();
     // Caps landed, if the radio speaks block, pull its list and union-reconcile.
     _reconcileFirmwareBlock();
+
+    // BLE pairing pin, bytes 4..7 of the header (#1100).
+    _deviceBlePin = parseDevicePin(frame) ?? _deviceBlePin;
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];
