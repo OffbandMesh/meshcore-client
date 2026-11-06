@@ -1544,6 +1544,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channels_retrySync => 'Retry sync';
 
   @override
+  String channels_erasedSlots(String slots) {
+    return 'The radio has lost the channels in slot(s) $slots; it reported them as erased. Your channel list here has been kept and was not overwritten.';
+  }
+
+  @override
+  String get channels_restoreToRadio => 'Restore to radio';
+
+  @override
+  String channels_restoreToRadioConfirm(int count, String names) {
+    return 'Write $count channel(s) back to the radio: $names. This replaces whatever those slots hold now.';
+  }
+
+  @override
+  String channels_restoreToRadioDone(int count) {
+    return 'Restored $count channel(s) to the radio.';
+  }
+
+  @override
+  String get channels_restoreToRadioFailed =>
+      'Could not restore the channel list: nothing cached to restore, or the radio is not connected.';
+
+  @override
+  String channels_restoreToRadioPartial(int written, int total) {
+    return 'Only $written of $total channel(s) came back after the restore. The radio did not take the rest. Try the restore again.';
+  }
+
+  @override
   String channels_slotIdentityChanged(String changes) {
     return 'Channel layout changed on the radio: $changes';
   }
@@ -1580,7 +1607,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channels_unmuteChannel => '取消静音频道';
 
   @override
-  String get channels_notifications => 'Notifications';
+  String get channels_notifications => 'Phone notifications';
 
   @override
   String get channels_notifyAll => 'All messages';
@@ -1590,6 +1617,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channels_notifyOff => 'Off';
+
+  @override
+  String get channels_radioSound => 'Radio sound';
+
+  @override
+  String get channels_radioSoundUnset => 'Not set';
+
+  @override
+  String channels_radioSoundFollows(String scope) {
+    return 'Follows the radio: $scope';
+  }
+
+  @override
+  String get channels_radioSoundMutedByRadio =>
+      'Silent: the radio is set to None';
+
+  @override
+  String get channels_radioSoundReading => 'Reading from the radio';
 
   @override
   String get channels_deleteChannel => '删除频道';

@@ -27,6 +27,7 @@ import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -206,6 +207,30 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                             unawaited(connector.getChannels(force: true)),
                         child: Text(context.l10n.channels_retrySync),
                       ),
+                    ],
+                  ),
+                // #1060: the radio answered for these slots with erased
+                // records. Undismissable: the radio has lost channels the
+                // client still holds, and the only way out is to write them
+                // back or accept the loss deliberately.
+                if (connector.erasedChannelSlots.isNotEmpty)
+                  MaterialBanner(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.errorContainer,
+                    content: Text(
+                      context.l10n.channels_erasedSlots(
+                        connector.erasedChannelSlots.toList().join(', '),
+                      ),
+                    ),
+                    actions: [
+                      if (connector.canRestoreChannelsToRadio)
+                        TextButton(
+                          onPressed: () => unawaited(
+                            _confirmRestoreChannels(context, connector),
+                          ),
+                          child: Text(context.l10n.channels_restoreToRadio),
+                        ),
                     ],
                   ),
                 if (connector.slotIdentityChanges.isNotEmpty)
@@ -570,6 +595,35 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                 }
               },
             ),
+            // The radio's own sound setting for this channel (#544), named
+            // apart from Notifications, which is the phone's. These are two
+            // independent settings over two outputs: neither reads the other.
+            // Gated on caps byte 2 0x80.
+            if (radioChannelNotifySupported(context.read<MeshCoreConnector>()))
+              Builder(
+                builder: (tileContext) {
+                  final live = tileContext.watch<MeshCoreConnector>();
+                  final effective = radioChannelNotifyEffective(
+                    tileContext,
+                    live.channelNotifyFor(channel),
+                    live.deviceNotifyScope,
+                  );
+                  return ListTile(
+                    leading: const Icon(Icons.volume_up_outlined),
+                    title: Text(tileContext.l10n.channels_radioSound),
+                    subtitle: Text(
+                      effective ?? tileContext.l10n.channels_radioSoundReading,
+                    ),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      await Future.delayed(const Duration(milliseconds: 100));
+                      if (parentContext.mounted) {
+                        showRadioChannelNotifyDialog(parentContext, channel);
+                      }
+                    },
+                  );
+                },
+              ),
             // The radio's own tone for this channel (#971), named apart from
             // Notifications, which is the phone's. Gated on caps byte 2 0x10.
             ChannelRadioToneTile(
@@ -1583,6 +1637,52 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ],
         ),
       ),
+    );
+  }
+
+  /// Writes the client's cached channels back onto a radio that lost them
+  /// (#1060). Confirmed first: it overwrites whatever those slots hold now.
+  Future<void> _confirmRestoreChannels(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) async {
+    final toRestore = connector.cachedChannels
+        .where((c) => !c.isUnusable)
+        .toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.channels_restoreToRadio),
+        content: Text(
+          dialogContext.l10n.channels_restoreToRadioConfirm(
+            toRestore.length,
+            toRestore.map((c) => c.name).join(', '),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.common_cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.channels_restoreToRadio),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final written = await connector.restoreChannelsToRadio();
+    if (!context.mounted) return;
+    showDismissibleSnackBar(
+      context,
+      content: Text(
+        written < 0
+            ? context.l10n.channels_restoreToRadioFailed
+            : context.l10n.channels_restoreToRadioDone(written),
+      ),
+      persist: written < 0,
     );
   }
 

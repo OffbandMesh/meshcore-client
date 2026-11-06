@@ -650,6 +650,25 @@ const int offbandCap2GpsMode = 0x20;
 /// (#987): text sizes, Screen off, time zone, battery full point.
 const int offbandCap2ScreenSettings = 0x40;
 
+/// Per-channel RADIO notify mode over `0xC5` 0x18 / 0x19 (#544,
+/// meshcore-firmware#606). Firmware sets it where `PIN_BUZZER` is defined, so
+/// it is a per-unit answer: gate on the BIT, never on model or version.
+///
+/// This is the LAST bit in caps byte 2, and there is NO byte 3.
+///
+/// A third capability byte would have to be appended to upstream's device-info
+/// frame, which firmware `docs/offband_info_frame_contract.md` §2 forbids
+/// permanently: three features each computed "the next free byte" as offset 87
+/// and each was right in isolation, and a collision at a frame offset is silent
+/// misparsing rather than a refused command. Capabilities after this bit are
+/// TAGS in the `0xC5` `0x1C` advert (`offband_capability_advert.dart`), which
+/// has no scarcity to run out of.
+///
+/// This bit itself is NOT the gate once a radio answers the advert: see
+/// `MeshCoreConnector.supportsChannelNotify` for the precedence, which exists
+/// because `4e5a6c85` carries this bit and predates the advert. (#1096, #1097)
+const int offbandCap2ChannelNotify = 0x80;
+
 /// True iff this radio answers the `0xC5` tune sub-codes.
 bool firmwareSupportsTunes(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2Tunes) != 0;
@@ -661,6 +680,14 @@ bool firmwareSupportsScreenSettings(int? offbandCaps2) =>
 /// True iff this radio answers the `0xC5` GPS-mode sub-codes (#969).
 bool firmwareSupportsGpsMode(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2GpsMode) != 0;
+
+/// True iff this radio stores a per-channel notify mode and answers the
+/// `0xC5` 0x18 / 0x19 sub-codes (#544).
+///
+/// Says nothing about the app's own per-channel notify setting, which needs no
+/// radio and is never gated on this.
+bool firmwareSupportsChannelNotify(int? offbandCaps2) =>
+    offbandCaps2 != null && (offbandCaps2 & offbandCap2ChannelNotify) != 0;
 
 bool firmwareSupportsOffbandCaplog(int? offbandCaps) =>
     offbandCaps != null && (offbandCaps & offbandCapCaplog) != 0;
