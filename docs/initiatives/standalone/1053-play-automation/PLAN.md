@@ -99,11 +99,11 @@ A, then B. B0 adds two permissions and one step to the `android` job in `release
 | **Stops** | Any refusal in section 6. | |
 | **Flash** | None | |
 
-`epic_chain` is filled with the Epic issue numbers before you mint, as on #962.
+Epics: A is #1082, B is #1083.
 
 ```grant-terms
 {
-  "epic_chain": [],
+  "epic_chain": [1082, 1083],
   "chain": true,
   "verification": { "mode": "owner" },
   "merge": { "budget": 2, "basis": "Two Epics, one PR each. The plan PR merges before this grant exists." },
