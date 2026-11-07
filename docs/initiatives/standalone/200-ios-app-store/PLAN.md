@@ -23,14 +23,14 @@ Research is on [#958](https://github.com/OffbandMesh/meshcore-client/issues/958)
 |---|---|---|---|
 | 1 | The `ios` CI job only compiles. | `flutter build ios --release --no-codesign` (`build.yml:134`) `[verified]` | Green proves nothing installable. Everything below the compile is unbuilt. |
 | 2 | The `ios` job writes no Giphy define. | No `dart_defines.json` step in `build.yml:116-135`, unlike android, linux, web and windows `[verified]` | A signed build made the same way would ship with a broken GIF picker. |
-| 3 | Native assets are not enabled for iOS. | linux, macos and windows run `flutter config --enable-native-assets` to bundle `sqlite3` and `llamadart` (#445); `ios` does not. `project.pbxproj` already carries a build phase for `io.flutter.flutter.native-assets.*` frameworks `[verified]` | The largest "compiles but does not work" risk: storage or translation missing at runtime. `[hypothesis: untested]` |
+| 3 | iOS bundles native assets without the flag. | linux, macos and windows run `flutter config --enable-native-assets` (#445); `ios` does not, and run 41171197215 on Flutter 3.44.1 still produced `sqlite3.framework` and `llamadart.framework` `[verified]` | The first draft's hypothesis that the flag was needed was wrong. The risk of a build that compiles but lacks them stays, so an assertion guards every build. |
 | 4 | The project targets iPhone **and** iPad. | `TARGETED_DEVICE_FAMILY = "1,2"` (`project.pbxproj:438`) `[verified]` | Contradicts the iPhone-only decision, and would require iPad screenshots. iPhone-only apps still run on iPad. `[hypothesis: standard iPadOS compatibility mode]` |
 | 5 | Signing is Automatic with no team. | `CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` (`project.pbxproj:468`) `[verified]` | The signed lane must supply manual signing at build time. |
 | 6 | The iOS bundle id differs from Android's. | Apple refused `app.offband.meshcore` as not available, and the owner's team did not hold it `[verified: owner screenshots 2026-10-31]`. The owner created the app as `app.offband.meshcore.ios` | The Xcode project moves to the new id. Android stays `app.offband.meshcore`. Who holds the original is unknown. |
 | 7 | No location purpose string is needed. | No location plugin in `pubspec.yaml` or `lib/` `[verified]` | Map positions come from radios. Bluetooth and camera strings are present. |
 | 8 | Signed releases already run on `v*` tags and manual dispatch, with secrets scoped to one job behind a required reviewer. | `release-signed.yml`: only `android` uses Environment `release-signing`; `release` needs `[android, windows, linux]` `[verified]` | iOS copies this pattern in its **own** Environment, and must not be able to block the GitHub release. |
 | 9 | App Store Connect API access needs its own approval. | "The Account Holder must request access... reviewed and approved on a case-by-case basis." Key downloadable once. `[verified]` | A separate owner wait, requested on day one after enrollment. |
-| 10 | Apple documents `openssl` as a CSR source, and Flutter documents `altool` upload with an API key. | Apple CSR page; docs.flutter.dev/deployment/ios `[verified]` | The Windows-only path is real. Apple's upload page lists Developer among the roles that can upload `[verified]`; that a team key with that role uploads through `altool` `[hypothesis: B5 proves it]`. Key size `[hypothesis: RSA 2048]`; `.p8` location for `altool` `[hypothesis]`. |
+| 10 | Apple documents `openssl` as a CSR source, and Flutter documents `altool` upload with an API key. | Apple CSR page; docs.flutter.dev/deployment/ios `[verified]` | The Windows-only path is real. Run 41171670352 proved it end to end `[verified]`: an RSA 2048 Windows-made certificate signed the IPA, and a team key with the Developer role validated and uploaded it through `altool`, read from `~/.appstoreconnect/private_keys`, a folder `man altool` documents. |
 | 11 | OpenSSL 3 writes `.p12` files older macOS tooling has refused. | Owner's box has OpenSSL 3.5.7 via Git for Windows `[verified]`; import compatibility `[hypothesis: untested]` | Must be proven on a runner, and can be, with a throwaway fixture, before enrollment. |
 | 12 | With France excluded, Apple needs **no** export document. | Standard algorithms not from Apple's OS need only the French declaration, and only for France `[verified]` | No CCATS, no French form. France is out by owner decision (#957). |
 | 13 | The shipped binary likely falls outside the US EAR. | 15 CFR 734.3 Note plus 742.15(b): public source, standard crypto, no notification `[verified text]`; the reading `[hypothesis]`, an engineer's reading and not legal advice | Holds only while **every** binary is built from public source. A standing rule below. Whether to have counsel confirm it is the owner's call. |
@@ -79,7 +79,7 @@ Needs the real certificate, profile and API key, so it waits on owner rounds 2 a
 
 | Task | Pts |
 |---|---|
-| **B1 · Close the compile job's gaps** in `build.yml`'s `ios` job and the project: `TARGETED_DEVICE_FAMILY = 1`, native assets enabled, Giphy define written. Plus an assertion that the built `.app` actually contains the `sqlite3` and `llamadart` frameworks, made to fail first by building without native assets. | 3 |
+| **B1 · Close the compile job's gaps** in `build.yml`'s `ios` job and the project: `TARGETED_DEVICE_FAMILY = 1`, Giphy define written. Plus an assertion that the built `.app` actually contains the `sqlite3` and `llamadart` frameworks, shown able to fail on every run against an empty app, because a build without the flag still contains them (finding 3). | 3 |
 | **B2 · `ios-signed.yml`,** a `workflow_call` workflow in Environment `apple-signing`: decode secrets (stop if any is empty), temporary keychain, install profile, write `ExportOptions.plist` (App Store Connect, manual signing, team, profile), `flutter build ipa` with `--build-name` from pubspec and `--build-number` per choice 1, the framework assertion again on the IPA, a `codesign` check that the app inside the IPA is signed by the Apple Distribution certificate (made to fail first against a wrong name, matching the Android fingerprint pin), then `altool` validation and upload, both always run. Keychain and key files removed with `if: always()`. | 4 |
 | **B3 · Callers:** `testflight.yml` on `workflow_dispatch`, and an `ios` job in `release-signed.yml` after `gate`. **`release` does not depend on it**, per choice 4. Neither workflow gains a `pull_request` trigger. | 3 |
 | **B4 · Read `man altool` on the runner** for the `.p8` location, failure reporting, and the current validate and upload subcommands (`--validate-app`, and whether `--upload-app` or `--upload-package` is current), and parse the upload output so an error that exits 0 still fails the job. | 2 |
@@ -171,7 +171,7 @@ No branch proceeds. There is deliberately **no** "skip upload" or dry-run input:
 - **Acceptance bar:**
   - A1's import check green on the legacy `.p12` and refusing a wrong password, with the default format's result recorded.
   - B2's signing check red against a wrong certificate name, green against the real one.
-  - B1's framework assertion red without native assets, green with them.
+  - B1's framework assertion red on an empty app, green on the real one.
   - A build in App Store Connect with the expected version and build number.
   - D1's positive and negative cases all at their expected result on a real iPhone.
 
@@ -186,7 +186,7 @@ No branch proceeds. There is deliberately **no** "skip upload" or dry-run input:
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | Where does each upload's build number come from? | The CI run number, stamped at build time: always unique, never a commit | The pubspec `+N`, matching Android, but every beta then needs a pubspec commit | ⭐ A | A |
+| 1 | Where does each upload's build number come from? | The CI run number, stamped at build time: always unique, never a commit | The pubspec `+N`, matching Android, but every beta then needs a pubspec commit | ⭐ A | A, using the run **ID**: the two callers each count their own run numbers, so run numbers would collide |
 | 2 | CoreScope sends packet hashes to `map.okimesh.org`, a server you help run. Declare it? | Declare nothing | Declare "Other Data, not linked to the user, App Functionality" | ⭐ B, safe to take unread | B |
 | 3 | The support URL App Review requires | A small `offband.org/support` page (`offband-site` work) | The privacy page's contact line | ⭐ A | A |
 | 4 | Should the GitHub release wait on the iOS upload? | No: an Apple outage cannot block Android and desktop | Yes: all platforms or none | ⭐ A | A |
