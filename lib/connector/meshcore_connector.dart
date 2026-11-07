@@ -229,6 +229,10 @@ enum ChannelWrite {
   /// Not connected, or no reply before the timeout. The write may or may not
   /// have landed.
   noReply,
+
+  /// An edit to a new key cleared the old channel, but the new one was not
+  /// confirmed, so the slot is now empty. (#1026)
+  clearedNotAdded,
 }
 
 /// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
@@ -6901,6 +6905,19 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> getChannels({int? maxChannels, bool force = false}) async {
+    // A sync started while a channel write waits for its reply would share the
+    // reply queue with it. Replies are matched by order, so the sync's
+    // empty-slot ERR could be taken as the write's answer. Deferred until the
+    // writes finish, then run once (#1026). The writers' own re-reads call
+    // [_syncChannels] directly.
+    if (_channelWritesInFlight > 0) {
+      _channelSyncDeferredByWrite = true;
+      return;
+    }
+    return _syncChannels(maxChannels: maxChannels, force: force);
+  }
+
+  Future<void> _syncChannels({int? maxChannels, bool force = false}) async {
     if (!isConnected) return;
     if (_isSyncingChannels) {
       debugPrint('[ChannelSync] Already syncing channels, ignoring request');
@@ -7255,12 +7272,37 @@ class MeshCoreConnector extends ChangeNotifier {
   Duration channelWriteReplyTimeout = const Duration(seconds: 5);
 
   int _channelWritesInFlight = 0;
+  bool _channelSyncDeferredByWrite = false;
 
   /// True while the channel list cannot be trusted to show which slots are
   /// free: a sync is re-reading it, or a write has not been answered yet. A
   /// slot chosen against it could already be taken. (#1021, #1026)
   bool get isChannelTableBusy =>
       _isSyncingChannels || _channelWritesInFlight > 0;
+
+  void _beginChannelWrite() => _channelWritesInFlight++;
+
+  /// Ends one write; the last one to end runs any sync that [getChannels]
+  /// deferred while writes were waiting for their replies.
+  void _endChannelWrite() {
+    _channelWritesInFlight--;
+    if (_channelWritesInFlight == 0 && _channelSyncDeferredByWrite) {
+      _channelSyncDeferredByWrite = false;
+      unawaited(_syncChannels(force: true));
+    }
+  }
+
+  /// Runs several channel writes as one, so no sync or other add can start
+  /// between two of them. Each write inside passes `refresh: false`, and the
+  /// caller re-reads the list once afterwards. (#1026)
+  Future<T> batchChannelWrites<T>(Future<T> Function() writes) async {
+    _beginChannelWrite();
+    try {
+      return await writes();
+    } finally {
+      _endChannelWrite();
+    }
+  }
 
   /// Writes the client's cached channel list back onto the radio (#1060).
   ///
@@ -7289,7 +7331,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Counted as a write in flight for its whole length, so an add made while
     // it runs is refused instead of choosing a slot this is about to fill
     // (#1021, #1026).
-    _channelWritesInFlight++;
+    _beginChannelWrite();
     try {
       var sent = 0;
       for (final channel in toRestore) {
@@ -7318,10 +7360,10 @@ class MeshCoreConnector extends ChangeNotifier {
       // the radio has not answered for yet and report 0 every time. The
       // authoritative feedback is the erased-slot banner, which is re-derived
       // on every sync and therefore stays up if some writes did not land.
-      await getChannels(force: true);
+      await _syncChannels(force: true);
       return sent;
     } finally {
-      _channelWritesInFlight--;
+      _endChannelWrite();
     }
   }
 
@@ -7354,6 +7396,10 @@ class MeshCoreConnector extends ChangeNotifier {
   /// A new key is a slot reassignment for history purposes, the same as
   /// before the clear-then-add: the old key's PSK-keyed history is kept, so
   /// it comes back if that key is ever re-added (#1063).
+  ///
+  /// If the clear lands and the add does not, the slot is left empty and this
+  /// returns [ChannelWrite.clearedNotAdded], so the user is told the channel is
+  /// gone rather than that the change may not have happened.
   Future<ChannelWrite> editChannel(
     Channel channel,
     String name,
@@ -7369,29 +7415,32 @@ class MeshCoreConnector extends ChangeNotifier {
         refresh: true,
       );
     }
-    _channelWritesInFlight++;
+    _beginChannelWrite();
     try {
       final cleared = await _writeChannelSlot(channel.index, '', Uint8List(16));
       if (cleared != ChannelWrite.ok) {
-        await getChannels(force: true);
+        await _syncChannels(force: true);
         return cleared;
       }
       await _retireSlotOccupant(channel.index);
-      return await _setChannel(
+      final added = await _setChannel(
         channel.index,
         name,
         psk,
         occupantPsk: null,
         refresh: true,
       );
+      return added == ChannelWrite.ok
+          ? ChannelWrite.ok
+          : ChannelWrite.clearedNotAdded;
     } finally {
-      _channelWritesInFlight--;
+      _endChannelWrite();
     }
   }
 
   Future<ChannelWrite> deleteChannel(int index, {bool refresh = true}) async {
     if (!isConnected) return ChannelWrite.noReply;
-    _channelWritesInFlight++;
+    _beginChannelWrite();
     try {
       // A slot is deleted by writing an empty name and a zero PSK. Its history
       // goes outright (the true-delete path, #1063), once the radio has said
@@ -7401,10 +7450,10 @@ class MeshCoreConnector extends ChangeNotifier {
         await _channelMessageStore.clearChannelMessages(index);
         _channelMessages.remove(index);
       }
-      if (refresh) await getChannels(force: true);
+      if (refresh) await _syncChannels(force: true);
       return result;
     } finally {
-      _channelWritesInFlight--;
+      _endChannelWrite();
     }
   }
 
@@ -7415,7 +7464,7 @@ class MeshCoreConnector extends ChangeNotifier {
     required Uint8List? occupantPsk,
     required bool refresh,
   }) async {
-    _channelWritesInFlight++;
+    _beginChannelWrite();
     try {
       // A rename (same PSK) keeps everything; a different PSK retires the
       // slot's previous occupant (see [_retireSlotOccupant]).
@@ -7431,10 +7480,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
       // Re-read on every outcome: after a refusal the list we chose the slot
       // from was wrong, and after no reply nobody knows what the slot holds.
-      if (refresh) await getChannels(force: true);
+      if (refresh) await _syncChannels(force: true);
       return result;
     } finally {
-      _channelWritesInFlight--;
+      _endChannelWrite();
     }
   }
 

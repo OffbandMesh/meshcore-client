@@ -1054,6 +1054,10 @@
   "@channels_writeNoReply": {
     "description": "A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026)."
   },
+  "channels_writeClearedNotAdded": "The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.",
+  "@channels_writeClearedNotAdded": {
+    "description": "A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026)."
+  },
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",
   "channels_sortAZ": "A-Z",

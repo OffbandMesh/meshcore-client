@@ -3268,6 +3268,12 @@ abstract class AppLocalizations {
   /// **'The radio did not confirm the change. Check the channel list before trying again.'**
   String get channels_writeNoReply;
 
+  /// A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.'**
+  String get channels_writeClearedNotAdded;
+
   /// No description provided for @channels_sortBy.
   ///
   /// In en, this message translates to:

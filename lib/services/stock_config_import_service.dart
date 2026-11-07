@@ -284,30 +284,33 @@ class StockConfigImportService {
       isSyncing: _connector.isChannelTableBusy,
     );
     // Each write is answered before the next goes out, and the list is
-    // re-read once at the end. A re-read after every write would put the next
-    // write in the middle of a sync, where its reply cannot be told from the
-    // sync's (#1026).
-    var added = 0;
-    for (final assignment in plan.assignments) {
-      final result = await _connector.setChannel(
-        assignment.slot,
-        assignment.channel.name,
-        assignment.channel.secret,
-        refresh: false,
-      );
-      if (result == ChannelWrite.ok) {
-        added++;
-      } else {
-        skipped.add(
-          SkippedChannel(
-            assignment.channel.name,
-            result == ChannelWrite.noReply
-                ? StockConfigImportIssue.noReply
-                : StockConfigImportIssue.rejected,
-          ),
+    // re-read once at the end. A sync between two writes would share their
+    // reply queue, where a write's reply cannot be told from the sync's, so
+    // the whole loop runs as one batch (#1026).
+    final added = await _connector.batchChannelWrites(() async {
+      var count = 0;
+      for (final assignment in plan.assignments) {
+        final result = await _connector.setChannel(
+          assignment.slot,
+          assignment.channel.name,
+          assignment.channel.secret,
+          refresh: false,
         );
+        if (result == ChannelWrite.ok) {
+          count++;
+        } else {
+          skipped.add(
+            SkippedChannel(
+              assignment.channel.name,
+              result == ChannelWrite.noReply
+                  ? StockConfigImportIssue.noReply
+                  : StockConfigImportIssue.rejected,
+            ),
+          );
+        }
       }
-    }
+      return count;
+    });
     if (plan.assignments.isNotEmpty) {
       await _connector.getChannels(force: true);
     }
