@@ -1852,6 +1852,10 @@ class AppLocalizationsBg extends AppLocalizations {
       'The radio did not confirm the change. Check the channel list before trying again.';
 
   @override
+  String get channels_writeClearedNotAdded =>
+      'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.';
+
+  @override
   String get channels_sortBy => 'Сортирай по';
 
   @override

@@ -2194,17 +2194,19 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
               // Delete all community channels from the device. Each delete is
               // answered before the next goes out, and the list is re-read
-              // once at the end: a re-read between deletes would put the next
-              // one in the middle of a sync, where its reply cannot be told
-              // from the sync's (#1026).
-              ChannelWrite? failure;
-              for (final channel in communityChannels) {
-                final result = await connector.deleteChannel(
-                  channel.index,
-                  refresh: false,
-                );
-                if (result != ChannelWrite.ok) failure ??= result;
-              }
+              // once at the end. A sync between two deletes would share their
+              // reply queue, so the loop runs as one batch (#1026).
+              final failure = await connector.batchChannelWrites(() async {
+                ChannelWrite? first;
+                for (final channel in communityChannels) {
+                  final result = await connector.deleteChannel(
+                    channel.index,
+                    refresh: false,
+                  );
+                  if (result != ChannelWrite.ok) first ??= result;
+                }
+                return first;
+              });
               if (communityChannels.isNotEmpty) {
                 await connector.getChannels(force: true);
               }

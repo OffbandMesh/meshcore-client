@@ -72,6 +72,7 @@ bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
     ChannelWrite.occupied => l10n.channels_writeOccupied,
     ChannelWrite.rejected => l10n.channels_writeRejected,
     ChannelWrite.noReply => l10n.channels_writeNoReply,
+    ChannelWrite.clearedNotAdded => l10n.channels_writeClearedNotAdded,
   };
   if (message == null) return false;
   showChannelBlockedMessage(context, message);

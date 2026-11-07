@@ -206,6 +206,59 @@ void main() {
       expect(setFrames(), hasLength(1));
       expect(connector.channelMessagesForTest.containsKey(3), isTrue);
     });
+
+    test(
+      'a clear that lands and an add that fails says the slot is empty',
+      () async {
+        final edit = connector.editChannel(current, 'Weather', psk(0x99));
+        await untilSetFrames(1);
+        ok(); // the clear lands
+
+        await untilSetFrames(2);
+        err(errCodeNotFound); // the add does not
+
+        expect(await edit, ChannelWrite.clearedNotAdded);
+      },
+    );
+  });
+
+  // Gemini review of #1021: a sync started while a write waits for its reply
+  // shares the reply queue with it, so the sync's empty-slot ERR could be
+  // taken as the write's answer. The sync waits for the writes instead.
+  group('a sync requested during a write', () {
+    List<Uint8List> getFrames() =>
+        sent.where((f) => f.isNotEmpty && f[0] == cmdGetChannel).toList();
+
+    test('is deferred until the reply, then runs', () async {
+      final write = connector.setChannel(3, 'A', psk(0x22), refresh: false);
+      await connector.getChannels(force: true);
+      expect(connector.isSyncingChannels, isFalse);
+      expect(getFrames(), isEmpty);
+
+      ok();
+      expect(await write, ChannelWrite.ok);
+      await Future<void>.delayed(Duration.zero);
+      expect(connector.isSyncingChannels, isTrue);
+      expect(getFrames(), isNotEmpty);
+    });
+
+    test('does not start between two writes of a batch', () async {
+      final batch = connector.batchChannelWrites(() async {
+        final first = connector.setChannel(3, 'A', psk(0x22), refresh: false);
+        await connector.getChannels(force: true);
+        ok();
+        await first;
+        await Future<void>.delayed(Duration.zero);
+        // Between the two writes: the deferred sync must not have started.
+        expect(connector.isSyncingChannels, isFalse);
+        final second = connector.setChannel(4, 'B', psk(0x33), refresh: false);
+        ok();
+        return second;
+      });
+
+      expect(await batch, ChannelWrite.ok);
+      expect(getFrames(), isNotEmpty, reason: 'runs once the batch ends');
+    });
   });
 
   // #1024: after a FAILED sync the cached list is restored but

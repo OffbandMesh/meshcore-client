@@ -43,6 +43,7 @@ final _allMessages = [
   _l10n.channels_writeOccupied,
   _l10n.channels_writeRejected,
   _l10n.channels_writeNoReply,
+  _l10n.channels_writeClearedNotAdded,
 ];
 
 Future<BuildContext> _host(WidgetTester tester) async {
@@ -147,6 +148,7 @@ void main() {
       ChannelWrite.occupied: _l10n.channels_writeOccupied,
       ChannelWrite.rejected: _l10n.channels_writeRejected,
       ChannelWrite.noReply: _l10n.channels_writeNoReply,
+      ChannelWrite.clearedNotAdded: _l10n.channels_writeClearedNotAdded,
     };
     for (final entry in cases.entries) {
       testWidgets('${entry.key.name}: explained, persistently', (tester) async {
