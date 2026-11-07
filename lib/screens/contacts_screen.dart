@@ -1444,8 +1444,9 @@ class _ContactsScreenState extends State<ContactsScreen>
                           suggestedRouteLabel: suggestedLabel,
                           title: l10n.contacts_repeaterPathTrace,
                         );
-                        if (picked == null || picked.isEmpty)
+                        if (picked == null || picked.isEmpty) {
                           return; // cancelled
+                        }
                         path = picked;
                         flip = true;
                         final fh = picked.length >= hopBytes
