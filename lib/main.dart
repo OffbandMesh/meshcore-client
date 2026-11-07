@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -115,6 +116,10 @@ void main() async {
     appDebugLogService,
     enabled: appSettingsService.settings.appDebugLogEnabled,
   );
+  final packageInfo = await PackageInfo.fromPlatform();
+  appLogger.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+  appLogger.info('App ${appLogger.appVersion} started', tag: 'App');
+  appSettingsService.logLoadReport();
 
   // Initialize notification service
   final notificationService = NotificationService();

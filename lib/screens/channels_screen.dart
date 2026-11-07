@@ -16,6 +16,7 @@ import '../services/ui_view_state_service.dart';
 import '../models/channel.dart';
 import '../models/community.dart';
 import '../storage/community_store.dart';
+import '../utils/app_logger.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/disconnect_navigation_mixin.dart';
 import '../utils/route_transitions.dart';
@@ -551,9 +552,18 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   ) {
     final parentContext = context;
     final settingsService = context.read<AppSettingsService>();
-    final notifyMode = settingsService.channelNotifyMode(
+    final resolvedNotify = settingsService.resolveChannelNotifyMode(
       devicePrefix: connector.selfPublicKeyHex,
       pskHex: channel.pskHex,
+    );
+    final notifyMode = resolvedNotify.mode;
+    appLogger.info(
+      'Channel actions opened: radio '
+      '${AppSettingsService.radioScopePrefix(connector.selfPublicKeyHex)} '
+      'slot ${channel.index} "${channel.name}" psk '
+      '${AppSettingsService.pskFingerprint(channel.pskHex)} shows notify '
+      '${notifyMode.name} (${resolvedNotify.source})',
+      tag: 'NotifyMode',
     );
 
     showModalBottomSheet(

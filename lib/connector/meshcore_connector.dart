@@ -9025,6 +9025,13 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
 
+    _appDebugLogService?.info(
+      'App ${appLogger.appVersion} connected to radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} '
+      '"${_selfName ?? ''}"',
+      tag: 'Connector',
+    );
+
     //set all the stores' public key so they can load the correct data
     _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
     // Key channel history by the channel's PSK identity (not its reusable slot
@@ -10510,16 +10517,28 @@ class MeshCoreConnector extends ChangeNotifier {
     String? channelName,
     TranslationResult? translationResult,
   }) {
-    if (message.isOutgoing || _appSettingsService == null) return;
+    if (message.isOutgoing) return;
     final channelIndex = message.channelIndex;
-    if (channelIndex == null) return;
+    if (_appSettingsService == null || channelIndex == null) {
+      _appDebugLogService?.error(
+        'CHAN NOTIFY not evaluated: '
+        '${_appSettingsService == null ? 'settings service missing' : 'message has no channel slot'}',
+        tag: 'Notification',
+      );
+      return;
+    }
+    final label = channelName ?? _channelDisplayName(channelIndex);
 
     final settings = _appSettingsService!.settings;
     if (!settings.notificationsEnabled || !settings.notifyOnNewChannelMessage) {
+      _appDebugLogService?.info(
+        'CHAN NOTIFY slot $channelIndex "$label": suppressed, app setting '
+        'off (notifications=${settings.notificationsEnabled}, '
+        'channel messages=${settings.notifyOnNewChannelMessage})',
+        tag: 'Notification',
+      );
       return;
     }
-
-    final label = channelName ?? _channelDisplayName(channelIndex);
 
     // Reuse translation result only if completed and non-empty; else use original text
     final resolvedText =
@@ -10545,24 +10564,38 @@ class MeshCoreConnector extends ChangeNotifier {
       channelNotifyProbeForTest?.call(channelIndex, label, null, null);
       return;
     }
-    final mode = _appSettingsService!.channelNotifyMode(
+    final resolved = _appSettingsService!.resolveChannelNotifyMode(
       devicePrefix: selfPublicKeyHex,
       pskHex: slotChannel?.pskHex,
     );
+    final mode = resolved.mode;
     channelNotifyProbeForTest?.call(
       channelIndex,
       label,
       slotChannel?.pskHex,
       mode,
     );
-    switch (mode) {
-      case ChannelNotifyMode.off:
-        return;
-      case ChannelNotifyMode.mentionsOnly:
-        if (!_mentionsSelf(resolvedText)) return;
-      case ChannelNotifyMode.all:
-        break;
-    }
+    final String? suppressed = switch (mode) {
+      ChannelNotifyMode.off => 'mode off',
+      ChannelNotifyMode.mentionsOnly when !_mentionsSelf(resolvedText) =>
+        'mentions only, no mention',
+      _ => null,
+    };
+    final slotSource = slotChannel == null
+        ? 'no channel in slot'
+        : _channels.any((c) => c.index == channelIndex)
+        ? 'live list'
+        : 'cached list';
+    _appDebugLogService?.info(
+      'CHAN NOTIFY slot $channelIndex "$label": radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)}, slot holds '
+      '"${slotChannel?.name ?? ''}" psk '
+      '${AppSettingsService.pskFingerprint(slotChannel?.pskHex)} '
+      '($slotSource), mode ${mode.name} (${resolved.source}) -> '
+      '${suppressed == null ? 'posting' : 'suppressed, $suppressed'}',
+      tag: 'Notification',
+    );
+    if (suppressed != null) return;
 
     unawaited(
       () async {

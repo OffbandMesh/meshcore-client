@@ -2,12 +2,12 @@ import 'dart:io' show Platform, File;
 import 'dart:ui';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart';
 
 import '../helpers/gif_helper.dart';
 import '../helpers/pocketmesh_reaction.dart';
 import '../helpers/reaction_helper.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/app_logger.dart';
 import '../utils/platform_info.dart';
 import 'windows_taskbar_service.dart';
 
@@ -40,12 +40,32 @@ class NotificationService {
   bool _isBatchingActive = false;
   bool _suppressNotifications = false;
 
+  static const _tag = 'Notification';
+
   /// Temporarily suppress all notifications (e.g., during sync)
   void suppressNotifications(bool suppress) {
+    if (suppress != _suppressNotifications) {
+      appLogger.info(
+        suppress
+            ? 'Suppressing all notifications, dropping '
+                  '${_pendingNotifications.length} pending'
+            : 'Notifications no longer suppressed',
+        tag: _tag,
+      );
+    }
     _suppressNotifications = suppress;
     if (suppress) {
       _pendingNotifications.clear();
     }
+  }
+
+  bool _droppedWhileSuppressed(_NotificationType type, String identifier) {
+    if (!_suppressNotifications) return false;
+    appLogger.info(
+      'Dropped while suppressed: ${type.name} ($identifier)',
+      tag: _tag,
+    );
+    return true;
   }
 
   Future<void> initialize() async {
@@ -86,7 +106,10 @@ class NotificationService {
     // SocketException when the bus socket is missing (e.g. running as
     // root or inside a container without a session bus).
     if (PlatformInfo.isLinux && !_isDbusSessionAvailable()) {
-      debugPrint('Skipping notification init: D-Bus session bus unavailable');
+      appLogger.warn(
+        'Skipping notification init: D-Bus session bus unavailable',
+        tag: _tag,
+      );
       return;
     }
 
@@ -97,7 +120,7 @@ class NotificationService {
       );
       _isInitialized = true;
     } catch (e) {
-      debugPrint('Error initializing notifications: $e');
+      appLogger.error('Error initializing notifications: $e', tag: _tag);
     }
   }
 
@@ -113,6 +136,12 @@ class NotificationService {
   Future<bool> _ensureInitialized() async {
     if (!_isInitialized) {
       await initialize();
+    }
+    if (!_isInitialized) {
+      appLogger.error(
+        'Notification not shown: notifications are not initialized',
+        tag: _tag,
+      );
     }
     return _isInitialized;
   }
@@ -221,7 +250,7 @@ class NotificationService {
         payload: 'message:$contactId',
       );
     } catch (e) {
-      debugPrint('Failed to show message notification: $e');
+      appLogger.error('Failed to show message notification: $e', tag: _tag);
     }
   }
 
@@ -270,7 +299,7 @@ class NotificationService {
         payload: 'advert:$contactId',
       );
     } catch (e) {
-      debugPrint('Failed to show advert notification: $e');
+      appLogger.error('Failed to show advert notification: $e', tag: _tag);
     }
   }
 
@@ -327,7 +356,7 @@ class NotificationService {
         payload: 'channel:$channelIndex',
       );
     } catch (e) {
-      debugPrint('Failed to show channel notification: $e');
+      appLogger.error('Failed to show channel notification: $e', tag: _tag);
     }
   }
 
@@ -349,7 +378,7 @@ class NotificationService {
   void _onNotificationTapped(NotificationResponse response) {
     final payload = response.payload;
     if (payload != null) {
-      debugPrint('Notification tapped: $payload');
+      appLogger.info('Notification tapped: $payload', tag: _tag);
       // Handle navigation based on payload
       // This can be extended to navigate to specific screens
     }
@@ -428,7 +457,12 @@ class NotificationService {
     String? contactId,
     int? badgeCount,
   }) async {
-    if (_suppressNotifications) return;
+    if (_droppedWhileSuppressed(
+      _NotificationType.message,
+      'from: $contactName',
+    )) {
+      return;
+    }
 
     _queueNotification(
       _PendingNotification(
@@ -446,7 +480,7 @@ class NotificationService {
     required String contactType,
     String? contactId,
   }) async {
-    if (_suppressNotifications) return;
+    if (_droppedWhileSuppressed(_NotificationType.advert, contactName)) return;
 
     _queueNotification(
       _PendingNotification(
@@ -465,7 +499,12 @@ class NotificationService {
     int? channelIndex,
     int? badgeCount,
   }) async {
-    if (_suppressNotifications) return;
+    if (_droppedWhileSuppressed(
+      _NotificationType.channelMessage,
+      'in: $channelName',
+    )) {
+      return;
+    }
 
     _queueNotification(
       _PendingNotification(
@@ -485,8 +524,9 @@ class NotificationService {
     if (_lastNotificationTime != null &&
         now.difference(_lastNotificationTime!) < _minNotificationInterval) {
       _pendingNotifications.add(notification);
-      debugPrint(
-        '[Notification] queued: ${notification.type.name} (${_getNotificationIdentifier(notification)})',
+      appLogger.info(
+        'Queued for batch: ${notification.type.name} (${_getNotificationIdentifier(notification)})',
+        tag: _tag,
       );
 
       // Start batch timer if not already running
@@ -498,8 +538,9 @@ class NotificationService {
     }
 
     // Show immediately if enough time has passed
-    debugPrint(
-      '[Notification] sent immediately: ${notification.type.name} (${_getNotificationIdentifier(notification)})',
+    appLogger.info(
+      'Showing now: ${notification.type.name} (${_getNotificationIdentifier(notification)})',
+      tag: _tag,
     );
     _showNotificationImmediately(notification);
     _lastNotificationTime = now;
@@ -554,7 +595,7 @@ class NotificationService {
           break;
       }
     } catch (e) {
-      debugPrint('Failed to show immediate notification: $e');
+      appLogger.error('Failed to show immediate notification: $e', tag: _tag);
     }
   }
 
@@ -590,7 +631,11 @@ class NotificationService {
     final deviceInfo = adverts.isNotEmpty
         ? ' (${adverts.take(5).map((n) => n.body).join(', ')}${adverts.length > 5 ? ', ...' : ''})'
         : '';
-    debugPrint('[Notification] batch summary: ${parts.join(", ")}$deviceInfo');
+    appLogger.info(
+      'Showing batch summary: ${parts.join(", ")}$deviceInfo; channels: '
+      '${channelMsgs.map((n) => n.title).toSet().join(', ')}',
+      tag: _tag,
+    );
 
     const androidDetails = AndroidNotificationDetails(
       'batch_summary',
@@ -612,7 +657,10 @@ class NotificationService {
         payload: 'batch',
       );
     } catch (e) {
-      debugPrint('Failed to show batch summary notification: $e');
+      appLogger.error(
+        'Failed to show batch summary notification: $e',
+        tag: _tag,
+      );
     }
   }
 }
