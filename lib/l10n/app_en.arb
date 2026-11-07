@@ -385,6 +385,8 @@
   "settings_buttonActionsSubtitle": "Assign what the button does",
   "settings_badgeScreen": "Screen",
   "settings_badgeScreenSubtitle": "Text size, screen off, time zone",
+  "settings_indicators": "Display and LED",
+  "settings_indicatorsSubtitle": "Display mode, rotation, status LED",
   "settings_badgeBattery": "Battery",
   "settings_badgeBatterySubtitle": "100% at {mv} mV",
   "@settings_badgeBatterySubtitle": {

@@ -672,6 +672,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get settings_badgeScreenSubtitle => 'Text size, screen off, time zone';
 
   @override
+  String get settings_indicators => 'Display and LED';
+
+  @override
+  String get settings_indicatorsSubtitle =>
+      'Display mode, rotation, status LED';
+
+  @override
   String get settings_badgeBattery => 'Battery';
 
   @override
