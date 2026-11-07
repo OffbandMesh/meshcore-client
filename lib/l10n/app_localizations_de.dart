@@ -1829,6 +1829,35 @@ class AppLocalizationsDe extends AppLocalizations {
   String get channels_publicChannelAdded => 'Öffentlicher Kanal hinzugefügt';
 
   @override
+  String get channels_slotBusySyncing =>
+      'The radio is still updating its channel list. Try again in a moment.';
+
+  @override
+  String channels_slotsAllFull(int count) {
+    return 'All $count channel slots are in use. Delete a channel first.';
+  }
+
+  @override
+  String get channels_publicAlreadyAdded =>
+      'The Public channel is already on this radio.';
+
+  @override
+  String get channels_writeOccupied =>
+      'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.';
+
+  @override
+  String get channels_writeRejected =>
+      'The radio refused the change, so the channel is as it was.';
+
+  @override
+  String get channels_writeNoReply =>
+      'The radio did not confirm the change. Check the channel list before trying again.';
+
+  @override
+  String get channels_writeClearedNotAdded =>
+      'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.';
+
+  @override
   String get channels_sortBy => 'Sortiere nach';
 
   @override
@@ -4417,9 +4446,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get channels_invalidQr => 'Invalid QR code';
 
   @override
-  String get channels_noFreeSlot => 'No free channel slot';
-
-  @override
   String channels_qrAddConfirm(String name) {
     return 'Add channel \"$name\"?';
   }
@@ -5655,6 +5681,10 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get importConfig_reasonNoFreeSlot =>
       'no free channel slot on the device';
+
+  @override
+  String get importConfig_reasonChannelsSyncing =>
+      'channels were still being read from the radio; import again in a moment';
 
   @override
   String get importConfig_reasonAbsentFromFile => 'not present in this file';

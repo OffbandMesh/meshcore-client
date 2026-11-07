@@ -502,6 +502,11 @@ const int errCodeUnsupportedCmd = 1;
 /// not hold. (#762)
 const int errCodeNotFound = 2;
 
+/// `ERR_CODE_BAD_STATE`: e.g. `CMD_SET_CHANNEL` putting a different channel
+/// over an occupied slot, which firmware with OffbandMesh/meshcore-firmware#1864
+/// refuses. (#1026)
+const int errCodeBadState = 4;
+
 Uint8List buildOffbandBlockAddFrame(Uint8List pubKey) =>
     Uint8List.fromList([cmdOffbandBlock, offbandBlockAdd, ...pubKey]);
 Uint8List buildOffbandBlockRemoveFrame(Uint8List pubKey) =>

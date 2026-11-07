@@ -3232,6 +3232,48 @@ abstract class AppLocalizations {
   /// **'Public channel added'**
   String get channels_publicChannelAdded;
 
+  /// No description provided for @channels_slotBusySyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is still updating its channel list. Try again in a moment.'**
+  String get channels_slotBusySyncing;
+
+  /// No description provided for @channels_slotsAllFull.
+  ///
+  /// In en, this message translates to:
+  /// **'All {count} channel slots are in use. Delete a channel first.'**
+  String channels_slotsAllFull(int count);
+
+  /// No description provided for @channels_publicAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'The Public channel is already on this radio.'**
+  String get channels_publicAlreadyAdded;
+
+  /// The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.'**
+  String get channels_writeOccupied;
+
+  /// The radio answered a channel write with an error other than slot-occupied. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused the change, so the channel is as it was.'**
+  String get channels_writeRejected;
+
+  /// A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not confirm the change. Check the channel list before trying again.'**
+  String get channels_writeNoReply;
+
+  /// A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.'**
+  String get channels_writeClearedNotAdded;
+
   /// No description provided for @channels_sortBy.
   ///
   /// In en, this message translates to:
@@ -7496,12 +7538,6 @@ abstract class AppLocalizations {
   /// **'Invalid QR code'**
   String get channels_invalidQr;
 
-  /// No description provided for @channels_noFreeSlot.
-  ///
-  /// In en, this message translates to:
-  /// **'No free channel slot'**
-  String get channels_noFreeSlot;
-
   /// No description provided for @channels_qrAddConfirm.
   ///
   /// In en, this message translates to:
@@ -9495,6 +9531,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'no free channel slot on the device'**
   String get importConfig_reasonNoFreeSlot;
+
+  /// Skip reason: the channel list was mid-sync, so no slot could be trusted to be free (#1021).
+  ///
+  /// In en, this message translates to:
+  /// **'channels were still being read from the radio; import again in a moment'**
+  String get importConfig_reasonChannelsSyncing;
 
   /// Failure reason: the file did not contain the section (#576).
   ///

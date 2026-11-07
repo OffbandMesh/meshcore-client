@@ -47,6 +47,10 @@ enum StockConfigImportIssue {
   /// Every channel slot on the device is occupied.
   noFreeSlot,
 
+  /// The channel list was being re-read from the radio, so no slot could be
+  /// trusted to be free. Importing again once it finishes will work (#1021).
+  channelsSyncing,
+
   /// We have no supported way to write this value to the device.
   notWritable,
 }
@@ -70,8 +74,9 @@ class StockConfigImportResult {
 
   /// Sections whose commands were **sent** to the device without error.
   ///
-  /// This is not device confirmation. Apart from the identity import, which
-  /// waits for a real OK or ERR, the firmware's generic OK for these commands
+  /// This is not device confirmation. Apart from the identity import and the
+  /// channel writes, which wait for a real OK or ERR, the firmware's generic OK
+  /// for these commands
   /// is not currently awaited, so a frame lost or refused after it left our
   /// side would still land here. Wiring per-command confirmation is tracked
   /// separately; until then this set means "sent", and the UI says so rather
@@ -88,7 +93,9 @@ class StockConfigImportResult {
   /// send count and not a confirmed count.
   final int contactsWritten;
 
-  /// Channels whose write command was sent. Same caveat as [contactsWritten].
+  /// Channels the radio confirmed writing. Unlike [contactsWritten] this is a
+  /// confirmed count: a channel write waits for the radio's OK, and one it
+  /// refused or never answered is in [skippedChannels] instead (#1026).
   final int channelsAdded;
 
   bool get isComplete => failed.isEmpty && skippedChannels.isEmpty;
@@ -274,16 +281,41 @@ class StockConfigImportService {
       existing: _connector.channels,
       incoming: incoming,
       maxChannels: _connector.maxChannels,
+      isSyncing: _connector.isChannelTableBusy,
     );
-    for (final assignment in plan.assignments) {
-      await _connector.setChannel(
-        assignment.slot,
-        assignment.channel.name,
-        assignment.channel.secret,
-      );
+    // Each write is answered before the next goes out, and the list is
+    // re-read once at the end. A sync between two writes would share their
+    // reply queue, where a write's reply cannot be told from the sync's, so
+    // the whole loop runs as one batch (#1026).
+    final added = await _connector.batchChannelWrites(() async {
+      var count = 0;
+      for (final assignment in plan.assignments) {
+        final result = await _connector.setChannel(
+          assignment.slot,
+          assignment.channel.name,
+          assignment.channel.secret,
+          refresh: false,
+        );
+        if (result == ChannelWrite.ok) {
+          count++;
+        } else {
+          skipped.add(
+            SkippedChannel(
+              assignment.channel.name,
+              result == ChannelWrite.noReply
+                  ? StockConfigImportIssue.noReply
+                  : StockConfigImportIssue.rejected,
+            ),
+          );
+        }
+      }
+      return count;
+    });
+    if (plan.assignments.isNotEmpty) {
+      await _connector.getChannels(force: true);
     }
     skipped.addAll(plan.skipped);
-    return plan.assignments.length;
+    return added;
   }
 
   /// Upserts every contact. The firmware's add-or-update command keys on the
@@ -357,11 +389,25 @@ class ChannelImportPlan {
 /// New channels go into the lowest free slot. Stock's file has no index field,
 /// so incoming order is the only ordering information there is, and slots
 /// already occupied are left alone.
+///
+/// While [isSyncing] is true nothing is planned. The connector empties its
+/// channel list for the duration of a sync, so [existing] would look empty and
+/// every incoming channel would be written over slots that are in fact
+/// occupied, Public included (#1021). Each channel is reported as skipped
+/// instead, so the user sees why and can import again. [isSyncing] is required
+/// so a caller cannot forget it and get the unsafe behavior by default.
 ChannelImportPlan planChannelImport({
   required List<Channel> existing,
   required List<StockChannel> incoming,
   required int maxChannels,
+  required bool isSyncing,
 }) {
+  if (isSyncing) {
+    return ChannelImportPlan(const [], [
+      for (final channel in incoming)
+        SkippedChannel(channel.name, StockConfigImportIssue.channelsSyncing),
+    ]);
+  }
   final live = existing.where((c) => !c.isEmpty).toList();
   final takenSlots = live.map((c) => c.index).toSet();
   final psks = live.map((c) => c.pskHex).toSet();
