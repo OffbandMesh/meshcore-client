@@ -28,6 +28,7 @@ import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/badge_battery_view.dart';
 import 'settings/badge_screen_view.dart';
+import 'settings/indicators_view.dart';
 import 'settings/device_ui_view.dart';
 import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
@@ -493,6 +494,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     context,
                     l10n.settings_badgeBattery,
                     const BadgeBatteryView(),
+                  ),
+                ),
+              ],
+              // Display mode, rotation and LED (#523). Strictly on the 0x04
+              // bit: no bit, no row, no command.
+              if (connector.supportsIndicators) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.brightness_6_outlined),
+                  title: Text(l10n.settings_indicators),
+                  subtitle: Text(l10n.settings_indicatorsSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_indicators,
+                    const IndicatorsView(),
                   ),
                 ),
               ],

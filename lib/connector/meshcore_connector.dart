@@ -69,6 +69,7 @@ import '../storage/channel_region_scope_store.dart';
 import 'offband_capability_advert.dart';
 import 'offband_channel_notify.dart';
 import 'offband_device_ui.dart';
+import 'offband_indicators.dart';
 import 'offband_screen_settings.dart';
 import 'offband_tones.dart';
 import 'caplog_reassembler.dart';
@@ -463,6 +464,9 @@ class MeshCoreConnector extends ChangeNotifier {
   final Map<ToneEvent, EventToneState> _eventTones = {};
   final Map<int, TuneSlotInfo> _tuneSlots = {};
   ScreenSettingsState? _screenSettings;
+  bool? _ledEnabled;
+  DisplayMode? _displayMode;
+  int? _displayRotation;
   bool _tuneSlotTransferActive = false;
   final List<_DeviceUiWaiter> _deviceUiWaiters = [];
   int _pathHashByteWidth = 1;
@@ -1114,6 +1118,23 @@ class MeshCoreConnector extends ChangeNotifier {
   bool get supportsScreenSettings =>
       firmwareSupportsScreenSettings(_offbandCaps2);
 
+  /// Whether this radio has a settable display or LED (#523, caps byte 2
+  /// `0x04`). Which of the two it has, it says only by refusing the other.
+  bool get supportsIndicators => firmwareSupportsIndicators(_offbandCaps2);
+
+  /// The LED and display state the radio last reported, from device-info or a
+  /// reply. Null when it has not said.
+  bool? get ledEnabled => _ledEnabled;
+  DisplayMode? get displayMode => _displayMode;
+
+  /// Degrees, or null until the radio answers the rotation GET (`0x1A`).
+  ///
+  /// Null is "not read yet", NOT "cannot rotate". Capability is
+  /// [supportsDisplayRotation], which reads the advert tag; conflating the two
+  /// is what the old `supportsIndicators && _displayRotation != null` did, and
+  /// it made an unanswered read indistinguishable from an unsupported board.
+  int? get displayRotation => _displayRotation;
+
   /// The tune the radio reported for [channel], or null if not read yet.
   ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
 
@@ -1420,6 +1441,9 @@ class MeshCoreConnector extends ChangeNotifier {
   /// calling it before the list is synced is a no-op rather than a guess.
   void _reconcileAdvertisedDeviceUi() {
     unawaited(_readChannelNotifyModes());
+    // Rotation's gate is TAG_DISPLAY_ROTATION, so this is the first point at
+    // which it can be asked for at all (#1098).
+    if (supportsDisplayRotation) unawaited(requestDisplayRotation());
   }
 
   /// Ask the radio which notify mode [channel] has for its own buzzer (#544).
@@ -1817,6 +1841,66 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> setBatteryFull({required bool pin}) =>
       _sendScreenSet('batt SET', buildBatteryFullSetFrame(pin: pin));
 
+  Future<void> _sendIndicatorSet(
+    String what,
+    DeviceUiSurface surface,
+    Uint8List frame,
+  ) async {
+    if (!_deviceUiGateOpen(what, advertised: supportsIndicators)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = surface;
+    _appDebugLogService?.info('$what -> $frame', tag: 'DeviceUI');
+    await sendFrame(frame);
+  }
+
+  Future<void> setDisplayMode(DisplayMode mode) => _sendIndicatorSet(
+    'display SET',
+    DeviceUiSurface.display,
+    buildDisplaySetFrame(mode),
+  );
+
+  /// Refused locally until the radio has answered the rotation GET, so
+  /// firmware that cannot rotate is never sent a SET.
+  Future<void> setDisplayRotation(int degrees) async {
+    if (!supportsDisplayRotation) {
+      _setDeviceUiError(
+        DeviceUiSurface.rotation,
+        'This radio has not reported a rotation it can change',
+      );
+      return;
+    }
+    await _sendIndicatorSet(
+      'rotation SET',
+      DeviceUiSurface.rotation,
+      buildRotationSetFrame(degrees),
+    );
+  }
+
+  /// Read this radio's current rotation.
+  ///
+  /// This is a plain GET, not a capability probe. Rotation support comes from
+  /// `TAG_DISPLAY_ROTATION` in the `0x1C` advert, so the old probe (send
+  /// `0x18`, treat a refusal as "cannot rotate") is gone: contract §3 forbids
+  /// "discovering support by trying each feature's sub-code and watching for
+  /// errors", and the probe also had to borrow `_pendingDeviceUiWrite` for a
+  /// read, which meant a genuine write refusal could be eaten by it.
+  Future<void> requestDisplayRotation() async {
+    if (!_deviceUiGateOpen(
+      'rotation GET',
+      advertised: supportsDisplayRotation,
+    )) {
+      return;
+    }
+    await sendFrame(buildRotationGetFrame());
+  }
+
+  Future<void> setLedEnabled(bool on) => _sendIndicatorSet(
+    'led SET',
+    DeviceUiSurface.led,
+    buildLedSetFrame(on: on),
+  );
+
   /// Re-read whatever headless-UI state this radio supports. Called after every
   /// device-info reply so a scope changed by triple-press on the device is
   /// never displayed stale, and so frame-arrival order does not matter. (#475)
@@ -1855,6 +1939,8 @@ class MeshCoreConnector extends ChangeNotifier {
     if (supportsGpsMode) requestGpsMode();
     // Node Settings names the battery full point in its Battery row.
     if (supportsScreenSettings) requestScreenSettings();
+    // Rotation is NOT driven from here: its gate is an advert tag, which is
+    // not known yet at this point. It is driven from the advert reply instead.
   }
 
   /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
@@ -1907,6 +1993,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleScreenSettingsReply(screen);
       return;
     }
+    final indicator = parseIndicatorReply(frame);
+    if (indicator != null) {
+      _handleIndicatorReply(indicator);
+      return;
+    }
     _appDebugLogService?.warn(
       '0xC5 reply not understood (sub=0x'
       '${frame.length > 1 ? frame[1].toRadixString(16).padLeft(2, '0') : '??'}, '
@@ -1948,6 +2039,9 @@ class MeshCoreConnector extends ChangeNotifier {
       DeviceUiSurface.tuneSlot => 'Tune slot',
       DeviceUiSurface.screenSettings => 'Screen settings',
       DeviceUiSurface.channelNotify => 'Radio channel notifications',
+      DeviceUiSurface.display => 'Display',
+      DeviceUiSurface.led => 'LED',
+      DeviceUiSurface.rotation => 'Rotation',
       null => 'Device UI request',
     };
     _appDebugLogService?.warn(
@@ -2035,6 +2129,26 @@ class MeshCoreConnector extends ChangeNotifier {
     _appDebugLogService?.info(
       'chnotify reply: ch=${reply.channel} "${channel.name}" '
       'mode=${reply.mode.name} (${isWrite ? 'write confirmed' : 'read'})',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleIndicatorReply(IndicatorReply reply) {
+    final surface = reply.surface;
+    if (reply.isWrite && _pendingDeviceUiWrite == surface) {
+      _pendingDeviceUiWrite = null;
+    }
+    if (reply.errorMessage != null) {
+      _setDeviceUiError(surface, reply.errorMessage!);
+      return;
+    }
+    if (reply.displayMode != null) _displayMode = reply.displayMode;
+    if (reply.rotation != null) _displayRotation = reply.rotation;
+    if (reply.ledOn != null) _ledEnabled = reply.ledOn;
+    _appDebugLogService?.info(
+      'indicator reply: display=${_displayMode?.name} '
+      'rotation=$_displayRotation led=$_ledEnabled',
       tag: 'DeviceUI',
     );
     notifyListeners();
@@ -4919,6 +5033,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _advertRequestOutstanding = false;
     _advertContinuationRound = 0;
     _advertTags.clear();
+    _ledEnabled = null;
+    _displayMode = null;
+    _displayRotation = null;
     _blockListRetryTimer?.cancel();
     // Per-connection debounce timers must die with the connection so a timer
     // scheduled against this radio can't fire against the next one (#838 review).
@@ -8645,6 +8762,21 @@ class MeshCoreConnector extends ChangeNotifier {
       ? frame[4] | (frame[5] << 8) | (frame[6] << 16) | (frame[7] << 24)
       : null;
 
+  /// LED (byte 85) and display mode (byte 86), appended unconditionally on
+  /// v21+ (firmware #542). Each is null when the frame stops short of it. Like
+  /// the FEM byte, presence says nothing about capability:
+  /// [supportsIndicators] does.
+  ///
+  /// Bytes 82 to 86 keep working and are explicitly untouched by the advert
+  /// contract (§7). Nothing here reads 87, and nothing may: rotation is read
+  /// over `0x1A`/`0x1B` and advertised by `TAG_DISPLAY_ROTATION`.
+  static ({bool? ledOn, DisplayMode? mode}) parseIndicatorBytes(
+    Uint8List frame,
+  ) => (
+    ledOn: frame.length >= 86 ? frame[85] != 0 : null,
+    mode: frame.length >= 87 ? DisplayMode.fromCode(frame[86]) : null,
+  );
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
@@ -8714,12 +8846,19 @@ class MeshCoreConnector extends ChangeNotifier {
       _femLnaEnabled = parseFemLnaState(frame);
       // Second caps byte rides at offset 84, past the FEM state byte (#480).
       _offbandCaps2 = parseOffbandCaps2(frame);
-      // Nothing is read past byte 84 here. Offset 87 is where three features
-      // collided; capabilities beyond caps2 live in the 0x1C advert (#1096).
+      // LED (85) and display mode (86) ride past caps2 (#523). Bytes 82 to 86
+      // keep working; offset 87 is where three features collided and is read
+      // by nothing. Capabilities beyond caps2 live in the 0x1C advert (#1096).
+      final indicators = parseIndicatorBytes(frame);
+      _ledEnabled = indicators.ledOn;
+      _displayMode = indicators.mode;
     } else {
       _offbandCaps = null;
       _femLnaEnabled = null;
       _offbandCaps2 = null;
+      _ledEnabled = null;
+      _displayMode = null;
+      _displayRotation = null;
     }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
