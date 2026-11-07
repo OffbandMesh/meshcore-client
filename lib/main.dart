@@ -37,6 +37,7 @@ import 'services/storage_health_service.dart';
 import 'services/radio_preset_service.dart';
 import 'storage/drift/blob_store.dart';
 import 'widgets/contact_sync_shortfall_banner.dart';
+import 'widgets/factory_reset_banner.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
@@ -369,7 +370,11 @@ class MeshCoreApp extends StatelessWidget {
                               onDismiss: connector.dismissContactSyncShortfall,
                               onKeep: connector.resolveContactSyncKeepLocal,
                               onUseRadio: connector.resolveContactSyncUseRadio,
-                              child: child ?? const SizedBox.shrink(),
+                              child: FactoryResetBanner(
+                                status: connector.factoryResetStatus,
+                                onDismiss: connector.dismissFactoryResetStatus,
+                                child: child ?? const SizedBox.shrink(),
+                              ),
                             ),
                       ),
                     ),

@@ -1486,6 +1486,96 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to reboot the device? You will be disconnected.'**
   String get settings_rebootDeviceConfirm;
 
+  /// No description provided for @settings_factoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory Reset'**
+  String get settings_factoryReset;
+
+  /// No description provided for @settings_factoryResetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase the radio and give it a new identity'**
+  String get settings_factoryResetSubtitle;
+
+  /// No description provided for @settings_factoryResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This erases everything on the radio: its identity, contacts, channels and settings. It can\'t be undone.'**
+  String get settings_factoryResetConfirm;
+
+  /// No description provided for @settings_factoryResetDeleteAppData.
+  ///
+  /// In en, this message translates to:
+  /// **'Also delete this radio\'s data stored in the app'**
+  String get settings_factoryResetDeleteAppData;
+
+  /// No description provided for @settings_factoryResetNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset not sent: no radio is connected.'**
+  String get settings_factoryResetNotConnected;
+
+  /// No description provided for @factoryResetSentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset sent'**
+  String get factoryResetSentTitle;
+
+  /// No description provided for @factoryResetSentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is erasing itself and will restart with a new identity. Reconnect to it to finish.'**
+  String get factoryResetSentBody;
+
+  /// No description provided for @factoryResetSentBleBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect to finish.'**
+  String get factoryResetSentBleBody;
+
+  /// No description provided for @factoryResetCompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset complete'**
+  String get factoryResetCompleteTitle;
+
+  /// No description provided for @factoryResetCompleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio has a new identity. Its old data was deleted from the app.'**
+  String get factoryResetCompleteBody;
+
+  /// No description provided for @factoryResetCompleteKeptBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio has a new identity. Its old data was kept in the app.'**
+  String get factoryResetCompleteKeptBody;
+
+  /// No description provided for @factoryResetNotResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset did not happen'**
+  String get factoryResetNotResetTitle;
+
+  /// No description provided for @factoryResetNotResetBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio reconnected with the same identity, so it was not erased. Nothing was deleted from the app.'**
+  String get factoryResetNotResetBody;
+
+  /// No description provided for @factoryResetDeleteFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset done, app cleanup failed'**
+  String get factoryResetDeleteFailedTitle;
+
+  /// No description provided for @factoryResetDeleteFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio was erased, but deleting its old data from the app failed. The app will try again the next time this radio connects.'**
+  String get factoryResetDeleteFailedBody;
+
   /// No description provided for @settings_blePin.
   ///
   /// In en, this message translates to:

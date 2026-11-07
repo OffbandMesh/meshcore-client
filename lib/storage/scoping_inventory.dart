@@ -249,6 +249,15 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/services/storage_service.dart',
   ),
   StorageSurface(
+    'factory_reset_pending',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'one factory reset awaiting proof (#1054). It spans two identities of '
+        'the same device, the key before the wipe and the key after, so it '
+        'cannot live under either. It names the old radio inside the record',
+    owner: 'lib/storage/factory_reset_store.dart',
+  ),
+  StorageSurface(
     'map_removed_marker_ids',
     verdict: ScopingVerdict.globalOnPurpose,
     reason:

@@ -239,6 +239,7 @@ const int cmdSendTelemetryReq = 39;
 const int cmdGetCustomVar = 40;
 const int cmdSetCustomVar = 41;
 const int cmdSendBinaryReq = 50;
+const int cmdFactoryReset = 51;
 const int cmdGetStats = 56;
 const int cmdSendAnonReq = 57;
 const int cmdSetAutoAddConfig = 58;
@@ -1492,6 +1493,13 @@ Uint8List buildSetDevicePinFrame(int pin) {
 // Format: [cmd]["reboot"]
 Uint8List buildRebootFrame() {
   return Uint8List.fromList([cmdReboot, ...utf8.encode('reboot')]);
+}
+
+// Build CMD_FACTORY_RESET frame (stock since firmware ver code 7)
+// Format: [cmd]["reset"]. The radio disables its link before formatting, so
+// success is seen as a drop, never an OK.
+Uint8List buildFactoryResetFrame() {
+  return Uint8List.fromList([cmdFactoryReset, ...utf8.encode('reset')]);
 }
 
 // Build CMD_SYNC_NEXT_MESSAGE frame

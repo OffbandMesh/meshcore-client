@@ -56,7 +56,9 @@ import '../storage/client_id_store.dart';
 import '../storage/contact_discovery_store.dart';
 import '../storage/contact_settings_store.dart';
 import '../storage/contact_store.dart';
+import '../storage/factory_reset_store.dart';
 import '../storage/message_store.dart';
+import '../storage/radio_data_wipe.dart';
 import '../storage/unread_store.dart';
 import '../utils/app_logger.dart';
 import '../utils/battery_utils.dart';
@@ -296,6 +298,28 @@ class ContactSyncShortfall {
 
 /// What the radio said when asked for one contact by key. (#762)
 enum ContactKeyCheckResult { onRadio, notFound, unresolved }
+
+/// Why a factory reset was not sent. (#1054)
+enum FactoryResetRefusal { notConnected }
+
+/// Where a factory reset stands, for the app-wide banner. (#1054)
+enum FactoryResetStatus {
+  /// Sent. Over BLE the radio's pairing is gone too, so the OS one must go.
+  sentBle,
+  sent,
+
+  /// The radio came back with a new identity and its app data was deleted.
+  complete,
+
+  /// New identity; the user chose to keep the app data.
+  completeKept,
+
+  /// Same identity on reconnect: the radio was not wiped. Nothing deleted.
+  notReset,
+
+  /// New identity, but deleting the old app data failed. Retried next connect.
+  deleteFailed,
+}
 
 class _PendingKeyCheck {
   final String keyHex;
@@ -6856,6 +6880,127 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildRebootFrame());
   }
 
+  final FactoryResetStore _factoryResetStore = FactoryResetStore();
+  FactoryResetStatus? _factoryResetStatus;
+  FactoryResetStatus? get factoryResetStatus => _factoryResetStatus;
+
+  void dismissFactoryResetStatus() {
+    _factoryResetStatus = null;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  String? transportIdentityForTest;
+
+  /// Which physical device the link goes to, independent of its identity,
+  /// which a factory reset replaces.
+  String? get _transportIdentity =>
+      transportIdentityForTest ??
+      switch (_activeTransport) {
+        MeshCoreTransportType.bluetooth => _deviceId,
+        MeshCoreTransportType.usb => activeUsbPort,
+        MeshCoreTransportType.tcp => activeTcpEndpoint,
+      };
+
+  String? get _radioPrefix {
+    final hex = selfPublicKeyHex;
+    return hex.length >= 10 ? hex.substring(0, 10) : null;
+  }
+
+  /// Wipes the connected radio (#1054). Null when sent, else why not.
+  ///
+  /// The app data is NOT deleted here. The radio drops the link before it
+  /// formats, so nothing proves the wipe until it reconnects with a new
+  /// identity; see [_resolvePendingFactoryReset]. The session is ended on
+  /// purpose so it does not auto-reconnect into a wiped radio.
+  Future<FactoryResetRefusal?> factoryResetDevice({
+    required bool deleteAppData,
+  }) async {
+    final deviceId = _transportIdentity;
+    final prefix = _radioPrefix;
+    if (!isConnected || deviceId == null || prefix == null) {
+      return FactoryResetRefusal.notConnected;
+    }
+
+    await _factoryResetStore.save(
+      PendingFactoryReset(
+        deviceId: deviceId,
+        radioPrefix: prefix,
+        deleteAppData: deleteAppData,
+      ),
+    );
+    final overBle = _activeTransport == MeshCoreTransportType.bluetooth;
+    _appDebugLogService?.info(
+      'Factory reset sent device=$deviceId radio=$prefix '
+      'deleteAppData=$deleteAppData',
+      tag: 'Connection',
+    );
+    await sendFrame(buildFactoryResetFrame());
+    _factoryResetStatus = overBle
+        ? FactoryResetStatus.sentBle
+        : FactoryResetStatus.sent;
+    notifyListeners();
+    // Give the frame time to leave before the transport closes.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await disconnect();
+    return null;
+  }
+
+  /// Settles a pending factory reset on the first SELF_INFO of a connect.
+  ///
+  /// Only a connect to the same device decides anything. Same identity means
+  /// the wipe did not happen and every byte of app data stays. A failed delete
+  /// keeps the record, so the next connect tries again.
+  Future<void> _resolvePendingFactoryReset() async {
+    final pending = _factoryResetStore.load();
+    final deviceId = _transportIdentity;
+    final prefix = _radioPrefix;
+    if (pending == null || deviceId == null || prefix == null) return;
+    final outcome = resolveFactoryReset(
+      pending,
+      deviceId: deviceId,
+      radioPrefix: prefix,
+    );
+    if (outcome == null) return;
+
+    if (outcome == FactoryResetOutcome.wipeAppData) {
+      try {
+        final removed = await wipeRadioData(pending.radioPrefix);
+        await _appSettingsService?.forgetRadio(pending.radioPrefix);
+        _appDebugLogService?.info(
+          'Factory reset confirmed, removed $removed stored items for '
+          '${pending.radioPrefix}',
+          tag: 'Connection',
+        );
+      } catch (e) {
+        _appDebugLogService?.error(
+          'Factory reset confirmed but deleting ${pending.radioPrefix} '
+          'failed, will retry next connect: $e',
+          tag: 'Connection',
+        );
+        _factoryResetStatus = FactoryResetStatus.deleteFailed;
+        notifyListeners();
+        return;
+      }
+    }
+
+    await _factoryResetStore.clear();
+    _factoryResetStatus = switch (outcome) {
+      FactoryResetOutcome.wipeAppData => FactoryResetStatus.complete,
+      FactoryResetOutcome.keepAppData => FactoryResetStatus.completeKept,
+      FactoryResetOutcome.notReset => FactoryResetStatus.notReset,
+    };
+    _appDebugLogService?.info(
+      'Factory reset resolved: $outcome',
+      tag: 'Connection',
+    );
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  Future<void> resolvePendingFactoryResetForTest() =>
+      _resolvePendingFactoryReset();
+
   Future<void> setPrivacyMode(bool enabled) async {
     await sendCliCommand('set privacy ${enabled ? 'on' : 'off'}');
   }
@@ -8903,6 +9048,10 @@ class MeshCoreConnector extends ChangeNotifier {
     // nothing and never write, so a read before this point cannot serve
     // another radio's data.
     storageService?.setPublicKeyHex = selfPublicKeyHex;
+
+    // A factory reset is proven or disproven here, by the identity this
+    // device now reports (#1054).
+    unawaited(_resolvePendingFactoryReset());
 
     // Now that we have self info, we can load all the persisted data for this
     // node. Each step is timed: this sequence has stalled the UI isolate for

@@ -875,6 +875,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(l10n.settings_rebootDeviceSubtitle),
             onTap: () => _confirmReboot(context, connector),
           ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: Text(l10n.settings_factoryReset),
+            subtitle: Text(l10n.settings_factoryResetSubtitle),
+            onTap: () => _confirmFactoryReset(context, connector),
+          ),
         ],
       ),
     );
@@ -1283,6 +1290,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _confirmFactoryReset(BuildContext context, MeshCoreConnector connector) {
+    final l10n = context.l10n;
+    var deleteAppData = true;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: Text(l10n.settings_factoryReset),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.settings_factoryResetConfirm),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: deleteAppData,
+                onChanged: (value) =>
+                    setState(() => deleteAppData = value ?? deleteAppData),
+                title: Text(l10n.settings_factoryResetDeleteAppData),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.common_cancel),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                final refusal = await connector.factoryResetDevice(
+                  deleteAppData: deleteAppData,
+                );
+                if (refusal == null || !context.mounted) return;
+                showDismissibleSnackBar(
+                  context,
+                  content: Text(switch (refusal) {
+                    FactoryResetRefusal.notConnected =>
+                      l10n.settings_factoryResetNotConnected,
+                  }),
+                  backgroundColor: Colors.red,
+                  persist: true,
+                );
+              },
+              child: Text(
+                l10n.settings_factoryReset,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

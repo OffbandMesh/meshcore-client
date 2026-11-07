@@ -297,6 +297,18 @@ class AppSettingsService extends ChangeNotifier {
     );
   }
 
+  /// Drops [devicePrefix]'s notify modes, the per-radio part of this global
+  /// blob, after that radio was factory reset (#1054).
+  Future<void> forgetRadio(String devicePrefix) async {
+    final prefix = _scopePrefix(devicePrefix);
+    if (prefix.isEmpty) return;
+    final byRadio = _copyByRadio();
+    if (byRadio.remove(prefix) == null) return;
+    await updateSettings(
+      _settings.copyWith(channelNotifyModesByRadio: byRadio),
+    );
+  }
+
   /// One-time migration of the pre-#839 global state into the FIRST radio seen
   /// after upgrade. Called by the connector once that radio's channels are
   /// known. Later radios start clean, so the ambiguous legacy state never
