@@ -557,105 +557,112 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
     showModalBottomSheet(
       context: parentContext,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: Text(context.l10n.channels_editChannel),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _showEditChannelDialog(parentContext, connector, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.qr_code_2),
-              title: Text(context.l10n.channels_shareQr),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _showChannelQrDialog(parentContext, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(channelNotifyModeIcon(notifyMode)),
-              title: Text(context.l10n.channels_notifications),
-              subtitle: Text(channelNotifyModeLabel(context, notifyMode)),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  showChannelNotifyModeDialog(parentContext, channel);
-                }
-              },
-            ),
-            // The radio's own sound setting for this channel (#544), named
-            // apart from Notifications, which is the phone's. These are two
-            // independent settings over two outputs: neither reads the other.
-            // Gated on caps byte 2 0x80.
-            if (radioChannelNotifySupported(context.read<MeshCoreConnector>()))
-              Builder(
-                builder: (tileContext) {
-                  final live = tileContext.watch<MeshCoreConnector>();
-                  final effective = radioChannelNotifyEffective(
-                    tileContext,
-                    live.channelNotifyFor(channel),
-                    live.deviceNotifyScope,
-                  );
-                  return ListTile(
-                    leading: const Icon(Icons.volume_up_outlined),
-                    title: Text(tileContext.l10n.channels_radioSound),
-                    subtitle: Text(
-                      effective ?? tileContext.l10n.channels_radioSoundReading,
-                    ),
-                    onTap: () async {
-                      Navigator.pop(sheetContext);
-                      await Future.delayed(const Duration(milliseconds: 100));
-                      if (parentContext.mounted) {
-                        showRadioChannelNotifyDialog(parentContext, channel);
-                      }
-                    },
-                  );
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(context.l10n.channels_editChannel),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _showEditChannelDialog(parentContext, connector, channel);
+                  }
                 },
               ),
-            // The radio's own tone for this channel (#971), named apart from
-            // Notifications, which is the phone's. Gated on caps byte 2 0x10.
-            ChannelRadioToneTile(
-              channel: channel,
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  showChannelRadioToneDialog(parentContext, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: Text(
-                context.l10n.channels_deleteChannel,
-                style: const TextStyle(color: Colors.red),
+              ListTile(
+                leading: const Icon(Icons.qr_code_2),
+                title: Text(context.l10n.channels_shareQr),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _showChannelQrDialog(parentContext, channel);
+                  }
+                },
               ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _confirmDeleteChannel(
-                    context,
-                    connector,
-                    channelMessageStore,
-                    channel,
-                  );
-                }
-              },
-            ),
-          ],
+              ListTile(
+                leading: Icon(channelNotifyModeIcon(notifyMode)),
+                title: Text(context.l10n.channels_notifications),
+                subtitle: Text(channelNotifyModeLabel(context, notifyMode)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    showChannelNotifyModeDialog(parentContext, channel);
+                  }
+                },
+              ),
+              // The radio's own sound setting for this channel (#544), named
+              // apart from Notifications, which is the phone's. These are two
+              // independent settings over two outputs: neither reads the other.
+              // Gated on caps byte 2 0x80.
+              if (radioChannelNotifySupported(
+                context.read<MeshCoreConnector>(),
+              ))
+                Builder(
+                  builder: (tileContext) {
+                    final live = tileContext.watch<MeshCoreConnector>();
+                    final effective = radioChannelNotifyEffective(
+                      tileContext,
+                      live.channelNotifyFor(channel),
+                      live.deviceNotifyScope,
+                    );
+                    return ListTile(
+                      leading: const Icon(Icons.volume_up_outlined),
+                      title: Text(tileContext.l10n.channels_radioSound),
+                      subtitle: Text(
+                        effective ??
+                            tileContext.l10n.channels_radioSoundReading,
+                      ),
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        await Future.delayed(const Duration(milliseconds: 100));
+                        if (parentContext.mounted) {
+                          showRadioChannelNotifyDialog(parentContext, channel);
+                        }
+                      },
+                    );
+                  },
+                ),
+              // The radio's own tone for this channel (#971), named apart from
+              // Notifications, which is the phone's. Gated on caps byte 2 0x10.
+              ChannelRadioToneTile(
+                channel: channel,
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    showChannelRadioToneDialog(parentContext, channel);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  context.l10n.channels_deleteChannel,
+                  style: const TextStyle(color: Colors.red),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _confirmDeleteChannel(
+                      context,
+                      connector,
+                      channelMessageStore,
+                      channel,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

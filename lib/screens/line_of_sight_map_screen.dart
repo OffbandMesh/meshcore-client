@@ -422,6 +422,9 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
           .watch<MeshCoreConnector>()
           .getTotalChannelsUnreadCount(),
       appBar: AppBar(
+        // Explicit, because with a drawer present Scaffold would put a hamburger
+        // here, opening an empty panel, and iOS has no system back (#1052).
+        leading: const BackButton(),
         title: AppBarTitle(widget.title),
         centerTitle: true,
         actions: [

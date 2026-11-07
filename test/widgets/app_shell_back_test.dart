@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
@@ -52,6 +53,32 @@ void main() {
       expect(
         AppShell.backAction(drawerOpen: false, isTopLevel: true, canPop: false),
         AppShellBackAction.background,
+      );
+    });
+  });
+
+  group('AppShell.canSwipeBack (#1052)', () {
+    test('a pushed detail on iOS keeps the edge swipe', () {
+      expect(
+        AppShell.canSwipeBack(platform: TargetPlatform.iOS, isTopLevel: false),
+        isTrue,
+      );
+    });
+
+    test('a top-level tab on iOS must not swipe back to the scanner', () {
+      expect(
+        AppShell.canSwipeBack(platform: TargetPlatform.iOS, isTopLevel: true),
+        isFalse,
+      );
+    });
+
+    test('Android keeps routing Back through the shell', () {
+      expect(
+        AppShell.canSwipeBack(
+          platform: TargetPlatform.android,
+          isTopLevel: false,
+        ),
+        isFalse,
       );
     });
   });
@@ -111,6 +138,37 @@ void main() {
 
       // moveToBackground is a no-op off Android, so the route stays put.
       expect(find.text('SHELL'), findsOneWidget, reason: 'top-level stays');
+    });
+
+    testWidgets('the iOS edge swipe pops a pushed detail', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final navKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(host(navKey));
+      await pushShell(tester, navKey, isTopLevel: false);
+
+      await tester.dragFrom(const Offset(5, 300), const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SHELL'), findsNothing, reason: 'swiped to the list');
+      expect(find.text('HOME'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('the iOS edge swipe does not pop a top-level tab', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final navKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(host(navKey));
+      await pushShell(tester, navKey, isTopLevel: true);
+
+      await tester.dragFrom(const Offset(5, 300), const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SHELL'), findsOneWidget, reason: 'top-level stays');
+      debugDefaultTargetPlatformOverride = null;
     });
   });
 }

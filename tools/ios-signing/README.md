@@ -15,12 +15,12 @@ All on the web, signed in as the Account Holder. About 20 minutes.
 1. **Sign the agreement.** App Store Connect, **Business**: sign the latest agreement. Apple will not let you create an app until you do.
 2. **Ask for API access.** App Store Connect, **Users and Access**, **Integrations**, **Request Access**, tick the box, **Submit**. Apple reviews this case by case, so it is done first and waited on.
 3. **Register the app's identifier.** developer.apple.com, **Certificates, Identifiers & Profiles**, **Identifiers**, the **+** button, **App IDs**, **Continue**, type **App**, **Continue**.
-   - Description: `Offband Meshcore`
+   - Description: `Offband MeshCore`
    - **Explicit**, Bundle ID: `app.offband.meshcore.ios`
    - Leave the capabilities as they are. **Continue**, **Register**.
 4. **Create the app record.** App Store Connect, **Apps**, **+**, **New App**.
    - Platform: **iOS** only
-   - Name: `Offband Meshcore`
+   - Name: `Offband MeshCore`
    - Primary language: English (U.S.)
    - Bundle ID: pick `app.offband.meshcore.ios` from the list
    - SKU: `offband-meshcore-ios`
