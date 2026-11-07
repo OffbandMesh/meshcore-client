@@ -878,7 +878,7 @@
     }
   },
   "channels_restoreToRadio": "Restore to radio",
-  "channels_restoreToRadioConfirm": "Write {count} channel(s) back to the radio: {names}. This replaces whatever those slots hold now.",
+  "channels_restoreToRadioConfirm": "Write {count} channel(s) back to the radio: {names}. Channels the radio still has are left as they are.",
   "@channels_restoreToRadioConfirm": {
     "placeholders": {
       "count": {
@@ -889,11 +889,26 @@
       }
     }
   },
-  "channels_restoreToRadioDone": "Wrote {count} channel(s) back to the radio. If the warning above stays, some did not take.",
+  "channels_restoreToRadioDone": "The radio confirmed all {count} channel(s).",
   "@channels_restoreToRadioDone": {
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "channels_restoreToRadioPartial": "The radio confirmed {confirmed} of {total} channel(s). Not restored: {names}.",
+  "@channels_restoreToRadioPartial": {
+    "description": "Restore to radio finished with some channels refused, unanswered, or without a free slot. Persistent (#1117).",
+    "placeholders": {
+      "confirmed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
       }
     }
   },

@@ -1861,14 +1861,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   }
 
   /// Writes the client's cached channels back onto a radio that lost them
-  /// (#1060). Confirmed first: it overwrites whatever those slots hold now.
+  /// (#1060). Confirmed first. Only channels the radio no longer has are
+  /// written, and nothing it still has is overwritten (#1117).
   Future<void> _confirmRestoreChannels(
     BuildContext context,
     MeshCoreConnector connector,
   ) async {
-    final toRestore = connector.cachedChannels
-        .where((c) => !c.isUnusable)
-        .toList();
+    final toRestore = connector.channelsMissingFromRadio;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1897,16 +1896,27 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     if (!context.mounted) return;
     if (refuseWhileChannelTableBusy(context, connector)) return;
 
-    final written = await connector.restoreChannelsToRadio();
+    final result = await connector.restoreChannelsToRadio();
     if (!context.mounted) return;
+    // What the radio confirmed, not what was sent (#1117). Anything short of
+    // all of it persists, and names what is missing.
+    final l10n = context.l10n;
+    final String message;
+    if (result == null) {
+      message = l10n.channels_restoreToRadioFailed;
+    } else if (result.notRestored.isEmpty) {
+      message = l10n.channels_restoreToRadioDone(result.confirmed);
+    } else {
+      message = l10n.channels_restoreToRadioPartial(
+        result.confirmed,
+        result.total,
+        result.notRestored.map((c) => c.name).join(', '),
+      );
+    }
     showDismissibleSnackBar(
       context,
-      content: Text(
-        written < 0
-            ? context.l10n.channels_restoreToRadioFailed
-            : context.l10n.channels_restoreToRadioDone(written),
-      ),
-      persist: written < 0,
+      content: Text(message),
+      persist: result == null || result.notRestored.isNotEmpty,
     );
   }
 

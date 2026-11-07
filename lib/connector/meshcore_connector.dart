@@ -17,6 +17,7 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/channel_restore_plan.dart';
 import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
 import '../services/corescope_service.dart';
@@ -645,11 +646,6 @@ class MeshCoreConnector extends ChangeNotifier {
   int _totalChannelsToRequest = 0;
   List<Channel> _previousChannelsCache = [];
   static const int _maxChannelSyncRetries = 3;
-
-  /// Gap between consecutive channel writes in [restoreChannelsToRadio], so a
-  /// multi-channel restore cannot outrun the radio. Matches the spacing the USB
-  /// branch of [sendFrame] already applies per frame (#1060).
-  static const Duration _channelRestoreFrameGap = Duration(milliseconds: 10);
 
   // #1062: fail-closed channel sync. A slot the device never answered for is
   // UNKNOWN: tracked here, surfaced to the UI, and never backfilled from a
@@ -7309,64 +7305,77 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  /// Writes the client's cached channel list back onto the radio (#1060).
+  /// Cached channels the radio no longer has: what a restore would put back.
+  List<Channel> get channelsMissingFromRadio {
+    final liveKeys = _channels.map((c) => c.pskHex).toSet();
+    final seen = <String>{};
+    return [
+      for (final c in _cachedChannels)
+        if (!c.isUnusable && !liveKeys.contains(c.pskHex) && seen.add(c.pskHex))
+          c,
+    ];
+  }
+
+  /// Writes the client's cached channels back onto a radio that lost them
+  /// (#1060), placed by identity (see [planChannelRestore]) so it works on
+  /// firmware that refuses occupied slots (#1865) and keeps slot 0 for Public
+  /// (#1896).
   ///
-  /// For a radio that lost channel storage (reflash, wipe) the client's cache
-  /// is the only surviving copy. Each cached channel goes back to the slot it
-  /// came from, so PSK-keyed history and per-channel settings line up again.
+  /// Each write waits for the radio's OK or ERR, so the result says what the
+  /// radio confirmed, not what was sent. Nothing here clears history: the
+  /// identities being restored are the ones that own it.
   ///
-  /// Frames are sent directly rather than through [setChannel] because that
-  /// re-syncs after every write; this re-syncs once at the end. Nothing here
-  /// clears history: the identities being restored are the ones that own it.
-  ///
-  /// Returns the number of channels written, or -1 when there was nothing to
-  /// restore or the link is down. Written is not the same as confirmed: the
-  /// erased-slot banner is what tells the user the radio took them.
-  Future<int> restoreChannelsToRadio() async {
-    if (!isConnected) return -1;
-    final toRestore = _cachedChannels.where((c) => !c.isUnusable).toList();
-    if (toRestore.isEmpty) return -1;
+  /// Returns null when the link is down or nothing is missing.
+  Future<ChannelRestoreResult?> restoreChannelsToRadio() async {
+    if (!isConnected) return null;
+    final plan = planChannelRestore(
+      cached: _cachedChannels,
+      live: _channels,
+      erasedSlots: _erasedChannelSlots,
+      maxChannels: _maxChannels,
+    );
+    if (plan.steps.isEmpty && plan.noRoom.isEmpty) return null;
 
     _appDebugLogService?.info(
-      'Restoring ${toRestore.length} cached channel(s) to the radio: '
-      '${toRestore.map((c) => 'slot ${c.index} "${c.name}"').join(', ')}',
+      'Restoring ${plan.steps.length} cached channel(s) to the radio: '
+      '${plan.steps.map((s) => 'slot ${s.slot} "${s.channel.name}"${s.clearFirst ? ' (clear first)' : ''}').join(', ')}'
+      '${plan.noRoom.isEmpty ? '' : '; no room for ${plan.noRoom.map((c) => '"${c.name}"').join(', ')}'}',
       tag: 'ChannelSync',
     );
 
     // Counted as a write in flight for its whole length, so an add made while
     // it runs is refused instead of choosing a slot this is about to fill
-    // (#1021, #1026).
+    // (#1021, #1026). Each write is answered before the next goes out, which
+    // also paces the radio.
     _beginChannelWrite();
     try {
-      var sent = 0;
-      for (final channel in toRestore) {
-        if (!isConnected) break;
-        await sendFrame(
-          buildSetChannelFrame(channel.index, channel.name, channel.psk),
+      var confirmed = 0;
+      final notRestored = <Channel>[...plan.noRoom];
+      for (final step in plan.steps) {
+        if (step.clearFirst) {
+          final cleared = await _writeChannelSlot(step.slot, '', Uint8List(16));
+          if (cleared != ChannelWrite.ok) {
+            notRestored.add(step.channel);
+            continue;
+          }
+        }
+        final written = await _writeChannelSlot(
+          step.slot,
+          step.channel.name,
+          step.channel.psk,
         );
-        sent++;
-        // Space the writes. On BLE [sendFrame] prefers write-without-response,
-        // which returns once the frame reaches the OS and not once the radio
-        // has taken it, so an unpaced loop can overrun the radio and lose
-        // channels with no error anywhere. The USB branch of [sendFrame]
-        // already spaces its own frames for exactly this reason; BLE has no
-        // such pause.
-        if (sent < toRestore.length) {
-          await Future<void>.delayed(_channelRestoreFrameGap);
+        if (written == ChannelWrite.ok) {
+          confirmed++;
+        } else {
+          notRestored.add(step.channel);
         }
       }
-
-      // The radio now holds these again, so a fresh sync should confirm them
-      // and the erased-slot block clears itself on the next pass.
-      //
-      // This deliberately does NOT report how many the radio confirmed:
-      // [getChannels] returns once the first request is away, not once the
-      // sync has finished, so counting confirmations here would read a list
-      // the radio has not answered for yet and report 0 every time. The
-      // authoritative feedback is the erased-slot banner, which is re-derived
-      // on every sync and therefore stays up if some writes did not land.
       _syncAfterChannelWrites();
-      return sent;
+      return ChannelRestoreResult(
+        confirmed: confirmed,
+        total: plan.steps.length + plan.noRoom.length,
+        notRestored: notRestored,
+      );
     } finally {
       _endChannelWrite();
     }
