@@ -1268,6 +1268,12 @@
     }
   },
   "channel_senderAddNotConnected": "Not connected to a radio, so this sender can't be added yet",
+  "channels_pskDerivedFromName": "Key derives from the channel name",
+  "channels_communityDerived": "Derived from the community secret; manage it through the community",
+  "channels_copyPsk": "Copy key",
+  "channels_pskCopied": "Key copied",
+  "channels_hashtagMustKeepHash": "A hashtag channel's name must start with a single #. Add a new channel to use a different type.",
+  "channels_channelChangedReopen": "This channel changed on the radio while the dialog was open. Nothing was saved; reopen it and try again.",
   "channel_slotUnconfirmedSendBlocked": "Message not sent: the radio hasn't confirmed this channel slot yet. Retry the channel sync, then send again.",
   "channel_senderAddFailed": "Couldn't add this sender: {error}",
   "@channel_senderAddFailed": {

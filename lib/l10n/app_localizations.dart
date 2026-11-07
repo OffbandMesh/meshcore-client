@@ -2899,7 +2899,7 @@ abstract class AppLocalizations {
   /// No description provided for @channels_restoreToRadioDone.
   ///
   /// In en, this message translates to:
-  /// **'Restored {count} channel(s) to the radio.'**
+  /// **'Wrote {count} channel(s) back to the radio. If the warning above stays, some did not take.'**
   String channels_restoreToRadioDone(int count);
 
   /// No description provided for @channels_restoreToRadioFailed.
@@ -2907,12 +2907,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not restore the channel list: nothing cached to restore, or the radio is not connected.'**
   String get channels_restoreToRadioFailed;
-
-  /// No description provided for @channels_restoreToRadioPartial.
-  ///
-  /// In en, this message translates to:
-  /// **'Only {written} of {total} channel(s) came back after the restore. The radio did not take the rest. Try the restore again.'**
-  String channels_restoreToRadioPartial(int written, int total);
 
   /// No description provided for @channels_slotIdentityChanged.
   ///
@@ -3843,6 +3837,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not connected to a radio, so this sender can\'t be added yet'**
   String get channel_senderAddNotConnected;
+
+  /// No description provided for @channels_pskDerivedFromName.
+  ///
+  /// In en, this message translates to:
+  /// **'Key derives from the channel name'**
+  String get channels_pskDerivedFromName;
+
+  /// No description provided for @channels_communityDerived.
+  ///
+  /// In en, this message translates to:
+  /// **'Derived from the community secret; manage it through the community'**
+  String get channels_communityDerived;
+
+  /// No description provided for @channels_copyPsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy key'**
+  String get channels_copyPsk;
+
+  /// No description provided for @channels_pskCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Key copied'**
+  String get channels_pskCopied;
+
+  /// No description provided for @channels_hashtagMustKeepHash.
+  ///
+  /// In en, this message translates to:
+  /// **'A hashtag channel\'s name must start with a single #. Add a new channel to use a different type.'**
+  String get channels_hashtagMustKeepHash;
+
+  /// No description provided for @channels_channelChangedReopen.
+  ///
+  /// In en, this message translates to:
+  /// **'This channel changed on the radio while the dialog was open. Nothing was saved; reopen it and try again.'**
+  String get channels_channelChangedReopen;
 
   /// No description provided for @channel_slotUnconfirmedSendBlocked.
   ///
