@@ -1240,6 +1240,18 @@ abstract class AppLocalizations {
   /// **'Text size, screen off, time zone'**
   String get settings_badgeScreenSubtitle;
 
+  /// No description provided for @settings_indicators.
+  ///
+  /// In en, this message translates to:
+  /// **'Display and LED'**
+  String get settings_indicators;
+
+  /// No description provided for @settings_indicatorsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Display mode, rotation, status LED'**
+  String get settings_indicatorsSubtitle;
+
   /// No description provided for @settings_badgeBattery.
   ///
   /// In en, this message translates to:
