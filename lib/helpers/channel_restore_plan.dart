@@ -61,7 +61,8 @@ class ChannelRestorePlan {
 ///   overwritten.
 /// * An erased slot is cleared first.
 ///
-/// Public is placed first, so slot 0 is never used by anything else.
+/// Order does not matter: nothing but Public is ever placed in slot 0, so
+/// Public always finds it free unless a live channel holds it.
 ChannelRestorePlan planChannelRestore({
   required List<Channel> cached,
   required List<Channel> live,
@@ -70,13 +71,9 @@ ChannelRestorePlan planChannelRestore({
 }) {
   final liveKeys = live.map((c) => c.pskHex).toSet();
   final taken = live.map((c) => c.index).toSet();
-  final candidates =
-      cached
-          .where((c) => !c.isUnusable && !liveKeys.contains(c.pskHex))
-          .toList()
-        ..sort(
-          (a, b) => (b.isPublicChannel ? 1 : 0) - (a.isPublicChannel ? 1 : 0),
-        );
+  final candidates = cached
+      .where((c) => !c.isUnusable && !liveKeys.contains(c.pskHex))
+      .toList();
 
   final steps = <ChannelRestoreStep>[];
   final noRoom = <Channel>[];
