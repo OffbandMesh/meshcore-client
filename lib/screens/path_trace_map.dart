@@ -14,6 +14,7 @@ import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/services/app_settings_service.dart';
 import 'package:meshcore_open/services/map_tile_cache_service.dart';
 import 'package:meshcore_open/utils/app_logger.dart';
+import 'package:meshcore_open/widgets/osm_attribution.dart';
 import 'package:meshcore_open/widgets/snr_indicator.dart';
 import 'package:provider/provider.dart';
 
@@ -667,6 +668,7 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
                   ),
                 if (_hasData)
                   _buildLegendCard(context, _traceData!, isImperial),
+                if (_hasData) const OsmAttribution(),
               ],
             ),
           ),
@@ -967,7 +969,6 @@ class _PathTraceMapScreenState extends State<PathTraceMapScreen> {
         TileLayer(
           urlTemplate: kMapTileUrlTemplate,
           tileProvider: tileCache.tileProvider,
-          userAgentPackageName: MapTileCacheService.userAgentPackageName,
           maxZoom: 19,
         ),
         if (_polylines.isNotEmpty) PolylineLayer(polylines: _polylines),

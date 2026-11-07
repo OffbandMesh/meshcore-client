@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -34,7 +35,11 @@ class MapTileCacheResult {
 
 class MapTileCacheService {
   static const String cacheKey = 'map_tile_cache';
-  static const String userAgentPackageName = 'com.meshcore.open';
+
+  /// The OSM tile policy requires a distinct, stable User-Agent naming the
+  /// app, never a library default or another app's (#1111).
+  static const String userAgent =
+      'OffbandMeshCore (app.offband.meshcore; +https://offband.org)';
   static const int defaultMinZoom = 10;
   static const int defaultMaxZoom = 15;
 
@@ -51,12 +56,15 @@ class MapTileCacheService {
               maxNrOfCacheObjects: 200000,
             ),
           ) {
-    tileProvider = CachedNetworkTileProvider(cacheManager: this.cacheManager);
+    tileProvider = CachedNetworkTileProvider(
+      cacheManager: this.cacheManager,
+      headers: defaultHeaders,
+    );
   }
 
-  Map<String, String> get defaultHeaders => {
-    'User-Agent': 'flutter_map ($userAgentPackageName)',
-  };
+  /// A browser sends its own User-Agent and won't let a page replace it.
+  Map<String, String> get defaultHeaders =>
+      kIsWeb ? {} : {'User-Agent': userAgent};
 
   Future<void> clearCache() async {
     await cacheManager.emptyCache();
@@ -87,7 +95,7 @@ class MapTileCacheService {
     final safeMin = math.min(minZoom, maxZoom);
     final safeMax = math.max(minZoom, maxZoom);
     final total = estimateTileCount(bounds, safeMin, safeMax);
-    final authHeaders = headers ?? defaultHeaders;
+    final authHeaders = {...defaultHeaders, ...?headers};
     final safeConcurrency = math.max(1, concurrentDownloads);
     int completed = 0;
     int failed = 0;
