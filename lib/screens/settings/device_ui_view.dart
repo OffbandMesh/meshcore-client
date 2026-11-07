@@ -66,6 +66,12 @@ class _DeviceUiViewState extends State<DeviceUiView> {
     DeviceUiSurface.tunePlay ||
     DeviceUiSurface.tuneSlot => widget.part == DeviceUiPart.buzzer,
     DeviceUiSurface.gpsMode || DeviceUiSurface.screenSettings => false,
+    // The radio's per-channel notify control lives beside the app's own
+    // per-channel control on the Channels screen, not in this pane (#544
+    // Epic C), so a refusal for it is not this screen's to show. Epic C1
+    // surfaces it there; until then nothing on this pane can emit it, because
+    // nothing here writes it.
+    DeviceUiSurface.channelNotify => false,
   };
 
   @override
