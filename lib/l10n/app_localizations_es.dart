@@ -1628,17 +1628,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String channels_restoreToRadioDone(int count) {
-    return 'Restored $count channel(s) to the radio.';
+    return 'Wrote $count channel(s) back to the radio. If the warning above stays, some did not take.';
   }
 
   @override
   String get channels_restoreToRadioFailed =>
       'Could not restore the channel list: nothing cached to restore, or the radio is not connected.';
-
-  @override
-  String channels_restoreToRadioPartial(int written, int total) {
-    return 'Only $written of $total channel(s) came back after the restore. The radio did not take the rest. Try the restore again.';
-  }
 
   @override
   String channels_slotIdentityChanged(String changes) {
@@ -2207,6 +2202,27 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get channel_senderAddNotConnected =>
       'Not connected to a radio, so this sender can\'t be added yet';
+
+  @override
+  String get channels_pskDerivedFromName => 'Key derives from the channel name';
+
+  @override
+  String get channels_communityDerived =>
+      'Derived from the community secret; manage it through the community';
+
+  @override
+  String get channels_copyPsk => 'Copy key';
+
+  @override
+  String get channels_pskCopied => 'Key copied';
+
+  @override
+  String get channels_hashtagMustKeepHash =>
+      'A hashtag channel\'s name must start with a single #. Add a new channel to use a different type.';
+
+  @override
+  String get channels_channelChangedReopen =>
+      'This channel changed on the radio while the dialog was open. Nothing was saved; reopen it and try again.';
 
   @override
   String get channel_slotUnconfirmedSendBlocked =>

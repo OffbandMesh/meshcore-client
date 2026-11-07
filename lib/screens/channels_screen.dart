@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:meshcore_open/storage/channel_message_store.dart';
 import 'package:meshcore_open/utils/platform_info.dart';
 import 'package:meshcore_open/widgets/app_bar.dart';
@@ -1498,12 +1498,16 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       context,
       listen: false,
     );
+    final channelType = Channel.getChannelType(channel, _communityIndex);
+    final pskLocked = !channelPskEditable(channelType);
+    final nameLocked = !channelNameEditable(channelType);
     final nameController = TextEditingController(text: channel.name);
     final pskController = TextEditingController(text: channel.pskHex);
     bool cyr2latEnabled = connector.isChannelCyr2LatEnabled(channel.index);
     String? selectedCyr2LatProfileId = connector.getChannelCyr2LatProfileId(
       channel.index,
     );
+    String? nameError;
 
     showDialog(
       context: context,
@@ -1518,30 +1522,76 @@ class _ChannelsScreenState extends State<ChannelsScreen>
               children: [
                 TextField(
                   controller: nameController,
+                  readOnly: nameLocked,
                   decoration: InputDecoration(
                     labelText: dialogContext.l10n.channels_channelName,
                     border: const OutlineInputBorder(),
+                    helperText: nameLocked
+                        ? dialogContext.l10n.channels_communityDerived
+                        : null,
+                    helperMaxLines: 2,
+                    errorText: nameError,
+                    errorMaxLines: 2,
                   ),
                   maxLength: 31,
+                  // #1103: a hashtag channel's key IS its name, so a rename
+                  // re-derives it live, exactly as adding that hashtag would.
+                  onChanged: channelType == ChannelType.hashtag
+                      ? (value) => setState(() {
+                          nameError = null;
+                          final trimmed = value.trim();
+                          if (editedNameKeepsType(channelType, trimmed)) {
+                            pskController.text = Channel.formatPskHex(
+                              Channel.derivePskFromHashtag(trimmed),
+                            );
+                          }
+                        })
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: pskController,
+                  readOnly: pskLocked,
                   decoration: InputDecoration(
                     labelText: dialogContext.l10n.channels_pskHex,
                     border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.casino),
-                      tooltip: dialogContext.l10n.channels_generateRandomPsk,
-                      onPressed: () {
-                        final random = Random.secure();
-                        final bytes = Uint8List(16);
-                        for (int i = 0; i < 16; i++) {
-                          bytes[i] = random.nextInt(256);
-                        }
-                        pskController.text = Channel.formatPskHex(bytes);
-                      },
-                    ),
+                    helperText: pskLocked
+                        ? (channelType == ChannelType.hashtag
+                              ? dialogContext.l10n.channels_pskDerivedFromName
+                              : dialogContext.l10n.channels_communityDerived)
+                        : null,
+                    helperMaxLines: 2,
+                    // #1103: a derived key is never hand-edited or rolled,
+                    // but it stays copyable (OpenHop routing rules need it).
+                    suffixIcon: pskLocked
+                        ? IconButton(
+                            icon: const Icon(Icons.copy),
+                            tooltip: dialogContext.l10n.channels_copyPsk,
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(text: pskController.text),
+                              );
+                              showDismissibleSnackBar(
+                                dialogContext,
+                                content: Text(
+                                  dialogContext.l10n.channels_pskCopied,
+                                ),
+                              );
+                            },
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.casino),
+                            tooltip:
+                                dialogContext.l10n.channels_generateRandomPsk,
+                            onPressed: () {
+                              final random = Random.secure();
+                              final bytes = Uint8List(16);
+                              for (int i = 0; i < 16; i++) {
+                                bytes[i] = random.nextInt(256);
+                              }
+                              pskController.text = Channel.formatPskHex(bytes);
+                            },
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -1591,18 +1641,56 @@ class _ChannelsScreenState extends State<ChannelsScreen>
             ),
             FilledButton(
               onPressed: () async {
-                final name = nameController.text.trim();
-                final pskHex = pskController.text.trim();
+                final name = nameLocked
+                    ? channel.name
+                    : nameController.text.trim();
+                // #1103: a hashtag channel stays a hashtag; its key derives
+                // from the '#' name. A different kind of channel is an add,
+                // not an edit. Refuse the write and say why, inline.
+                if (!editedNameKeepsType(channelType, name)) {
+                  setState(() {
+                    nameError = dialogContext.l10n.channels_hashtagMustKeepHash;
+                  });
+                  return;
+                }
 
-                Uint8List psk;
-                try {
-                  psk = Channel.parsePskHex(pskHex);
-                } on FormatException {
+                // #1103 review: this dialog captured the channel when it
+                // opened. If a sync replaced the slot's identity meanwhile
+                // (the #1060 class), writing by the captured index would hit
+                // the NEW occupant with the OLD dialog's rules. Refuse the
+                // write and say why; mid-sync the list is empty, so this
+                // also fails closed while slots are unconfirmed.
+                final live = connector.channels.cast<Channel?>().firstWhere(
+                  (c) => c?.index == channel.index,
+                  orElse: () => null,
+                );
+                if (live == null || live.pskHex != channel.pskHex) {
+                  Navigator.pop(dialogContext);
                   showDismissibleSnackBar(
-                    dialogContext,
-                    content: Text(dialogContext.l10n.channels_pskMustBe32Hex),
+                    context,
+                    content: Text(context.l10n.channels_channelChangedReopen),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    persist: true,
                   );
                   return;
+                }
+
+                final Uint8List psk;
+                if (channelType == ChannelType.hashtag) {
+                  // The key IS the (possibly renamed) name, never the field.
+                  psk = Channel.derivePskFromHashtag(name);
+                } else if (pskLocked) {
+                  psk = channel.psk;
+                } else {
+                  try {
+                    psk = Channel.parsePskHex(pskController.text.trim());
+                  } on FormatException {
+                    showDismissibleSnackBar(
+                      dialogContext,
+                      content: Text(dialogContext.l10n.channels_pskMustBe32Hex),
+                    );
+                    return;
+                  }
                 }
 
                 Navigator.pop(dialogContext);
@@ -1637,7 +1725,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      nameController.dispose();
+      pskController.dispose();
+    });
   }
 
   /// Writes the client's cached channels back onto a radio that lost them
@@ -1994,3 +2085,27 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 }
+
+/// #1103: what the Edit Channel dialog may change, by channel type.
+///
+/// A hashtag channel's key IS its name (Channel.derivePskFromHashtag), so the
+/// key is never hand-editable and a rename re-derives it. A community
+/// hashtag's name and key both derive from the community secret, so both are
+/// locked and managed through the community. The key stays visible and
+/// copyable in every case: OpenHop routing rules need it.
+bool channelPskEditable(ChannelType type) =>
+    type != ChannelType.hashtag && type != ChannelType.communityHashtag;
+
+bool channelNameEditable(ChannelType type) =>
+    type != ChannelType.communityHashtag;
+
+/// A hashtag channel must stay a hashtag: its key derives from the '#' name.
+/// Exactly ONE leading '#': a '##name' would hash differently from the
+/// '#name' everyone else derives, silently isolating the user (review
+/// finding). Converting to another kind of channel is an add, not an edit
+/// (#1103).
+bool editedNameKeepsType(ChannelType type, String newName) =>
+    type != ChannelType.hashtag ||
+    (newName.startsWith('#') &&
+        !newName.startsWith('##') &&
+        newName.length > 1);
