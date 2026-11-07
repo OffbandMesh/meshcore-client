@@ -1747,12 +1747,18 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                   return;
                 }
 
+                // Checked first: mid-sync the list is empty, so the identity
+                // check below would close the dialog and blame a changed
+                // channel. This keeps the dialog, and the user's edits, open
+                // and gives the real reason (#1021, #1026).
+                if (refuseWhileChannelTableBusy(dialogContext, connector)) {
+                  return;
+                }
                 // #1103 review: this dialog captured the channel when it
                 // opened. If a sync replaced the slot's identity meanwhile
                 // (the #1060 class), writing by the captured index would hit
                 // the NEW occupant with the OLD dialog's rules. Refuse the
-                // write and say why; mid-sync the list is empty, so this
-                // also fails closed while slots are unconfirmed.
+                // write and say why.
                 final live = connector.channels.cast<Channel?>().firstWhere(
                   (c) => c?.index == channel.index,
                   orElse: () => null,
@@ -1765,9 +1771,6 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     backgroundColor: Theme.of(context).colorScheme.error,
                     persist: true,
                   );
-                  return;
-                }
-                if (refuseWhileChannelTableBusy(dialogContext, connector)) {
                   return;
                 }
 
