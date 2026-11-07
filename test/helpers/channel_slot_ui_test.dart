@@ -35,11 +35,15 @@ Channel _ch(int index, String name, int fill) => Channel(
 
 final _l10n = lookupAppLocalizations(const Locale('en'));
 
+final _publicPsk = Channel.parsePskHex(Channel.publicChannelPsk);
+final _otherPsk = Channel.parsePskHex('00112233445566778899aabbccddeeff');
+
 /// Every refusal this file can show, so a success can assert none of them.
 final _allMessages = [
   _l10n.channels_slotBusySyncing,
   _l10n.channels_slotsAllFull(3),
   _l10n.channels_publicAlreadyAdded,
+  _l10n.channels_publicCannotBeRemoved,
   _l10n.channels_writeOccupied,
   _l10n.channels_writeRejected,
   _l10n.channels_writeNoReply,
@@ -84,7 +88,11 @@ void main() {
   group('allocateChannelSlotOrExplain', () {
     testWidgets('busy: refused, with the busy message', (tester) async {
       final context = await _host(tester);
-      final slot = allocateChannelSlotOrExplain(context, _FakeConn(busy: true));
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        _FakeConn(busy: true),
+        psk: _otherPsk,
+      );
 
       expect(slot, isNull);
       await _expectPersistent(tester, _l10n.channels_slotBusySyncing);
@@ -98,6 +106,7 @@ void main() {
           list: [_ch(0, 'A', 1), _ch(1, 'B', 2), _ch(2, 'C', 3)],
           max: 3,
         ),
+        psk: _otherPsk,
       );
 
       expect(slot, isNull);
@@ -109,9 +118,83 @@ void main() {
       final slot = allocateChannelSlotOrExplain(
         context,
         _FakeConn(list: [_ch(0, 'A', 1)], max: 3),
+        psk: _otherPsk,
       );
 
       expect(slot, 1);
+      await _expectNoRefusal(tester);
+    });
+
+    // #1117: the key decides. Public's key goes to slot 0; any other key never.
+    testWidgets('Public\'s key on an empty radio: slot 0', (tester) async {
+      final context = await _host(tester);
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        _FakeConn(),
+        psk: _publicPsk,
+      );
+
+      expect(slot, 0);
+      await _expectNoRefusal(tester);
+    });
+
+    testWidgets('another key on an empty radio: not slot 0', (tester) async {
+      final context = await _host(tester);
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        _FakeConn(),
+        psk: _otherPsk,
+      );
+
+      expect(slot, 1);
+    });
+
+    testWidgets('Public\'s key with Public present: refused, any path', (
+      tester,
+    ) async {
+      // Join Public, a typed private key, a QR share and a hashtag "public"
+      // all come through here, so a second Public is refused once.
+      final context = await _host(tester);
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        _FakeConn(
+          list: [Channel(index: 0, name: 'Public', psk: _publicPsk)],
+        ),
+        psk: _publicPsk,
+      );
+
+      expect(slot, isNull);
+      await _expectPersistent(tester, _l10n.channels_publicAlreadyAdded);
+    });
+  });
+
+  group('refuseDeletingPublic', () {
+    testWidgets('Public: refused, persistently', (tester) async {
+      final context = await _host(tester);
+      final refused = refuseDeletingPublic(
+        context,
+        Channel(index: 0, name: 'Public', psk: _publicPsk),
+      );
+
+      expect(refused, isTrue);
+      await _expectPersistent(tester, _l10n.channels_publicCannotBeRemoved);
+    });
+
+    testWidgets('Public by key, whatever its name: refused', (tester) async {
+      final context = await _host(tester);
+      final refused = refuseDeletingPublic(
+        context,
+        Channel(index: 4, name: 'Renamed', psk: _publicPsk),
+      );
+
+      expect(refused, isTrue);
+    });
+
+    testWidgets('any other channel: allowed, and no message', (tester) async {
+      final context = await _host(tester);
+      final refused = refuseDeletingPublic(context, _ch(1, 'Public', 2));
+
+      expect(refused, isFalse, reason: 'named Public, but not its key');
       await _expectNoRefusal(tester);
     });
   });

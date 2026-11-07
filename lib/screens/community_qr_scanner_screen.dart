@@ -237,11 +237,11 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     var channelRefused = false;
     if (addPublicChannel && context.mounted) {
       final connector = context.read<MeshCoreConnector>();
-      final slot = allocateChannelSlotOrExplain(context, connector);
+      final psk = community.deriveCommunityPublicPsk();
+      final slot = allocateChannelSlotOrExplain(context, connector, psk: psk);
       if (slot == null) {
         channelRefused = true;
       } else {
-        final psk = community.deriveCommunityPublicPsk();
         final channelName = '${community.name} Public';
         final result = await connector.setChannel(slot, channelName, psk);
         if (context.mounted) {
@@ -313,7 +313,11 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
       ),
     );
     if (confirmed == true && context.mounted) {
-      final slot = allocateChannelSlotOrExplain(context, connector);
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        connector,
+        psk: channel.psk,
+      );
       // Refused: the persistent message explains why. Stay on this screen so
       // the user can retry, rather than popping away from the explanation.
       if (slot == null) return;

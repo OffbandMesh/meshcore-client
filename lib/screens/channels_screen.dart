@@ -921,18 +921,19 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   );
                                   return;
                                 }
-                                final slot = _allocateChannelSlot(
-                                  dialogContext,
-                                  connector,
-                                );
-                                // Refused: leave the dialog open so the user
-                                // can retry once the sync finishes.
-                                if (slot == null) return;
                                 final random = Random.secure();
                                 final psk = Uint8List(16);
                                 for (int i = 0; i < 16; i++) {
                                   psk[i] = random.nextInt(256);
                                 }
+                                final slot = _allocateChannelSlot(
+                                  dialogContext,
+                                  connector,
+                                  psk,
+                                );
+                                // Refused: leave the dialog open so the user
+                                // can retry once the sync finishes.
+                                if (slot == null) return;
                                 Navigator.pop(dialogContext);
                                 final result = await connector.setChannel(
                                   slot,
@@ -1036,6 +1037,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 final slot = _allocateChannelSlot(
                                   dialogContext,
                                   connector,
+                                  psk,
                                 );
                                 if (slot == null) return;
                                 Navigator.pop(dialogContext);
@@ -1078,14 +1080,15 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                       Expanded(
                         child: FilledButton(
                           onPressed: () async {
-                            final slot = _allocateChannelSlot(
-                              dialogContext,
-                              connector,
-                            );
-                            if (slot == null) return;
                             final psk = Channel.parsePskHex(
                               Channel.publicChannelPsk,
                             );
+                            final slot = _allocateChannelSlot(
+                              dialogContext,
+                              connector,
+                              psk,
+                            );
+                            if (slot == null) return;
                             Navigator.pop(dialogContext);
                             final result = await connector.setChannel(
                               slot,
@@ -1245,7 +1248,15 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 final String channelName;
 
                                 final Uint8List psk;
-                                if (isRegularHashtag) {
+                                if (isRegularHashtag &&
+                                    Channel.hashtagMeansPublic(hashtag)) {
+                                  // "public" means the real Public, as on the
+                                  // device (#1896), not sha256("#public").
+                                  channelName = 'Public';
+                                  psk = Channel.parsePskHex(
+                                    Channel.publicChannelPsk,
+                                  );
+                                } else if (isRegularHashtag) {
                                   channelName = '#$hashtag';
                                   // Regular hashtag - public derivation using SHA256
                                   psk = Channel.derivePskFromHashtag(hashtag);
@@ -1281,6 +1292,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 final slot = _allocateChannelSlot(
                                   context,
                                   connector,
+                                  psk,
                                 );
                                 if (slot == null) return;
                                 if (dialogContext.mounted) {
@@ -1426,6 +1438,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   slot = _allocateChannelSlot(
                                     context,
                                     connector,
+                                    community.deriveCommunityPublicPsk(),
                                   );
                                   channelRefused = slot == null;
                                 }
@@ -1791,6 +1804,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     return;
                   }
                 }
+                // Typing Public's key into another channel would make a
+                // second Public, which the radio refuses (#1896). Say so here
+                // instead of reporting a generic refusal.
+                if (Channel.isPublicKey(psk) &&
+                    !channel.isPublicChannel &&
+                    refusePublicAlreadyOnRadio(dialogContext, connector)) {
+                  return;
+                }
 
                 Navigator.pop(dialogContext);
                 try {
@@ -1895,6 +1916,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     ChannelMessageStore channelMessageStore,
     Channel channel,
   ) {
+    if (refuseDeletingPublic(context, channel)) return;
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1960,13 +1982,12 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     MeshCoreConnector connector,
   ) async {
     // This used to write slot 0 unconditionally, with no occupancy check, so
-    // it overwrote whatever was there (#1021). Public is identified by its PSK
-    // (`Channel.isPublicChannel`), not by its index, so it has no claim on
-    // slot 0 and can live anywhere.
-    if (refusePublicAlreadyOnRadio(context, connector)) return;
-    final slot = _allocateChannelSlot(context, connector);
-    if (slot == null) return;
+    // it overwrote whatever was there (#1021). It now goes through the shared
+    // allocator, which refuses a second Public and puts Public in slot 0, the
+    // slot firmware reserves for it (#1896), whenever slot 0 is free.
     final psk = Channel.parsePskHex(Channel.publicChannelPsk);
+    final slot = _allocateChannelSlot(context, connector, psk);
+    if (slot == null) return;
     final result = await connector.setChannel(slot, 'Public', psk);
     if (!context.mounted) return;
     if (explainUnconfirmedChannelWrite(context, result)) return;
@@ -1983,7 +2004,8 @@ class _ChannelsScreenState extends State<ChannelsScreen>
   int? _allocateChannelSlot(
     BuildContext context,
     MeshCoreConnector connector,
-  ) => allocateChannelSlotOrExplain(context, connector);
+    Uint8List psk,
+  ) => allocateChannelSlotOrExplain(context, connector, psk: psk);
 
   void _showManageCommunitiesDialog(BuildContext context) {
     showModalBottomSheet(
@@ -2245,10 +2267,14 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 /// A hashtag channel's key IS its name (Channel.derivePskFromHashtag), so the
 /// key is never hand-editable and a rename re-derives it. A community
 /// hashtag's name and key both derive from the community secret, so both are
-/// locked and managed through the community. The key stays visible and
-/// copyable in every case: OpenHop routing rules need it.
+/// locked and managed through the community. Public's key is fixed: a new key
+/// would make it a different channel, and firmware #1896 refuses the clear
+/// that a key change needs. The key stays visible and copyable in every case:
+/// OpenHop routing rules need it.
 bool channelPskEditable(ChannelType type) =>
-    type != ChannelType.hashtag && type != ChannelType.communityHashtag;
+    type != ChannelType.hashtag &&
+    type != ChannelType.communityHashtag &&
+    type != ChannelType.public;
 
 bool channelNameEditable(ChannelType type) =>
     type != ChannelType.communityHashtag;

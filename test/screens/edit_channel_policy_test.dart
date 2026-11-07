@@ -14,9 +14,14 @@ void main() {
       expect(channelPskEditable(ChannelType.communityHashtag), isFalse);
     });
 
+    // #1117: Public's key is fixed, and firmware #1896 refuses clearing
+    // Public, which a key change needs.
+    test('locked for Public', () {
+      expect(channelPskEditable(ChannelType.public), isFalse);
+    });
+
     test('editable for the rest', () {
       expect(channelPskEditable(ChannelType.private), isTrue);
-      expect(channelPskEditable(ChannelType.public), isTrue);
       expect(channelPskEditable(ChannelType.communityPublic), isTrue);
     });
   });

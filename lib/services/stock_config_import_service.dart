@@ -386,9 +386,10 @@ class ChannelImportPlan {
 /// is the non-destructive reading, and pinning down what stock actually does is
 /// one of the T1 gate's questions.
 ///
-/// New channels go into the lowest free slot. Stock's file has no index field,
-/// so incoming order is the only ordering information there is, and slots
-/// already occupied are left alone.
+/// New channels go into the lowest free slot, never slot 0 unless the channel is
+/// Public (#1896). Stock's file has no index field, so incoming order is the
+/// only ordering information there is, and slots already occupied are left
+/// alone.
 ///
 /// While [isSyncing] is true nothing is planned. The connector empties its
 /// channel list for the duration of a sync, so [existing] would look empty and
@@ -424,11 +425,19 @@ ChannelImportPlan planChannelImport({
       );
       continue;
     }
+    // Slot 0 is Public's (#1896): Public goes there when it is free, and no
+    // other channel goes there at all, the same rule as decideChannelSlot.
+    final isPublic = Channel.isPublicKey(channel.secret);
     int? slot;
-    for (var i = 0; i < maxChannels; i++) {
-      if (!takenSlots.contains(i)) {
-        slot = i;
-        break;
+    if (isPublic && !takenSlots.contains(Channel.publicSlot)) {
+      slot = Channel.publicSlot;
+    } else {
+      for (var i = 0; i < maxChannels; i++) {
+        if (i == Channel.publicSlot) continue;
+        if (!takenSlots.contains(i)) {
+          slot = i;
+          break;
+        }
       }
     }
     if (slot == null) {

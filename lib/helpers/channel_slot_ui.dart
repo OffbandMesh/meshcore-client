@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
+import '../models/channel.dart';
 import 'channel_slot_decision.dart';
 import 'snack_bar_builder.dart';
 
@@ -22,10 +25,18 @@ import 'snack_bar_builder.dart';
 /// The owner's ruling is that the unsafe write is blocked but the control stays
 /// live: a greyed-out button prevents the damage and tells the user nothing. So
 /// a refusal returns null *and* says what is wrong.
+///
+/// [psk] is the key about to be written. Public's key gets slot 0 and nothing
+/// else does (#1896), and a second copy of Public is refused, whichever path
+/// the key came in by: Join Public, a typed private key, a QR share, or a
+/// hashtag join of "public".
 int? allocateChannelSlotOrExplain(
   BuildContext context,
-  MeshCoreConnector connector,
-) {
+  MeshCoreConnector connector, {
+  required Uint8List psk,
+}) {
+  final isPublic = Channel.isPublicKey(psk);
+  if (isPublic && refusePublicAlreadyOnRadio(context, connector)) return null;
   final decision = decideChannelSlot(
     channels: connector.channels,
     maxChannels: connector.maxChannels,
@@ -34,6 +45,7 @@ int? allocateChannelSlotOrExplain(
     // impossible on a flaky link. Busy also covers a write the radio has not
     // answered yet (#1026): until it does, the list does not show its slot.
     isSyncing: connector.isChannelTableBusy,
+    isPublic: isPublic,
   );
   switch (decision.refusal) {
     case ChannelSlotRefusal.syncing:
@@ -81,14 +93,27 @@ bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
 
 /// Refuses a second Public channel, and says so. Returns true if it refused.
 ///
-/// Public is identified by its PSK (`Channel.isPublicChannel`), not by slot 0,
-/// so it can live in any slot and this is the only duplicate check it needs.
+/// Public is identified by its PSK (`Channel.isPublicChannel`), not by name or
+/// slot, so this finds it wherever older firmware left it.
 bool refusePublicAlreadyOnRadio(
   BuildContext context,
   MeshCoreConnector connector,
 ) {
   if (!connector.channels.any((c) => c.isPublicChannel)) return false;
   showChannelBlockedMessage(context, context.l10n.channels_publicAlreadyAdded);
+  return true;
+}
+
+/// For a delete: refuses to remove Public, and says so. Returns true if it
+/// refused. Firmware #1896 refuses the clear anyway, with the same error code
+/// as an occupied slot, so without this the user would read the wrong reason
+/// (owner 2026-10-28: "make sure Public can't be deleted").
+bool refuseDeletingPublic(BuildContext context, Channel channel) {
+  if (!channel.isPublicChannel) return false;
+  showChannelBlockedMessage(
+    context,
+    context.l10n.channels_publicCannotBeRemoved,
+  );
   return true;
 }
 

@@ -3250,6 +3250,12 @@ abstract class AppLocalizations {
   /// **'The Public channel is already on this radio.'**
   String get channels_publicAlreadyAdded;
 
+  /// Refusal when the user tries to delete the Public channel. Firmware #1896 keeps Public permanently in slot 0. Persistent (#1117).
+  ///
+  /// In en, this message translates to:
+  /// **'Public can\'t be removed from the radio. It always stays in slot 0.'**
+  String get channels_publicCannotBeRemoved;
+
   /// The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026).
   ///
   /// In en, this message translates to:
