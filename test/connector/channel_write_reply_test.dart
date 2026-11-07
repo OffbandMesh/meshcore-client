@@ -259,6 +259,21 @@ void main() {
       expect(await batch, ChannelWrite.ok);
       expect(getFrames(), isNotEmpty, reason: 'runs once the batch ends');
     });
+
+    test('a write\'s own re-read waits for another pending write', () async {
+      final first = connector.setChannel(3, 'A', psk(0x22));
+      final second = connector.deleteChannel(4);
+
+      ok(); // answers the first; the second is still waiting
+      expect(await first, ChannelWrite.ok);
+      await Future<void>.delayed(Duration.zero);
+      expect(connector.isSyncingChannels, isFalse);
+      expect(getFrames(), isEmpty);
+
+      ok();
+      expect(await second, ChannelWrite.ok);
+      expect(connector.isSyncingChannels, isTrue);
+    });
   });
 
   // #1024: after a FAILED sync the cached list is restored but
