@@ -116,8 +116,12 @@ void main() async {
     appDebugLogService,
     enabled: appSettingsService.settings.appDebugLogEnabled,
   );
-  final packageInfo = await PackageInfo.fromPlatform();
-  appLogger.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+  try {
+    final packageInfo = await PackageInfo.fromPlatform();
+    appLogger.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+  } catch (e) {
+    appLogger.error('Could not read the app version: $e', tag: 'App');
+  }
   appLogger.info('App ${appLogger.appVersion} started', tag: 'App');
   appSettingsService.logLoadReport();
 

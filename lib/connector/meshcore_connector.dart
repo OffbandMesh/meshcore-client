@@ -10553,7 +10553,8 @@ class MeshCoreConnector extends ChangeNotifier {
     // Evaluated against resolvedText so a translated mention still matches.
     // #1062: an unknown slot means an unknown PSK means an unknowable mode;
     // fail closed (no notification) rather than defaulting to noisy.
-    final slotChannel = _findChannelByIndex(channelIndex);
+    final slotLookup = _findChannelByIndexWithSource(channelIndex);
+    final slotChannel = slotLookup.channel;
     if (slotChannel == null &&
         _unconfirmedChannelSlots.contains(channelIndex)) {
       _appDebugLogService?.warn(
@@ -10581,17 +10582,12 @@ class MeshCoreConnector extends ChangeNotifier {
         'mentions only, no mention',
       _ => null,
     };
-    final slotSource = slotChannel == null
-        ? 'no channel in slot'
-        : _channels.any((c) => c.index == channelIndex)
-        ? 'live list'
-        : 'cached list';
     _appDebugLogService?.info(
       'CHAN NOTIFY slot $channelIndex "$label": radio '
       '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)}, slot holds '
       '"${slotChannel?.name ?? ''}" psk '
       '${AppSettingsService.pskFingerprint(slotChannel?.pskHex)} '
-      '($slotSource), mode ${mode.name} (${resolved.source}) -> '
+      '(${slotLookup.source}), mode ${mode.name} (${resolved.source}) -> '
       '${suppressed == null ? 'posting' : 'suppressed, $suppressed'}',
       tag: 'Notification',
     );
@@ -11154,19 +11150,28 @@ class MeshCoreConnector extends ChangeNotifier {
     return contact.type != advTypeRepeater;
   }
 
-  Channel? _findChannelByIndex(int index) {
+  Channel? _findChannelByIndex(int index) =>
+      _findChannelByIndexWithSource(index).channel;
+
+  /// [_findChannelByIndex] plus which list answered, for the log.
+  ({Channel? channel, String source}) _findChannelByIndexWithSource(int index) {
     // #1062: an unconfirmed slot's contents are unknown. Returning the cached
     // occupant here is how a stale identity (wrong PSK, wrong name) attached
     // itself to live traffic; fail closed instead.
-    if (_unconfirmedChannelSlots.contains(index)) return null;
-    return _channels.cast<Channel?>().firstWhere(
-          (c) => c?.index == index,
-          orElse: () => null,
-        ) ??
-        _cachedChannels.cast<Channel?>().firstWhere(
-          (c) => c?.index == index,
-          orElse: () => null,
-        );
+    if (_unconfirmedChannelSlots.contains(index)) {
+      return (channel: null, source: 'slot unconfirmed');
+    }
+    final live = _channels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    if (live != null) return (channel: live, source: 'live list');
+    final cached = _cachedChannels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    if (cached != null) return (channel: cached, source: 'cached list');
+    return (channel: null, source: 'no channel in slot');
   }
 
   void _maybeIncrementChannelUnread(
