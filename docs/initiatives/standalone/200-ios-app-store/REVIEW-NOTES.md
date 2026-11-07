@@ -28,7 +28,7 @@ USER-GENERATED CONTENT
 Messages are sent radio to radio. There is no Offband server holding them, so we cannot see, filter or remove them. Users can block a contact from the Contacts screen or a sender from a channel. That drops the contact's direct messages and hides the sender's channel messages. There is no in-app report button, because no one operates a service to receive or act on a report; users can write to support@offband.org. GIF search is limited to Giphy's G rating.
 
 ENCRYPTION
-The app uses standard AES, SHA-256 and HMAC from open-source libraries. Export compliance was answered in App Store Connect. The source code is public: https://github.com/OffbandMesh/meshcore-client
+The app uses standard AES, SHA-256 and HMAC from open-source libraries. Its Info.plist sets ITSAppUsesNonExemptEncryption to false, and it is not offered in France. The source code is public: https://github.com/OffbandMesh/meshcore-client
 ```
 
 ## Demo video

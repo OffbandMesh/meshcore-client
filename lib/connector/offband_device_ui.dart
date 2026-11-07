@@ -130,6 +130,10 @@ enum DeviceUiSurface {
   tunePlay,
   tuneSlot,
   screenSettings,
+
+  /// The radio's own per-channel notify mode (#544). Distinct from the app's
+  /// per-channel notify setting, which is not a device-UI surface at all.
+  channelNotify,
 }
 
 /// The refusal reason for a GPS write. Reason 1 means Power save on a build
