@@ -1042,6 +1042,10 @@
     }
   },
   "channels_publicAlreadyAdded": "The Public channel is already on this radio.",
+  "channels_publicCannotBeRemoved": "Public can't be removed from the radio. It always stays in slot 0.",
+  "@channels_publicCannotBeRemoved": {
+    "description": "Refusal when the user tries to delete the Public channel. Firmware #1896 keeps Public permanently in slot 0. Persistent (#1117)."
+  },
   "channels_writeOccupied": "The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.",
   "@channels_writeOccupied": {
     "description": "The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026)."

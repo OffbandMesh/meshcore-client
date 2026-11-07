@@ -141,6 +141,50 @@ void main() {
       expect(plan.skipped, isEmpty);
     });
 
+    // #1117: firmware #1896 refuses any channel but Public in slot 0, even
+    // while it is empty, and refuses Public anywhere else.
+    test('no channel but Public is planned into slot 0', () {
+      final plan = planChannelImport(
+        existing: const [],
+        incoming: [incoming('Weather', 0x22), incoming('Emergency', 0x33)],
+        maxChannels: 40,
+        isSyncing: false,
+      );
+
+      expect(plan.assignments.map((a) => a.slot), [1, 2]);
+    });
+
+    test('Public in the file goes to slot 0 when it is free', () {
+      final plan = planChannelImport(
+        existing: const [],
+        incoming: [
+          incoming('Weather', 0x22),
+          StockChannel(
+            name: 'Public',
+            secret: Channel.parsePskHex(Channel.publicChannelPsk),
+          ),
+        ],
+        maxChannels: 40,
+        isSyncing: false,
+      );
+
+      final bySlot = {for (final a in plan.assignments) a.channel.name: a.slot};
+      expect(bySlot['Public'], 0);
+      expect(bySlot['Weather'], 1);
+    });
+
+    test('a radio full but for slot 0 has no room for other channels', () {
+      final plan = planChannelImport(
+        existing: [for (var i = 1; i < 4; i++) live(i, 'c$i', 0x40 + i)],
+        incoming: [incoming('Weather', 0x22)],
+        maxChannels: 4,
+        isSyncing: false,
+      );
+
+      expect(plan.assignments, isEmpty);
+      expect(plan.skipped.single.reason, StockConfigImportIssue.noFreeSlot);
+    });
+
     // #1021: the connector empties its channel list for the length of a sync,
     // so mid-sync `existing` looks empty. Planning then would write every
     // incoming channel over slots that are really occupied, starting at 0.

@@ -313,6 +313,7 @@ void main() {
           channels: connector.channels,
           maxChannels: 3,
           isSyncing: connector.isChannelTableBusy,
+          isPublic: false,
         );
         expect(decision.slot, 2);
       },

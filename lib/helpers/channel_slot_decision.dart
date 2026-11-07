@@ -45,16 +45,28 @@ class ChannelSlotDecision {
 ///
 /// An absent index genuinely means a free slot, because the connector never
 /// adds an empty channel to its list.
+///
+/// Slot 0 is Public's (firmware #1896, owner 2026-10-28: slot 0 "should always
+/// remain public"). Firmware refuses any other channel there, even while it is
+/// empty, so [isPublic] false never gets slot 0. Public goes to slot 0 when it
+/// is free; firmware refuses Public anywhere else, so the fallback to another
+/// free slot exists only for older firmware, where slot 0 can be held by some
+/// other channel. [isPublic] is required so no caller can forget the rule.
 ChannelSlotDecision decideChannelSlot({
   required List<Channel> channels,
   required int maxChannels,
   required bool isSyncing,
+  required bool isPublic,
 }) {
   if (isSyncing) {
     return const ChannelSlotDecision.refused(ChannelSlotRefusal.syncing);
   }
   final used = channels.map((c) => c.index).toSet();
+  if (isPublic && !used.contains(Channel.publicSlot)) {
+    return const ChannelSlotDecision.slot(Channel.publicSlot);
+  }
   for (var i = 0; i < maxChannels; i++) {
+    if (i == Channel.publicSlot) continue;
     if (!used.contains(i)) return ChannelSlotDecision.slot(i);
   }
   return const ChannelSlotDecision.refused(ChannelSlotRefusal.full);

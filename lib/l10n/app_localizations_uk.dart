@@ -1838,6 +1838,10 @@ class AppLocalizationsUk extends AppLocalizations {
       'The Public channel is already on this radio.';
 
   @override
+  String get channels_publicCannotBeRemoved =>
+      'Public can\'t be removed from the radio. It always stays in slot 0.';
+
+  @override
   String get channels_writeOccupied =>
       'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.';
 
