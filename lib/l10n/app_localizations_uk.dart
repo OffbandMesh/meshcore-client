@@ -1627,12 +1627,21 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String channels_restoreToRadioConfirm(int count, String names) {
-    return 'Write $count channel(s) back to the radio: $names. This replaces whatever those slots hold now.';
+    return 'Write $count channel(s) back to the radio: $names. Channels the radio still has are left as they are.';
   }
 
   @override
   String channels_restoreToRadioDone(int count) {
-    return 'Wrote $count channel(s) back to the radio. If the warning above stays, some did not take.';
+    return 'The radio confirmed all $count channel(s).';
+  }
+
+  @override
+  String channels_restoreToRadioPartial(
+    int confirmed,
+    int total,
+    String names,
+  ) {
+    return 'The radio confirmed $confirmed of $total channel(s). Not restored: $names.';
   }
 
   @override

@@ -2905,14 +2905,20 @@ abstract class AppLocalizations {
   /// No description provided for @channels_restoreToRadioConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Write {count} channel(s) back to the radio: {names}. This replaces whatever those slots hold now.'**
+  /// **'Write {count} channel(s) back to the radio: {names}. Channels the radio still has are left as they are.'**
   String channels_restoreToRadioConfirm(int count, String names);
 
   /// No description provided for @channels_restoreToRadioDone.
   ///
   /// In en, this message translates to:
-  /// **'Wrote {count} channel(s) back to the radio. If the warning above stays, some did not take.'**
+  /// **'The radio confirmed all {count} channel(s).'**
   String channels_restoreToRadioDone(int count);
+
+  /// Restore to radio finished with some channels refused, unanswered, or without a free slot. Persistent (#1117).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio confirmed {confirmed} of {total} channel(s). Not restored: {names}.'**
+  String channels_restoreToRadioPartial(int confirmed, int total, String names);
 
   /// No description provided for @channels_restoreToRadioFailed.
   ///
