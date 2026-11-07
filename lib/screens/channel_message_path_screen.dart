@@ -17,6 +17,7 @@ import '../models/channel_message.dart';
 import '../models/app_settings.dart';
 import '../models/contact.dart';
 import '../widgets/adaptive_app_bar_title.dart';
+import '../widgets/osm_attribution.dart';
 
 class ChannelMessagePathScreen extends StatelessWidget {
   final ChannelMessage message;
@@ -606,8 +607,6 @@ class _ChannelMessagePathMapScreenState
                     TileLayer(
                       urlTemplate: kMapTileUrlTemplate,
                       tileProvider: tileCache.tileProvider,
-                      userAgentPackageName:
-                          MapTileCacheService.userAgentPackageName,
                       maxZoom: 19,
                     ),
                     if (polylines.isNotEmpty)
@@ -648,6 +647,7 @@ class _ChannelMessagePathMapScreenState
                     ),
                   ),
                 _buildLegendCard(context, hops, isImperial),
+                const OsmAttribution(),
               ],
             ),
           ),
