@@ -1871,6 +1871,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       ),
     );
     if (confirmed != true) return;
+    // Its writes share the reply queue with any sync or other channel write,
+    // so like every channel write it waits for a quiet table (#1026).
+    if (!context.mounted) return;
+    if (refuseWhileChannelTableBusy(context, connector)) return;
 
     final written = await connector.restoreChannelsToRadio();
     if (!context.mounted) return;

@@ -7165,8 +7165,13 @@ class MeshCoreConnector extends ChangeNotifier {
 
   void _beginChannelWrite() => _channelWritesInFlight++;
 
-  /// Ends one write; the last one to end runs any sync that [getChannels]
-  /// deferred while writes were waiting for their replies.
+  /// Asks for a re-read once every channel write has its answer. A writer
+  /// never starts one itself: another write may still be waiting on the same
+  /// reply queue. Nested and batched writes therefore re-read once, at the end.
+  void _syncAfterChannelWrites() => _channelSyncDeferredByWrite = true;
+
+  /// Ends one write; the last one to end runs the sync requested by a writer,
+  /// or by [getChannels] while writes were waiting for their replies.
   void _endChannelWrite() {
     _channelWritesInFlight--;
     if (_channelWritesInFlight == 0 && _channelSyncDeferredByWrite) {
@@ -7243,7 +7248,7 @@ class MeshCoreConnector extends ChangeNotifier {
       // the radio has not answered for yet and report 0 every time. The
       // authoritative feedback is the erased-slot banner, which is re-derived
       // on every sync and therefore stays up if some writes did not land.
-      await _syncChannels(force: true);
+      _syncAfterChannelWrites();
       return sent;
     } finally {
       _endChannelWrite();
@@ -7302,7 +7307,7 @@ class MeshCoreConnector extends ChangeNotifier {
     try {
       final cleared = await _writeChannelSlot(channel.index, '', Uint8List(16));
       if (cleared != ChannelWrite.ok) {
-        await _syncChannels(force: true);
+        _syncAfterChannelWrites();
         return cleared;
       }
       await _retireSlotOccupant(channel.index);
@@ -7333,7 +7338,7 @@ class MeshCoreConnector extends ChangeNotifier {
         await _channelMessageStore.clearChannelMessages(index);
         _channelMessages.remove(index);
       }
-      if (refresh) await _syncChannels(force: true);
+      if (refresh) _syncAfterChannelWrites();
       return result;
     } finally {
       _endChannelWrite();
@@ -7363,7 +7368,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
       // Re-read on every outcome: after a refusal the list we chose the slot
       // from was wrong, and after no reply nobody knows what the slot holds.
-      if (refresh) await _syncChannels(force: true);
+      if (refresh) _syncAfterChannelWrites();
       return result;
     } finally {
       _endChannelWrite();
