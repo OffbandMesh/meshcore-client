@@ -138,7 +138,7 @@ void main() {
     PrefsManager.reset();
     await PrefsManager.initialize();
     PackageInfo.setMockInitialValues(
-      appName: 'Offband Meshcore',
+      appName: 'Offband MeshCore',
       packageName: 'app.offband.meshcore',
       version: '9.9.9',
       buildNumber: '99',

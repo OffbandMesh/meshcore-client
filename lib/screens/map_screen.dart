@@ -30,6 +30,7 @@ import '../icons/los_icon.dart';
 import 'channels_screen.dart';
 import 'chat_screen.dart';
 import 'contacts_screen.dart';
+import '../widgets/osm_attribution.dart';
 import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../helpers/snack_bar_builder.dart';
@@ -551,8 +552,6 @@ class _MapScreenState extends State<MapScreen> {
                   TileLayer(
                     urlTemplate: kMapTileUrlTemplate,
                     tileProvider: tileCache.tileProvider,
-                    userAgentPackageName:
-                        MapTileCacheService.userAgentPackageName,
                     maxZoom: 19,
                   ),
                   if (_polylines.isNotEmpty && _isBuildingPathTrace)
@@ -654,6 +653,8 @@ class _MapScreenState extends State<MapScreen> {
                   hasPathSelector: _isBuildingPathTrace,
                 ),
               if (_isBuildingPathTrace) _buildPathTraceOverlay(),
+              // Bottom-left: the filter button sits bottom-right.
+              const OsmAttribution(alignment: Alignment.bottomLeft),
             ],
           ),
           floatingActionButton: FloatingActionButton(

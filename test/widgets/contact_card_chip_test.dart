@@ -94,6 +94,16 @@ void main() {
     expect(find.textContaining(_key), findsNothing);
   });
 
+  testWidgets('a link beside a card stays tappable (#1074)', (tester) async {
+    const url = 'https://example.org';
+    await _pump(tester, '$_card see $url', _Conn());
+
+    await tester.tapOnText(find.textRange.ofSubstring(url));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AlertDialog, url), findsOneWidget);
+  });
+
   testWidgets('a plain message is untouched and keeps link support', (
     tester,
   ) async {

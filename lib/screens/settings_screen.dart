@@ -18,6 +18,7 @@ import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
+import '../utils/platform_info.dart';
 import 'settings/settings_shell.dart';
 import 'settings/about_view.dart';
 import 'settings/app_settings_view.dart';
@@ -27,6 +28,7 @@ import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/badge_battery_view.dart';
 import 'settings/badge_screen_view.dart';
+import 'settings/indicators_view.dart';
 import 'settings/device_ui_view.dart';
 import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
@@ -148,10 +150,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // A blanket context.watch here rebuilt the whole settings screen on every
     // sync frame, thrashing the UI thread and slowing the channel sync (#81).
     final showObserver = context.select<MeshCoreConnector, bool>(
-      (c) => ObserverConfigClient.supportsConfig(
-        firmwareVerCode: c.firmwareVerCode ?? 0,
-        offbandCaps: c.offbandCaps ?? 0,
-      ),
+      (c) =>
+          ObserverConfigClient.supportsConfig(offbandCaps: c.offbandCaps ?? 0),
     );
     // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
     // the Device Info Build row. Selects narrowly so the category list only
@@ -232,7 +232,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_actions,
         builder: _actionsPane,
       ),
-      if (experimentalUnlocked)
+      // App Store guideline 2.5.19 bars hidden features, so iOS has no unlock
+      // and never shows this section (#1051).
+      if (experimentalUnlocked && !PlatformInfo.isIOS)
         SettingsCategory(
           icon: Icons.science_outlined,
           title: l10n.settings_experimental,
@@ -495,6 +497,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+              // Display mode, rotation and LED (#523). Strictly on the 0x04
+              // bit: no bit, no row, no command.
+              if (connector.supportsIndicators) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.brightness_6_outlined),
+                  title: Text(l10n.settings_indicators),
+                  subtitle: Text(l10n.settings_indicatorsSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_indicators,
+                    const IndicatorsView(),
+                  ),
+                ),
+              ],
               if (connector.selfPublicKey != null) ...[
                 const Divider(height: 1),
                 Padding(
@@ -712,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               l10n.settings_infoBuild,
               BuildInfo.stamp,
               copyValue: BuildInfo.stamp,
-              onTap: _handleUnlockTap,
+              onTap: PlatformInfo.isIOS ? null : _handleUnlockTap,
             ),
             if (_versionHint != null)
               Padding(
@@ -849,6 +867,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          _buildBlePinTile(context),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.restart_alt, color: Colors.orange),
@@ -866,6 +885,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// #1100: the radio's BLE pairing pin, shown in plain text (owner decision
+  /// 2026-11-06: no masking, matching other mesh clients; any connected
+  /// client can read it from device info anyway). Hidden until a device-info
+  /// frame carries the field. select() so only this tile rebuilds when the
+  /// pin changes (the #81 lesson).
+  Widget _buildBlePinTile(BuildContext context) {
+    final l10n = context.l10n;
+    final blePin = context.select<MeshCoreConnector, int?>(
+      (c) => c.deviceBlePin,
+    );
+    if (blePin == null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.password),
+          title: Text(l10n.settings_blePin),
+          subtitle: Text(
+            // Firmware prints the pin as %06d; mirror it, and CLI-set values
+            // outside the 6-digit range still display as the radio shows them.
+            blePin == 0
+                ? l10n.settings_blePinDefault
+                : blePin.toString().padLeft(6, '0'),
+          ),
+          onTap: () => _editBlePin(context, context.read<MeshCoreConnector>()),
+        ),
+      ],
+    );
+  }
+
+  void _editBlePin(BuildContext context, MeshCoreConnector connector) {
+    final l10n = context.l10n;
+    final current = connector.deviceBlePin ?? 0;
+    // Prefill only a value cmd 37 would accept back. The firmware CLI can
+    // store out-of-range pins (unvalidated atoi); offering one for re-save
+    // would only invite the validation refusal (#1100 review).
+    final controller = TextEditingController(
+      text: current >= 100000 && current <= 999999 ? current.toString() : '',
+    );
+    String? errorText;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.settings_blePin),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              helperText: l10n.settings_blePinHelp,
+              helperMaxLines: 4,
+              errorText: errorText,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _sendBlePin(
+                  context,
+                  connector,
+                  0,
+                  l10n.settings_blePinResetDone,
+                );
+              },
+              child: Text(l10n.settings_blePinResetAction),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.common_cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                final pin = int.tryParse(controller.text);
+                if (pin == null || pin < 100000 || pin > 999999) {
+                  // Refuse the write at the attempt and say why, inline:
+                  // the range is firmware's own validation (#1100).
+                  setDialogState(() {
+                    errorText = l10n.settings_blePinInvalid;
+                  });
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                _sendBlePin(
+                  context,
+                  connector,
+                  pin,
+                  l10n.settings_blePinSaved(controller.text),
+                );
+              },
+              child: Text(l10n.common_save),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
+  /// The success notice shows only once the frame was actually written; a
+  /// transport failure surfaces as a persistent error instead of silently
+  /// showing a pin the radio never received (#1100 review).
+  Future<void> _sendBlePin(
+    BuildContext context,
+    MeshCoreConnector connector,
+    int pin,
+    String successText,
+  ) async {
+    final l10n = context.l10n;
+    try {
+      await connector.setDevicePin(pin);
+    } catch (e) {
+      if (!context.mounted) return;
+      showDismissibleSnackBar(
+        context,
+        content: Text(l10n.settings_blePinSendFailed(e.toString())),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        persist: true,
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    showDismissibleSnackBar(context, content: Text(successText), persist: true);
   }
 
   Widget _buildDebugCard(BuildContext context) {

@@ -14,6 +14,12 @@ class LinkHandler {
     return base.copyWith(color: orange, decoration: TextDecoration.underline);
   }
 
+  static const _options = LinkifyOptions(
+    humanize: false,
+    defaultToHttps: false,
+  );
+  static const _linkifiers = [UrlLinkifier(), EmailLinkifier()];
+
   /// Returns a [SelectableLinkify] on desktop or a [Linkify] on mobile.
   static Widget buildLinkifyText({
     required BuildContext context,
@@ -22,8 +28,6 @@ class LinkHandler {
     TextStyle? linkStyle,
   }) {
     final effectiveLinkStyle = linkStyle ?? defaultLinkStyle(context, style);
-    const options = LinkifyOptions(humanize: false, defaultToHttps: false);
-    const linkifiers = [UrlLinkifier(), EmailLinkifier()];
     void onOpen(LinkableElement link) => handleLinkTap(context, link.url);
 
     if (PlatformInfo.isDesktop) {
@@ -31,8 +35,8 @@ class LinkHandler {
         text: text,
         style: style,
         linkStyle: effectiveLinkStyle,
-        options: options,
-        linkifiers: linkifiers,
+        options: _options,
+        linkifiers: _linkifiers,
         onOpen: onOpen,
       );
     }
@@ -40,9 +44,27 @@ class LinkHandler {
       text: text,
       style: style,
       linkStyle: effectiveLinkStyle,
-      options: options,
-      linkifiers: linkifiers,
+      options: _options,
+      linkifiers: _linkifiers,
       onOpen: onOpen,
+    );
+  }
+
+  /// A span with the same links, style and confirm-on-tap as
+  /// [buildLinkifyText], for text that sits between widget spans such as
+  /// mention chips. (#1074)
+  static InlineSpan buildLinkifySpan({
+    required BuildContext context,
+    required String text,
+    required TextStyle style,
+  }) {
+    return LinkifySpan(
+      text: text,
+      style: style,
+      linkStyle: defaultLinkStyle(context, style),
+      options: _options,
+      linkifiers: _linkifiers,
+      onOpen: (link) => handleLinkTap(context, link.url),
     );
   }
 

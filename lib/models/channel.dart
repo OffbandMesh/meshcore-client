@@ -25,6 +25,23 @@ class Channel {
 
   bool get isEmpty => name.isEmpty && psk.every((b) => b == 0);
 
+  /// A slot the radio answered for that holds no usable channel.
+  ///
+  /// Erased flash reads back as 0xFF, not 0x00, so such a record is NOT
+  /// [isEmpty]: the name decodes through `allowMalformed` into U+FFFD
+  /// replacement characters and the PSK is all-ones. Both halves are checked
+  /// because either one being unreadable makes the record unusable as a
+  /// channel identity, and the PSK is what every per-channel setting is keyed
+  /// by (#1060).
+  ///
+  /// The client must never adopt one of these as a channel, and must never
+  /// persist a list containing one over a known-good cached list.
+  bool get isErased =>
+      name.contains('�') || (psk.isNotEmpty && psk.every((b) => b == 0xFF));
+
+  /// A slot that carries no channel the client should hold, for either reason.
+  bool get isUnusable => isEmpty || isErased;
+
   bool get isPublicChannel => pskHex == publicChannelPsk;
 
   static Channel? fromFrame(Uint8List frame) {

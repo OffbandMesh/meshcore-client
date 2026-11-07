@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:meshcore_open/storage/channel_message_store.dart';
 import 'package:meshcore_open/utils/platform_info.dart';
 import 'package:meshcore_open/widgets/app_bar.dart';
@@ -27,8 +27,10 @@ import '../widgets/channel_drawer_list.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/unread_badge.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../widgets/battery_optimization_banner.dart';
+import '../helpers/channel_slot_ui.dart';
 import '../helpers/snack_bar_builder.dart';
 import 'channel_chat_screen.dart';
 import 'community_qr_scanner_screen.dart';
@@ -187,6 +189,65 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
             return Column(
               children: [
+                // #1062: persistent, undismissable while true. A slot the
+                // radio never confirmed means its channel is unknown; a
+                // 4-second toast is not an error surface (SAFELANE 6).
+                if (connector.unconfirmedChannelSlots.isNotEmpty)
+                  MaterialBanner(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.errorContainer,
+                    content: Text(
+                      context.l10n.channels_unconfirmedSlots(
+                        connector.unconfirmedChannelSlots.toList().join(', '),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            unawaited(connector.getChannels(force: true)),
+                        child: Text(context.l10n.channels_retrySync),
+                      ),
+                    ],
+                  ),
+                // #1060: the radio answered for these slots with erased
+                // records. Undismissable: the radio has lost channels the
+                // client still holds, and the only way out is to write them
+                // back or accept the loss deliberately.
+                if (connector.erasedChannelSlots.isNotEmpty)
+                  MaterialBanner(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.errorContainer,
+                    content: Text(
+                      context.l10n.channels_erasedSlots(
+                        connector.erasedChannelSlots.toList().join(', '),
+                      ),
+                    ),
+                    actions: [
+                      if (connector.canRestoreChannelsToRadio)
+                        TextButton(
+                          onPressed: () => unawaited(
+                            _confirmRestoreChannels(context, connector),
+                          ),
+                          child: Text(context.l10n.channels_restoreToRadio),
+                        ),
+                    ],
+                  ),
+                if (connector.slotIdentityChanges.isNotEmpty)
+                  MaterialBanner(
+                    content: Text(
+                      context.l10n.channels_slotIdentityChanged(
+                        connector.slotIdentityChanges.join('; '),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: connector.acknowledgeSlotIdentityChanges,
+                        child: Text(context.l10n.common_dismiss),
+                      ),
+                    ],
+                  ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: TextField(
@@ -497,76 +558,112 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
     showModalBottomSheet(
       context: parentContext,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: Text(context.l10n.channels_editChannel),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _showEditChannelDialog(parentContext, connector, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.qr_code_2),
-              title: Text(context.l10n.channels_shareQr),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _showChannelQrDialog(parentContext, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: Icon(channelNotifyModeIcon(notifyMode)),
-              title: Text(context.l10n.channels_notifications),
-              subtitle: Text(channelNotifyModeLabel(context, notifyMode)),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  showChannelNotifyModeDialog(parentContext, channel);
-                }
-              },
-            ),
-            // The radio's own tone for this channel (#971), named apart from
-            // Notifications, which is the phone's. Gated on caps byte 2 0x10.
-            ChannelRadioToneTile(
-              channel: channel,
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  showChannelRadioToneDialog(parentContext, channel);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: Text(
-                context.l10n.channels_deleteChannel,
-                style: const TextStyle(color: Colors.red),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(context.l10n.channels_editChannel),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _showEditChannelDialog(parentContext, connector, channel);
+                  }
+                },
               ),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await Future.delayed(const Duration(milliseconds: 100));
-                if (parentContext.mounted) {
-                  _confirmDeleteChannel(
-                    context,
-                    connector,
-                    channelMessageStore,
-                    channel,
-                  );
-                }
-              },
-            ),
-          ],
+              ListTile(
+                leading: const Icon(Icons.qr_code_2),
+                title: Text(context.l10n.channels_shareQr),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _showChannelQrDialog(parentContext, channel);
+                  }
+                },
+              ),
+              ListTile(
+                leading: Icon(channelNotifyModeIcon(notifyMode)),
+                title: Text(context.l10n.channels_notifications),
+                subtitle: Text(channelNotifyModeLabel(context, notifyMode)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    showChannelNotifyModeDialog(parentContext, channel);
+                  }
+                },
+              ),
+              // The radio's own sound setting for this channel (#544), named
+              // apart from Notifications, which is the phone's. These are two
+              // independent settings over two outputs: neither reads the other.
+              // Gated on caps byte 2 0x80.
+              if (radioChannelNotifySupported(
+                context.read<MeshCoreConnector>(),
+              ))
+                Builder(
+                  builder: (tileContext) {
+                    final live = tileContext.watch<MeshCoreConnector>();
+                    final effective = radioChannelNotifyEffective(
+                      tileContext,
+                      live.channelNotifyFor(channel),
+                      live.deviceNotifyScope,
+                    );
+                    return ListTile(
+                      leading: const Icon(Icons.volume_up_outlined),
+                      title: Text(tileContext.l10n.channels_radioSound),
+                      subtitle: Text(
+                        effective ??
+                            tileContext.l10n.channels_radioSoundReading,
+                      ),
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        await Future.delayed(const Duration(milliseconds: 100));
+                        if (parentContext.mounted) {
+                          showRadioChannelNotifyDialog(parentContext, channel);
+                        }
+                      },
+                    );
+                  },
+                ),
+              // The radio's own tone for this channel (#971), named apart from
+              // Notifications, which is the phone's. Gated on caps byte 2 0x10.
+              ChannelRadioToneTile(
+                channel: channel,
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    showChannelRadioToneDialog(parentContext, channel);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  context.l10n.channels_deleteChannel,
+                  style: const TextStyle(color: Colors.red),
+                ),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (parentContext.mounted) {
+                    _confirmDeleteChannel(
+                      context,
+                      connector,
+                      channelMessageStore,
+                      channel,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -718,10 +815,10 @@ class _ChannelsScreenState extends State<ChannelsScreen>
 
   void _showAddChannelDialog(BuildContext context) {
     final connector = context.read<MeshCoreConnector>();
-    final nextIndex = _findNextAvailableIndex(
-      connector.channels,
-      connector.maxChannels,
-    );
+    // No slot is chosen here. It used to be, and that was the bug: the channel
+    // list is emptied for the duration of a sync, so an index picked when this
+    // dialog opened could point at an occupied slot by the time Add was
+    // pressed. Each handler now calls _allocateChannelSlot at the write (#1021).
     final hasPublicChannel = connector.channels.any((c) => c.isPublicChannel);
     int? selectedOption;
     final nameController = TextEditingController();
@@ -824,28 +921,44 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   );
                                   return;
                                 }
+                                final slot = _allocateChannelSlot(
+                                  dialogContext,
+                                  connector,
+                                );
+                                // Refused: leave the dialog open so the user
+                                // can retry once the sync finishes.
+                                if (slot == null) return;
                                 final random = Random.secure();
                                 final psk = Uint8List(16);
                                 for (int i = 0; i < 16; i++) {
                                   psk[i] = random.nextInt(256);
                                 }
                                 Navigator.pop(dialogContext);
-                                await connector.setChannel(
-                                  nextIndex,
+                                final result = await connector.setChannel(
+                                  slot,
                                   name,
                                   psk,
                                 );
-                                await channelMessageStore.clearChannelMessages(
-                                  nextIndex,
-                                );
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(name),
-                                    ),
-                                  );
+                                // Only on OK: a refused write leaves another
+                                // channel in this slot, and this would wipe
+                                // that channel's history (#1026).
+                                if (result == ChannelWrite.ok) {
+                                  await channelMessageStore
+                                      .clearChannelMessages(slot);
                                 }
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
+                                }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(name),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_create),
                             ),
@@ -892,7 +1005,7 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                         children: [
                           Expanded(
                             child: FilledButton(
-                              onPressed: () {
+                              onPressed: () async {
                                 final name = nameController.text.trim();
                                 final pskHex = pskController.text.trim();
                                 if (name.isEmpty) {
@@ -920,16 +1033,30 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   );
                                   return;
                                 }
+                                final slot = _allocateChannelSlot(
+                                  dialogContext,
+                                  connector,
+                                );
+                                if (slot == null) return;
                                 Navigator.pop(dialogContext);
-                                connector.setChannel(nextIndex, name, psk);
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(name),
-                                    ),
-                                  );
+                                final result = await connector.setChannel(
+                                  slot,
+                                  name,
+                                  psk,
+                                );
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
                                 }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(name),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_add),
                             ),
@@ -950,20 +1077,34 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                     children: [
                       Expanded(
                         child: FilledButton(
-                          onPressed: () {
+                          onPressed: () async {
+                            final slot = _allocateChannelSlot(
+                              dialogContext,
+                              connector,
+                            );
+                            if (slot == null) return;
                             final psk = Channel.parsePskHex(
                               Channel.publicChannelPsk,
                             );
                             Navigator.pop(dialogContext);
-                            connector.setChannel(nextIndex, 'Public', psk);
-                            if (context.mounted) {
-                              showDismissibleSnackBar(
-                                context,
-                                content: Text(
-                                  context.l10n.channels_publicChannelAdded,
-                                ),
-                              );
+                            final result = await connector.setChannel(
+                              slot,
+                              'Public',
+                              psk,
+                            );
+                            if (!context.mounted) return;
+                            if (explainUnconfirmedChannelWrite(
+                              context,
+                              result,
+                            )) {
+                              return;
                             }
+                            showDismissibleSnackBar(
+                              context,
+                              content: Text(
+                                context.l10n.channels_publicChannelAdded,
+                              ),
+                            );
                           },
                           child: Text(dialogContext.l10n.common_add),
                         ),
@@ -1133,24 +1274,38 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                   _loadCommunities();
                                 }
 
+                                // The screen's context, not the dialog's: the
+                                // hashtag store write above is awaited, so the
+                                // dialog may already be gone by here.
+                                if (!context.mounted) return;
+                                final slot = _allocateChannelSlot(
+                                  context,
+                                  connector,
+                                );
+                                if (slot == null) return;
                                 if (dialogContext.mounted) {
                                   Navigator.pop(dialogContext);
                                 }
-                                connector.setChannel(
-                                  nextIndex,
+                                final result = await connector.setChannel(
+                                  slot,
                                   channelName,
                                   psk,
                                 );
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.channels_channelAdded(
-                                        channelName,
-                                      ),
-                                    ),
-                                  );
+                                if (!context.mounted) return;
+                                if (explainUnconfirmedChannelWrite(
+                                  context,
+                                  result,
+                                )) {
+                                  return;
                                 }
+                                showDismissibleSnackBar(
+                                  context,
+                                  content: Text(
+                                    context.l10n.channels_channelAdded(
+                                      channelName,
+                                    ),
+                                  ),
+                                );
                               },
                               child: Text(dialogContext.l10n.common_add),
                             ),
@@ -1259,19 +1414,25 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 // Save to store
                                 await _communityStore.addCommunity(community);
 
-                                // Optionally add the community public channel to the device
-                                if (addPublicChannel) {
-                                  final psk = community
-                                      .deriveCommunityPublicPsk();
-                                  final channelName =
-                                      '${community.name} Public';
-                                  connector.setChannel(
-                                    nextIndex,
-                                    channelName,
-                                    psk,
+                                // Optionally add the community public channel to the device.
+                                // The community itself is already saved above,
+                                // so a refused slot skips only the channel
+                                // write and never loses the community. Uses the
+                                // screen's context, not the dialog's: this runs
+                                // after an await and the dialog may be gone.
+                                int? slot;
+                                var channelRefused = false;
+                                if (addPublicChannel && context.mounted) {
+                                  slot = _allocateChannelSlot(
+                                    context,
+                                    connector,
                                   );
+                                  channelRefused = slot == null;
                                 }
 
+                                // Closed before the write, which now waits for
+                                // the radio: an open dialog would let a second
+                                // tap create the community twice.
                                 if (dialogContext.mounted) {
                                   Navigator.pop(dialogContext);
                                 }
@@ -1279,13 +1440,34 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                                 // Refresh communities list
                                 _loadCommunities();
 
-                                if (context.mounted) {
-                                  showDismissibleSnackBar(
-                                    context,
-                                    content: Text(
-                                      context.l10n.community_created(name),
-                                    ),
+                                if (slot != null) {
+                                  final result = await connector.setChannel(
+                                    slot,
+                                    '${community.name} Public',
+                                    community.deriveCommunityPublicPsk(),
                                   );
+                                  if (context.mounted) {
+                                    channelRefused =
+                                        explainUnconfirmedChannelWrite(
+                                          context,
+                                          result,
+                                        );
+                                  }
+                                }
+
+                                if (context.mounted) {
+                                  // A refusal's message is showing and
+                                  // persists; this toast would replace it
+                                  // (#1026). The QR below still shows: the
+                                  // community was created either way.
+                                  if (!channelRefused) {
+                                    showDismissibleSnackBar(
+                                      context,
+                                      content: Text(
+                                        context.l10n.community_created(name),
+                                      ),
+                                    );
+                                  }
 
                                   // Show QR code dialog
                                   await QrCodeShareDialog.show(
@@ -1409,12 +1591,16 @@ class _ChannelsScreenState extends State<ChannelsScreen>
       context,
       listen: false,
     );
+    final channelType = Channel.getChannelType(channel, _communityIndex);
+    final pskLocked = !channelPskEditable(channelType);
+    final nameLocked = !channelNameEditable(channelType);
     final nameController = TextEditingController(text: channel.name);
     final pskController = TextEditingController(text: channel.pskHex);
     bool cyr2latEnabled = connector.isChannelCyr2LatEnabled(channel.index);
     String? selectedCyr2LatProfileId = connector.getChannelCyr2LatProfileId(
       channel.index,
     );
+    String? nameError;
 
     showDialog(
       context: context,
@@ -1429,30 +1615,76 @@ class _ChannelsScreenState extends State<ChannelsScreen>
               children: [
                 TextField(
                   controller: nameController,
+                  readOnly: nameLocked,
                   decoration: InputDecoration(
                     labelText: dialogContext.l10n.channels_channelName,
                     border: const OutlineInputBorder(),
+                    helperText: nameLocked
+                        ? dialogContext.l10n.channels_communityDerived
+                        : null,
+                    helperMaxLines: 2,
+                    errorText: nameError,
+                    errorMaxLines: 2,
                   ),
                   maxLength: 31,
+                  // #1103: a hashtag channel's key IS its name, so a rename
+                  // re-derives it live, exactly as adding that hashtag would.
+                  onChanged: channelType == ChannelType.hashtag
+                      ? (value) => setState(() {
+                          nameError = null;
+                          final trimmed = value.trim();
+                          if (editedNameKeepsType(channelType, trimmed)) {
+                            pskController.text = Channel.formatPskHex(
+                              Channel.derivePskFromHashtag(trimmed),
+                            );
+                          }
+                        })
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: pskController,
+                  readOnly: pskLocked,
                   decoration: InputDecoration(
                     labelText: dialogContext.l10n.channels_pskHex,
                     border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.casino),
-                      tooltip: dialogContext.l10n.channels_generateRandomPsk,
-                      onPressed: () {
-                        final random = Random.secure();
-                        final bytes = Uint8List(16);
-                        for (int i = 0; i < 16; i++) {
-                          bytes[i] = random.nextInt(256);
-                        }
-                        pskController.text = Channel.formatPskHex(bytes);
-                      },
-                    ),
+                    helperText: pskLocked
+                        ? (channelType == ChannelType.hashtag
+                              ? dialogContext.l10n.channels_pskDerivedFromName
+                              : dialogContext.l10n.channels_communityDerived)
+                        : null,
+                    helperMaxLines: 2,
+                    // #1103: a derived key is never hand-edited or rolled,
+                    // but it stays copyable (OpenHop routing rules need it).
+                    suffixIcon: pskLocked
+                        ? IconButton(
+                            icon: const Icon(Icons.copy),
+                            tooltip: dialogContext.l10n.channels_copyPsk,
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(text: pskController.text),
+                              );
+                              showDismissibleSnackBar(
+                                dialogContext,
+                                content: Text(
+                                  dialogContext.l10n.channels_pskCopied,
+                                ),
+                              );
+                            },
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.casino),
+                            tooltip:
+                                dialogContext.l10n.channels_generateRandomPsk,
+                            onPressed: () {
+                              final random = Random.secure();
+                              final bytes = Uint8List(16);
+                              for (int i = 0; i < 16; i++) {
+                                bytes[i] = random.nextInt(256);
+                              }
+                              pskController.text = Channel.formatPskHex(bytes);
+                            },
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -1502,23 +1734,76 @@ class _ChannelsScreenState extends State<ChannelsScreen>
             ),
             FilledButton(
               onPressed: () async {
-                final name = nameController.text.trim();
-                final pskHex = pskController.text.trim();
+                final name = nameLocked
+                    ? channel.name
+                    : nameController.text.trim();
+                // #1103: a hashtag channel stays a hashtag; its key derives
+                // from the '#' name. A different kind of channel is an add,
+                // not an edit. Refuse the write and say why, inline.
+                if (!editedNameKeepsType(channelType, name)) {
+                  setState(() {
+                    nameError = dialogContext.l10n.channels_hashtagMustKeepHash;
+                  });
+                  return;
+                }
 
-                Uint8List psk;
-                try {
-                  psk = Channel.parsePskHex(pskHex);
-                } on FormatException {
+                // Checked first: mid-sync the list is empty, so the identity
+                // check below would close the dialog and blame a changed
+                // channel. This keeps the dialog, and the user's edits, open
+                // and gives the real reason (#1021, #1026).
+                if (refuseWhileChannelTableBusy(dialogContext, connector)) {
+                  return;
+                }
+                // #1103 review: this dialog captured the channel when it
+                // opened. If a sync replaced the slot's identity meanwhile
+                // (the #1060 class), writing by the captured index would hit
+                // the NEW occupant with the OLD dialog's rules. Refuse the
+                // write and say why.
+                final live = connector.channels.cast<Channel?>().firstWhere(
+                  (c) => c?.index == channel.index,
+                  orElse: () => null,
+                );
+                if (live == null || live.pskHex != channel.pskHex) {
+                  Navigator.pop(dialogContext);
                   showDismissibleSnackBar(
-                    dialogContext,
-                    content: Text(dialogContext.l10n.channels_pskMustBe32Hex),
+                    context,
+                    content: Text(context.l10n.channels_channelChangedReopen),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    persist: true,
                   );
                   return;
                 }
 
+                final Uint8List psk;
+                if (channelType == ChannelType.hashtag) {
+                  // The key IS the (possibly renamed) name, never the field.
+                  psk = Channel.derivePskFromHashtag(name);
+                } else if (pskLocked) {
+                  psk = channel.psk;
+                } else {
+                  try {
+                    psk = Channel.parsePskHex(pskController.text.trim());
+                  } on FormatException {
+                    showDismissibleSnackBar(
+                      dialogContext,
+                      content: Text(dialogContext.l10n.channels_pskMustBe32Hex),
+                    );
+                    return;
+                  }
+                }
+
                 Navigator.pop(dialogContext);
                 try {
-                  await connector.setChannel(channel.index, name, psk);
+                  final result = await connector.editChannel(
+                    channel,
+                    name,
+                    psk,
+                  );
+                  if (result != ChannelWrite.ok) {
+                    if (!context.mounted) return;
+                    explainUnconfirmedChannelWrite(context, result);
+                    return;
+                  }
                   await connector.setChannelCyr2LatEnabled(
                     channel.index,
                     cyr2latEnabled,
@@ -1548,6 +1833,59 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ],
         ),
       ),
+    ).whenComplete(() {
+      nameController.dispose();
+      pskController.dispose();
+    });
+  }
+
+  /// Writes the client's cached channels back onto a radio that lost them
+  /// (#1060). Confirmed first: it overwrites whatever those slots hold now.
+  Future<void> _confirmRestoreChannels(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) async {
+    final toRestore = connector.cachedChannels
+        .where((c) => !c.isUnusable)
+        .toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(dialogContext.l10n.channels_restoreToRadio),
+        content: Text(
+          dialogContext.l10n.channels_restoreToRadioConfirm(
+            toRestore.length,
+            toRestore.map((c) => c.name).join(', '),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(dialogContext.l10n.common_cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(dialogContext.l10n.channels_restoreToRadio),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    // Its writes share the reply queue with any sync or other channel write,
+    // so like every channel write it waits for a quiet table (#1026).
+    if (!context.mounted) return;
+    if (refuseWhileChannelTableBusy(context, connector)) return;
+
+    final written = await connector.restoreChannelsToRadio();
+    if (!context.mounted) return;
+    showDismissibleSnackBar(
+      context,
+      content: Text(
+        written < 0
+            ? context.l10n.channels_restoreToRadioFailed
+            : context.l10n.channels_restoreToRadioDone(written),
+      ),
+      persist: written < 0,
     );
   }
 
@@ -1571,13 +1909,21 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ),
           TextButton(
             onPressed: () async {
+              if (refuseWhileChannelTableBusy(dialogContext, connector)) {
+                return;
+              }
               Navigator.pop(dialogContext);
               try {
-                await connector.deleteChannel(channel.index);
+                final result = await connector.deleteChannel(channel.index);
 
-                await channelMessageStore.clearChannelMessages(channel.index);
+                // Only on OK: if the radio kept the channel, it keeps its
+                // history too (#1026).
+                if (result == ChannelWrite.ok) {
+                  await channelMessageStore.clearChannelMessages(channel.index);
+                }
 
                 if (!context.mounted) return;
+                if (explainUnconfirmedChannelWrite(context, result)) return;
 
                 showDismissibleSnackBar(
                   context,
@@ -1609,22 +1955,35 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 
-  void _addPublicChannel(BuildContext context, MeshCoreConnector connector) {
+  Future<void> _addPublicChannel(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) async {
+    // This used to write slot 0 unconditionally, with no occupancy check, so
+    // it overwrote whatever was there (#1021). Public is identified by its PSK
+    // (`Channel.isPublicChannel`), not by its index, so it has no claim on
+    // slot 0 and can live anywhere.
+    if (refusePublicAlreadyOnRadio(context, connector)) return;
+    final slot = _allocateChannelSlot(context, connector);
+    if (slot == null) return;
     final psk = Channel.parsePskHex(Channel.publicChannelPsk);
-    connector.setChannel(0, 'Public', psk);
+    final result = await connector.setChannel(slot, 'Public', psk);
+    if (!context.mounted) return;
+    if (explainUnconfirmedChannelWrite(context, result)) return;
     showDismissibleSnackBar(
       context,
       content: Text(context.l10n.channels_publicChannelAdded),
     );
   }
 
-  int _findNextAvailableIndex(List<Channel> channels, int maxChannels) {
-    final usedIndices = channels.map((c) => c.index).toSet();
-    for (int i = 0; i < maxChannels; i++) {
-      if (!usedIndices.contains(i)) return i;
-    }
-    return 0;
-  }
+  /// Thin alias for the shared allocator, kept so the five call sites in this
+  /// file read the same as before. The logic lives in
+  /// `helpers/channel_slot_ui.dart` so this screen, the QR scanner and config
+  /// import all answer "which slot is free?" the same way (#1021).
+  int? _allocateChannelSlot(
+    BuildContext context,
+    MeshCoreConnector connector,
+  ) => allocateChannelSlotOrExplain(context, connector);
 
   void _showManageCommunitiesDialog(BuildContext context) {
     showModalBottomSheet(
@@ -1831,23 +2190,44 @@ class _ChannelsScreenState extends State<ChannelsScreen>
           ),
           TextButton(
             onPressed: () async {
+              if (communityChannels.isNotEmpty &&
+                  refuseWhileChannelTableBusy(dialogContext, connector)) {
+                return;
+              }
               Navigator.pop(dialogContext);
 
-              // Delete all community channels from the device
-              for (final channel in communityChannels) {
-                await connector.deleteChannel(channel.index);
+              // Delete all community channels from the device. Each delete is
+              // answered before the next goes out, and the list is re-read
+              // once at the end. A sync between two deletes would share their
+              // reply queue, so the loop runs as one batch (#1026).
+              final failure = await connector.batchChannelWrites(() async {
+                ChannelWrite? first;
+                for (final channel in communityChannels) {
+                  final result = await connector.deleteChannel(
+                    channel.index,
+                    refresh: false,
+                  );
+                  if (result != ChannelWrite.ok) first ??= result;
+                }
+                return first;
+              });
+              if (communityChannels.isNotEmpty) {
+                await connector.getChannels(force: true);
               }
 
               // Remove community from store
               await _communityStore.removeCommunity(community.id);
               _loadCommunities();
 
-              if (context.mounted) {
-                showDismissibleSnackBar(
-                  context,
-                  content: Text(context.l10n.community_deleted(community.name)),
-                );
+              if (!context.mounted) return;
+              if (failure != null &&
+                  explainUnconfirmedChannelWrite(context, failure)) {
+                return;
               }
+              showDismissibleSnackBar(
+                context,
+                content: Text(context.l10n.community_deleted(community.name)),
+              );
             },
             child: Text(
               dialogContext.l10n.community_delete,
@@ -1859,3 +2239,27 @@ class _ChannelsScreenState extends State<ChannelsScreen>
     );
   }
 }
+
+/// #1103: what the Edit Channel dialog may change, by channel type.
+///
+/// A hashtag channel's key IS its name (Channel.derivePskFromHashtag), so the
+/// key is never hand-editable and a rename re-derives it. A community
+/// hashtag's name and key both derive from the community secret, so both are
+/// locked and managed through the community. The key stays visible and
+/// copyable in every case: OpenHop routing rules need it.
+bool channelPskEditable(ChannelType type) =>
+    type != ChannelType.hashtag && type != ChannelType.communityHashtag;
+
+bool channelNameEditable(ChannelType type) =>
+    type != ChannelType.communityHashtag;
+
+/// A hashtag channel must stay a hashtag: its key derives from the '#' name.
+/// Exactly ONE leading '#': a '##name' would hash differently from the
+/// '#name' everyone else derives, silently isolating the user (review
+/// finding). Converting to another kind of channel is an add, not an edit
+/// (#1103).
+bool editedNameKeepsType(ChannelType type, String newName) =>
+    type != ChannelType.hashtag ||
+    (newName.startsWith('#') &&
+        !newName.startsWith('##') &&
+        newName.length > 1);

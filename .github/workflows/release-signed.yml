@@ -1,8 +1,8 @@
 name: Release (signed, all platforms)
 
 # Produces a COMPLETE, published release from a `v*` tag: signed Android APK +
-# AAB, Windows, and Linux, attached to a GitHub release whose body is the
-# human-authored release notes. This is what makes a partial release (the
+# AAB, Windows, Linux, and macOS (unsigned until #1109), attached to a GitHub
+# release whose body is the human-authored release notes. This is what makes a partial release (the
 # rc.2/rc.3 failure) impossible.
 #
 # SECURITY: this repo is PUBLIC and the `android` job has the signing keystore,
@@ -13,7 +13,8 @@ name: Release (signed, all platforms)
 #     run a job that can read the keystore.
 #   - Only the `android` job references the `release-signing` Environment, so
 #     ONLY it receives the keystore secrets, and only after the required
-#     reviewer approves. The windows/linux/release jobs never see them.
+#     reviewer approves. The windows/linux/release jobs never see them. The
+#     `ios` job has its own Environment, `apple-signing`, in ios-signed.yml.
 #   - Keystore written to disk only for the build, deleted with `if: always()`.
 #   - Signing values passed via env:, never on a command line, never echoed.
 #
@@ -249,11 +250,54 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Unsigned (ad-hoc) macOS build, distributed as a release asset (#1108).
+  # No Apple service is involved, so unlike `ios` it blocks the release like
+  # the other desktop jobs. Developer ID signing + notarization is #1109.
+  macos:
+    needs: gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
+      - run: flutter build macos --release --no-pub --dart-define-from-file=dart_defines.json
+      # ditto, not zip: it preserves the .app bundle's symlinks, which plain
+      # zip flattens into copies that break code-signing validation (#1108).
+      - name: Zip macOS app
+        run: |
+          set -eu
+          APP=build/macos/Build/Products/Release/offband_meshcore.app
+          lipo -archs "${APP}/Contents/MacOS/offband_meshcore" || true
+          ditto -c -k --keepParent "${APP}" offband-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: offband-macos.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # Uploads to App Store Connect (#1039). Deliberately not in `release`'s needs:
+  # an Apple-side failure must not block the Android and desktop release.
+  ios:
+    needs: gate
+    uses: ./.github/workflows/ios-signed.yml
+    secrets: inherit
+
   # Creates the release ONLY after all platform builds (and the signing cert
   # check) have passed, so a signing failure yields no release rather than an
   # empty one. Published directly: the notes were reviewed in the cut PR.
   release:
-    needs: [android, windows, linux]
+    needs: [android, windows, linux, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # create the release + upload assets
@@ -277,6 +321,7 @@ jobs:
           cp incoming/release-android/* out/
           cp incoming/release-windows/* out/
           cp incoming/release-linux/* out/
+          cp incoming/release-macos/* out/
           echo "Assets for the release:"
           ls -la out/
       # Draft-first so publication is ATOMIC: the release is not visible to
@@ -326,7 +371,7 @@ jobs:
           else
             gh release create "${TAG}" \
               --draft \
-              --title "Offband Meshcore ${VERSION}" \
+              --title "Offband MeshCore ${VERSION}" \
               --notes-file "${NOTES}" \
               "${PRERELEASE_FLAG}"
             gh release upload "${TAG}" out/*

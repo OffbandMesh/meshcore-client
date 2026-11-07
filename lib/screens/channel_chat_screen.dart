@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,7 @@ import '../services/corescope_service.dart';
 import '../services/region_discovery_service.dart';
 import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../services/block_service.dart';
 import '../services/chat_text_scale_service.dart';
@@ -180,6 +182,10 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       setState(() => _unreadDividerMessageId = null);
     }
   }
+
+  bool get _isTouchPlatform =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
 
   void _onTextFieldFocusChange() {
     if (_textFieldFocusNode.hasFocus && mounted) {
@@ -417,19 +423,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         MaterialPageRoute(builder: (context) => const SettingsScreen()),
       ),
       appBarBuilder: (context, pinned) => AppBar(
-        // Pinned: the panel is already docked, so no hamburger is needed.
-        // Unpinned: this is a pushed route, so Scaffold would put a back arrow
-        // in this slot; the explicit hamburger replaces it. System back still
-        // pops to the channel list.
-        leading: pinned
-            ? null
-            : Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu),
-                  tooltip: context.l10n.channels_title,
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
-              ),
+        // Explicit, because with a drawer present Scaffold would put a hamburger
+        // here, and iOS has no system back to fall back on (#1052).
+        leading: const BackButton(),
         title: Row(
           children: [
             _channelIcon(_currentChannel),
@@ -468,12 +464,23 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         centerTitle: false,
         bottom: const SyncProgressAppBarBottom(),
         actions: [
+          // Pinned: the panel is already docked, so no button is needed.
+          if (!pinned)
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                tooltip: context.l10n.channels_title,
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
           const RadioStatsIconButton(),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
               if (value == 'notifications') {
                 showChannelNotifyModeDialog(context, widget.channel);
+              } else if (value == 'radioSound') {
+                showRadioChannelNotifyDialog(context, _currentChannel);
               } else if (value == 'radioTone') {
                 final connector = context.read<MeshCoreConnector>();
                 requestChannelRadioTone(connector, _currentChannel.index);
@@ -507,6 +514,22 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                   ],
                 ),
               ),
+              // #544: the RADIO's sound for this channel. Separate from
+              // Notifications above, which is the phone's; the two are
+              // independent settings and neither reads the other.
+              if (radioChannelNotifySupported(
+                context.read<MeshCoreConnector>(),
+              ))
+                const PopupMenuItem(
+                  value: 'radioSound',
+                  child: Row(
+                    children: [
+                      Icon(Icons.volume_up_outlined, size: 20),
+                      SizedBox(width: 12),
+                      Text('Radio sound'),
+                    ],
+                  ),
+                ),
               if (context.read<MeshCoreConnector>().supportsTunes)
                 const PopupMenuItem(
                   value: 'radioTone',
@@ -551,145 +574,160 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         child: Column(
           children: [
             Expanded(
-              child: Consumer<MeshCoreConnector>(
-                builder: (context, connector, child) {
-                  final messages = connector.getChannelMessages(
-                    _currentChannel,
-                  );
-                  final blockService = context.watch<BlockService>();
-                  final visibleMessages = messages
-                      .where(
-                        (m) =>
-                            !_isChannelSenderHidden(m, connector, blockService),
-                      )
-                      .toList();
-
-                  if (visibleMessages.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _currentChannel.isPublicChannel
-                                ? Icons.public
-                                : Icons.tag,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            context.l10n.chat_noMessages,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            context.l10n.chat_sendMessageToStart,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
+              // A touch outside a text field does not dismiss the keyboard on
+              // mobile, and the keyboard hides the bottom bar (#1052).
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _textFieldFocusNode.unfocus,
+                child: Consumer<MeshCoreConnector>(
+                  builder: (context, connector, child) {
+                    final messages = connector.getChannelMessages(
+                      _currentChannel,
                     );
-                  }
+                    final blockService = context.watch<BlockService>();
+                    final visibleMessages = messages
+                        .where(
+                          (m) => !_isChannelSenderHidden(
+                            m,
+                            connector,
+                            blockService,
+                          ),
+                        )
+                        .toList();
 
-                  // Reverse messages so newest appear at bottom with reverse: true
-                  final reversedMessages = visibleMessages.reversed.toList();
-                  final itemCount =
-                      reversedMessages.length + (_isLoadingOlder ? 1 : 0);
-
-                  // Auto-scroll to bottom if user is already at bottom
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_channelSkipNextBottomSnap) {
-                      _channelSkipNextBottomSnap = false;
-                      return;
+                    if (visibleMessages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _currentChannel.isPublicChannel
+                                  ? Icons.public
+                                  : Icons.tag,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              context.l10n.chat_noMessages,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              context.l10n.chat_sendMessageToStart,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
                     }
-                    _scrollController.scrollToBottomIfAtBottom();
-                  });
 
-                  return Stack(
-                    children: [
-                      ChatZoomWrapper(
-                        child: ListView.builder(
-                          reverse: true, // List grows from bottom up
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(8),
-                          itemCount: itemCount,
-                          itemBuilder: (context, index) {
-                            // Loading indicator now appears at end (bottom) of reversed list
-                            if (_isLoadingOlder && index == itemCount - 1) {
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                    // Reverse messages so newest appear at bottom with reverse: true
+                    final reversedMessages = visibleMessages.reversed.toList();
+                    final itemCount =
+                        reversedMessages.length + (_isLoadingOlder ? 1 : 0);
+
+                    // Auto-scroll to bottom if user is already at bottom
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_channelSkipNextBottomSnap) {
+                        _channelSkipNextBottomSnap = false;
+                        return;
+                      }
+                      _scrollController.scrollToBottomIfAtBottom();
+                    });
+
+                    return Stack(
+                      children: [
+                        ChatZoomWrapper(
+                          child: ListView.builder(
+                            reverse: true, // List grows from bottom up
+                            controller: _scrollController,
+                            keyboardDismissBehavior: _isTouchPlatform
+                                ? ScrollViewKeyboardDismissBehavior.onDrag
+                                : ScrollViewKeyboardDismissBehavior.manual,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: itemCount,
+                            itemBuilder: (context, index) {
+                              // Loading indicator now appears at end (bottom) of reversed list
+                              if (_isLoadingOlder && index == itemCount - 1) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   ),
+                                );
+                              }
+                              final messageIndex = index;
+                              final message = reversedMessages[messageIndex];
+                              if (!_messageKeys.containsKey(
+                                message.messageId,
+                              )) {
+                                _messageKeys[message.messageId] = GlobalKey();
+                              }
+                              final isUnreadAnchor =
+                                  _unreadDividerMessageId != null &&
+                                  message.messageId == _unreadDividerMessageId;
+                              // Day divider above the first message of each
+                              // calendar day. List is reversed, so the older
+                              // neighbour is at index+1.
+                              final olderIdx = messageIndex + 1;
+                              final showDayDivider =
+                                  olderIdx >= reversedMessages.length ||
+                                  !_isSameDay(
+                                    message.timestamp,
+                                    reversedMessages[olderIdx].timestamp,
+                                  );
+                              return Container(
+                                key: _messageKeys[message.messageId]!,
+                                child: Builder(
+                                  builder: (context) {
+                                    final textScale = context
+                                        .select<ChatTextScaleService, double>(
+                                          (service) => service.scale,
+                                        );
+                                    final bubble = _buildMessageBubble(
+                                      message,
+                                      textScale,
+                                    );
+                                    if (!showDayDivider && !isUnreadAnchor) {
+                                      return bubble;
+                                    }
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (showDayDivider)
+                                          _buildDayDivider(
+                                            context,
+                                            message.timestamp,
+                                          ),
+                                        if (isUnreadAnchor)
+                                          const UnreadDivider(),
+                                        bubble,
+                                      ],
+                                    );
+                                  },
                                 ),
                               );
-                            }
-                            final messageIndex = index;
-                            final message = reversedMessages[messageIndex];
-                            if (!_messageKeys.containsKey(message.messageId)) {
-                              _messageKeys[message.messageId] = GlobalKey();
-                            }
-                            final isUnreadAnchor =
-                                _unreadDividerMessageId != null &&
-                                message.messageId == _unreadDividerMessageId;
-                            // Day divider above the first message of each
-                            // calendar day. List is reversed, so the older
-                            // neighbour is at index+1.
-                            final olderIdx = messageIndex + 1;
-                            final showDayDivider =
-                                olderIdx >= reversedMessages.length ||
-                                !_isSameDay(
-                                  message.timestamp,
-                                  reversedMessages[olderIdx].timestamp,
-                                );
-                            return Container(
-                              key: _messageKeys[message.messageId]!,
-                              child: Builder(
-                                builder: (context) {
-                                  final textScale = context
-                                      .select<ChatTextScaleService, double>(
-                                        (service) => service.scale,
-                                      );
-                                  final bubble = _buildMessageBubble(
-                                    message,
-                                    textScale,
-                                  );
-                                  if (!showDayDivider && !isUnreadAnchor) {
-                                    return bubble;
-                                  }
-                                  return Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (showDayDivider)
-                                        _buildDayDivider(
-                                          context,
-                                          message.timestamp,
-                                        ),
-                                      if (isUnreadAnchor) const UnreadDivider(),
-                                      bubble,
-                                    ],
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                            },
+                          ),
                         ),
-                      ),
-                      JumpToBottomButton(scrollController: _scrollController),
-                    ],
-                  );
-                },
+                        JumpToBottomButton(scrollController: _scrollController),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
             _buildMessageComposer(),
@@ -750,37 +788,41 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) {
         final l10n = sheetContext.l10n;
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: _buildAvatar(message.senderName),
-                title: Text(message.senderName),
-                subtitle: ambiguous
-                    ? Text(
-                        l10n.channel_senderMultipleMatches(candidates.length),
-                      )
-                    : null,
-              ),
-              const Divider(height: 1),
-              ..._buildSenderContactEntries(sheetContext, message),
-              ListTile(
-                leading: Icon(Icons.block, color: Colors.red.shade700),
-                title: Text(l10n.block_sender),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _blockChannelSender(message);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.close),
-                title: Text(l10n.common_cancel),
-                onTap: () => Navigator.pop(sheetContext),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: _buildAvatar(message.senderName),
+                  title: Text(message.senderName),
+                  subtitle: ambiguous
+                      ? Text(
+                          l10n.channel_senderMultipleMatches(candidates.length),
+                        )
+                      : null,
+                ),
+                const Divider(height: 1),
+                ..._buildSenderContactEntries(sheetContext, message),
+                ListTile(
+                  leading: Icon(Icons.block, color: Colors.red.shade700),
+                  title: Text(l10n.block_sender),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockChannelSender(message);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.close),
+                  title: Text(l10n.common_cancel),
+                  onTap: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -1771,6 +1813,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     }
     // end transform
 
+    // Refuse before clearing so the draft survives the refusal.
+    if (_refuseIfSlotUnconfirmed(connector)) return;
+
     _textController.clear();
     _cancelReply();
     _textFieldFocusNode.requestFocus();
@@ -1781,6 +1826,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       translatedLanguageCode: translatedLanguageCode,
       translationModelId: translationModelId,
     );
+  }
+
+  /// #1063: an outgoing write on a slot this connection has not confirmed
+  /// would persist under an unknown identity and be orphaned, so refuse at
+  /// the attempt and say why (a sync can confirm the slot seconds later, so
+  /// greying the composer would mislead).
+  bool _refuseIfSlotUnconfirmed(MeshCoreConnector connector) {
+    if (connector.canSendOnChannel(_currentChannel.index)) return false;
+    showDismissibleSnackBar(
+      context,
+      content: Text(context.l10n.channel_slotUnconfirmedSendBlocked),
+      backgroundColor: Theme.of(context).colorScheme.error,
+      persist: true,
+    );
+    return true;
   }
 
   /// One-click reply quoting the route a message took, hop count + path,
@@ -1816,6 +1876,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     if (connector.isChannelCyr2LatEnabled(_currentChannel.index)) {
       text = Cyr2Lat.encode(text);
     }
+    if (_refuseIfSlotUnconfirmed(connector)) return;
     connector.sendChannelMessage(_currentChannel, text);
   }
 
@@ -2051,10 +2112,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   void _retryChannelMessage(ChannelMessage message) {
-    context.read<MeshCoreConnector>().sendChannelMessage(
-      _currentChannel,
-      message.text,
-    );
+    final connector = context.read<MeshCoreConnector>();
+    if (_refuseIfSlotUnconfirmed(connector)) return;
+    connector.sendChannelMessage(_currentChannel, message.text);
     showDismissibleSnackBar(
       context,
       content: Text(context.l10n.chat_sendingAgain),
@@ -2073,134 +2133,138 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.reply),
-              title: Text(context.l10n.chat_reply),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _setReplyingTo(message);
-              },
-            ),
-            if (message.pathBytes.isNotEmpty)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.alt_route),
-                title: Text(context.l10n.chat_replyWithRoute),
+                leading: const Icon(Icons.reply),
+                title: Text(context.l10n.chat_reply),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _sendRouteReply(message);
+                  _setReplyingTo(message);
                 },
               ),
-            if (PlatformInfo.isDesktop)
+              if (message.pathBytes.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: Text(context.l10n.chat_replyWithRoute),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _sendRouteReply(message);
+                  },
+                ),
+              if (PlatformInfo.isDesktop)
+                ListTile(
+                  leading: const Icon(Icons.route),
+                  title: Text(context.l10n.chat_path),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showMessagePathInfo(message);
+                  },
+                ),
+              // Offer resend on an outgoing channel message until a repeater
+              // repeats it back (repeatCount > 0). The radio-ack checkmark
+              // (status == sent) does NOT mean a repeat was heard, so gate on the
+              // repeat-back, not status. Channel sends aren't auto-retried, so
+              // this is the only recovery path. (#256, #555)
+              if (message.isOutgoing && message.repeatCount == 0)
+                ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: Text(context.l10n.message_sendAgain),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _retryChannelMessage(message);
+                  },
+                ),
+              // CoreScope observer count refresh (#524), owner feature. A large,
+              // reliable tap target vs the small inline badge.
+              if (message.isOutgoing && message.onAirHash != null)
+                ListTile(
+                  leading: const Icon(Icons.cloud_outlined),
+                  title: Text(context.l10n.channel_coreScopeRefresh),
+                  subtitle: message.coreScopeObserverCount != null
+                      ? Text(_coreScopeLabel(message))
+                      : null,
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _refreshCoreScope(message);
+                  },
+                ),
+              // Can't react to your own messages
+              if (!message.isOutgoing)
+                ListTile(
+                  leading: const Icon(Icons.add_reaction_outlined),
+                  title: Text(context.l10n.chat_addReaction),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showEmojiPicker(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.route),
-                title: Text(context.l10n.chat_path),
+                leading: const Icon(Icons.copy),
+                title: Text(context.l10n.common_copy),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  _showMessagePathInfo(message);
+                  _copyMessageText(message.text);
                 },
               ),
-            // Offer resend on an outgoing channel message until a repeater
-            // repeats it back (repeatCount > 0). The radio-ack checkmark
-            // (status == sent) does NOT mean a repeat was heard, so gate on the
-            // repeat-back, not status. Channel sends aren't auto-retried, so
-            // this is the only recovery path. (#256, #555)
-            if (message.isOutgoing && message.repeatCount == 0)
+              if (canTranslateMessage)
+                ListTile(
+                  leading: const Icon(Icons.translate),
+                  title: Text(context.l10n.translation_translateMessage),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    unawaited(
+                      context.read<MeshCoreConnector>().translateChannelMessage(
+                        _currentChannel.index,
+                        message,
+                        manualTranslation: true,
+                      ),
+                    );
+                  },
+                ),
+              if (!message.isOutgoing)
+                ListTile(
+                  leading: const Icon(Icons.mark_chat_unread_outlined),
+                  title: Text(context.l10n.chat_markAsUnread),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _markAsUnread(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.refresh),
-                title: Text(context.l10n.message_sendAgain),
-                onTap: () {
+                leading: const Icon(Icons.delete_outline),
+                title: Text(context.l10n.common_delete),
+                onTap: () async {
                   Navigator.pop(sheetContext);
-                  _retryChannelMessage(message);
+                  await _deleteMessage(message);
                 },
               ),
-            // CoreScope observer count refresh (#524), owner feature. A large,
-            // reliable tap target vs the small inline badge.
-            if (message.isOutgoing && message.onAirHash != null)
+              // Same sender contact actions the avatar tap offers (#468), so
+              // long-press remains a superset of every gesture on the message.
+              if (!message.isOutgoing) ...[
+                const Divider(height: 1),
+                ..._buildSenderContactEntries(sheetContext, message),
+                ListTile(
+                  leading: Icon(Icons.block, color: Colors.red.shade700),
+                  title: Text(context.l10n.block_sender),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _blockChannelSender(message);
+                  },
+                ),
+              ],
               ListTile(
-                leading: const Icon(Icons.cloud_outlined),
-                title: Text(context.l10n.channel_coreScopeRefresh),
-                subtitle: message.coreScopeObserverCount != null
-                    ? Text(_coreScopeLabel(message))
-                    : null,
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _refreshCoreScope(message);
-                },
-              ),
-            // Can't react to your own messages
-            if (!message.isOutgoing)
-              ListTile(
-                leading: const Icon(Icons.add_reaction_outlined),
-                title: Text(context.l10n.chat_addReaction),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showEmojiPicker(message);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: Text(context.l10n.common_copy),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _copyMessageText(message.text);
-              },
-            ),
-            if (canTranslateMessage)
-              ListTile(
-                leading: const Icon(Icons.translate),
-                title: Text(context.l10n.translation_translateMessage),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  unawaited(
-                    context.read<MeshCoreConnector>().translateChannelMessage(
-                      _currentChannel.index,
-                      message,
-                      manualTranslation: true,
-                    ),
-                  );
-                },
-              ),
-            if (!message.isOutgoing)
-              ListTile(
-                leading: const Icon(Icons.mark_chat_unread_outlined),
-                title: Text(context.l10n.chat_markAsUnread),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _markAsUnread(message);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: Text(context.l10n.common_delete),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                await _deleteMessage(message);
-              },
-            ),
-            // Same sender contact actions the avatar tap offers (#468), so
-            // long-press remains a superset of every gesture on the message.
-            if (!message.isOutgoing) ...[
-              const Divider(height: 1),
-              ..._buildSenderContactEntries(sheetContext, message),
-              ListTile(
-                leading: Icon(Icons.block, color: Colors.red.shade700),
-                title: Text(context.l10n.block_sender),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _blockChannelSender(message);
-                },
+                leading: const Icon(Icons.close),
+                title: Text(context.l10n.common_cancel),
+                onTap: () => Navigator.pop(sheetContext),
               ),
             ],
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: Text(context.l10n.common_cancel),
-              onTap: () => Navigator.pop(sheetContext),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2229,6 +2293,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       message.text,
     );
     final reactionText = ReactionHelper.encodeReaction(hash, emojiIndex);
+    if (_refuseIfSlotUnconfirmed(connector)) return;
     connector.sendChannelMessage(_currentChannel, reactionText);
   }
 

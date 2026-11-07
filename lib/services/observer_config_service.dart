@@ -47,12 +47,11 @@ class ObserverConfigService extends ChangeNotifier {
   bool _brokersUnavailable = false;
   bool get brokersUnavailable => _brokersUnavailable;
 
-  /// Whether the connected device supports the config command, the version
-  /// gate AND the capability bit, read live from the connector's device-info
-  /// parse. The settings UI watches the connector, so the Observer category
+  /// Whether the connected device supports the config command: the capability
+  /// bit, read live from the connector's device-info parse (#1065, no version
+  /// gate). The settings UI watches the connector, so the Observer category
   /// appears/hides as this flips on connect/disconnect.
   bool get supported => ObserverConfigClient.supportsConfig(
-    firmwareVerCode: _connector.firmwareVerCode ?? 0,
     offbandCaps: _connector.offbandCaps ?? 0,
   );
 
