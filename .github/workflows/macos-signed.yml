@@ -33,6 +33,9 @@ jobs:
   macos-signed:
     runs-on: macos-latest
     environment: apple-signing # required-reviewer gate; do not remove
+    # Apple's notary queue can hold a new Developer ID's submissions for hours.
+    # GitHub's job limit is 6h; the notarytool wait below fits inside it.
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -136,7 +139,7 @@ jobs:
           ditto -c -k --keepParent "${APP}" "${SUBMIT}"
           OUT="${RUNNER_TEMP}/notarize.json"
           xcrun notarytool submit "${SUBMIT}" --key "${P8}" --key-id "${ASC_API_KEY_ID}" \
-            --issuer "${ASC_API_ISSUER_ID}" --wait --timeout 30m --output-format json > "${OUT}" || true
+            --issuer "${ASC_API_ISSUER_ID}" --wait --timeout 5h --output-format json > "${OUT}" || true
           cat "${OUT}"
           STATUS="$(jq -r '.status // empty' "${OUT}")"
           ID="$(jq -r '.id // empty' "${OUT}")"
