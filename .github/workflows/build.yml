@@ -247,11 +247,35 @@ jobs:
         if: needs.classify.outputs.docs_only != 'true'
       - run: dart run build_runner build --delete-conflicting-outputs
         if: needs.classify.outputs.docs_only != 'true'
+      - name: Write dart_defines.json
+        if: needs.classify.outputs.docs_only != 'true'
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
       - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
         if: needs.classify.outputs.docs_only != 'true'
         run: flutter config --enable-native-assets
-      - run: flutter build macos --release --no-pub
+      - run: flutter build macos --release --no-pub --dart-define-from-file=dart_defines.json
         if: needs.classify.outputs.docs_only != 'true'
+      # ditto, not zip: it preserves the .app bundle's symlinks, which plain
+      # zip flattens into copies that break code-signing validation (#1108).
+      # lipo output is informational: whether the build plus native assets
+      # comes out universal or arm64-only is recorded here, not assumed.
+      - name: Zip macOS app
+        if: needs.classify.outputs.docs_only != 'true'
+        run: |
+          set -eu
+          APP=build/macos/Build/Products/Release/offband_meshcore.app
+          lipo -archs "${APP}/Contents/MacOS/offband_meshcore" || true
+          ditto -c -k --keepParent "${APP}" offband-macos.zip
+      - name: Upload macOS build
+        if: needs.classify.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: offband-macos-r${{ github.run_number }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: offband-macos.zip
+          if-no-files-found: error
+          retention-days: 14
 
   web:
     runs-on: ubuntu-latest
