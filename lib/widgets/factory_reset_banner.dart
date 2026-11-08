@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 
-/// Shown above the whole app while a factory reset is outstanding and once it
-/// settles (#1054). The settings screen is gone by then, because the reset
-/// ends the session, so the outcome is reported here and stays until
-/// dismissed. Sits in `MaterialApp.builder`, like [ContactSyncShortfallBanner].
+/// Shown above the whole app after a factory reset is sent (#1054). The
+/// settings screen is gone by then, because the reset ends the session, so it
+/// is reported here and stays until dismissed. Sits in `MaterialApp.builder`,
+/// like [ContactSyncShortfallBanner].
 class FactoryResetBanner extends StatelessWidget {
   final FactoryResetStatus? status;
   final VoidCallback onDismiss;
@@ -34,9 +34,7 @@ class FactoryResetBanner extends StatelessWidget {
   Widget _banner(BuildContext context, FactoryResetStatus current) {
     final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
-    final failed =
-        current == FactoryResetStatus.notReset ||
-        current == FactoryResetStatus.deleteFailed;
+    final failed = current == FactoryResetStatus.deleteFailed;
     final background = failed
         ? scheme.errorContainer
         : scheme.secondaryContainer;
@@ -51,18 +49,6 @@ class FactoryResetBanner extends StatelessWidget {
       FactoryResetStatus.sent => (
         l10n.factoryResetSentTitle,
         l10n.factoryResetSentBody,
-      ),
-      FactoryResetStatus.complete => (
-        l10n.factoryResetCompleteTitle,
-        l10n.factoryResetCompleteBody,
-      ),
-      FactoryResetStatus.completeKept => (
-        l10n.factoryResetCompleteTitle,
-        l10n.factoryResetCompleteKeptBody,
-      ),
-      FactoryResetStatus.notReset => (
-        l10n.factoryResetNotResetTitle,
-        l10n.factoryResetNotResetBody,
       ),
       FactoryResetStatus.deleteFailed => (
         l10n.factoryResetDeleteFailedTitle,

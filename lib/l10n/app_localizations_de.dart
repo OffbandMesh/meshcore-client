@@ -830,37 +830,19 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get factoryResetSentBody =>
-      'The radio is erasing itself and will restart with a new identity. Reconnect to it to finish.';
+      'The radio is erasing itself and will restart with a new identity.';
 
   @override
   String get factoryResetSentBleBody =>
-      'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect to finish.';
-
-  @override
-  String get factoryResetCompleteTitle => 'Factory reset complete';
-
-  @override
-  String get factoryResetCompleteBody =>
-      'The radio has a new identity. Its old data was deleted from the app.';
-
-  @override
-  String get factoryResetCompleteKeptBody =>
-      'The radio has a new identity. Its old data was kept in the app.';
-
-  @override
-  String get factoryResetNotResetTitle => 'Factory reset did not happen';
-
-  @override
-  String get factoryResetNotResetBody =>
-      'The radio reconnected with the same identity, so it was not erased. Nothing was deleted from the app.';
+      'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect.';
 
   @override
   String get factoryResetDeleteFailedTitle =>
-      'Factory reset done, app cleanup failed';
+      'Factory reset sent, app cleanup failed';
 
   @override
   String get factoryResetDeleteFailedBody =>
-      'The radio was erased, but deleting its old data from the app failed. The app will try again the next time this radio connects.';
+      'The reset was sent, but deleting this radio\'s data from the app failed.';
 
   @override
   String get settings_blePin => 'BLE pairing PIN';
