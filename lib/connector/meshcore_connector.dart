@@ -1938,7 +1938,7 @@ class MeshCoreConnector extends ChangeNotifier {
       'rotation SET',
       DeviceUiSurface.rotation,
       buildRotationSetFrame(degrees),
-      advertised: supportsDisplayRotation,
+      advertised: supportsIndicators,
     );
   }
 
