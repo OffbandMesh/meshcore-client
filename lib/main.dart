@@ -43,6 +43,7 @@ import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 import 'widgets/keep_screen_awake.dart';
+import 'widgets/sponsor_prompt.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -393,7 +394,7 @@ class MeshCoreApp extends StatelessWidget {
             },
             home: (PlatformInfo.isWeb && !PlatformInfo.isChrome)
                 ? const ChromeRequiredScreen()
-                : const ScannerScreen(),
+                : const SponsorPromptGate(child: ScannerScreen()),
           );
         },
       ),

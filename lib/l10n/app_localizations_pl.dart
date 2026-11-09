@@ -966,6 +966,22 @@ class AppLocalizationsPl extends AppLocalizations {
   String get settings_aboutDonate => 'Donate or sponsor';
 
   @override
+  String get sponsorPrompt_title => 'Support Offband';
+
+  @override
+  String get sponsorPrompt_body =>
+      'Offband MeshCore is free, open source, and built by an independent developer. If it\'s useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.';
+
+  @override
+  String get sponsorPrompt_sponsor => 'Sponsor';
+
+  @override
+  String get sponsorPrompt_notNow => 'Not now';
+
+  @override
+  String get sponsorPrompt_dontShowAgain => 'Don\'t show again';
+
+  @override
   String get settings_aboutLinkFailed => 'Could not open the link';
 
   @override

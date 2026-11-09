@@ -1738,6 +1738,36 @@ abstract class AppLocalizations {
   /// **'Donate or sponsor'**
   String get settings_aboutDonate;
 
+  /// No description provided for @sponsorPrompt_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Support Offband'**
+  String get sponsorPrompt_title;
+
+  /// No description provided for @sponsorPrompt_body.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband MeshCore is free, open source, and built by an independent developer. If it\'s useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.'**
+  String get sponsorPrompt_body;
+
+  /// No description provided for @sponsorPrompt_sponsor.
+  ///
+  /// In en, this message translates to:
+  /// **'Sponsor'**
+  String get sponsorPrompt_sponsor;
+
+  /// No description provided for @sponsorPrompt_notNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get sponsorPrompt_notNow;
+
+  /// No description provided for @sponsorPrompt_dontShowAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t show again'**
+  String get sponsorPrompt_dontShowAgain;
+
   /// No description provided for @settings_aboutLinkFailed.
   ///
   /// In en, this message translates to:
