@@ -7131,8 +7131,8 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     // A sync before device info, or one asked for fewer slots, has not seen
     // every channel, so it cannot say what the radio does not hold (#1128).
-    final sawEverySlot =
-        _slotCountKnown && _totalChannelsToRequest >= _maxChannels;
+    final askedSlots = _totalChannelsToRequest;
+    final sawEverySlot = _slotCountKnown && askedSlots >= _maxChannels;
 
     _cleanupChannelSync(completed: true);
 
@@ -7179,6 +7179,7 @@ class MeshCoreConnector extends ChangeNotifier {
         'channel(s) retained); use Restore to write them back to the radio.',
         tag: 'ChannelSync',
       );
+      _logHistoryCheckSkipped('the radio has erased slots (Restore case)');
     } else if (_unconfirmedChannelSlots.isEmpty) {
       // Full confirmation: the fresh list is the truth, replace the cache.
       _cachedChannels = List<Channel>.from(_channels);
@@ -7193,7 +7194,15 @@ class MeshCoreConnector extends ChangeNotifier {
       // Only here: an erased slot means the radio lost channels that Restore
       // can put back with their history, and a hole means the list is not
       // known. Neither is a list to judge history against (#1128).
-      if (sawEverySlot) unawaited(_purgeHistoryNotOnRadio());
+      if (sawEverySlot) {
+        unawaited(_purgeHistoryNotOnRadio());
+      } else {
+        _logHistoryCheckSkipped(
+          _slotCountKnown
+              ? 'this sync read $askedSlots of the radio\'s $_maxChannels slots'
+              : 'device info has not said how many slots the radio has',
+        );
+      }
     } else {
       // Holes: keep the last fully-confirmed persisted list for offline use
       // rather than overwriting it with a partial one. The holes are surfaced
@@ -7203,6 +7212,9 @@ class MeshCoreConnector extends ChangeNotifier {
         '$_unconfirmedChannelSlots; cached list NOT overwritten. '
         'Retry the sync to confirm them.',
         tag: 'ChannelSync',
+      );
+      _logHistoryCheckSkipped(
+        'slots $_unconfirmedChannelSlots are unconfirmed',
       );
     }
     _recalculateCachedChannelsUnreadTotal();
@@ -7724,6 +7736,14 @@ class MeshCoreConnector extends ChangeNotifier {
     return moved != null;
   }
 
+  /// Every sync says what became of the hidden-history check, so a log never
+  /// leaves "ran and found nothing" indistinguishable from "did not run".
+  void _logHistoryCheckSkipped(String why) => _appDebugLogService?.info(
+    'Hidden channel history check skipped for radio '
+    '${_channelMessageStore.publicKeyHex}: $why. Nothing deleted (#1128)',
+    tag: 'Storage',
+  );
+
   /// Deletes this radio's channel history that no channel on it shows, after
   /// a sync the radio fully confirmed with nothing erased (#1128). Not while a
   /// write is waiting on the radio: the list could be mid-change.
@@ -7733,7 +7753,10 @@ class MeshCoreConnector extends ChangeNotifier {
   /// for this connection, and a key leaves it once the radio holds it again,
   /// so a later delete of that channel is judged normally.
   Future<void> _purgeHistoryNotOnRadio() async {
-    if (_channelWritesInFlight > 0) return;
+    if (_channelWritesInFlight > 0) {
+      _logHistoryCheckSkipped('a channel write is waiting on the radio');
+      return;
+    }
     final onRadio = _channels.where((c) => !c.isUnusable).toList();
     _sparedFromPurge.removeAll(onRadio.map((c) => c.pskHex));
     try {

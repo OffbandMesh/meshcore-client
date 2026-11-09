@@ -18,11 +18,13 @@ import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/app_settings.dart';
 import 'package:meshcore_open/models/channel.dart';
 import 'package:meshcore_open/models/channel_message.dart';
+import 'package:meshcore_open/services/app_debug_log_service.dart';
 import 'package:meshcore_open/services/app_settings_service.dart';
 import 'package:meshcore_open/storage/channel_message_store.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
+import 'package:meshcore_open/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Uint8List psk(int fill) => Uint8List.fromList(List<int>.filled(16, fill));
@@ -52,6 +54,13 @@ void main() {
   late MeshCoreConnector connector;
   late AppSettingsService settings;
   late List<Uint8List> sent;
+  late AppDebugLogService log;
+
+  /// What the exported log says about the hidden-history check, newest last.
+  List<String> historyChecks() => [
+    for (final e in log.entries)
+      if (e.message.startsWith('Hidden channel history check')) e.message,
+  ];
 
   final weather = Channel(index: 0, name: 'Weather', psk: psk(0x22));
   final empty = Uint8List(16);
@@ -101,6 +110,9 @@ void main() {
     settings = AppSettingsService();
     await settings.loadSettings();
     connector.setAppSettingsServiceForTest(settings);
+    log = AppDebugLogService()..setEnabled(true);
+    appLogger.initialize(log, enabled: true);
+    connector.setAppDebugLogServiceForTest(log);
 
     // Device info says the radio has [slots] channel slots.
     connector.handleFrameForTest([respCodeDeviceInfo, 14, 100, slots]);
@@ -125,15 +137,27 @@ void main() {
     KeyChangeHistory history, {
     List<int>? addReply,
   }) async {
+    int setFrames() =>
+        sent.where((f) => f.isNotEmpty && f[0] == cmdSetChannel).length;
+    final before = setFrames();
     final edit = connector.editChannel(
       weather,
       'Weather',
       newKey,
       history: history,
     );
-    await settle();
+    Future<void> untilSetFrames(int n) async {
+      // The history move can decode on another isolate, so wait in real time
+      // for the frame rather than a fixed number of microtask turns.
+      for (var i = 0; i < 500 && setFrames() < before + n; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(setFrames(), before + n, reason: 'set-channel frame $n sent');
+    }
+
+    await untilSetFrames(1);
     ok(); // the clear
-    await settle(50);
+    await untilSetFrames(2);
     connector.handleFrameForTest(addReply ?? [respCodeOk]);
     return edit;
   }
@@ -298,6 +322,10 @@ void main() {
       await radioHolds([('Other', psk(0x33)), null]);
 
       expect(await historyOf(weather.psk).loadChannelMessages(0), isEmpty);
+      expect(
+        historyChecks().last,
+        allOf(contains('against 1 channel(s)'), contains('1 deleted')),
+      );
     });
 
     test(
@@ -328,6 +356,8 @@ void main() {
 
       expect(connector.canRestoreChannelsToRadio, isTrue);
       expect(await historyOf(weather.psk).loadChannelMessages(0), hasLength(1));
+      expect(historyChecks().last, contains('skipped'));
+      expect(historyChecks().last, contains('erased slots'));
     });
 
     test('a sync asked for fewer slots than the radio has', () async {
@@ -336,6 +366,13 @@ void main() {
       await settle(50);
 
       expect(await historyOf(weather.psk).loadChannelMessages(0), hasLength(1));
+      expect(
+        historyChecks().last,
+        contains(
+          'skipped for radio 0001020304: this sync read 1 of the '
+          'radio\'s 2 slots',
+        ),
+      );
     });
 
     test('a radio that reports no channels at all', () async {
