@@ -284,6 +284,20 @@ void main() {
       expect(connector.supportsLedControl, isTrue);
     });
 
+    test('the next radio does not inherit the previous radio\'s tags', () {
+      // Radio A: tags say LED only, bit clear.
+      connectWith(caps2: 0x01, tags: [offbandInfoTagLedControl]);
+      expect(connector.supportsDisplayControl, isFalse);
+
+      // Radio B predates the advert and sets the bit. Its device-info drops
+      // A's advert, so the bit answers both.
+      connector.handleFrameForTest(deviceInfo());
+      connector.handleFrameForTest(Uint8List.fromList(advertUnsupported()));
+
+      expect(connector.supportsDisplayControl, isTrue);
+      expect(connector.supportsLedControl, isTrue);
+    });
+
     test('support is never probed: no display or LED GET is sent', () {
       connectWith(
         caps2: offbandCap2Indicators,
