@@ -1164,9 +1164,23 @@ class MeshCoreConnector extends ChangeNotifier {
   bool get supportsScreenSettings =>
       firmwareSupportsScreenSettings(_offbandCaps2);
 
-  /// Whether this radio has a settable display or LED (#523, caps byte 2
-  /// `0x04`). Which of the two it has, it says only by refusing the other.
-  bool get supportsIndicators => firmwareSupportsIndicators(_offbandCaps2);
+  /// Whether this radio's display mode can be set (#1132, firmware #2069).
+  /// See [resolveIndicatorSupport] for the precedence between the advert tags
+  /// and caps2 `0x04`.
+  bool get supportsDisplayControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).display;
+
+  /// Whether this radio's status LED can be set (#1132, firmware #2069).
+  bool get supportsLedControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).led;
+
+  /// Whether this radio has a settable display or LED, so the Indicators page
+  /// has anything to show (#523, #1132).
+  bool get supportsIndicators => supportsDisplayControl || supportsLedControl;
 
   /// The LED and display state the radio last reported, from device-info or a
   /// reply. Null when it has not said.
@@ -1471,6 +1485,8 @@ class MeshCoreConnector extends ChangeNotifier {
       '${advert ?? 'UNSUPPORTED, falling back to device-info offsets'}'
       ' chanNotify=$supportsChannelNotify'
       ' rotation=$supportsDisplayRotation'
+      ' display=$supportsDisplayControl'
+      ' led=$supportsLedControl'
       ' ackCapacity=${ackCapacity ?? 'absent'}',
       tag: 'DeviceUI',
     );
@@ -1890,9 +1906,10 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> _sendIndicatorSet(
     String what,
     DeviceUiSurface surface,
-    Uint8List frame,
-  ) async {
-    if (!_deviceUiGateOpen(what, advertised: supportsIndicators)) return;
+    Uint8List frame, {
+    required bool advertised,
+  }) async {
+    if (!_deviceUiGateOpen(what, advertised: advertised)) return;
     _deviceUiError = null;
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = surface;
@@ -1904,6 +1921,7 @@ class MeshCoreConnector extends ChangeNotifier {
     'display SET',
     DeviceUiSurface.display,
     buildDisplaySetFrame(mode),
+    advertised: supportsDisplayControl,
   );
 
   /// Refused locally until the radio has answered the rotation GET, so
@@ -1920,6 +1938,7 @@ class MeshCoreConnector extends ChangeNotifier {
       'rotation SET',
       DeviceUiSurface.rotation,
       buildRotationSetFrame(degrees),
+      advertised: supportsDisplayRotation,
     );
   }
 
@@ -1945,6 +1964,7 @@ class MeshCoreConnector extends ChangeNotifier {
     'led SET',
     DeviceUiSurface.led,
     buildLedSetFrame(on: on),
+    advertised: supportsLedControl,
   );
 
   /// Re-read whatever headless-UI state this radio supports. Called after every
@@ -9220,7 +9240,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// LED (byte 85) and display mode (byte 86), appended unconditionally on
   /// v21+ (firmware #542). Each is null when the frame stops short of it. Like
   /// the FEM byte, presence says nothing about capability:
-  /// [supportsIndicators] does.
+  /// [supportsDisplayControl] and [supportsLedControl] do.
   ///
   /// Bytes 82 to 86 keep working and are explicitly untouched by the advert
   /// contract (§7). Nothing here reads 87, and nothing may: rotation is read

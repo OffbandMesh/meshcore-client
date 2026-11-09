@@ -174,6 +174,151 @@ void main() {
     expect(sentSub(offbandUiRotationGet), isFalse);
   });
 
+  // #1132 (firmware #2069): display control and LED control are separate tags
+  // in the advert. Precedence from the firmware header: the tags decide when
+  // the advert carries either; otherwise caps2 0x04 answers both.
+  group('display and LED gate on their own tags', () {
+    void connectWith({required int caps2, List<int>? tags}) {
+      connector.handleFrameForTest(deviceInfo(caps2: caps2));
+      if (tags != null) {
+        connector.handleFrameForTest(Uint8List.fromList(advert(tags)));
+      }
+    }
+
+    test(
+      'display tag only: display shown, LED hidden and never sent',
+      () async {
+        connectWith(
+          caps2: offbandCap2Indicators,
+          tags: [offbandInfoTagDisplayControl],
+        );
+        sent.clear();
+
+        expect(connector.supportsDisplayControl, isTrue);
+        expect(connector.supportsLedControl, isFalse);
+        expect(connector.supportsIndicators, isTrue);
+
+        await connector.setLedEnabled(false);
+        await connector.setDisplayMode(DisplayMode.alwaysOn);
+        expect(sentSub(offbandUiLedSet), isFalse);
+        expect(sentSub(offbandUiDisplaySet), isTrue);
+      },
+    );
+
+    test('LED tag only: LED shown, display hidden and never sent', () async {
+      connectWith(
+        caps2: offbandCap2Indicators,
+        tags: [offbandInfoTagLedControl],
+      );
+      sent.clear();
+
+      expect(connector.supportsDisplayControl, isFalse);
+      expect(connector.supportsLedControl, isTrue);
+
+      await connector.setDisplayMode(DisplayMode.alwaysOn);
+      await connector.setLedEnabled(false);
+      expect(sentSub(offbandUiDisplaySet), isFalse);
+      expect(sentSub(offbandUiLedSet), isTrue);
+    });
+
+    test('both tags: both shown', () {
+      connectWith(
+        caps2: offbandCap2Indicators,
+        tags: [offbandInfoTagDisplayControl, offbandInfoTagLedControl],
+      );
+
+      expect(connector.supportsDisplayControl, isTrue);
+      expect(connector.supportsLedControl, isTrue);
+    });
+
+    test('a tag decides even with caps2 0x04 clear', () {
+      connectWith(caps2: 0x01, tags: [offbandInfoTagLedControl]);
+
+      expect(connector.supportsDisplayControl, isFalse);
+      expect(connector.supportsLedControl, isTrue);
+      expect(connector.supportsIndicators, isTrue);
+    });
+
+    test('advert without either tag: caps2 0x04 answers both, as today', () {
+      connectWith(
+        caps2: offbandCap2Indicators,
+        tags: [offbandInfoTagDisplayRotation],
+      );
+
+      expect(connector.supportsDisplayControl, isTrue);
+      expect(connector.supportsLedControl, isTrue);
+    });
+
+    test('advert without either tag and caps2 0x04 clear: no Indicators', () {
+      connectWith(caps2: 0x01, tags: [offbandInfoTagChanNotify]);
+
+      expect(connector.supportsDisplayControl, isFalse);
+      expect(connector.supportsLedControl, isFalse);
+      expect(connector.supportsIndicators, isFalse);
+    });
+
+    test('a radio that predates the advert: caps2 0x04 answers both', () {
+      connector.handleFrameForTest(deviceInfo());
+      connector.handleFrameForTest(Uint8List.fromList(advertUnsupported()));
+
+      expect(
+        connector.capabilityAdvertState,
+        CapabilityAdvertState.unsupported,
+      );
+      expect(connector.supportsDisplayControl, isTrue);
+      expect(connector.supportsLedControl, isTrue);
+    });
+
+    test('a radio that predates the advert, caps2 0x04 clear: nothing', () {
+      connector.handleFrameForTest(deviceInfo(caps2: 0x01));
+      connector.handleFrameForTest(Uint8List.fromList(advertUnsupported()));
+
+      expect(connector.supportsIndicators, isFalse);
+    });
+
+    test('before the advert answers, caps2 0x04 answers both', () {
+      connectWith(caps2: offbandCap2Indicators);
+
+      expect(connector.capabilityAdvertState, CapabilityAdvertState.unknown);
+      expect(connector.supportsDisplayControl, isTrue);
+      expect(connector.supportsLedControl, isTrue);
+    });
+
+    test('support is never probed: no display or LED GET is sent', () {
+      connectWith(
+        caps2: offbandCap2Indicators,
+        tags: [offbandInfoTagDisplayControl],
+      );
+
+      expect(sentSub(offbandUiDisplayGet), isFalse);
+      expect(sentSub(offbandUiLedGet), isFalse);
+    });
+
+    test('an unknown tag is skipped by its length and kept', () {
+      final reply = parseCapabilityAdvertReply([
+        cmdOffbandDeviceUi,
+        offbandUiInfoGet,
+        offbandInfoTagLedControl,
+        0x00,
+        0x06,
+        0x02,
+        0xAA,
+        0xBB,
+        0x07,
+        0x00,
+      ])!;
+
+      expect(reply.malformed, isFalse);
+      expect(reply.has(offbandInfoTagLedControl), isTrue);
+      expect(reply.tags[0x06], [0xAA, 0xBB]);
+      expect(reply.has(0x07), isTrue);
+      expect(resolveIndicatorSupport(offbandCaps2: 0, advert: reply), (
+        display: false,
+        led: true,
+      ));
+    });
+  });
+
   group('rotation', () {
     test('the INDICATORS bit alone does NOT open rotation', () {
       // The gate moved to the advert tag. 0x04 means indicators, which is a
