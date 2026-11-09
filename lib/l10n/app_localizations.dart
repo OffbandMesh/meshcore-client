@@ -3382,6 +3382,36 @@ abstract class AppLocalizations {
   /// **'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.'**
   String get channels_writeClearedNotAdded;
 
+  /// The user chose to keep message history across a key change; the radio took the new key but the app could not move the stored messages. Persistent (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'The channel was changed, but its message history could not be moved to it. The app log has the details.'**
+  String get channels_writeHistoryNotMoved;
+
+  /// Title of the question asked before a channel's key changes (a hashtag rename, or a new private key) (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep message history?'**
+  String get channels_keyChangeHistoryTitle;
+
+  /// Body of the keep-or-delete question for a channel key change (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'This gives \"{name}\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.'**
+  String channels_keyChangeHistoryBody(String name);
+
+  /// Moves the channel's stored messages to its new key (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep message history'**
+  String get channels_keyChangeKeepHistory;
+
+  /// Deletes the channel's stored messages, as Delete Channel does (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message history'**
+  String get channels_keyChangeDeleteHistory;
+
   /// No description provided for @channels_sortBy.
   ///
   /// In en, this message translates to:

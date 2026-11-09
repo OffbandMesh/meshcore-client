@@ -235,7 +235,15 @@ enum ChannelWrite {
   /// An edit to a new key cleared the old channel, but the new one was not
   /// confirmed, so the slot is now empty. (#1026)
   clearedNotAdded,
+
+  /// The radio took the new key, but the old key's message history, which
+  /// the user chose to keep, could not be moved to it. (#1128)
+  historyNotMoved,
 }
+
+/// What a channel key change does with the old key's message history. The
+/// user is asked; history is never kept hidden (#1128).
+enum KeyChangeHistory { keep, delete }
 
 /// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
 /// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
@@ -538,6 +546,11 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _batteryRequested = false;
   bool _awaitingSelfInfo = false;
   bool _hasReceivedDeviceInfo = false;
+
+  /// This connection's device info has said how many channel slots the radio
+  /// has, on every transport ([_hasReceivedDeviceInfo] is set only where the
+  /// initial sync is gated on it). (#1128)
+  bool _slotCountKnown = false;
   // Initial sync is serialized for predictable progress. Firmware exposes one
   // FIFO queued-message stream, so direct/room frames are buffered until after
   // contacts are known.
@@ -4587,6 +4600,8 @@ class MeshCoreConnector extends ChangeNotifier {
     storageService?.setPublicKeyHex = '';
     // Device-scoped: the next radio's device info supplies its own pin (#1100).
     _deviceBlePin = null;
+    // Kept history a key change could not land belongs to this radio (#1128).
+    _sparedFromPurge.clear();
     _applySelfKeyToBlockService();
   }
 
@@ -4601,6 +4616,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer?.cancel();
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // Drop the previous radio's in-memory history before a new connection loads
     // its own. These caches are keyed by channel index / contact key, not by
     // radio, so without this a radio switch would keep showing the prior
@@ -4688,6 +4704,10 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setAppDebugLogServiceForTest(AppDebugLogService service) =>
       _appDebugLogService = service;
+
+  @visibleForTesting
+  void setAppSettingsServiceForTest(AppSettingsService service) =>
+      _appSettingsService = service;
 
   /// The state a BLE link leaves behind: a radio to go back to. (#997)
   @visibleForTesting
@@ -5084,6 +5104,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryRequested = false;
     _awaitingSelfInfo = false;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     _maxContacts = _defaultMaxContacts;
     _maxChannels = _defaultMaxChannels;
     _resetSyncProgressState();
@@ -7108,6 +7129,10 @@ class MeshCoreConnector extends ChangeNotifier {
       '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels'
       '${_unconfirmedChannelSlots.isEmpty ? '' : ', unconfirmed slots: $_unconfirmedChannelSlots'}',
     );
+    // A sync before device info, or one asked for fewer slots, has not seen
+    // every channel, so it cannot say what the radio does not hold (#1128).
+    final sawEverySlot =
+        _slotCountKnown && _totalChannelsToRequest >= _maxChannels;
 
     _cleanupChannelSync(completed: true);
 
@@ -7165,6 +7190,10 @@ class MeshCoreConnector extends ChangeNotifier {
           );
         }),
       );
+      // Only here: an erased slot means the radio lost channels that Restore
+      // can put back with their history, and a hole means the list is not
+      // known. Neither is a list to judge history against (#1128).
+      if (sawEverySlot) unawaited(_purgeHistoryNotOnRadio());
     } else {
       // Holes: keep the last fully-confirmed persisted list for offline use
       // rather than overwriting it with a partial one. The holes are surfaced
@@ -7342,6 +7371,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int _channelWritesInFlight = 0;
   bool _channelSyncDeferredByWrite = false;
+  final Set<String> _sparedFromPurge = {};
 
   /// True while the channel list cannot be trusted to show which slots are
   /// free: a sync is re-reading it, or a write has not been answered yet. A
@@ -7480,9 +7510,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// OffbandMesh/meshcore-firmware#1864 refuses a different channel over an
   /// occupied slot, and that is what a new key in place is.
   ///
-  /// A new key is a slot reassignment for history purposes, the same as
-  /// before the clear-then-add: the old key's PSK-keyed history is kept, so
-  /// it comes back if that key is ever re-added (#1063).
+  /// A new key needs [history], the user's answer to what happens to the old
+  /// key's messages (#1128). It is applied as soon as the radio confirms the
+  /// clear, never waiting on the add, so the old key's history is never left
+  /// hidden: Keep moves it and the notify mode to the new key, Delete removes
+  /// it as Delete Channel would.
   ///
   /// If the clear lands and the add does not, the slot is left empty and this
   /// returns [ChannelWrite.clearedNotAdded], so the user is told the channel is
@@ -7490,10 +7522,17 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<ChannelWrite> editChannel(
     Channel channel,
     String name,
-    Uint8List psk,
-  ) async {
+    Uint8List psk, {
+    KeyChangeHistory? history,
+  }) async {
     if (!isConnected) return ChannelWrite.noReply;
-    if (listEquals(channel.psk, psk)) {
+    final keyChanges = !listEquals(channel.psk, psk);
+    if (keyChanges && history == null) {
+      throw ArgumentError(
+        'A key change needs the keep-or-delete history answer (#1128)',
+      );
+    }
+    if (!keyChanges) {
       return _setChannel(
         channel.index,
         name,
@@ -7509,6 +7548,15 @@ class MeshCoreConnector extends ChangeNotifier {
         _syncAfterChannelWrites();
         return cleared;
       }
+      final newPskHex = Channel(
+        index: channel.index,
+        name: name,
+        psk: psk,
+      ).pskHex;
+      final moved = await _applyKeyChangeHistory(channel, newPskHex, history!);
+      // The user said keep. What could not be moved stays under the old key,
+      // and the sync after this write must not delete it as hidden.
+      if (!moved) _sparedFromPurge.add(channel.pskHex);
       await _retireSlotOccupant(channel.index);
       final added = await _setChannel(
         channel.index,
@@ -7517,9 +7565,14 @@ class MeshCoreConnector extends ChangeNotifier {
         occupantPsk: null,
         refresh: true,
       );
-      return added == ChannelWrite.ok
-          ? ChannelWrite.ok
-          : ChannelWrite.clearedNotAdded;
+      if (added != ChannelWrite.ok) {
+        // The kept history now waits under a key the radio does not hold, for
+        // the user to add the channel again; the sync after this write must
+        // not delete it as hidden (#1128).
+        if (history == KeyChangeHistory.keep) _sparedFromPurge.add(newPskHex);
+        return ChannelWrite.clearedNotAdded;
+      }
+      return moved ? ChannelWrite.ok : ChannelWrite.historyNotMoved;
     } finally {
       _endChannelWrite();
     }
@@ -7633,11 +7686,67 @@ class MeshCoreConnector extends ChangeNotifier {
   ///  - legacy slot-index keys (pre-#194) would be adopted onto the new
   ///    occupant by the store's one-time migration; purge them (#193/#1063).
   ///  - the in-memory conversation map is slot-keyed; drop this slot's entry.
-  /// The old occupant's PSK-keyed history is deliberately left intact: if
-  /// that channel is ever re-added (any slot), its history comes back (#1063).
+  /// The old occupant's PSK-keyed history is settled by the full sync every
+  /// write ends with, not here: firmware that moves a channel out of the way
+  /// (#1896) still holds it, so it keeps its history, and a channel the radio
+  /// no longer holds has its history deleted by that sync (#1128).
   Future<void> _retireSlotOccupant(int index) async {
     await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
+  }
+
+  /// Applies the user's keep-or-delete answer for a key change once the radio
+  /// has confirmed the clear (#1128). Returns false when Keep could not move
+  /// the history; the store has logged why and left it under the old key.
+  Future<bool> _applyKeyChangeHistory(
+    Channel channel,
+    String newPskHex,
+    KeyChangeHistory history,
+  ) async {
+    _appDebugLogService?.info(
+      'Key change on slot ${channel.index} "${channel.name}": user chose to '
+      '${history.name} its message history',
+      tag: 'ChannelWrite',
+    );
+    if (history == KeyChangeHistory.delete) {
+      await _channelMessageStore.deleteChannelHistory(channel.pskHex);
+      return true;
+    }
+    final moved = await _channelMessageStore.moveChannelHistory(
+      channel.pskHex,
+      newPskHex,
+    );
+    await _appSettingsService?.moveChannelNotifyMode(
+      devicePrefix: selfPublicKeyHex,
+      fromPskHex: channel.pskHex,
+      toPskHex: newPskHex,
+    );
+    return moved != null;
+  }
+
+  /// Deletes this radio's channel history that no channel on it shows, after
+  /// a sync the radio fully confirmed with nothing erased (#1128). Not while a
+  /// write is waiting on the radio: the list could be mid-change.
+  ///
+  /// [_sparedFromPurge] holds keys whose kept history a key change could not
+  /// put on the radio: the add was not confirmed, or the move failed. It lasts
+  /// for this connection, and a key leaves it once the radio holds it again,
+  /// so a later delete of that channel is judged normally.
+  Future<void> _purgeHistoryNotOnRadio() async {
+    if (_channelWritesInFlight > 0) return;
+    final onRadio = _channels.where((c) => !c.isUnusable).toList();
+    _sparedFromPurge.removeAll(onRadio.map((c) => c.pskHex));
+    try {
+      await _channelMessageStore.purgeHistoryNotOnRadio(
+        radioPskHex: {...onRadio.map((c) => c.pskHex), ..._sparedFromPurge},
+        occupiedSlots: onRadio.map((c) => c.index).toSet(),
+      );
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Could not delete history no channel on the radio shows: $e',
+        tag: 'Storage',
+      );
+    }
   }
 
   // --- Offband GPS query (CMD_OFFBAND_GPS / RESP_CODE_OFFBAND_GPS = 0xC1) (#135)
@@ -9105,6 +9214,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_shouldGateInitialChannelSync) {
       _hasReceivedDeviceInfo = true;
     }
+    _slotCountKnown = true;
     _firmwareVerCode = frame[1];
 
     // Readable build date / model / firmware version, NUL-terminated strings
@@ -11765,6 +11875,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Preserve deviceId and displayName for UI display during reconnection
     // They're only cleared on manual disconnect via disconnect() method
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // But NOT the identity that scopes stored data (#158). A manual
     // disconnect() clears _selfPublicKey; an unexpected drop did not, so
     // every per-radio store, and the one channels_screen builds from

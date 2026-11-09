@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/storage/channel_message_store.dart';
@@ -1823,12 +1824,29 @@ class _ChannelsScreenState extends State<ChannelsScreen>
                   return;
                 }
 
+                // #1128: a new key asks what happens to the old key's history.
+                // Backing out leaves this dialog open and writes nothing.
+                KeyChangeHistory? history;
+                if (!listEquals(psk, channel.psk)) {
+                  history = await askKeyChangeHistory(
+                    dialogContext,
+                    channel.name,
+                  );
+                  appLogger.info(
+                    'Key change for slot ${channel.index} "${channel.name}": '
+                    'history answer ${history?.name ?? 'cancelled'}',
+                    tag: 'ChannelWrite',
+                  );
+                  if (history == null || !dialogContext.mounted) return;
+                }
+
                 Navigator.pop(dialogContext);
                 try {
                   final result = await connector.editChannel(
                     channel,
                     name,
                     psk,
+                    history: history,
                   );
                   if (result != ChannelWrite.ok) {
                     if (!context.mounted) return;

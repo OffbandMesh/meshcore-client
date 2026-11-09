@@ -381,6 +381,26 @@ class BlobStore {
         .go();
   }
 
+  /// Removes the messages under [storeKey] whose identity is in [mergeKeys],
+  /// and no others, so a message saved meanwhile survives (#1128). Chunked
+  /// under SQLite's bound-variable limit.
+  Future<void> deleteMessageRowsIn(
+    String storeKey,
+    Iterable<String> mergeKeys,
+  ) async {
+    final keys = mergeKeys.toList();
+    for (var i = 0; i < keys.length; i += 500) {
+      final chunk = keys.sublist(
+        i,
+        i + 500 > keys.length ? keys.length : i + 500,
+      );
+      await (_db.delete(
+            _db.messageRecords,
+          )..where((t) => t.storeKey.equals(storeKey) & t.mergeKey.isIn(chunk)))
+          .go();
+    }
+  }
+
   /// Removes every message under [storeKey], for the stores' clear paths.
   Future<void> deleteMessageRows(String storeKey) async {
     await (_db.delete(
