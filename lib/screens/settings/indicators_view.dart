@@ -7,12 +7,13 @@ import '../../connector/offband_indicators.dart';
 import '../../widgets/device_ui_error_banner.dart';
 
 /// The radio's display and LED (#523, #944): display mode, rotation and the
-/// status LED. Gated on caps byte 2 `0x04`; the Node Settings row that leads
-/// here is gated the same way.
+/// status LED. Each block shows only when the radio has that control
+/// ([MeshCoreConnector.supportsDisplayControl],
+/// [MeshCoreConnector.supportsLedControl], #1132); the Node Settings row that
+/// leads here shows when it has either.
 ///
-/// Every control draws from what the radio reported, never from the tap. A
-/// board without a display or without a controllable LED refuses that write
-/// and says so in the banner. English-only, matching [DeviceUiView].
+/// Every control draws from what the radio reported, never from the tap.
+/// English-only, matching [DeviceUiView].
 class IndicatorsView extends StatelessWidget {
   const IndicatorsView({super.key});
 
@@ -33,28 +34,31 @@ class IndicatorsView extends StatelessWidget {
             message: error,
             onDismiss: connector.clearDeviceUiError,
           ),
-        const _Header('Display'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: SegmentedButton<DisplayMode>(
-            segments: [
-              for (final m in DisplayMode.values)
-                ButtonSegment(value: m, label: Text(m.label)),
-            ],
-            selected: {?mode},
-            emptySelectionAllowed: true,
-            onSelectionChanged: (v) {
-              if (v.isNotEmpty) connector.setDisplayMode(v.first);
-            },
+        if (connector.supportsDisplayControl) ...[
+          const _Header('Display'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<DisplayMode>(
+              segments: [
+                for (final m in DisplayMode.values)
+                  ButtonSegment(value: m, label: Text(m.label)),
+              ],
+              selected: {?mode},
+              emptySelectionAllowed: true,
+              onSelectionChanged: (v) {
+                if (v.isNotEmpty) connector.setDisplayMode(v.first);
+              },
+            ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Text(
-            mode?.description ?? 'The radio has not reported its display mode',
-            style: Theme.of(context).textTheme.bodySmall,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              mode?.description ??
+                  'The radio has not reported its display mode',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
-        ),
+        ],
         if (connector.supportsDisplayRotation) ...[
           const _Header('Rotation'),
           Padding(
@@ -76,17 +80,19 @@ class IndicatorsView extends StatelessWidget {
             ),
           ),
         ],
-        const _Header('LED'),
-        SwitchListTile(
-          title: const Text('Status LED'),
-          subtitle: Text(
-            led == null
-                ? 'The radio has not reported its LED'
-                : 'Turn off to save battery or to stay unseen',
+        if (connector.supportsLedControl) ...[
+          const _Header('LED'),
+          SwitchListTile(
+            title: const Text('Status LED'),
+            subtitle: Text(
+              led == null
+                  ? 'The radio has not reported its LED'
+                  : 'Turn off to save battery or to stay unseen',
+            ),
+            value: led ?? false,
+            onChanged: connector.setLedEnabled,
           ),
-          value: led ?? false,
-          onChanged: connector.setLedEnabled,
-        ),
+        ],
       ],
     );
   }

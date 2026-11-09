@@ -33,6 +33,13 @@ const int offbandUiInfoGet = 0x1C;
 const int offbandInfoTagChanNotify = 0x01;
 const int offbandInfoTagDisplayRotation = 0x02;
 const int offbandInfoTagAckCapacity = 0x03;
+
+/// Display control and LED control are separate capabilities (firmware #2067,
+/// PR OffbandMesh/meshcore-firmware#2080, merged `c835aeca`): a board can have
+/// one without the other, and caps2 `0x04` INDICATORS answers both with one
+/// bit. Values are read over `0x05`/`0x06` and `0x07`/`0x08`.
+const int offbandInfoTagDisplayControl = 0x04;
+const int offbandInfoTagLedControl = 0x05;
 const int offbandInfoTagContinue = 0xFF;
 
 /// `0x00` is not a valid tag.
