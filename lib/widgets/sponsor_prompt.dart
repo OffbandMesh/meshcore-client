@@ -18,9 +18,20 @@ class SponsorPrompt {
   static const String offKey = 'sponsor_prompt_off';
   static final Uri sponsorUri = Uri.parse('https://offband.org/donate');
 
-  /// Shows the window unless it has already shown for [version], the user
-  /// turned it off, or this is iOS (hidden there like About's Donate, #1051).
-  /// The version is saved before the window opens, so a crash can't loop it.
+  /// The commit a test build was made from, passed with
+  /// `--dart-define=GIT_SHA=<sha>`. Test builds share one version and build
+  /// number, so this is what tells them apart. Release builds leave it empty:
+  /// their build number already changes every time.
+  static const String buildSha = String.fromEnvironment('GIT_SHA');
+
+  /// What one installed build is known by: `1.8.0+69`, or `1.8.0+69@<sha>`.
+  static String buildId(String version, {String sha = buildSha}) =>
+      sha.isEmpty ? version : '$version@$sha';
+
+  /// Shows the window unless it has already shown for this build ([version] is
+  /// its [buildId]), the user turned it off, or this is iOS (hidden there like
+  /// About's Donate, #1051). The build is saved before the window opens, so a
+  /// crash can't loop it.
   static Future<void> maybeShow(
     BuildContext context, {
     String? version,
@@ -68,7 +79,7 @@ class SponsorPrompt {
   static Future<String?> _installedVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      return '${info.version}+${info.buildNumber}';
+      return buildId('${info.version}+${info.buildNumber}');
     } catch (e) {
       appLogger.error('Sponsor prompt: no app version: $e', tag: 'Sponsor');
       return null;

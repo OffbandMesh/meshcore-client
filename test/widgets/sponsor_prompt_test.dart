@@ -131,9 +131,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(_title, findsOneWidget);
+    // Carries the commit when the test run passes --dart-define=GIT_SHA.
     expect(
       PrefsManager.instance.getString(SponsorPrompt.shownForKey),
-      '1.8.0+69',
+      SponsorPrompt.buildId('1.8.0+69'),
     );
   });
 
@@ -178,6 +179,32 @@ void main() {
       expect(find.text('Could not open the link'), findsOneWidget);
     });
   }
+
+  test('a test build is known by its commit, a release by its version', () {
+    expect(SponsorPrompt.buildId('1.8.0+69', sha: ''), '1.8.0+69');
+    expect(
+      SponsorPrompt.buildId('1.8.0+69', sha: 'abc1234'),
+      '1.8.0+69@abc1234',
+    );
+  });
+
+  testWidgets('two test builds of one version each show it once', (
+    tester,
+  ) async {
+    final prefs = await _prefs();
+    final first = SponsorPrompt.buildId('1.8.0+69', sha: 'abc1234');
+    final second = SponsorPrompt.buildId('1.8.0+69', sha: 'def5678');
+    await _launch(tester, prefs, version: first);
+    expect(_title, findsOneWidget);
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+
+    await _launch(tester, prefs, version: first);
+    expect(_title, findsNothing);
+
+    await _launch(tester, prefs, version: second);
+    expect(_title, findsOneWidget);
+  });
 
   test('Sponsor opens the donate page the About screen uses', () {
     expect(SponsorPrompt.sponsorUri.toString(), 'https://offband.org/donate');
