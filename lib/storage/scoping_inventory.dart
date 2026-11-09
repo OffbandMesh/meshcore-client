@@ -276,6 +276,22 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/services/radio_preset_service.dart',
   ),
   StorageSurface(
+    'sponsor_prompt_shown_for',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'the app version the sponsor window last showed for (#1129). It '
+        'follows the installed app, not a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_off',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        "the user's \"Don't show again\" for the sponsor window (#1129). A "
+        'choice about the app, not about a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
     'anr_last_exit_ts_ms',
     verdict: ScopingVerdict.globalOnPurpose,
     reason:
