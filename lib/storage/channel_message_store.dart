@@ -586,6 +586,12 @@ class ChannelMessageStore {
         tag: 'Storage',
       );
     }
+    appLogger.info(
+      'Hidden channel history check for radio $publicKeyHex: '
+      '${candidates.length} stored key(s) against ${radioPskHex.length} '
+      'channel(s) on the radio, ${deleted.length} deleted (#1128)',
+      tag: 'Storage',
+    );
     return deleted;
   }
 
