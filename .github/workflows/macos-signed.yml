@@ -4,19 +4,33 @@ name: macOS signed build
 # notarizes it with Apple and staples the ticket, so it opens on any Mac with
 # no Gatekeeper warning (#1109, epic #1107). Called by release-signed.yml.
 #
-# SECURITY: this repo is PUBLIC, and this job holds the Developer ID key and
-# the App Store Connect API key.
+# Three jobs, so no Mac runner ever sits waiting on Apple's queue:
+#   1. build-sign-submit (Mac):  build, sign, submit, keep the signed app.
+#   2. notary-wait (Linux):      poll Apple for that submission, bounded.
+#   3. staple (Mac):             staple the ticket, verify, publish the zip.
+# If Apple holds a submission past the poll deadline, job 2 fails, the signed
+# app stays an artifact of the run, and "Re-run failed jobs" checks the SAME
+# submission again later. Nothing is rebuilt or resubmitted.
+#
+# SEPARATION: this lane uses its own `apple-macos` Environment and its own
+# App Store Connect key. It shares no Environment, secret or key with the
+# iOS lane (`apple-signing`), so a hold, revocation or failure in one Apple
+# lane cannot break the other.
+#
+# SECURITY: this repo is PUBLIC, and jobs 1 and 2 hold the Developer ID key
+# and the notary API key.
 #
 #   - NEVER call this from a `pull_request` workflow. A PR (incl. from a fork)
 #     must never run a job that can read these secrets.
-#   - Only this job references the `apple-signing` Environment, so only it
-#     receives them, and only after the required reviewer approves.
+#   - Only jobs 1 and 2 reference the `apple-macos` Environment, so only they
+#     receive secrets, and only after the required reviewer approves. Job 3
+#     needs none: stapling fetches the public ticket by the app's hash.
 #   - Secret files live in RUNNER_TEMP and are removed with `if: always()`.
 #   - Values are passed via env:, never echoed. The identity name holds the
 #     owner's legal name and is masked.
 #
 # There is deliberately no skip-notarization input: an unsigned or
-# unnotarized app must fail this job, never pass it (#904).
+# unnotarized app must fail this lane, never pass it (#904).
 
 on:
   workflow_call:
@@ -30,12 +44,12 @@ permissions:
   contents: read
 
 jobs:
-  macos-signed:
+  build-sign-submit:
     runs-on: macos-latest
-    environment: apple-signing # required-reviewer gate; do not remove
-    # Apple's notary queue can hold a new Developer ID's submissions for hours.
-    # GitHub's job limit is 6h; the notarytool wait below fits inside it.
-    timeout-minutes: 355
+    environment: apple-macos # required-reviewer gate; do not remove
+    timeout-minutes: 60
+    outputs:
+      submission-id: ${{ steps.submit.outputs.id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,14 +57,14 @@ jobs:
         env:
           MACOS_DEVID_P12_BASE64: ${{ secrets.MACOS_DEVID_P12_BASE64 }}
           MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
-          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
-          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
-          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           set -eu
           missing=0
           for name in MACOS_DEVID_P12_BASE64 MACOS_DEVID_P12_PASSWORD \
-                      ASC_API_KEY_P8_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID; do
+                      MACOS_NOTARY_KEY_P8_BASE64 MACOS_NOTARY_KEY_ID MACOS_NOTARY_ISSUER_ID; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Secret ${name} is empty or absent in this run."
               missing=1
@@ -125,47 +139,43 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${APP}"
           lipo -archs "${APP}/Contents/MacOS/offband_meshcore"
 
-      - name: Notarize and staple
+      # ditto, not zip: it preserves the .app bundle's symlinks (#1108). The
+      # same zip is what Apple notarizes and what job 3 staples.
+      - name: Zip the signed app
+        run: ditto -c -k --keepParent "${APP}" offband-macos-signed.zip
+
+      # Upload only, no --wait: the verdict is job 2's business.
+      - name: Submit for notarization
+        id: submit
         env:
-          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
-          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
-          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           set -eu
           umask 077
           P8="${RUNNER_TEMP}/AuthKey.p8"
-          printf '%s' "${ASC_API_KEY_P8_BASE64}" | base64 --decode > "${P8}"
-          SUBMIT="${RUNNER_TEMP}/notarize-submit.zip"
-          ditto -c -k --keepParent "${APP}" "${SUBMIT}"
+          printf '%s' "${MACOS_NOTARY_KEY_P8_BASE64}" | base64 --decode > "${P8}"
           OUT="${RUNNER_TEMP}/notarize.json"
-          xcrun notarytool submit "${SUBMIT}" --key "${P8}" --key-id "${ASC_API_KEY_ID}" \
-            --issuer "${ASC_API_ISSUER_ID}" --wait --timeout 5h --output-format json > "${OUT}" || true
+          xcrun notarytool submit offband-macos-signed.zip --key "${P8}" \
+            --key-id "${MACOS_NOTARY_KEY_ID}" --issuer "${MACOS_NOTARY_ISSUER_ID}" \
+            --output-format json > "${OUT}"
           cat "${OUT}"
-          STATUS="$(jq -r '.status // empty' "${OUT}")"
           ID="$(jq -r '.id // empty' "${OUT}")"
-          if [ "${STATUS}" != "Accepted" ]; then
-            echo "::error::Notarization status is '${STATUS:-none}', not Accepted."
-            if [ -n "${ID}" ]; then
-              xcrun notarytool log "${ID}" --key "${P8}" --key-id "${ASC_API_KEY_ID}" \
-                --issuer "${ASC_API_ISSUER_ID}" || true
-            fi
+          if [ -z "${ID}" ]; then
+            echo "::error::notarytool returned no submission id."
             exit 1
           fi
-          xcrun stapler staple "${APP}"
-          xcrun stapler validate "${APP}"
-          spctl --assess --type execute --verbose=4 "${APP}"
+          echo "id=${ID}" >> "$GITHUB_OUTPUT"
+          echo "Submitted for notarization: ${ID}"
 
-      # ditto, not zip: it preserves the .app bundle's symlinks (#1108).
-      - name: Zip macOS app
-        run: |
-          set -eu
-          ditto -c -k --keepParent "${APP}" offband-macos.zip
+      # Kept 30 days so a held submission can be finished by a re-run.
       - uses: actions/upload-artifact@v4
         with:
-          name: release-macos
-          path: offband-macos.zip
+          name: macos-signed-unstapled
+          path: offband-macos-signed.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
       - name: Remove the signing material
         if: always()
@@ -173,3 +183,52 @@ jobs:
           set +e
           if [ -n "${KC:-}" ]; then security delete-keychain "${KC}"; fi
           rm -f dart_defines.json "${RUNNER_TEMP}/devid.p12" "${RUNNER_TEMP}/AuthKey.p8"
+
+  notary-wait:
+    needs: build-sign-submit
+    runs-on: ubuntu-latest
+    environment: apple-macos # holds the notary key; do not remove
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet "PyJWT[crypto]==2.10.1"
+      - name: Wait for Apple's verdict (45 min max)
+        env:
+          SUBMISSION_ID: ${{ needs.build-sign-submit.outputs.submission-id }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -eu
+          umask 077
+          export P8="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s' "${MACOS_NOTARY_KEY_P8_BASE64}" | base64 --decode > "${P8}"
+          python3 .github/scripts/notary-wait.py "${SUBMISSION_ID}" 45
+      - name: Remove the notary key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/AuthKey.p8"
+
+  staple:
+    needs: notary-wait
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-signed-unstapled
+      - name: Staple and verify
+        run: |
+          set -eu
+          ditto -x -k offband-macos-signed.zip .
+          APP=offband_meshcore.app
+          xcrun stapler staple "${APP}"
+          xcrun stapler validate "${APP}"
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+          spctl --assess --type execute --verbose=4 "${APP}"
+          ditto -c -k --keepParent "${APP}" offband-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: offband-macos.zip
+          if-no-files-found: error
+          retention-days: 7
