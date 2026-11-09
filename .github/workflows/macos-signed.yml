@@ -6,7 +6,7 @@ name: macOS signed build
 #
 # Three jobs, so no Mac runner ever sits waiting on Apple's queue:
 #   1. build-sign-submit (Mac):  build, sign, submit, keep the signed app.
-#   2. notary-wait (Linux):      poll Apple for that submission, bounded.
+#   2. notary-wait (Linux):      poll Apple for that submission, up to 340 min.
 #   3. staple (Mac):             staple the ticket, verify, publish the zip.
 # If Apple holds a submission past the poll deadline, job 2 fails, the signed
 # app stays an artifact of the run, and "Re-run failed jobs" checks the SAME
@@ -188,11 +188,14 @@ jobs:
     needs: build-sign-submit
     runs-on: ubuntu-latest
     environment: apple-macos # holds the notary key; do not remove
-    timeout-minutes: 50
+    # GitHub's job limit is 360 minutes. A Linux runner on a public repo costs
+    # nothing to keep polling, and a hold of a few hours then finishes with no
+    # manual re-run. The poll deadline leaves room for setup inside the limit.
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - run: pip install --quiet "PyJWT[crypto]==2.10.1"
-      - name: Wait for Apple's verdict (45 min max)
+      - name: Wait for Apple's verdict (340 min max)
         env:
           SUBMISSION_ID: ${{ needs.build-sign-submit.outputs.submission-id }}
           MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
@@ -203,7 +206,7 @@ jobs:
           umask 077
           export P8="${RUNNER_TEMP}/AuthKey.p8"
           printf '%s' "${MACOS_NOTARY_KEY_P8_BASE64}" | base64 --decode > "${P8}"
-          python3 .github/scripts/notary-wait.py "${SUBMISSION_ID}" 45
+          python3 .github/scripts/notary-wait.py "${SUBMISSION_ID}" 340
       - name: Remove the notary key
         if: always()
         run: rm -f "${RUNNER_TEMP}/AuthKey.p8"
