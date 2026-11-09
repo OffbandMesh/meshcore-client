@@ -1756,17 +1756,23 @@ abstract class AppLocalizations {
   /// **'Sponsor'**
   String get sponsorPrompt_sponsor;
 
+  /// No description provided for @sponsorPrompt_anytime.
+  ///
+  /// In en, this message translates to:
+  /// **'You can support Offband anytime from About in Settings, or at offband.org/donate.'**
+  String get sponsorPrompt_anytime;
+
   /// No description provided for @sponsorPrompt_notNow.
   ///
   /// In en, this message translates to:
   /// **'Not now'**
   String get sponsorPrompt_notNow;
 
-  /// No description provided for @sponsorPrompt_dontShowAgain.
+  /// No description provided for @sponsorPrompt_never.
   ///
   /// In en, this message translates to:
-  /// **'Don\'t show again'**
-  String get sponsorPrompt_dontShowAgain;
+  /// **'Never Show Again'**
+  String get sponsorPrompt_never;
 
   /// No description provided for @settings_aboutLinkFailed.
   ///

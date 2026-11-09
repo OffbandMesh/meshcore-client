@@ -976,10 +976,14 @@ class AppLocalizationsBg extends AppLocalizations {
   String get sponsorPrompt_sponsor => 'Sponsor';
 
   @override
+  String get sponsorPrompt_anytime =>
+      'You can support Offband anytime from About in Settings, or at offband.org/donate.';
+
+  @override
   String get sponsorPrompt_notNow => 'Not now';
 
   @override
-  String get sponsorPrompt_dontShowAgain => 'Don\'t show again';
+  String get sponsorPrompt_never => 'Never Show Again';
 
   @override
   String get settings_aboutLinkFailed => 'Could not open the link';
