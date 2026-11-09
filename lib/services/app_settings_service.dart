@@ -404,6 +404,30 @@ class AppSettingsService extends ChangeNotifier {
     );
   }
 
+  /// Carries a channel's notify mode from its old key to its new one, when a
+  /// key change keeps the channel's history (#1128).
+  Future<void> moveChannelNotifyMode({
+    required String devicePrefix,
+    required String fromPskHex,
+    required String toPskHex,
+  }) async {
+    final prefix = radioScopePrefix(devicePrefix);
+    final mode = _settings.channelNotifyModesByRadio[prefix]?[fromPskHex];
+    if (prefix.isEmpty || fromPskHex == toPskHex || mode == null) return;
+    final byRadio = _copyByRadio();
+    final radioModes = byRadio[prefix]!;
+    radioModes.remove(fromPskHex);
+    radioModes[toPskHex] = mode;
+    await updateSettings(
+      _settings.copyWith(channelNotifyModesByRadio: byRadio),
+    );
+    appLogger.info(
+      'Notify mode ${mode.name} moved with the channel on radio $prefix: psk '
+      '${pskFingerprint(fromPskHex)} -> ${pskFingerprint(toPskHex)}',
+      tag: 'NotifyMode',
+    );
+  }
+
   /// Drops [devicePrefix]'s notify modes, the per-radio part of this global
   /// blob, after that radio was factory reset (#1054).
   Future<void> forgetRadio(String devicePrefix) async {

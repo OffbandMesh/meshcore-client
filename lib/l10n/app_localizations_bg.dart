@@ -1934,6 +1934,24 @@ class AppLocalizationsBg extends AppLocalizations {
       'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.';
 
   @override
+  String get channels_writeHistoryNotMoved =>
+      'The channel was changed, but its message history could not be moved to it. The app log has the details.';
+
+  @override
+  String get channels_keyChangeHistoryTitle => 'Keep message history?';
+
+  @override
+  String channels_keyChangeHistoryBody(String name) {
+    return 'This gives \"$name\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.';
+  }
+
+  @override
+  String get channels_keyChangeKeepHistory => 'Keep message history';
+
+  @override
+  String get channels_keyChangeDeleteHistory => 'Delete message history';
+
+  @override
   String get channels_sortBy => 'Сортирай по';
 
   @override

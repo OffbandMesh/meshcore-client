@@ -1093,6 +1093,31 @@
   "@channels_writeClearedNotAdded": {
     "description": "A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026)."
   },
+  "channels_writeHistoryNotMoved": "The channel was changed, but its message history could not be moved to it. The app log has the details.",
+  "@channels_writeHistoryNotMoved": {
+    "description": "The user chose to keep message history across a key change; the radio took the new key but the app could not move the stored messages. Persistent (#1128)."
+  },
+  "channels_keyChangeHistoryTitle": "Keep message history?",
+  "@channels_keyChangeHistoryTitle": {
+    "description": "Title of the question asked before a channel's key changes (a hashtag rename, or a new private key) (#1128)."
+  },
+  "channels_keyChangeHistoryBody": "This gives \"{name}\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.",
+  "@channels_keyChangeHistoryBody": {
+    "description": "Body of the keep-or-delete question for a channel key change (#1128).",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_keyChangeKeepHistory": "Keep message history",
+  "@channels_keyChangeKeepHistory": {
+    "description": "Moves the channel's stored messages to its new key (#1128)."
+  },
+  "channels_keyChangeDeleteHistory": "Delete message history",
+  "@channels_keyChangeDeleteHistory": {
+    "description": "Deletes the channel's stored messages, as Delete Channel does (#1128)."
+  },
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",
   "channels_sortAZ": "A-Z",
