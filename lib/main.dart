@@ -43,6 +43,7 @@ import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 import 'widgets/keep_screen_awake.dart';
+import 'widgets/ios_on_mac_notice.dart';
 import 'widgets/sponsor_prompt.dart';
 
 void main() async {
@@ -394,7 +395,9 @@ class MeshCoreApp extends StatelessWidget {
             },
             home: (PlatformInfo.isWeb && !PlatformInfo.isChrome)
                 ? const ChromeRequiredScreen()
-                : const SponsorPromptGate(child: ScannerScreen()),
+                : const IosOnMacNoticeGate(
+                    child: SponsorPromptGate(child: ScannerScreen()),
+                  ),
           );
         },
       ),

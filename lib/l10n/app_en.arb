@@ -509,6 +509,8 @@
   "sponsorPrompt_anytime": "You can support Offband anytime from About in Settings, or at offband.org/donate.",
   "sponsorPrompt_notNow": "Not now",
   "sponsorPrompt_never": "Never Show Again",
+  "iosOnMac_title": "iPhone app on a Mac",
+  "iosOnMac_body": "This is the iPhone version of Offband MeshCore. It's made for iPhone and iPad, so on a Mac it runs in a fixed phone-sized window.",
   "settings_aboutLinkFailed": "Could not open the link",
   "settings_aboutOpenMeteoAttribution": "LOS elevation data: Open-Meteo (CC BY 4.0)",
   "settings_aboutPresetsAttribution": "Regional radio presets: MeshCore's suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.",

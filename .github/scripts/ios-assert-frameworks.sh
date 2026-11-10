@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Fails unless a built Runner.app holds the native-asset libraries (#1037).
+# Fails unless a built iOS app holds the native-asset libraries (#1037).
 # An iOS build can compile with them missing, and the app then fails only at
 # runtime, when it opens storage or loads translation.
 set -eu
 
-app="${1:?usage: ios-assert-frameworks.sh <path to Runner.app>}"
+app="${1:?usage: ios-assert-frameworks.sh <path to the .app>}"
 frameworks="${app}/Frameworks"
 
 if [ ! -d "${frameworks}" ]; then

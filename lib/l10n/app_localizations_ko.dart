@@ -957,6 +957,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get sponsorPrompt_never => 'Never Show Again';
 
   @override
+  String get iosOnMac_title => 'iPhone app on a Mac';
+
+  @override
+  String get iosOnMac_body =>
+      'This is the iPhone version of Offband MeshCore. It\'s made for iPhone and iPad, so on a Mac it runs in a fixed phone-sized window.';
+
+  @override
   String get settings_aboutLinkFailed => 'Could not open the link';
 
   @override
