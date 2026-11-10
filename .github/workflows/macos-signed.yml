@@ -34,11 +34,6 @@ name: macOS signed build
 
 on:
   workflow_call:
-  # Proves the lane before a release tag (#1109). Removed before this branch
-  # merges.
-  push:
-    branches:
-      - feat/1109-macos-signing
 
 permissions:
   contents: read
