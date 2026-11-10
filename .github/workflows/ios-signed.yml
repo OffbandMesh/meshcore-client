@@ -198,7 +198,12 @@ jobs:
           UNPACKED="${RUNNER_TEMP}/ipa"
           mkdir -p "${UNPACKED}"
           unzip -q "${IPA}" -d "${UNPACKED}"
-          echo "APP=${UNPACKED}/Payload/Runner.app" >> "$GITHUB_ENV"
+          if [ ! -d "${UNPACKED}/Payload/Offband MeshCore.app" ]; then
+            echo "::error::The IPA holds no 'Offband MeshCore.app' (#1140):"
+            ls -1 "${UNPACKED}/Payload"
+            exit 1
+          fi
+          echo "APP=${UNPACKED}/Payload/Offband MeshCore.app" >> "$GITHUB_ENV"
 
       - name: Assert the IPA holds its native-asset frameworks (#1037)
         run: bash .github/scripts/ios-assert-frameworks.sh "${APP}"
