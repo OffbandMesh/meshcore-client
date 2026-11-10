@@ -9,6 +9,7 @@ import '../models/community.dart';
 import '../storage/community_store.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../widgets/qr_scanner_widget.dart';
+import '../helpers/channel_slot_ui.dart';
 import '../helpers/snack_bar_builder.dart';
 
 /// Screen for scanning community QR codes to join communities.
@@ -224,24 +225,41 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     _communityStore.setPublicKeyHex = connector.selfPublicKeyHex;
     await _communityStore.addCommunity(community);
 
-    // Optionally add the community public channel to the device
+    // Optionally add the community public channel to the device. The
+    // community is already saved above, so a refused slot only skips the
+    // channel; it never loses the community.
+    //
+    // This used to skip the channel silently when the radio was full and then
+    // show a green "joined" toast, which told the user everything had worked
+    // when the channel had not been added (#1021). A refusal, or a write the
+    // radio did not confirm (#1026), now explains itself, and only a confirmed
+    // write shows the green confirmation.
+    var channelRefused = false;
     if (addPublicChannel && context.mounted) {
       final connector = context.read<MeshCoreConnector>();
-      final nextIndex = _findNextAvailableChannelIndex(connector);
-
-      if (nextIndex != null) {
-        final psk = community.deriveCommunityPublicPsk();
+      final psk = community.deriveCommunityPublicPsk();
+      final slot = allocateChannelSlotOrExplain(context, connector, psk: psk);
+      if (slot == null) {
+        channelRefused = true;
+      } else {
         final channelName = '${community.name} Public';
-        connector.setChannel(nextIndex, channelName, psk);
+        final result = await connector.setChannel(slot, channelName, psk);
+        if (context.mounted) {
+          channelRefused = explainUnconfirmedChannelWrite(context, result);
+        }
       }
     }
 
     if (context.mounted) {
-      showDismissibleSnackBar(
-        context,
-        content: Text(context.l10n.community_joined(community.name)),
-        backgroundColor: Colors.green,
-      );
+      // The refusal message is already showing and persists; a green toast
+      // on top of it would contradict it.
+      if (!channelRefused) {
+        showDismissibleSnackBar(
+          context,
+          content: Text(context.l10n.community_joined(community.name)),
+          backgroundColor: Colors.green,
+        );
+      }
 
       // Return to previous screen
       Navigator.pop(context, community);
@@ -271,17 +289,11 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
       }
       return;
     }
-    final nextIndex = _findNextAvailableChannelIndex(connector);
-    if (nextIndex == null) {
-      if (context.mounted) {
-        showDismissibleSnackBar(
-          context,
-          content: Text(context.l10n.channels_noFreeSlot),
-          backgroundColor: Colors.red,
-        );
-      }
-      return;
-    }
+    // No slot is chosen here. It used to be, and that is the same bug the
+    // channels screen had: the index was picked before the confirmation
+    // dialog below and written after it, so a channel sync during the
+    // confirmation (a channel write starts one) could leave it pointing at
+    // an occupied slot. The slot is now chosen after the user confirms.
     if (!context.mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -301,7 +313,22 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
       ),
     );
     if (confirmed == true && context.mounted) {
-      connector.setChannel(nextIndex, channel.name, channel.psk);
+      final slot = allocateChannelSlotOrExplain(
+        context,
+        connector,
+        psk: channel.psk,
+      );
+      // Refused: the persistent message explains why. Stay on this screen so
+      // the user can retry, rather than popping away from the explanation.
+      if (slot == null) return;
+      final result = await connector.setChannel(
+        slot,
+        channel.name,
+        channel.psk,
+      );
+      if (!context.mounted) return;
+      // Not confirmed: stay on this screen with the explanation showing.
+      if (explainUnconfirmedChannelWrite(context, result)) return;
       showDismissibleSnackBar(
         context,
         content: Text(context.l10n.channels_qrAdded(channel.name)),
@@ -311,13 +338,5 @@ class _CommunityQrScannerScreenState extends State<CommunityQrScannerScreen> {
     } else if (context.mounted) {
       Navigator.pop(context);
     }
-  }
-
-  int? _findNextAvailableChannelIndex(MeshCoreConnector connector) {
-    final usedIndices = connector.channels.map((c) => c.index).toSet();
-    for (int i = 0; i < connector.maxChannels; i++) {
-      if (!usedIndices.contains(i)) return i;
-    }
-    return null;
   }
 }

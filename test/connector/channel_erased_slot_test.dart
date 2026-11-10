@@ -203,37 +203,149 @@ void main() {
     });
   });
 
+  // #1117: the restore places by identity and reports what the radio
+  // confirmed. Current firmware refuses an occupied slot (#1865), reads an
+  // erased record as occupied, refuses any channel but Public in slot 0, and
+  // refuses Public anywhere else (#1896).
   group('restoring the list to the radio', () {
-    test('every cached channel is written back to its own slot', () async {
-      c.seedCachedChannelsForTest([
-        _channel(0, 'Public', 10),
-        _channel(1, 'wardriving', 40),
-      ]);
+    final realPublic = Channel(
+      index: 0,
+      name: 'Public',
+      psk: Channel.parsePskHex(Channel.publicChannelPsk),
+    );
+
+    /// A radio that answers every channel write, OK unless [refuseSlot].
+    void answerWrites({int? refuseSlot}) {
+      c.sendFrameOverrideForTest = (data) {
+        sent.add(data.toList());
+        if (data.isNotEmpty && data[0] == cmdSetChannel) {
+          final refused = data[1] == refuseSlot && data[2] != 0;
+          c.handleFrameForTest(
+            refused ? [respCodeErr, errCodeBadState] : [respCodeOk],
+          );
+        }
+      };
+    }
+
+    List<List<int>> setFrames() =>
+        sent.where((f) => f[0] == cmdSetChannel).toList();
+
+    test('each missing channel goes back, its key with it', () async {
+      c.seedCachedChannelsForTest([realPublic, _channel(1, 'wardriving', 40)]);
+      answerWrites();
       sent.clear();
 
-      final written = await c.restoreChannelsToRadio();
+      final result = await c.restoreChannelsToRadio();
 
-      expect(written, 2);
-      final setFrames = sent.where((f) => f[0] == cmdSetChannel).toList();
-      expect(setFrames.length, 2);
-      expect(setFrames[0][1], 0);
-      expect(setFrames[1][1], 1);
+      expect(result!.confirmed, 2);
+      expect(result.notRestored, isEmpty);
+      final frames = setFrames();
+      expect(frames.map((f) => f[1]), [0, 1], reason: 'Public in slot 0');
       // The PSK travels with it, so the restored channel keeps the identity
       // its history and settings are keyed by.
-      expect(setFrames[1].sublist(34, 50), _channel(1, 'wardriving', 40).psk);
+      expect(frames[1].sublist(34, 50), _channel(1, 'wardriving', 40).psk);
+    });
+
+    test('no channel but Public is restored into slot 0', () async {
+      // Cached at slot 0 under older firmware, where any channel could sit
+      // there. Current firmware refuses it there, so it moves.
+      c.seedCachedChannelsForTest([_channel(0, 'old slot 0', 10)]);
+      answerWrites();
+      sent.clear();
+
+      final result = await c.restoreChannelsToRadio();
+
+      expect(result!.confirmed, 1);
+      expect(setFrames().single[1], isNot(0));
+    });
+
+    test('an erased slot is cleared before it is written', () async {
+      // The field case: slot 0 survived, slots 1 and 2 came back erased.
+      await c.getChannels(force: true, maxChannels: 3);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 0, name: 'kept', pskSeed: 10),
+      );
+      await _settle(2);
+      c.handleFrameForTest(_erasedFrame(1));
+      await _settle(2);
+      c.handleFrameForTest(_erasedFrame(2));
+      await _settle();
+      c.seedCachedChannelsForTest([_channel(1, 'wardriving', 40)]);
+      answerWrites();
+      sent.clear();
+
+      final result = await c.restoreChannelsToRadio();
+
+      expect(result!.confirmed, 1);
+      final frames = setFrames();
+      expect(frames.map((f) => f[1]), [1, 1]);
+      expect(frames[0][2], 0, reason: 'the clear: an empty name');
+      expect(frames[1].sublist(34, 50), _channel(1, 'wardriving', 40).psk);
+    });
+
+    test('a channel the radio still has is not written again', () async {
+      await c.getChannels(force: true, maxChannels: 2);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 1, name: 'wardriving', pskSeed: 40),
+      );
+      await _settle();
+      c.seedCachedChannelsForTest([
+        _channel(1, 'wardriving', 40),
+        _channel(2, 'test', 70),
+      ]);
+      expect(c.channelsMissingFromRadio.map((ch) => ch.name), ['test']);
+      answerWrites();
+      sent.clear();
+
+      final result = await c.restoreChannelsToRadio();
+
+      expect(result!.total, 1);
+      expect(setFrames().single.sublist(34, 50), _channel(2, 'test', 70).psk);
+    });
+
+    test('a live channel is never overwritten', () async {
+      // Slot 1 now holds a different channel than the cache remembers there.
+      await c.getChannels(force: true, maxChannels: 3);
+      c.handleFrameForTest(
+        _channelInfoFrame(index: 1, name: 'newer', pskSeed: 90),
+      );
+      await _settle();
+      c.seedCachedChannelsForTest([_channel(1, 'wardriving', 40)]);
+      answerWrites();
+      sent.clear();
+
+      final result = await c.restoreChannelsToRadio();
+
+      expect(result!.confirmed, 1);
+      expect(setFrames().single[1], 2, reason: 'moved, not over slot 1');
+    });
+
+    test('a refusal is reported by name, not counted as restored', () async {
+      c.seedCachedChannelsForTest([
+        _channel(1, 'wardriving', 40),
+        _channel(2, 'test', 70),
+      ]);
+      answerWrites(refuseSlot: 2);
+
+      final result = await c.restoreChannelsToRadio();
+
+      expect(result!.confirmed, 1);
+      expect(result.total, 2);
+      expect(result.notRestored.map((ch) => ch.name), ['test']);
     });
 
     test('an erased cached entry is never written back', () async {
       c.seedCachedChannelsForTest([
-        _channel(0, 'Public', 10),
-        Channel.fromFrame(_erasedFrame(1))!,
+        _channel(1, 'wardriving', 40),
+        Channel.fromFrame(_erasedFrame(2))!,
       ]);
+      answerWrites();
       sent.clear();
 
-      final written = await c.restoreChannelsToRadio();
+      final result = await c.restoreChannelsToRadio();
 
-      expect(written, 1);
-      expect(sent.where((f) => f[0] == cmdSetChannel).length, 1);
+      expect(result!.confirmed, 1);
+      expect(setFrames().length, 1);
     });
 
     test(
@@ -241,40 +353,33 @@ void main() {
       () async {
         c.seedCachedChannelsForTest([]);
 
-        expect(await c.restoreChannelsToRadio(), -1);
+        expect(await c.restoreChannelsToRadio(), isNull);
         expect(sent.where((f) => f[0] == cmdSetChannel), isEmpty);
       },
     );
 
-    // Adversarial review finding: on BLE sendFrame prefers write-without-
-    // response, so its await returns when the frame reaches the OS and not
-    // when the radio has taken it. An unpaced loop can therefore overrun the
-    // radio and drop channels with no error raised anywhere. The USB branch
-    // of sendFrame already spaces its frames; this loop must too.
-    test(
-      'consecutive channel writes are spaced, not fired in a tight loop',
-      () async {
-        c.seedCachedChannelsForTest([
-          _channel(0, 'Public', 10),
-          _channel(1, 'wardriving', 40),
-          _channel(2, 'test', 70),
-        ]);
-        sent.clear();
+    // Adversarial review finding (#1060): on BLE sendFrame returns when the
+    // frame reaches the OS, not when the radio has taken it, so an unpaced
+    // loop can overrun the radio. Each write now waits for the radio's own
+    // answer before the next goes out, which paces it by the radio itself.
+    test('the next write waits for the radio to answer the last', () async {
+      c.seedCachedChannelsForTest([
+        _channel(1, 'wardriving', 40),
+        _channel(2, 'test', 70),
+      ]);
+      sent.clear();
 
-        final sw = Stopwatch()..start();
-        final written = await c.restoreChannelsToRadio();
-        sw.stop();
+      final restore = c.restoreChannelsToRadio();
+      await _settle();
+      expect(setFrames().length, 1, reason: 'nothing answered yet');
 
-        expect(written, 3);
-        // Two gaps between three writes. A lower bound, so this asserts the
-        // pacing exists without pinning the exact duration.
-        expect(
-          sw.elapsedMilliseconds,
-          greaterThanOrEqualTo(20),
-          reason: 'three writes with no spacing would return almost instantly',
-        );
-      },
-    );
+      c.handleFrameForTest([respCodeOk]);
+      await _settle();
+      expect(setFrames().length, 2);
+
+      c.handleFrameForTest([respCodeOk]);
+      expect((await restore)!.confirmed, 2);
+    });
   });
 
   // Adversarial review finding: the guards added here stop an erased record
@@ -331,7 +436,7 @@ void main() {
       expect(c.cachedChannels, isEmpty);
       // Nothing usable cached means the restore is refused rather than
       // writing erased records back onto the radio.
-      expect(await c.restoreChannelsToRadio(), -1);
+      expect(await c.restoreChannelsToRadio(), isNull);
       expect(sent.where((f) => f[0] == cmdSetChannel), isEmpty);
     });
   });

@@ -101,7 +101,8 @@ enum ButtonConfigError {
     0x09,
     'Not charged yet. Charge the radio fully, then set 100% again. Nothing '
     'was changed.',
-  );
+  ),
+  noRotation(0x0A, "This radio's display cannot be rotated");
 
   const ButtonConfigError(this.code, this.message);
   final int code;
@@ -134,6 +135,11 @@ enum DeviceUiSurface {
   /// The radio's own per-channel notify mode (#544). Distinct from the app's
   /// per-channel notify setting, which is not a device-UI surface at all.
   channelNotify,
+  display,
+  led,
+
+  /// Display rotation over `0xC5` `0x1A`/`0x1B` (#1098, firmware #1990).
+  rotation,
 }
 
 /// The refusal reason for a GPS write. Reason 1 means Power save on a build

@@ -1240,6 +1240,18 @@ abstract class AppLocalizations {
   /// **'Text size, screen off, time zone'**
   String get settings_badgeScreenSubtitle;
 
+  /// No description provided for @settings_indicators.
+  ///
+  /// In en, this message translates to:
+  /// **'Display and LED'**
+  String get settings_indicators;
+
+  /// No description provided for @settings_indicatorsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Display mode, rotation, status LED'**
+  String get settings_indicatorsSubtitle;
+
   /// No description provided for @settings_badgeBattery.
   ///
   /// In en, this message translates to:
@@ -1474,6 +1486,66 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to reboot the device? You will be disconnected.'**
   String get settings_rebootDeviceConfirm;
 
+  /// No description provided for @settings_factoryReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory Reset'**
+  String get settings_factoryReset;
+
+  /// No description provided for @settings_factoryResetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase the radio and give it a new identity'**
+  String get settings_factoryResetSubtitle;
+
+  /// No description provided for @settings_factoryResetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This erases everything on the radio: its identity, contacts, channels and settings. It can\'t be undone.'**
+  String get settings_factoryResetConfirm;
+
+  /// No description provided for @settings_factoryResetDeleteAppData.
+  ///
+  /// In en, this message translates to:
+  /// **'Also delete this radio\'s data stored in the app'**
+  String get settings_factoryResetDeleteAppData;
+
+  /// No description provided for @settings_factoryResetNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset not sent: no radio is connected.'**
+  String get settings_factoryResetNotConnected;
+
+  /// No description provided for @factoryResetSentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset sent'**
+  String get factoryResetSentTitle;
+
+  /// No description provided for @factoryResetSentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is erasing itself and will restart with a new identity.'**
+  String get factoryResetSentBody;
+
+  /// No description provided for @factoryResetSentBleBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect.'**
+  String get factoryResetSentBleBody;
+
+  /// No description provided for @factoryResetDeleteFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Factory reset sent, app cleanup failed'**
+  String get factoryResetDeleteFailedTitle;
+
+  /// No description provided for @factoryResetDeleteFailedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The reset was sent, but deleting this radio\'s data from the app failed.'**
+  String get factoryResetDeleteFailedBody;
+
   /// No description provided for @settings_blePin.
   ///
   /// In en, this message translates to:
@@ -1665,6 +1737,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Donate or sponsor'**
   String get settings_aboutDonate;
+
+  /// No description provided for @sponsorPrompt_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Support Offband'**
+  String get sponsorPrompt_title;
+
+  /// No description provided for @sponsorPrompt_body.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband MeshCore is free, open source, and built by an independent developer. If it\'s useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.'**
+  String get sponsorPrompt_body;
+
+  /// No description provided for @sponsorPrompt_sponsor.
+  ///
+  /// In en, this message translates to:
+  /// **'Sponsor'**
+  String get sponsorPrompt_sponsor;
+
+  /// No description provided for @sponsorPrompt_anytime.
+  ///
+  /// In en, this message translates to:
+  /// **'You can support Offband anytime from About in Settings, or at offband.org/donate.'**
+  String get sponsorPrompt_anytime;
+
+  /// No description provided for @sponsorPrompt_notNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get sponsorPrompt_notNow;
+
+  /// No description provided for @sponsorPrompt_never.
+  ///
+  /// In en, this message translates to:
+  /// **'Never Show Again'**
+  String get sponsorPrompt_never;
 
   /// No description provided for @settings_aboutLinkFailed.
   ///
@@ -2893,14 +3001,20 @@ abstract class AppLocalizations {
   /// No description provided for @channels_restoreToRadioConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Write {count} channel(s) back to the radio: {names}. This replaces whatever those slots hold now.'**
+  /// **'Write {count} channel(s) back to the radio: {names}. Channels the radio still has are left as they are.'**
   String channels_restoreToRadioConfirm(int count, String names);
 
   /// No description provided for @channels_restoreToRadioDone.
   ///
   /// In en, this message translates to:
-  /// **'Wrote {count} channel(s) back to the radio. If the warning above stays, some did not take.'**
+  /// **'The radio confirmed all {count} channel(s).'**
   String channels_restoreToRadioDone(int count);
+
+  /// Restore to radio finished with some channels refused, unanswered, or without a free slot. Persistent (#1117).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio confirmed {confirmed} of {total} channel(s). Not restored: {names}.'**
+  String channels_restoreToRadioPartial(int confirmed, int total, String names);
 
   /// No description provided for @channels_restoreToRadioFailed.
   ///
@@ -3219,6 +3333,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Public channel added'**
   String get channels_publicChannelAdded;
+
+  /// No description provided for @channels_slotBusySyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio is still updating its channel list. Try again in a moment.'**
+  String get channels_slotBusySyncing;
+
+  /// No description provided for @channels_slotsAllFull.
+  ///
+  /// In en, this message translates to:
+  /// **'All {count} channel slots are in use. Delete a channel first.'**
+  String channels_slotsAllFull(int count);
+
+  /// No description provided for @channels_publicAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'The Public channel is already on this radio.'**
+  String get channels_publicAlreadyAdded;
+
+  /// Refusal when the user tries to delete the Public channel. Firmware #1896 keeps Public permanently in slot 0. Persistent (#1117).
+  ///
+  /// In en, this message translates to:
+  /// **'Public can\'t be removed from the radio. It always stays in slot 0.'**
+  String get channels_publicCannotBeRemoved;
+
+  /// The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.'**
+  String get channels_writeOccupied;
+
+  /// The radio answered a channel write with an error other than slot-occupied. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio refused the change, so the channel is as it was.'**
+  String get channels_writeRejected;
+
+  /// A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The radio did not confirm the change. Check the channel list before trying again.'**
+  String get channels_writeNoReply;
+
+  /// A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026).
+  ///
+  /// In en, this message translates to:
+  /// **'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.'**
+  String get channels_writeClearedNotAdded;
+
+  /// The user chose to keep message history across a key change; the radio took the new key but the app could not move the stored messages. Persistent (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'The channel was changed, but its message history could not be moved to it. The app log has the details.'**
+  String get channels_writeHistoryNotMoved;
+
+  /// Title of the question asked before a channel's key changes (a hashtag rename, or a new private key) (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep message history?'**
+  String get channels_keyChangeHistoryTitle;
+
+  /// Body of the keep-or-delete question for a channel key change (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'This gives \"{name}\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.'**
+  String channels_keyChangeHistoryBody(String name);
+
+  /// Moves the channel's stored messages to its new key (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep message history'**
+  String get channels_keyChangeKeepHistory;
+
+  /// Deletes the channel's stored messages, as Delete Channel does (#1128).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message history'**
+  String get channels_keyChangeDeleteHistory;
 
   /// No description provided for @channels_sortBy.
   ///
@@ -7484,12 +7676,6 @@ abstract class AppLocalizations {
   /// **'Invalid QR code'**
   String get channels_invalidQr;
 
-  /// No description provided for @channels_noFreeSlot.
-  ///
-  /// In en, this message translates to:
-  /// **'No free channel slot'**
-  String get channels_noFreeSlot;
-
   /// No description provided for @channels_qrAddConfirm.
   ///
   /// In en, this message translates to:
@@ -9483,6 +9669,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'no free channel slot on the device'**
   String get importConfig_reasonNoFreeSlot;
+
+  /// Skip reason: the channel list was mid-sync, so no slot could be trusted to be free (#1021).
+  ///
+  /// In en, this message translates to:
+  /// **'channels were still being read from the radio; import again in a moment'**
+  String get importConfig_reasonChannelsSyncing;
 
   /// Failure reason: the file did not contain the section (#576).
   ///
