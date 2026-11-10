@@ -40,7 +40,11 @@ def get(url, auth=True):
 
 while True:
     try:
-        status = get(API + submission_id)["data"]["attributes"]["status"]
+        body = get(API + submission_id)
+        status = body["data"]["attributes"]["status"]
+    except (KeyError, TypeError):
+        print(f"::error::Unexpected notary API response for {submission_id}: {json.dumps(body)[:500]}")
+        sys.exit(1)
     except urllib.error.HTTPError as error:
         if error.code < 500:
             print(f"::error::Notary API returned HTTP {error.code} for {submission_id}.")
