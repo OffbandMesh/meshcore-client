@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshcore_open/utils/gpx_export.dart';
 import 'package:provider/provider.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
@@ -20,18 +18,20 @@ import '../services/radio_preset_service.dart';
 import '../connector/observer_config_client.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/build_info.dart';
+import '../utils/platform_info.dart';
 import 'settings/settings_shell.dart';
+import 'settings/about_view.dart';
 import 'settings/app_settings_view.dart';
+import 'settings/debug_logs_view.dart';
 import 'settings/message_settings_view.dart';
 import 'settings/observer_settings_view.dart';
 import 'settings/blocked_view.dart';
 import 'settings/badge_battery_view.dart';
 import 'settings/badge_screen_view.dart';
+import 'settings/indicators_view.dart';
 import 'settings/device_ui_view.dart';
 import 'settings/location_view.dart';
 import '../helpers/device_name_validator.dart';
-import 'app_debug_log_screen.dart';
-import 'ble_debug_log_screen.dart';
 import 'device_cli_screen.dart';
 import 'export_config_screen.dart';
 import 'import_config_screen.dart';
@@ -80,7 +80,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBatteryVoltage = false;
-  String _appVersion = '';
 
   // #509 hidden unlock: 7 taps on the version row within a rolling window
   // reveals the Experimental settings section.
@@ -94,23 +93,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Timer? _versionHintTimer;
 
   @override
-  void initState() {
-    super.initState();
-    _loadVersionInfo();
-  }
-
-  @override
   void dispose() {
     _versionHintTimer?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadVersionInfo() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    if (!mounted) return;
-    setState(() {
-      _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-    });
   }
 
   void _handleUnlockTap() {
@@ -165,14 +150,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // A blanket context.watch here rebuilt the whole settings screen on every
     // sync frame, thrashing the UI thread and slowing the channel sync (#81).
     final showObserver = context.select<MeshCoreConnector, bool>(
-      (c) => ObserverConfigClient.supportsConfig(
-        firmwareVerCode: c.firmwareVerCode ?? 0,
-        offbandCaps: c.offbandCaps ?? 0,
-      ),
+      (c) =>
+          ObserverConfigClient.supportsConfig(offbandCaps: c.offbandCaps ?? 0),
     );
     // Owner-only Experimental section (#509), revealed by the 7-tap gesture on
-    // the About version row. Selects narrowly so the category list only rebuilds
-    // when the flag flips, not on every connector update (same reason as above).
+    // the Device Info Build row. Selects narrowly so the category list only
+    // rebuilds when the flag flips, not on every connector update (same reason
+    // as above).
     final experimentalUnlocked = context.select<AppSettingsService, bool>(
       (s) => s.settings.experimentalUnlocked,
     );
@@ -248,7 +232,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: l10n.settings_actions,
         builder: _actionsPane,
       ),
-      if (experimentalUnlocked)
+      // App Store guideline 2.5.19 bars hidden features, so iOS has no unlock
+      // and never shows this section (#1051).
+      if (experimentalUnlocked && !PlatformInfo.isIOS)
         SettingsCategory(
           icon: Icons.science_outlined,
           title: l10n.settings_experimental,
@@ -263,7 +249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsCategory(
         icon: Icons.info_outline,
         title: l10n.settings_about,
-        builder: _aboutPane,
+        builder: (_) => const AboutView(),
       ),
     ];
   }
@@ -511,6 +497,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+              // Display mode, rotation and LED (#523). Shown when the radio
+              // has display control or LED control (#1132).
+              if (connector.supportsIndicators) ...[
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.brightness_6_outlined),
+                  title: Text(l10n.settings_indicators),
+                  subtitle: Text(l10n.settings_indicatorsSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _pushBadgePage(
+                    context,
+                    l10n.settings_indicators,
+                    const IndicatorsView(),
+                  ),
+                ),
+              ],
               if (connector.selfPublicKey != null) ...[
                 const Divider(height: 1),
                 Padding(
@@ -728,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               l10n.settings_infoBuild,
               BuildInfo.stamp,
               copyValue: BuildInfo.stamp,
-              onTap: _handleUnlockTap,
+              onTap: PlatformInfo.isIOS ? null : _handleUnlockTap,
             ),
             if (_versionHint != null)
               Padding(
@@ -865,6 +867,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          _buildBlePinTile(context),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.restart_alt, color: Colors.orange),
@@ -872,113 +875,148 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(l10n.settings_rebootDeviceSubtitle),
             onTap: () => _confirmReboot(context, connector),
           ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: Text(l10n.settings_factoryReset),
+            subtitle: Text(l10n.settings_factoryResetSubtitle),
+            onTap: () => _confirmFactoryReset(context, connector),
+          ),
         ],
       ),
     );
   }
 
-  // About is its own top-level Settings category (#525/#526), no longer a card
-  // in the Debug pane. Outbound links (offband.org / Play / donate) added by
-  // #527 between the info block and the licenses row.
-  Widget _aboutPane(BuildContext context) {
+  /// #1100: the radio's BLE pairing pin, shown in plain text (owner decision
+  /// 2026-11-06: no masking, matching other mesh clients; any connected
+  /// client can read it from device info anyway). Hidden until a device-info
+  /// frame carries the field. select() so only this tile rebuilds when the
+  /// pin changes (the #81 lesson).
+  Widget _buildBlePinTile(BuildContext context) {
     final l10n = context.l10n;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final blePin = context.select<MeshCoreConnector, int?>(
+      (c) => c.deviceBlePin,
+    );
+    if (blePin == null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(l10n.appTitle),
-                subtitle: Text(
-                  l10n.settings_aboutVersion(
-                    _appVersion.isEmpty ? l10n.common_loading : _appVersion,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l10n.settings_aboutDescription),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.settings_aboutLegalese,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.settings_aboutPresetsAttribution,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(l10n.settings_aboutWebsite),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.shop_outlined),
-                title: Text(l10n.settings_aboutPlayStore),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl(
-                  'https://play.google.com/store/apps/details?id=app.offband.meshcore',
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.favorite_outline),
-                title: Text(l10n.settings_aboutDonate),
-                trailing: const Icon(Icons.open_in_new, size: 18),
-                onTap: () => _openExternalUrl('https://offband.org/donate'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.description_outlined),
-                title: Text(l10n.settings_aboutLicenses),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: l10n.appTitle,
-                  applicationVersion: _appVersion.isEmpty ? null : _appVersion,
-                  applicationLegalese: l10n.settings_aboutLegalese,
-                ),
-              ),
-            ],
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.password),
+          title: Text(l10n.settings_blePin),
+          subtitle: Text(
+            // Firmware prints the pin as %06d; mirror it, and CLI-set values
+            // outside the 6-digit range still display as the radio shows them.
+            blePin == 0
+                ? l10n.settings_blePinDefault
+                : blePin.toString().padLeft(6, '0'),
           ),
+          onTap: () => _editBlePin(context, context.read<MeshCoreConnector>()),
         ),
       ],
     );
   }
 
-  Future<void> _openExternalUrl(String url) async {
+  void _editBlePin(BuildContext context, MeshCoreConnector connector) {
+    final l10n = context.l10n;
+    final current = connector.deviceBlePin ?? 0;
+    // Prefill only a value cmd 37 would accept back. The firmware CLI can
+    // store out-of-range pins (unvalidated atoi); offering one for re-save
+    // would only invite the validation refusal (#1100 review).
+    final controller = TextEditingController(
+      text: current >= 100000 && current <= 999999 ? current.toString() : '',
+    );
+    String? errorText;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.settings_blePin),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              helperText: l10n.settings_blePinHelp,
+              helperMaxLines: 4,
+              errorText: errorText,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _sendBlePin(
+                  context,
+                  connector,
+                  0,
+                  l10n.settings_blePinResetDone,
+                );
+              },
+              child: Text(l10n.settings_blePinResetAction),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.common_cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                final pin = int.tryParse(controller.text);
+                if (pin == null || pin < 100000 || pin > 999999) {
+                  // Refuse the write at the attempt and say why, inline:
+                  // the range is firmware's own validation (#1100).
+                  setDialogState(() {
+                    errorText = l10n.settings_blePinInvalid;
+                  });
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                _sendBlePin(
+                  context,
+                  connector,
+                  pin,
+                  l10n.settings_blePinSaved(controller.text),
+                );
+              },
+              child: Text(l10n.common_save),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
+  /// The success notice shows only once the frame was actually written; a
+  /// transport failure surfaces as a persistent error instead of silently
+  /// showing a pin the radio never received (#1100 review).
+  Future<void> _sendBlePin(
+    BuildContext context,
+    MeshCoreConnector connector,
+    int pin,
+    String successText,
+  ) async {
+    final l10n = context.l10n;
     try {
-      if (await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      )) {
-        return;
-      }
-    } catch (_) {
-      // fall through to the failure message
-    }
-    if (mounted) {
+      await connector.setDevicePin(pin);
+    } catch (e) {
+      if (!context.mounted) return;
       showDismissibleSnackBar(
         context,
-        content: Text(context.l10n.settings_aboutLinkFailed),
+        content: Text(l10n.settings_blePinSendFailed(e.toString())),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        persist: true,
       );
+      return;
     }
+    if (!context.mounted) return;
+    showDismissibleSnackBar(context, content: Text(successText), persist: true);
   }
 
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
-    final settingsService = context.watch<AppSettingsService>();
     // #884: the Device CLI console is offered only when the connected radio
     // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
     // at the upstream-1.18 absorb). select() so only this gate flipping
@@ -1010,67 +1048,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const Divider(height: 1),
           ],
-          SwitchListTile(
-            secondary: const Icon(Icons.bug_report_outlined),
-            title: Text(l10n.appSettings_appDebugLogging),
-            subtitle: Text(l10n.appSettings_appDebugLoggingSubtitle),
-            value: settingsService.settings.appDebugLogEnabled,
-            onChanged: (value) async {
-              try {
-                await settingsService.setAppDebugLogEnabled(value);
-              } catch (_) {
-                if (context.mounted) {
-                  showDismissibleSnackBar(
-                    context,
-                    content: const Text(
-                      'Could not change debug logging. Please try again.',
-                    ),
-                  );
-                }
-                return;
-              }
-              if (!context.mounted) return;
-              showDismissibleSnackBar(
-                context,
-                content: Text(
-                  value
-                      ? l10n.appSettings_appDebugLoggingEnabled
-                      : l10n.appSettings_appDebugLoggingDisabled,
-                ),
-                duration: const Duration(seconds: 2),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.bluetooth_outlined),
-            title: Text(l10n.settings_companionDebugLog),
-            subtitle: Text(l10n.settings_companionDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BleDebugLogScreen(),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.code_outlined),
-            title: Text(l10n.settings_appDebugLog),
-            subtitle: Text(l10n.settings_appDebugLogSubtitle),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const AppDebugLogScreen(),
-                ),
-              );
-            },
-          ),
+          // The app-level rows, shared with the scanner's app-only settings
+          // (#693). The rows below them need the radio and stay here only.
+          const DebugLogTiles(),
           const Divider(height: 1),
           // Serial capture (#430). English-only for now; localization follow-up.
           ListTile(
@@ -1310,6 +1290,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _confirmFactoryReset(BuildContext context, MeshCoreConnector connector) {
+    final l10n = context.l10n;
+    var deleteAppData = true;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: Text(l10n.settings_factoryReset),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.settings_factoryResetConfirm),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: deleteAppData,
+                onChanged: (value) =>
+                    setState(() => deleteAppData = value ?? deleteAppData),
+                title: Text(l10n.settings_factoryResetDeleteAppData),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.common_cancel),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                final refusal = await connector.factoryResetDevice(
+                  deleteAppData: deleteAppData,
+                );
+                if (refusal == null || !context.mounted) return;
+                showDismissibleSnackBar(
+                  context,
+                  content: Text(switch (refusal) {
+                    FactoryResetRefusal.notConnected =>
+                      l10n.settings_factoryResetNotConnected,
+                  }),
+                  backgroundColor: Colors.red,
+                  persist: true,
+                );
+              },
+              child: Text(
+                l10n.settings_factoryReset,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,8 +1,8 @@
-# Offband Meshcore - Flutter Client
+# Offband MeshCore - Flutter Client
 
-**Offband Meshcore** is an open-source Flutter client for MeshCore LoRa mesh networking devices. Connects to MeshCore-compatible radios over **BLE, TCP, or USB serial** and provides direct/channel chat, contact and channel management, on-map node tracking, repeater administration, and on-device message translation.
+**Offband MeshCore** is an open-source Flutter client for MeshCore LoRa mesh networking devices. Connects to MeshCore-compatible radios over **BLE, TCP, or USB serial** and provides direct/channel chat, contact and channel management, on-map node tracking, repeater administration, and on-device message translation.
 
-> Offband Meshcore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by zjs81, used under the MIT License. See [LICENSE](LICENSE) and the README Credits section.
+> Offband MeshCore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by zjs81, used under the MIT License. See [LICENSE](LICENSE) and the README Credits section.
 
 ## Build Commands
 

@@ -18,6 +18,7 @@ import '../utils/route_transitions.dart';
 import '../connector/meshcore_connector.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/osm_attribution.dart';
 import '../icons/los_icon.dart';
 
 class LineOfSightEndpoint {
@@ -422,6 +423,9 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
           .watch<MeshCoreConnector>()
           .getTotalChannelsUnreadCount(),
       appBar: AppBar(
+        // Explicit, because with a drawer present Scaffold would put a hamburger
+        // here, opening an empty panel, and iOS has no system back (#1052).
+        leading: const BackButton(),
         title: AppBarTitle(widget.title),
         centerTitle: true,
         actions: [
@@ -483,7 +487,6 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
               TileLayer(
                 urlTemplate: kMapTileUrlTemplate,
                 tileProvider: tileCache.tileProvider,
-                userAgentPackageName: MapTileCacheService.userAgentPackageName,
                 maxZoom: 19,
               ),
               if (_result != null && _result!.segments.isNotEmpty)
@@ -514,7 +517,8 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
           if (!_showHud && _result != null && _result!.segments.isNotEmpty)
             Positioned(
               left: 12,
-              bottom: 12,
+              // Clears the OSM credit below it.
+              bottom: 32,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: Colors.black54,
@@ -532,6 +536,8 @@ class _LineOfSightMapScreenState extends State<LineOfSightMapScreen> {
                 ),
               ),
             ),
+          // Bottom-left: the action button sits bottom-right.
+          const OsmAttribution(alignment: Alignment.bottomLeft),
         ],
       ),
       floatingActionButton: FloatingActionButton(

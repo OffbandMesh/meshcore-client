@@ -1,8 +1,9 @@
 name: Release (signed, all platforms)
 
 # Produces a COMPLETE, published release from a `v*` tag: signed Android APK +
-# AAB, Windows, and Linux, attached to a GitHub release whose body is the
-# human-authored release notes. This is what makes a partial release (the
+# AAB, Windows and Linux, attached to a GitHub release whose body is the
+# human-authored release notes. The notarized macOS zip (#1109) is added after
+# Apple accepts it, by `macos-attach`. This is what makes a partial release (the
 # rc.2/rc.3 failure) impossible.
 #
 # SECURITY: this repo is PUBLIC and the `android` job has the signing keystore,
@@ -13,7 +14,9 @@ name: Release (signed, all platforms)
 #     run a job that can read the keystore.
 #   - Only the `android` job references the `release-signing` Environment, so
 #     ONLY it receives the keystore secrets, and only after the required
-#     reviewer approves. The windows/linux/release jobs never see them.
+#     reviewer approves. The windows/linux/release jobs never see them. The
+#     `ios` job uses the `apple-signing` Environment (ios-signed.yml); the
+#     `macos` jobs use the separate `apple-macos` one (macos-signed.yml).
 #   - Keystore written to disk only for the build, deleted with `if: always()`.
 #   - Signing values passed via env:, never on a command line, never echoed.
 #
@@ -249,6 +252,23 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Developer ID signed and notarized macOS build (#1109). Deliberately not in
+  # `release`'s needs: Apple's notary queue is outside our control, so it must
+  # not hold up Android, Windows and Linux. `macos-attach` adds the asset to
+  # the published release once Apple accepts it. An unnotarized macOS app is
+  # never published: if notarization fails, the release ships without it.
+  macos:
+    needs: gate
+    uses: ./.github/workflows/macos-signed.yml
+    secrets: inherit
+
+  # Uploads to App Store Connect (#1039). Deliberately not in `release`'s needs:
+  # an Apple-side failure must not block the Android and desktop release.
+  ios:
+    needs: gate
+    uses: ./.github/workflows/ios-signed.yml
+    secrets: inherit
+
   # Creates the release ONLY after all platform builds (and the signing cert
   # check) have passed, so a signing failure yields no release rather than an
   # empty one. Published directly: the notes were reviewed in the cut PR.
@@ -326,7 +346,7 @@ jobs:
           else
             gh release create "${TAG}" \
               --draft \
-              --title "Offband Meshcore ${VERSION}" \
+              --title "Offband MeshCore ${VERSION}" \
               --notes-file "${NOTES}" \
               "${PRERELEASE_FLAG}"
             gh release upload "${TAG}" out/*
@@ -338,3 +358,20 @@ jobs:
             gh release edit "${TAG}" "${PRERELEASE_FLAG}" --draft=false
           fi
           echo "Release ${TAG} published with $(ls out | wc -l) assets."
+
+  # Adds the notarized macOS zip to the release after both are done (#1109).
+  # If macOS was held at Apple, "Re-run failed jobs" finishes the macOS lane
+  # and then this job, with no rebuild.
+  macos-attach:
+    needs: [release, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # upload one asset to the existing release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+      - name: Attach macOS asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" offband-macos.zip --clobber --repo "${GITHUB_REPOSITORY}"

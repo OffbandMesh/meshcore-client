@@ -1,12 +1,12 @@
-# Offband Meshcore
+# Offband MeshCore
 
 Open-source Flutter client for MeshCore LoRa mesh networking devices.
 
-> **Offband Meshcore** is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by [zjs81](https://github.com/zjs81), used under the MIT License. Full credit to the original project — see [Credits](#credits).
+> **Offband MeshCore** is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by [zjs81](https://github.com/zjs81), used under the MIT License. Full credit to the original project — see [Credits](#credits).
 
 ## Overview
 
-Offband Meshcore is a cross-platform mobile application for communicating with MeshCore LoRa mesh network devices via Bluetooth Low Energy (BLE). The app enables long-range, off-grid communication through peer-to-peer messaging, public channels, and mesh networking capabilities.
+Offband MeshCore is a cross-platform mobile application for communicating with MeshCore LoRa mesh network devices via Bluetooth Low Energy (BLE). The app enables long-range, off-grid communication through peer-to-peer messaging, public channels, and mesh networking capabilities.
 
 ## Screenshots
 
@@ -250,7 +250,7 @@ For issues, questions, or feature requests, please open an issue on GitHub:
 
 ## Credits
 
-Offband Meshcore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by **zjs81**, used under the MIT License. The original copyright and license are retained in [LICENSE](LICENSE). Deep thanks to zjs81 and the upstream contributors.
+Offband MeshCore is an independent fork of **[MeshCore Open](https://github.com/zjs81/meshcore-open)** by **zjs81**, used under the MIT License. The original copyright and license are retained in [LICENSE](LICENSE). Deep thanks to zjs81 and the upstream contributors.
 
 - Built with [Flutter](https://flutter.dev/)
 - Map tiles from [OpenStreetMap](https://www.openstreetmap.org/)

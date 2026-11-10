@@ -70,9 +70,8 @@ class TranslatedMessageContent extends StatelessWidget {
       );
     }
     // Neither chip can be interleaved with the Linkify widget, so a message
-    // containing one renders as rich text with chip spans (links inside such a
-    // message are not tappable, same as the prior leading-mention path).
-    // Messages with neither keep full link support above.
+    // containing one renders as rich text with chip spans, and the text between
+    // the chips is linkified span by span so its links stay tappable. (#1074)
     //
     // Both patterns are collected and sorted by position, so a message
     // carrying a mention AND a contact card renders both in the right order.
@@ -85,12 +84,18 @@ class TranslatedMessageContent extends StatelessWidget {
       ..._contactCard.allMatches(text).map((m) => (m, true)),
     ]..sort((a, b) => a.$1.start.compareTo(b.$1.start));
 
+    InlineSpan plain(String segment) => LinkHandler.buildLinkifySpan(
+      context: context,
+      text: segment,
+      style: textStyle,
+    );
+
     final spans = <InlineSpan>[];
     var last = 0;
     for (final (m, isCard) in matches) {
       if (m.start < last) continue;
       if (m.start > last) {
-        spans.add(TextSpan(text: text.substring(last, m.start)));
+        spans.add(plain(text.substring(last, m.start)));
       }
       spans.add(
         WidgetSpan(
@@ -103,7 +108,7 @@ class TranslatedMessageContent extends StatelessWidget {
       last = m.end;
     }
     if (last < text.length) {
-      spans.add(TextSpan(text: text.substring(last)));
+      spans.add(plain(text.substring(last)));
     }
     return Text.rich(TextSpan(children: spans), style: textStyle);
   }

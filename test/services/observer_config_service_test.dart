@@ -165,13 +165,18 @@ void main() {
   });
   tearDown(() => c.close());
 
-  test('supported reflects version gate + capability bit', () {
+  test('supported reflects the capability bit alone (#1065)', () {
     expect(svc.supported, isTrue);
     c.caps = 0x00; // observer bit off
     expect(svc.supported, isFalse);
     c.caps = 0x01;
-    c.ver = 13; // below gate
-    expect(svc.supported, isFalse);
+    expect(svc.supported, isTrue);
+    // The ver code is no longer consulted: a device reporting the rolled-back
+    // 14, or anything else, is supported iff the observer bit is set.
+    c.ver = 13;
+    expect(svc.supported, isTrue);
+    c.ver = 14;
+    expect(svc.supported, isTrue);
   });
 
   test('setFlat returns true on ACK (happy path)', () async {

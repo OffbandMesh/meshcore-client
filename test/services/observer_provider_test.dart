@@ -47,10 +47,10 @@ void main() {
         ),
       );
 
-      // Unsupported until the shared connector reports a v14+ observer build.
+      // Unsupported until the shared connector reports the observer cap bit
+      // (#1065: the bit alone, no version gate).
       expect(svc.supported, isFalse);
 
-      connector.ver = ObserverConfigClient.minVerCode;
       connector.caps = ObserverConfigClient.capWifiObserver;
 
       // The gate flips because the service reads through the SAME connector.

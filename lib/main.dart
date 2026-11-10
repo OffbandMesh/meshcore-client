@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -37,10 +38,12 @@ import 'services/storage_health_service.dart';
 import 'services/radio_preset_service.dart';
 import 'storage/drift/blob_store.dart';
 import 'widgets/contact_sync_shortfall_banner.dart';
+import 'widgets/factory_reset_banner.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
 import 'widgets/keep_screen_awake.dart';
+import 'widgets/sponsor_prompt.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +117,14 @@ void main() async {
     appDebugLogService,
     enabled: appSettingsService.settings.appDebugLogEnabled,
   );
+  try {
+    final packageInfo = await PackageInfo.fromPlatform();
+    appLogger.appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+  } catch (e) {
+    appLogger.error('Could not read the app version: $e', tag: 'App');
+  }
+  appLogger.info('App ${appLogger.appVersion} started', tag: 'App');
+  appSettingsService.logLoadReport();
 
   // Initialize notification service
   final notificationService = NotificationService();
@@ -316,7 +327,7 @@ class MeshCoreApp extends StatelessWidget {
       child: Consumer<AppSettingsService>(
         builder: (context, settingsService, child) {
           return MaterialApp(
-            title: 'Offband Meshcore',
+            title: 'Offband MeshCore',
             debugShowCheckedModeBanner: false,
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -369,7 +380,11 @@ class MeshCoreApp extends StatelessWidget {
                               onDismiss: connector.dismissContactSyncShortfall,
                               onKeep: connector.resolveContactSyncKeepLocal,
                               onUseRadio: connector.resolveContactSyncUseRadio,
-                              child: child ?? const SizedBox.shrink(),
+                              child: FactoryResetBanner(
+                                status: connector.factoryResetStatus,
+                                onDismiss: connector.dismissFactoryResetStatus,
+                                child: child ?? const SizedBox.shrink(),
+                              ),
                             ),
                       ),
                     ),
@@ -379,7 +394,7 @@ class MeshCoreApp extends StatelessWidget {
             },
             home: (PlatformInfo.isWeb && !PlatformInfo.isChrome)
                 ? const ChromeRequiredScreen()
-                : const ScannerScreen(),
+                : const SponsorPromptGate(child: ScannerScreen()),
           );
         },
       ),

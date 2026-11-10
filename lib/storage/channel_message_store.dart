@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:meshcore_open/utils/app_logger.dart';
 
@@ -126,23 +127,45 @@ class ChannelMessageStore {
 
   /// Active storage key: PSK identity when known, else the slot index.
   ///
-  /// The index fallback is legitimate before a channel list has loaded, but it
-  /// reads a DIFFERENT key: if history was already migrated to the PSK key, the
-  /// caller gets an empty list that is indistinguishable from data loss.
-  /// SAFELANE 6 - this must never be silent. Falling back where a resolver
-  /// exists means the channel list was not ready, which is the #333 race.
-  String _storageKey(int channelIndex) {
+  /// The index fallback is legitimate on a READ before a channel list has
+  /// loaded, but it reads a DIFFERENT key: if history was already migrated to
+  /// the PSK key, the caller gets an empty list that is indistinguishable from
+  /// data loss. SAFELANE 6 - this must never be silent. Falling back where a
+  /// resolver exists means the channel list was not ready, which is the #333
+  /// race.
+  ///
+  /// A WRITE must never land on the index fallback: the one-time adoption in
+  /// [loadChannelMessages] only runs while the PSK key is EMPTY, so a message
+  /// written to the index key of a channel that already has PSK-keyed history
+  /// is orphaned - stored, never read again. Since #1062 the connector files
+  /// live traffic only after the channel list is confirmed (ingress barrier +
+  /// fail-closed slot lookup), so a write-side fallback is a defect; it is
+  /// logged as an error and [forWrite] marks the call sites that save, remove
+  /// or clear. (#1063)
+  String _storageKey(int channelIndex, {bool forWrite = false}) {
     final pskHex = channelPskResolver?.call(channelIndex);
     if (pskHex != null && pskHex.isNotEmpty) {
       return '$keyFor$_pskMarker$pskHex';
     }
     if (channelPskResolver != null) {
-      appLogger.warn(
-        'Channel $channelIndex has no PSK yet; falling back to the slot-index '
-        'key. Any history already migrated to the PSK key will read as EMPTY. '
-        'This means the channel list was not loaded first (#333).',
-        tag: 'Storage',
-      );
+      if (forWrite) {
+        appLogger.error(
+          'WRITE for channel $channelIndex fell back to the slot-index key: '
+          'the slot did not resolve to a PSK. If this channel already has '
+          'PSK-keyed history, this write is orphaned (adoption only runs on '
+          'an empty PSK key). Post-#1062 ingress cannot reach this; a user '
+          'action on an unconfirmed slot can. (#1063)',
+          tag: 'Storage',
+        );
+      } else {
+        appLogger.warn(
+          'Channel $channelIndex has no PSK yet; falling back to the '
+          'slot-index key. Any history already migrated to the PSK key will '
+          'read as EMPTY. This means the channel list was not loaded first '
+          '(#333).',
+          tag: 'Storage',
+        );
+      }
     }
     return _indexKey(channelIndex);
   }
@@ -165,7 +188,7 @@ class ChannelMessageStore {
     // the in-memory copy win so edits/reactions/status updates are captured.
     // Deletion has its own path (removeChannelMessage) so this never
     // resurrects a message the user deleted.
-    final key = _storageKey(channelIndex);
+    final key = _storageKey(channelIndex, forWrite: true);
     final blobs = BlobStore.instance;
 
     // Rows (#920): one upsert per message in the list, which costs the same
@@ -230,7 +253,7 @@ class ChannelMessageStore {
     ChannelMessage message,
   ) async {
     if (publicKeyHex.isEmpty) return;
-    final key = _storageKey(channelIndex);
+    final key = _storageKey(channelIndex, forWrite: true);
     final blobs = BlobStore.instance;
     if (await blobs.ensureMessageRowsMigrated(key, channelHistoryToRows)) {
       await blobs.deleteMessageRow(key, _mergeKey(message));
@@ -351,18 +374,230 @@ class ChannelMessageStore {
     return out;
   }
 
-  /// Clear messages for a specific channel slot. Removes BOTH the PSK-identity
-  /// key and the raw slot-index key: deleteChannel needs the channel's own
-  /// history gone, and setChannel's reuse-clear (#193) needs any stale
-  /// slot-index history gone so it can't be migrated onto the new occupant.
+  /// Clear a channel's history outright: BOTH the PSK-identity key and the
+  /// raw slot-index key. This is the true-delete path (deleteChannel, the
+  /// user's explicit clear) - the channel's own history must be gone.
+  /// Slot reassignment uses [clearLegacySlotHistory] instead, which keeps the
+  /// outgoing occupant's PSK-keyed history. (#1063)
   Future<void> clearChannelMessages(int channelIndex) async {
     final blobs = BlobStore.instance;
-    for (final key in {_storageKey(channelIndex), _indexKey(channelIndex)}) {
+    for (final key in {
+      _storageKey(channelIndex, forWrite: true),
+      _indexKey(channelIndex),
+    }) {
       await blobs.deleteEverywhere(key);
       // Rows as well, or a clear would leave the history readable (#920).
       await blobs.deleteMessageRows(key);
     }
   }
+
+  /// Purges only the LEGACY slot-keyed history for [channelIndex]: the
+  /// device-scoped index key and the pre-device-scoping unscoped key. Used
+  /// when a slot is reassigned to a different channel (#193): without this,
+  /// [loadChannelMessages]' one-time adoption would migrate the previous
+  /// occupant's pre-#194 history onto the new occupant. The previous
+  /// occupant's PSK-keyed history is NOT touched, so re-adding that channel
+  /// later restores its messages. (#1063)
+  Future<void> clearLegacySlotHistory(int channelIndex) async {
+    final blobs = BlobStore.instance;
+    for (final key in {_indexKey(channelIndex), '$_keyPrefix$channelIndex'}) {
+      await blobs.deleteEverywhere(key);
+      await blobs.deleteMessageRows(key);
+    }
+  }
+
+  String _pskKey(String pskHex) => '$keyFor$_pskMarker$pskHex';
+
+  /// Moves every message stored under [fromPskHex] to [toPskHex], for a key
+  /// change the user chose to keep history across (#1128).
+  ///
+  /// Copy, verify, then delete: an interruption leaves the history under both
+  /// keys, never under neither. A message already under the new key keeps
+  /// that copy. Only the copied rows are deleted, and the pass repeats, so a
+  /// message saved to the old key mid-move is moved too rather than lost.
+  /// Returns how many messages the new key gained, or null when the move
+  /// could not be done safely, in which case whatever was not yet moved is
+  /// left under the old key and the reason is logged as an error.
+  Future<int?> moveChannelHistory(String fromPskHex, String toPskHex) async {
+    final what =
+        'channel history psk ${_fingerprint(fromPskHex)} -> '
+        '${_fingerprint(toPskHex)}';
+    if (publicKeyHex.isEmpty || fromPskHex.isEmpty || toPskHex.isEmpty) {
+      appLogger.error(
+        'NOT moving $what: no radio key or no channel key',
+        tag: 'Storage',
+      );
+      return null;
+    }
+    if (fromPskHex == toPskHex) return 0;
+    final from = _pskKey(fromPskHex);
+    final to = _pskKey(toPskHex);
+    final blobs = BlobStore.instance;
+
+    for (final key in [from, to]) {
+      if (!await blobs.ensureMessageRowsMigrated(key, channelHistoryToRows)) {
+        appLogger.error(
+          'NOT moving $what: $key could not be moved onto rows. Both keys '
+          'are unchanged.',
+          tag: 'Storage',
+        );
+        return null;
+      }
+    }
+
+    var moved = 0;
+    var gained = 0;
+    for (var pass = 0; pass < 3; pass++) {
+      final payloads = await blobs.messagePayloads(from);
+      if (payloads.isEmpty) break;
+      final already = await blobs.messageMergeKeys(to);
+      final sourceKeys = <String>{};
+      final rows = <MessageRowInput>[];
+      for (final payload in payloads) {
+        final ChannelMessage m;
+        try {
+          m = _messageFromJson(jsonDecode(payload) as Map<String, dynamic>);
+        } catch (e) {
+          appLogger.error(
+            'NOT moving $what: a stored message will not decode ($e). '
+            '$moved message(s) were moved before this; the rest stay under '
+            'the old key.',
+            tag: 'Storage',
+          );
+          return null;
+        }
+        final mergeKey = _mergeKey(m);
+        sourceKeys.add(mergeKey);
+        if (already.contains(mergeKey)) continue;
+        rows.add(
+          MessageRowInput(
+            mergeKey: mergeKey,
+            timestampMs: m.timestamp.millisecondsSinceEpoch,
+            payload: payload,
+          ),
+        );
+      }
+
+      await blobs.upsertMessageRows(to, rows);
+      final missing = sourceKeys.difference(await blobs.messageMergeKeys(to));
+      if (missing.isNotEmpty) {
+        appLogger.error(
+          'NOT finishing $what: ${missing.length} of ${sourceKeys.length} '
+          'messages did not read back under the new key. They stay under the '
+          'old key.',
+          tag: 'Storage',
+        );
+        return null;
+      }
+      await blobs.deleteMessageRowsIn(from, sourceKeys);
+      moved += sourceKeys.length;
+      gained += rows.length;
+    }
+
+    final left = await blobs.messageRowCount(from);
+    if (left > 0) {
+      appLogger.error(
+        'NOT finishing $what: $left message(s) kept arriving under the old '
+        'key; they stay there.',
+        tag: 'Storage',
+      );
+      return null;
+    }
+    await blobs.deleteEverywhere(from);
+    appLogger.info(
+      'Moved $what: $moved message(s), $gained new to the new key (#1128)',
+      tag: 'Storage',
+    );
+    return gained;
+  }
+
+  /// Deletes everything stored under [pskHex] for this radio, the history
+  /// half of Delete Channel, addressed by key rather than slot (#1128).
+  Future<void> deleteChannelHistory(String pskHex) async {
+    if (publicKeyHex.isEmpty || pskHex.isEmpty) {
+      appLogger.error(
+        'NOT deleting channel history psk ${_fingerprint(pskHex)}: no radio '
+        'key or no channel key',
+        tag: 'Storage',
+      );
+      return;
+    }
+    final key = _pskKey(pskHex);
+    final blobs = BlobStore.instance;
+    final count = await blobs.messageRowCount(key);
+    await blobs.deleteEverywhere(key);
+    await blobs.deleteMessageRows(key);
+    appLogger.info(
+      'Deleted channel history psk ${_fingerprint(pskHex)}: $count message '
+      'row(s) (#1128)',
+      tag: 'Storage',
+    );
+  }
+
+  /// Deletes this radio's channel history that no channel on it can show:
+  /// history under a key the radio does not hold, and pre-#194 slot history
+  /// for a slot that holds nothing. History is never kept hidden (#1128).
+  ///
+  /// The caller passes the radio's fully confirmed channel list, with no
+  /// erased slots. Restore (#1117) only has work when slots are erased, so
+  /// its channels' history is never what this sees.
+  ///
+  /// Returns the deleted keys, each logged with its row count.
+  Future<List<String>> purgeHistoryNotOnRadio({
+    required Set<String> radioPskHex,
+    required Set<int> occupiedSlots,
+  }) async {
+    if (publicKeyHex.isEmpty) return const [];
+    if (radioPskHex.isEmpty) {
+      appLogger.warn(
+        'Radio $publicKeyHex reports no channels at all; not deleting any '
+        'channel history on that (#1128)',
+        tag: 'Storage',
+      );
+      return const [];
+    }
+    final blobs = BlobStore.instance;
+    final pskPrefix = '$keyFor$_pskMarker';
+    final slotKey = RegExp('^${RegExp.escape(keyFor)}(\\d+)\$');
+    final candidates = {
+      ...await blobs.keysWithPrefix(keyFor),
+      ...(await blobs.messageStoreKeys()).where((k) => k.startsWith(keyFor)),
+    };
+
+    final deleted = <String>[];
+    for (final key in candidates.toList()..sort()) {
+      final String label;
+      if (key.startsWith(pskPrefix)) {
+        final pskHex = key.substring(pskPrefix.length);
+        if (radioPskHex.contains(pskHex)) continue;
+        label = 'psk ${_fingerprint(pskHex)}';
+      } else {
+        final slot = slotKey.firstMatch(key)?.group(1);
+        if (slot == null || occupiedSlots.contains(int.parse(slot))) continue;
+        label = 'empty slot $slot (pre-#194)';
+      }
+      final count = await blobs.messageRowCount(key);
+      await blobs.deleteEverywhere(key);
+      await blobs.deleteMessageRows(key);
+      deleted.add(key);
+      appLogger.info(
+        'Deleted hidden channel history of radio $publicKeyHex, $label: '
+        '$count message row(s), no channel on the radio shows it (#1128)',
+        tag: 'Storage',
+      );
+    }
+    appLogger.info(
+      'Hidden channel history check for radio $publicKeyHex: '
+      '${candidates.length} stored key(s) against ${radioPskHex.length} '
+      'channel(s) on the radio, ${deleted.length} deleted (#1128)',
+      tag: 'Storage',
+    );
+    return deleted;
+  }
+
+  static String _fingerprint(String pskHex) => pskHex.isEmpty
+      ? 'none'
+      : sha256.convert(utf8.encode(pskHex)).toString().substring(0, 8);
 
   /// Clear all channel messages
   Future<void> clearAllChannelMessages() async {

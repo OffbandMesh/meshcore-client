@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../services/app_settings_service.dart';
 import '../services/map_tile_cache_service.dart';
 import '../widgets/adaptive_app_bar_title.dart';
+import '../widgets/osm_attribution.dart';
 import '../helpers/snack_bar_builder.dart';
 
 class MapCacheScreen extends StatefulWidget {
@@ -321,8 +322,6 @@ class _MapCacheScreenState extends State<MapCacheScreen> {
                     TileLayer(
                       urlTemplate: kMapTileUrlTemplate,
                       tileProvider: tileCache.tileProvider,
-                      userAgentPackageName:
-                          MapTileCacheService.userAgentPackageName,
                       maxZoom: 19,
                     ),
                     if (selectedBounds != null)
@@ -354,6 +353,7 @@ class _MapCacheScreenState extends State<MapCacheScreen> {
                     ),
                   ),
                 ),
+                const OsmAttribution(),
               ],
             ),
           ),

@@ -1,6 +1,6 @@
 {
   "@@locale": "hu",
-  "appTitle": "Offband Meshcore",
+  "appTitle": "Offband MeshCore",
   "nav_contacts": "Kapcsolatok",
   "nav_channels": "Csatornák",
   "nav_map": "Térkép",
@@ -188,7 +188,7 @@
   "settings_appDebugLog": "App-debug log",
   "settings_appDebugLogSubtitle": "Programozási hibajelzések",
   "settings_about": "Ról",
-  "settings_aboutVersion": "Offband Meshcore {version} verzió",
+  "settings_aboutVersion": "Offband MeshCore {version} verzió",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {

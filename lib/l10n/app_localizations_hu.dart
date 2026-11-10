@@ -9,7 +9,7 @@ class AppLocalizationsHu extends AppLocalizations {
   AppLocalizationsHu([String locale = 'hu']) : super(locale);
 
   @override
-  String get appTitle => 'Offband Meshcore';
+  String get appTitle => 'Offband MeshCore';
 
   @override
   String get nav_contacts => 'Kapcsolatok';
@@ -306,6 +306,14 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get scanner_bluetoothOffMessage =>
       'Kérjük, kapcsolja be a Bluetooth-ot, hogy eszközök keresése lehessen.';
+
+  @override
+  String get scanner_scanFailedLocationOff =>
+      'Location is off, so Android won\'t let the app scan for Bluetooth radios. Turn on Location in your phone\'s quick settings, then tap Scan again.';
+
+  @override
+  String get scanner_scanFailedGeneric =>
+      'Could not start the Bluetooth scan. Tap Scan to try again. If it keeps failing, turn Bluetooth off and on.';
 
   @override
   String get scanner_connectFailedTransient =>
@@ -663,6 +671,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settings_badgeScreenSubtitle => 'Text size, screen off, time zone';
 
   @override
+  String get settings_indicators => 'Display and LED';
+
+  @override
+  String get settings_indicatorsSubtitle =>
+      'Display mode, rotation, status LED';
+
+  @override
   String get settings_badgeBattery => 'Battery';
 
   @override
@@ -795,6 +810,75 @@ class AppLocalizationsHu extends AppLocalizations {
       'Biztosan szeretné újraindítani a készüléket? Ebben az esetben a kapcsolat megszűnik.';
 
   @override
+  String get settings_factoryReset => 'Factory Reset';
+
+  @override
+  String get settings_factoryResetSubtitle =>
+      'Erase the radio and give it a new identity';
+
+  @override
+  String get settings_factoryResetConfirm =>
+      'This erases everything on the radio: its identity, contacts, channels and settings. It can\'t be undone.';
+
+  @override
+  String get settings_factoryResetDeleteAppData =>
+      'Also delete this radio\'s data stored in the app';
+
+  @override
+  String get settings_factoryResetNotConnected =>
+      'Factory reset not sent: no radio is connected.';
+
+  @override
+  String get factoryResetSentTitle => 'Factory reset sent';
+
+  @override
+  String get factoryResetSentBody =>
+      'The radio is erasing itself and will restart with a new identity.';
+
+  @override
+  String get factoryResetSentBleBody =>
+      'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect.';
+
+  @override
+  String get factoryResetDeleteFailedTitle =>
+      'Factory reset sent, app cleanup failed';
+
+  @override
+  String get factoryResetDeleteFailedBody =>
+      'The reset was sent, but deleting this radio\'s data from the app failed.';
+
+  @override
+  String get settings_blePin => 'BLE pairing PIN';
+
+  @override
+  String get settings_blePinDefault => 'Firmware default';
+
+  @override
+  String get settings_blePinHelp =>
+      '6 digits (100000-999999). New phones and PCs must enter it when pairing. Reset to default to return to the firmware\'s built-in behavior.';
+
+  @override
+  String get settings_blePinInvalid =>
+      'Enter a 6-digit PIN between 100000 and 999999';
+
+  @override
+  String settings_blePinSaved(String pin) {
+    return 'PIN set to $pin. Already-paired devices may need to forget the radio and pair again.';
+  }
+
+  @override
+  String get settings_blePinResetDone =>
+      'PIN reset to the firmware default. Already-paired devices may need to forget the radio and pair again.';
+
+  @override
+  String settings_blePinSendFailed(String error) {
+    return 'The PIN was not changed: sending to the radio failed ($error)';
+  }
+
+  @override
+  String get settings_blePinResetAction => 'Reset to default';
+
+  @override
   String get settings_debug => 'Hibakeresés';
 
   @override
@@ -856,7 +940,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String settings_aboutVersion(String version) {
-    return 'Offband Meshcore $version verzió';
+    return 'Offband MeshCore $version verzió';
   }
 
   @override
@@ -878,6 +962,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get settings_aboutDonate => 'Donate or sponsor';
+
+  @override
+  String get sponsorPrompt_title => 'Support Offband';
+
+  @override
+  String get sponsorPrompt_body =>
+      'Offband MeshCore is free, open source, and built by an independent developer. If it\'s useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.';
+
+  @override
+  String get sponsorPrompt_sponsor => 'Sponsor';
+
+  @override
+  String get sponsorPrompt_anytime =>
+      'You can support Offband anytime from About in Settings, or at offband.org/donate.';
+
+  @override
+  String get sponsorPrompt_notNow => 'Not now';
+
+  @override
+  String get sponsorPrompt_never => 'Never Show Again';
 
   @override
   String get settings_aboutLinkFailed => 'Could not open the link';
@@ -1573,6 +1677,53 @@ class AppLocalizationsHu extends AppLocalizations {
   String get channels_searchChannels => 'Keresési opciók...';
 
   @override
+  String channels_unconfirmedSlots(String slots) {
+    return 'The radio did not confirm channel slot(s) $slots. Those channels are unknown until a sync succeeds.';
+  }
+
+  @override
+  String get channels_retrySync => 'Retry sync';
+
+  @override
+  String channels_erasedSlots(String slots) {
+    return 'The radio has lost the channels in slot(s) $slots; it reported them as erased. Your channel list here has been kept and was not overwritten.';
+  }
+
+  @override
+  String get channels_restoreToRadio => 'Restore to radio';
+
+  @override
+  String channels_restoreToRadioConfirm(int count, String names) {
+    return 'Write $count channel(s) back to the radio: $names. Channels the radio still has are left as they are.';
+  }
+
+  @override
+  String channels_restoreToRadioDone(int count) {
+    return 'The radio confirmed all $count channel(s).';
+  }
+
+  @override
+  String channels_restoreToRadioPartial(
+    int confirmed,
+    int total,
+    String names,
+  ) {
+    return 'The radio confirmed $confirmed of $total channel(s). Not restored: $names.';
+  }
+
+  @override
+  String get channels_restoreToRadioFailed =>
+      'Could not restore the channel list: nothing cached to restore, or the radio is not connected.';
+
+  @override
+  String channels_slotIdentityChanged(String changes) {
+    return 'Channel layout changed on the radio: $changes';
+  }
+
+  @override
+  String get common_dismiss => 'Dismiss';
+
+  @override
   String get channels_noChannelsFound => 'Nincs megtalálható csatorna';
 
   @override
@@ -1601,7 +1752,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get channels_unmuteChannel => 'Engedje be a hangot';
 
   @override
-  String get channels_notifications => 'Notifications';
+  String get channels_notifications => 'Phone notifications';
 
   @override
   String get channels_notifyAll => 'All messages';
@@ -1611,6 +1762,24 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get channels_notifyOff => 'Off';
+
+  @override
+  String get channels_radioSound => 'Radio sound';
+
+  @override
+  String get channels_radioSoundUnset => 'Not set';
+
+  @override
+  String channels_radioSoundFollows(String scope) {
+    return 'Follows the radio: $scope';
+  }
+
+  @override
+  String get channels_radioSoundMutedByRadio =>
+      'Silent: the radio is set to None';
+
+  @override
+  String get channels_radioSoundReading => 'Reading from the radio';
 
   @override
   String get channels_deleteChannel => 'Mozdony törlése';
@@ -1731,6 +1900,57 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get channels_publicChannelAdded => 'A nyilvános csatorna hozzáadva';
+
+  @override
+  String get channels_slotBusySyncing =>
+      'The radio is still updating its channel list. Try again in a moment.';
+
+  @override
+  String channels_slotsAllFull(int count) {
+    return 'All $count channel slots are in use. Delete a channel first.';
+  }
+
+  @override
+  String get channels_publicAlreadyAdded =>
+      'The Public channel is already on this radio.';
+
+  @override
+  String get channels_publicCannotBeRemoved =>
+      'Public can\'t be removed from the radio. It always stays in slot 0.';
+
+  @override
+  String get channels_writeOccupied =>
+      'The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.';
+
+  @override
+  String get channels_writeRejected =>
+      'The radio refused the change, so the channel is as it was.';
+
+  @override
+  String get channels_writeNoReply =>
+      'The radio did not confirm the change. Check the channel list before trying again.';
+
+  @override
+  String get channels_writeClearedNotAdded =>
+      'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.';
+
+  @override
+  String get channels_writeHistoryNotMoved =>
+      'The channel was changed, but its message history could not be moved to it. The app log has the details.';
+
+  @override
+  String get channels_keyChangeHistoryTitle => 'Keep message history?';
+
+  @override
+  String channels_keyChangeHistoryBody(String name) {
+    return 'This gives \"$name\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.';
+  }
+
+  @override
+  String get channels_keyChangeKeepHistory => 'Keep message history';
+
+  @override
+  String get channels_keyChangeDeleteHistory => 'Delete message history';
 
   @override
   String get channels_sortBy => 'Szűrés';
@@ -1935,13 +2155,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String get debugLog_downloadLog => 'Download logs';
 
   @override
-  String get debugLog_shareSubject => 'Offband Meshcore logs';
+  String get debugLog_shareSubject => 'Offband MeshCore logs';
 
   @override
   String get debugLog_logSaved => 'Log saved';
 
   @override
   String get debugLog_logUnavailable => 'No log available to export';
+
+  @override
+  String get debugLog_exportFailed =>
+      'Couldn\'t share the log. Please try again.';
 
   @override
   String get debugLog_copied => 'Hibajelentő napló másolva';
@@ -2115,6 +2339,31 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get channel_senderAddNotConnected =>
       'Not connected to a radio, so this sender can\'t be added yet';
+
+  @override
+  String get channels_pskDerivedFromName => 'Key derives from the channel name';
+
+  @override
+  String get channels_communityDerived =>
+      'Derived from the community secret; manage it through the community';
+
+  @override
+  String get channels_copyPsk => 'Copy key';
+
+  @override
+  String get channels_pskCopied => 'Key copied';
+
+  @override
+  String get channels_hashtagMustKeepHash =>
+      'A hashtag channel\'s name must start with a single #. Add a new channel to use a different type.';
+
+  @override
+  String get channels_channelChangedReopen =>
+      'This channel changed on the radio while the dialog was open. Nothing was saved; reopen it and try again.';
+
+  @override
+  String get channel_slotUnconfirmedSendBlocked =>
+      'Message not sent: the radio hasn\'t confirmed this channel slot yet. Retry the channel sync, then send again.';
 
   @override
   String channel_senderAddFailed(String error) {
@@ -4292,9 +4541,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get channels_invalidQr => 'Invalid QR code';
 
   @override
-  String get channels_noFreeSlot => 'No free channel slot';
-
-  @override
   String channels_qrAddConfirm(String name) {
     return 'Add channel \"$name\"?';
   }
@@ -5529,6 +5775,10 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get importConfig_reasonNoFreeSlot =>
       'no free channel slot on the device';
+
+  @override
+  String get importConfig_reasonChannelsSyncing =>
+      'channels were still being read from the radio; import again in a moment';
 
   @override
   String get importConfig_reasonAbsentFromFile => 'not present in this file';

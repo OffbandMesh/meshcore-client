@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_settings.dart';
 import '../models/translation_support.dart';
@@ -25,9 +26,15 @@ class AppSettingsService extends ChangeNotifier {
     return stored ?? 'nmc';
   }
 
+  // loadSettings runs before the app logger exists, so its outcome is kept
+  // here and written by [logLoadReport] once logging is up.
+  String? _loadError;
+  bool _loadFoundStored = false;
+
   Future<void> loadSettings() async {
     final prefs = PrefsManager.instance;
     final jsonStr = prefs.getString(_settingsKey);
+    _loadFoundStored = jsonStr != null;
 
     if (jsonStr != null) {
       try {
@@ -36,7 +43,7 @@ class AppSettingsService extends ChangeNotifier {
         Cyr2Lat.setCharMap(_settings.cyr2latCharMap);
         notifyListeners();
       } catch (e) {
-        // If parsing fails, use defaults
+        _loadError = '$e';
         _settings = AppSettings();
         Cyr2Lat.setCharMap(_settings.cyr2latCharMap);
       }
@@ -46,14 +53,76 @@ class AppSettingsService extends ChangeNotifier {
     }
   }
 
+  void logLoadReport() {
+    if (_loadError != null) {
+      appLogger.error(
+        'Saved settings could not be read ($_loadError); every setting is '
+        'back at its default, including channel notify modes',
+        tag: 'Settings',
+      );
+    } else if (!_loadFoundStored) {
+      appLogger.info('No saved settings; using defaults', tag: 'Settings');
+    }
+    appLogger.info(
+      'Channel notify modes loaded (migrated=${_settings.channelNotifyMigrated}): '
+      '${describeNotifyModes(_settings.channelNotifyModesByRadio)}',
+      tag: 'NotifyMode',
+    );
+  }
+
   Future<void> updateSettings(AppSettings newSettings) async {
+    final notifyBefore = describeNotifyModes(
+      _settings.channelNotifyModesByRadio,
+    );
     _settings = newSettings;
     Cyr2Lat.setCharMap(_settings.cyr2latCharMap);
+    final notifyAfter = describeNotifyModes(
+      _settings.channelNotifyModesByRadio,
+    );
+    if (notifyAfter != notifyBefore) {
+      appLogger.info(
+        'Channel notify table changed: $notifyBefore -> $notifyAfter',
+        tag: 'NotifyMode',
+      );
+    }
     notifyListeners();
 
     final prefs = PrefsManager.instance;
     final jsonStr = jsonEncode(_settings.toJson());
-    await prefs.setString(_settingsKey, jsonStr);
+    final written = await prefs.setString(_settingsKey, jsonStr);
+    if (!written) {
+      appLogger.error(
+        'Saving settings to storage failed; changes hold only until the app '
+        'closes',
+        tag: 'Settings',
+      );
+    }
+  }
+
+  /// Short one-way tag for a channel PSK, so the log can tell channels apart
+  /// without carrying the key.
+  static String pskFingerprint(String? pskHex) {
+    if (pskHex == null || pskHex.isEmpty) return 'none';
+    return sha256.convert(utf8.encode(pskHex)).toString().substring(0, 8);
+  }
+
+  /// The notify table as one stable line: radio prefix, then each channel's
+  /// PSK fingerprint and mode, sorted so two equal tables print identically.
+  static String describeNotifyModes(
+    Map<String, Map<String, ChannelNotifyMode>> byRadio,
+  ) {
+    if (byRadio.isEmpty) return '{}';
+    final radios = byRadio.keys.toList()..sort();
+    return radios
+        .map((radio) {
+          final entries =
+              byRadio[radio]!.entries
+                  .map((e) => '${pskFingerprint(e.key)}=${e.value.name}')
+                  .toList()
+                ..sort();
+          return '$radio[${entries.join(',')}]';
+        })
+        .join(' ');
   }
 
   Future<void> setClearPathOnMaxRetry(bool value) async {
@@ -239,7 +308,7 @@ class AppSettingsService extends ChangeNotifier {
 
   /// First 10 hex of the connected radio's key, matching every other per-radio
   /// store. Empty when no radio is connected -> the caller gets the default.
-  static String _scopePrefix(String devicePrefix) =>
+  static String radioScopePrefix(String devicePrefix) =>
       devicePrefix.length > 10 ? devicePrefix.substring(0, 10) : devicePrefix;
 
   /// Resolve a channel's notify mode for the CONNECTED radio ([devicePrefix])
@@ -249,27 +318,56 @@ class AppSettingsService extends ChangeNotifier {
   ChannelNotifyMode channelNotifyMode({
     required String devicePrefix,
     required String? pskHex,
+  }) =>
+      resolveChannelNotifyMode(devicePrefix: devicePrefix, pskHex: pskHex).mode;
+
+  /// [channelNotifyMode] plus where the answer came from, for the log.
+  ({ChannelNotifyMode mode, String source}) resolveChannelNotifyMode({
+    required String devicePrefix,
+    required String? pskHex,
   }) {
-    final prefix = _scopePrefix(devicePrefix);
-    if (prefix.isEmpty || pskHex == null || pskHex.isEmpty) {
-      return ChannelNotifyMode.all;
+    final prefix = radioScopePrefix(devicePrefix);
+    if (prefix.isEmpty) {
+      return (mode: ChannelNotifyMode.all, source: 'default, no radio key');
     }
-    return _settings.channelNotifyModesByRadio[prefix]?[pskHex] ??
-        ChannelNotifyMode.all;
+    if (pskHex == null || pskHex.isEmpty) {
+      return (mode: ChannelNotifyMode.all, source: 'default, no channel PSK');
+    }
+    final stored = _settings.channelNotifyModesByRadio[prefix]?[pskHex];
+    if (stored == null) {
+      return (mode: ChannelNotifyMode.all, source: 'default, nothing saved');
+    }
+    return (mode: stored, source: 'saved');
   }
 
   /// Store a channel's notify mode for the connected radio. Keyed only by
-  /// ([devicePrefix], [pskHex]); when either is unknown this is a no-op so we
-  /// never write an unscoped or index-keyed entry. `all` removes the single
-  /// entry (it is the default), so set-and-back genuinely resets (#839).
+  /// ([devicePrefix], [pskHex]); when either is unknown nothing is written, so
+  /// we never write an unscoped or index-keyed entry, and the refusal is
+  /// logged as an error. `all` removes the single entry (it is the default),
+  /// so set-and-back genuinely resets (#839).
   Future<void> setChannelNotifyMode({
     required String devicePrefix,
     required String? pskHex,
     required String channelName,
     required ChannelNotifyMode mode,
+    int? channelIndex,
   }) async {
-    final prefix = _scopePrefix(devicePrefix);
-    if (prefix.isEmpty || pskHex == null || pskHex.isEmpty) return;
+    final prefix = radioScopePrefix(devicePrefix);
+    final target =
+        'radio ${prefix.isEmpty ? '(none)' : prefix} slot '
+        '${channelIndex ?? '?'} "$channelName" psk ${pskFingerprint(pskHex)}';
+    if (prefix.isEmpty || pskHex == null || pskHex.isEmpty) {
+      appLogger.error(
+        'Notify mode NOT saved for $target, wanted ${mode.name}: '
+        '${prefix.isEmpty ? 'no radio key' : 'channel has no PSK'}',
+        tag: 'NotifyMode',
+      );
+      return;
+    }
+    final before = resolveChannelNotifyMode(
+      devicePrefix: devicePrefix,
+      pskHex: pskHex,
+    );
 
     final byRadio = _copyByRadio();
     final radioModes = byRadio.putIfAbsent(prefix, () => {});
@@ -295,6 +393,55 @@ class AppSettingsService extends ChangeNotifier {
         mutedChannels: muted,
       ),
     );
+    final after = resolveChannelNotifyMode(
+      devicePrefix: devicePrefix,
+      pskHex: pskHex,
+    );
+    appLogger.info(
+      'Notify mode saved for $target: ${before.mode.name} (${before.source}) '
+      '-> ${mode.name}; reads back ${after.mode.name} (${after.source})',
+      tag: 'NotifyMode',
+    );
+  }
+
+  /// Carries a channel's notify mode from its old key to its new one, when a
+  /// key change keeps the channel's history (#1128).
+  Future<void> moveChannelNotifyMode({
+    required String devicePrefix,
+    required String fromPskHex,
+    required String toPskHex,
+  }) async {
+    final prefix = radioScopePrefix(devicePrefix);
+    final mode = _settings.channelNotifyModesByRadio[prefix]?[fromPskHex];
+    if (prefix.isEmpty || fromPskHex == toPskHex || mode == null) return;
+    final byRadio = _copyByRadio();
+    final radioModes = byRadio[prefix]!;
+    radioModes.remove(fromPskHex);
+    radioModes[toPskHex] = mode;
+    await updateSettings(
+      _settings.copyWith(channelNotifyModesByRadio: byRadio),
+    );
+    appLogger.info(
+      'Notify mode ${mode.name} moved with the channel on radio $prefix: psk '
+      '${pskFingerprint(fromPskHex)} -> ${pskFingerprint(toPskHex)}',
+      tag: 'NotifyMode',
+    );
+  }
+
+  /// Drops [devicePrefix]'s notify modes, the per-radio part of this global
+  /// blob, after that radio was factory reset (#1054).
+  Future<void> forgetRadio(String devicePrefix) async {
+    final prefix = radioScopePrefix(devicePrefix);
+    if (prefix.isEmpty) return;
+    final byRadio = _copyByRadio();
+    if (byRadio.remove(prefix) == null) return;
+    appLogger.info(
+      'Dropping notify modes of factory-reset radio $prefix',
+      tag: 'NotifyMode',
+    );
+    await updateSettings(
+      _settings.copyWith(channelNotifyModesByRadio: byRadio),
+    );
   }
 
   /// One-time migration of the pre-#839 global state into the FIRST radio seen
@@ -308,8 +455,12 @@ class AppSettingsService extends ChangeNotifier {
     required Map<String, String> pskByChannelName,
   }) async {
     if (_settings.channelNotifyMigrated) return;
-    final prefix = _scopePrefix(devicePrefix);
+    final prefix = radioScopePrefix(devicePrefix);
     if (prefix.isEmpty) return;
+    appLogger.info(
+      'Migrating legacy channel notify settings into radio $prefix',
+      tag: 'NotifyMode',
+    );
 
     final byRadio = _copyByRadio();
     final radioModes = byRadio.putIfAbsent(prefix, () => {});

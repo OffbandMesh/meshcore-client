@@ -17,6 +17,7 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/channel_restore_plan.dart';
 import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
 import '../services/corescope_service.dart';
@@ -56,6 +57,7 @@ import '../storage/contact_discovery_store.dart';
 import '../storage/contact_settings_store.dart';
 import '../storage/contact_store.dart';
 import '../storage/message_store.dart';
+import '../storage/radio_data_wipe.dart';
 import '../storage/unread_store.dart';
 import '../utils/app_logger.dart';
 import '../utils/battery_utils.dart';
@@ -66,7 +68,10 @@ import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
 import '../storage/channel_region_scope_store.dart';
+import 'offband_capability_advert.dart';
+import 'offband_channel_notify.dart';
 import 'offband_device_ui.dart';
+import 'offband_indicators.dart';
 import 'offband_screen_settings.dart';
 import 'offband_tones.dart';
 import 'caplog_reassembler.dart';
@@ -209,6 +214,37 @@ enum IdentityTransfer {
   noReply,
 }
 
+/// How a channel write (`CMD_SET_CHANNEL`) ended, as the radio reported it.
+/// (#1026)
+enum ChannelWrite {
+  /// The radio answered OK.
+  ok,
+
+  /// The radio refused because a different channel holds the slot
+  /// (`ERR_CODE_BAD_STATE`, OffbandMesh/meshcore-firmware#1864). That channel
+  /// is still there, intact.
+  occupied,
+
+  /// The radio refused for another reason, e.g. a slot index it does not have.
+  rejected,
+
+  /// Not connected, or no reply before the timeout. The write may or may not
+  /// have landed.
+  noReply,
+
+  /// An edit to a new key cleared the old channel, but the new one was not
+  /// confirmed, so the slot is now empty. (#1026)
+  clearedNotAdded,
+
+  /// The radio took the new key, but the old key's message history, which
+  /// the user chose to keep, could not be moved to it. (#1128)
+  historyNotMoved,
+}
+
+/// What a channel key change does with the old key's message history. The
+/// user is asked; history is never kept hidden (#1128).
+enum KeyChangeHistory { keep, delete }
+
 /// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
 /// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
 class IdentityExportResult {
@@ -269,6 +305,19 @@ class ContactSyncShortfall {
 
 /// What the radio said when asked for one contact by key. (#762)
 enum ContactKeyCheckResult { onRadio, notFound, unresolved }
+
+/// Why a factory reset was not sent. (#1054)
+enum FactoryResetRefusal { notConnected }
+
+/// Where a factory reset stands, for the app-wide banner. (#1054)
+enum FactoryResetStatus {
+  /// Sent. Over BLE the radio's pairing is gone too, so the OS one must go.
+  sentBle,
+  sent,
+
+  /// Sent, but deleting the radio's app data failed.
+  deleteFailed,
+}
 
 class _PendingKeyCheck {
   final String keyHex;
@@ -420,6 +469,23 @@ class MeshCoreConnector extends ChangeNotifier {
   Classification? _classification;
   int? _offbandCaps2;
   bool? _femLnaEnabled;
+
+  /// The `0xC5` `0x1C` capability advert for THIS radio (#1095).
+  ///
+  /// Tags accumulate across `TAG_CONTINUE` rounds, so this is the merged view
+  /// and not just the last frame. Null until a reply arrives.
+  OffbandCapabilityAdvert? _capabilityAdvert;
+  CapabilityAdvertState _advertState = CapabilityAdvertState.unknown;
+
+  /// A zero-payload `0x1C` request is in flight.
+  ///
+  /// Needed because `[0xC5][0x7F][0x05]` names no sub-code. The refusal is
+  /// claimed as "this radio predates the advert" only while this is set and no
+  /// device-UI WRITE is outstanding, so an error belonging to a write is never
+  /// stolen from it.
+  bool _advertRequestOutstanding = false;
+  int _advertContinuationRound = 0;
+  final Map<int, Uint8List> _advertTags = {};
   ButtonMatrix? _buttonMatrix;
   String? _lastDeviceUiSuppression;
   DeviceNotifyScope? _deviceNotifyScope;
@@ -428,9 +494,25 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? _pendingDeviceUiWrite;
   GpsModeState? _gpsModeState;
   final Map<int, ChannelTune> _channelTunes = {};
+
+  /// Slot index to the radio's own notify mode for that channel (#544).
+  /// Written only from a device reply, and cleared per radio like every other
+  /// device-UI surface. Slot-derived state: #1061's identity diff must reset
+  /// it when a slot's PSK changes, or it describes the wrong channel.
+  // #1060/#544: keyed by channel PSK hex, NOT by slot index. The wire is
+  // slot-addressed, but a slot is not an identity: when a channel moves slots
+  // (wipe + re-import, manual reorder) a slot-keyed mode follows the SLOT and
+  // lands on whatever channel now sits there. That is how a channel set to
+  // None started chirping again. The slot is resolved at the wire edge only,
+  // and everything the client holds or shows is keyed by PSK, matching the
+  // app's own `channelNotifyModesByRadio` (#848) and PSK-keyed history (#194).
+  final Map<String, RadioChannelNotify> _channelNotifyModes = {};
   final Map<ToneEvent, EventToneState> _eventTones = {};
   final Map<int, TuneSlotInfo> _tuneSlots = {};
   ScreenSettingsState? _screenSettings;
+  bool? _ledEnabled;
+  DisplayMode? _displayMode;
+  int? _displayRotation;
   bool _tuneSlotTransferActive = false;
   final List<_DeviceUiWaiter> _deviceUiWaiters = [];
   int _pathHashByteWidth = 1;
@@ -464,6 +546,11 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _batteryRequested = false;
   bool _awaitingSelfInfo = false;
   bool _hasReceivedDeviceInfo = false;
+
+  /// This connection's device info has said how many channel slots the radio
+  /// has, on every transport ([_hasReceivedDeviceInfo] is set only where the
+  /// initial sync is gated on it). (#1128)
+  bool _slotCountKnown = false;
   // Initial sync is serialized for predictable progress. Firmware exposes one
   // FIFO queued-message stream, so direct/room frames are buffered until after
   // contacts are known.
@@ -490,6 +577,13 @@ class MeshCoreConnector extends ChangeNotifier {
   static const int _defaultMaxChannels = 40;
   int _maxContacts = _defaultMaxContacts;
   int _maxChannels = _defaultMaxChannels;
+
+  /// The radio's configured BLE pairing pin from device info (#1100).
+  /// 0 = the firmware build default (on display builds that means a random
+  /// per-session pin shown on the device). Null until a device-info frame
+  /// long enough to carry it arrives.
+  int? _deviceBlePin;
+  int? get deviceBlePin => _deviceBlePin;
   int? _contactSyncTotal;
   int _contactSyncReceived = 0;
   bool _contactSyncUsesSinceFilter = false;
@@ -579,6 +673,64 @@ class MeshCoreConnector extends ChangeNotifier {
   int _totalChannelsToRequest = 0;
   List<Channel> _previousChannelsCache = [];
   static const int _maxChannelSyncRetries = 3;
+
+  // #1062: fail-closed channel sync. A slot the device never answered for is
+  // UNKNOWN: tracked here, surfaced to the UI, and never backfilled from a
+  // previous list (that backfill is how a stale slot map misrouted
+  // notifications and conversations, #1060).
+  final Set<int> _unconfirmedChannelSlots = {};
+
+  /// Device slots this connection's sync could not confirm. Non-empty means
+  /// the channel list has holes the UI must surface (#1062).
+  Set<int> get unconfirmedChannelSlots =>
+      Set.unmodifiable(_unconfirmedChannelSlots);
+
+  // #1060: slots the device answered for with an ERASED record (all-0xFF).
+  // The device answering is not the same as the device having a channel: a
+  // reflash or a wipe leaves readable garbage, not silence. These are refused
+  // rather than adopted, and their presence blocks the cached-list overwrite
+  // below, because a cached list the user can still see is better data than
+  // erased flash.
+  final Set<int> _erasedChannelSlots = {};
+
+  /// Device slots that answered with an erased record on the latest sync.
+  /// Non-empty means the radio lost channel storage and the client is holding
+  /// its own cached list instead (#1060).
+  Set<int> get erasedChannelSlots => Set.unmodifiable(_erasedChannelSlots);
+
+  /// True when the radio reported erased slots and the client therefore kept a
+  /// cached channel list the radio no longer has. The UI offers a restore.
+  bool get canRestoreChannelsToRadio =>
+      _erasedChannelSlots.isNotEmpty &&
+      _cachedChannels.any((c) => !c.isUnusable);
+
+  // #1062: ingress barrier. Live channel traffic is held while this
+  // connection's channel list is not yet synced, then flushed, so a message
+  // is never filed against a guessed slot map. Held MESSAGE frames are keyed
+  // by the radio that delivered them (#1063 review): they survive reconnects
+  // because the radio already popped them, but a switch to a DIFFERENT radio
+  // must not flush them into its conversations. A parked radio's frames flush
+  // when that radio next completes a sync; '' holds frames from before the
+  // connection identified itself and is adopted by the next flush.
+  bool _channelListSynced = false;
+  final Map<String, List<Uint8List>> _heldChannelMsgFramesByRadio = {};
+  List<Uint8List> get _heldChannelMsgFrames =>
+      _heldChannelMsgFramesByRadio.putIfAbsent(selfPublicKeyHex, () => []);
+  final List<Uint8List> _heldRawChannelFrames = [];
+  static const int _maxHeldChannelFrames = 64;
+
+  /// Human-readable per-slot identity changes found by the latest completed
+  /// sync (old name -> new name). Surfaced once by the channels screen (#1062).
+  final List<String> _slotIdentityChanges = [];
+  List<String> get slotIdentityChanges =>
+      List.unmodifiable(_slotIdentityChanges);
+
+  /// User dismissed the slot-identity-change notice (#1062).
+  void acknowledgeSlotIdentityChanges() {
+    _slotIdentityChanges.clear();
+    notifyListeners();
+  }
+
   static const int _channelSyncTimeoutMs = 2000; // 2 second timeout per channel
   static const Duration _batteryPollInterval = Duration(seconds: 120);
 
@@ -860,6 +1012,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
   CompanionRadioStats? get latestRadioStats => _latestRadioStats;
 
+  /// One of the two surviving ver-code reads (#1066). A stock feature, and a
+  /// stock radio advertises no capability byte, so there is no bit to gate on.
+  /// The `?? 0` is what keeps a malformed frame from lighting this up. See the
+  /// POPULATION INVARIANT note in meshcore_protocol.dart before touching it.
   bool get supportsCompanionRadioStats => (_firmwareVerCode ?? 0) >= 8;
 
   bool get radioStatsAirActivityPulse {
@@ -932,6 +1088,61 @@ class MeshCoreConnector extends ChangeNotifier {
   /// an error: every radio predating #508 reports null here. (#480)
   int? get offbandCaps2 => _offbandCaps2;
 
+  /// This radio's capability advert, merged across continuation rounds (#1095).
+  /// Null until a `0x1C` reply arrives; see [capabilityAdvertState] to tell
+  /// "has not answered" apart from "does not have the mechanism".
+  OffbandCapabilityAdvert? get capabilityAdvert => _capabilityAdvert;
+
+  /// How far the advert handshake has got with this radio.
+  CapabilityAdvertState get capabilityAdvertState => _advertState;
+
+  /// Whether this radio stores a per-channel notify mode for its own buzzer
+  /// (#544, #1097). Says nothing about the app's per-channel notify setting,
+  /// which is independent and needs no radio.
+  ///
+  /// PRECEDENCE, not OR. Channel notify has two merged claims: caps2 `0x80`
+  /// and `TAG_CHAN_NOTIFY`. The contract does not state which wins, and both
+  /// single-source readings break on a real radio:
+  ///
+  /// - bit only: when the bit is retired under contract §4 ("their bits become
+  ///   tags and the bits are retired in the same change"), a radio advertising
+  ///   the tag with `0x80` clear would silently lose the control.
+  /// - tag only: firmware `4e5a6c85` has channel notify and caps2 `0x80` but
+  ///   predates `0x1C` entirely, so the already-flashed T1000-E would lose it.
+  ///
+  /// So an advert, once it arrives, is authoritative and the bit is ignored;
+  /// with no advert the bit answers, which is exactly the behaviour that
+  /// shipped before `0x1C` existed. Raised with FuchsiaCreek before coding
+  /// (Agent Mail 1449); one expression to invert if the ruling differs.
+  ///
+  /// While a request is still in flight the bit answers, so nothing regresses
+  /// in the window before the reply. A radio that sets the bit and omits the
+  /// tag is self-inconsistent and will flip the control off when the advert
+  /// lands, which is the correct reading of a firmware fault.
+  bool get supportsChannelNotify {
+    final advert = _capabilityAdvert;
+    if (advert != null) return advert.has(offbandInfoTagChanNotify);
+    return firmwareSupportsChannelNotify(_offbandCaps2);
+  }
+
+  /// Whether this radio's display can rotate (#1098, firmware #1990).
+  ///
+  /// Tag-gated ONLY, with no caps-bit fallback, and that is not an oversight:
+  /// rotation's sub-codes `0x1A`/`0x1B` were claimed in the same merge as the
+  /// advert itself, so no firmware exists that can rotate but cannot advertise.
+  /// It is deliberately NOT gated on caps2 `0x04` INDICATORS, which means
+  /// indicators and is a different capability.
+  bool get supportsDisplayRotation =>
+      _capabilityAdvert?.has(offbandInfoTagDisplayRotation) ?? false;
+
+  /// Outstanding-ACK capacity this radio reports (#1099, firmware #994/#1001).
+  ///
+  /// Carried in the advert by the contract §3 exception: one byte, fixed for
+  /// the build, no sub-code of its own. Null means the radio did not say, which
+  /// is not zero and is not an error.
+  int? get ackCapacity =>
+      _capabilityAdvert?.byteValue(offbandInfoTagAckCapacity);
+
   /// Whether this radio exposes a configurable button-action matrix (#474).
   bool get supportsButtonMatrix => firmwareSupportsButtonMatrix(_offbandCaps2);
 
@@ -953,8 +1164,48 @@ class MeshCoreConnector extends ChangeNotifier {
   bool get supportsScreenSettings =>
       firmwareSupportsScreenSettings(_offbandCaps2);
 
+  /// Whether this radio's display mode can be set (#1132, firmware #2069).
+  /// See [resolveIndicatorSupport] for the precedence between the advert tags
+  /// and caps2 `0x04`.
+  bool get supportsDisplayControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).display;
+
+  /// Whether this radio's status LED can be set (#1132, firmware #2069).
+  bool get supportsLedControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).led;
+
+  /// Whether this radio has a settable display or LED, so the Indicators page
+  /// has anything to show (#523, #1132).
+  bool get supportsIndicators => supportsDisplayControl || supportsLedControl;
+
+  /// The LED and display state the radio last reported, from device-info or a
+  /// reply. Null when it has not said.
+  bool? get ledEnabled => _ledEnabled;
+  DisplayMode? get displayMode => _displayMode;
+
+  /// Degrees, or null until the radio answers the rotation GET (`0x1A`).
+  ///
+  /// Null is "not read yet", NOT "cannot rotate". Capability is
+  /// [supportsDisplayRotation], which reads the advert tag; conflating the two
+  /// is what the old `supportsIndicators && _displayRotation != null` did, and
+  /// it made an unanswered read indistinguishable from an unsupported board.
+  int? get displayRotation => _displayRotation;
+
   /// The tune the radio reported for [channel], or null if not read yet.
   ChannelTune? channelTuneFor(int channel) => _channelTunes[channel];
+
+  /// The radio's notify mode for [channel], or null until the radio has
+  /// reported it. Null is "not yet known", distinct from
+  /// [RadioChannelNotify.unset], which is the radio saying no choice is set.
+  ///
+  /// Looked up by the channel's PSK identity, so a mode read for one channel
+  /// can never be shown against another that later occupies its slot (#1060).
+  RadioChannelNotify? channelNotifyFor(Channel channel) =>
+      _channelNotifyModes[channel.pskHex];
 
   /// The tune the radio reported for [event], or null if not read yet.
   EventToneState? eventTone(ToneEvent event) => _eventTones[event];
@@ -974,8 +1225,7 @@ class MeshCoreConnector extends ChangeNotifier {
   DeviceUiSurface? get deviceUiErrorSurface => _deviceUiErrorSurface;
 
   /// Whether this radio answers the 0xC6 packet-hash query (#524/#611).
-  bool get supportsPktHash =>
-      firmwareSupportsPktHash(_offbandCaps2, _firmwareVerCode);
+  bool get supportsPktHash => firmwareSupportsPktHash(_offbandCaps2);
 
   /// Whether to fetch CoreScope observer counts for outgoing channel messages:
   /// firmware supports the hash query AND the owner enabled the feature.
@@ -1142,6 +1392,187 @@ class MeshCoreConnector extends ChangeNotifier {
       tag: 'DeviceUI',
     );
     await sendFrame(buildChannelTuneSetFrame(channel, tune));
+  }
+
+  /// Ask this radio for its capability advert (#1095).
+  ///
+  /// One request per connect, sent from [_reconcileDeviceUi] once device-info
+  /// has landed, which is well past MTU negotiation. The client asks and the
+  /// device never pushes: `_att_mtu` is 23 until `onMTUChange` fires, so a
+  /// pushed advert would be truncated to a 20-byte payload as the NORMAL case.
+  ///
+  /// Not gated on [deviceUiCommandLanded]-style capability checks, because
+  /// this request is how capabilities become known.
+  Future<void> requestCapabilityAdvert() async {
+    if (!deviceUiCommandLanded) return;
+    if (!isConnected) return;
+    _advertRequestOutstanding = true;
+    _appDebugLogService?.info(
+      'advert GET -> [0xC5][0x1C] (zero payload)',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildCapabilityAdvertRequestFrame());
+  }
+
+  /// Continue a paged advert from [cursor].
+  Future<void> _requestCapabilityAdvertFrom(int cursor) async {
+    if (!isConnected) return;
+    _advertRequestOutstanding = true;
+    _appDebugLogService?.info(
+      'advert GET -> [0xC5][0x1C][0x${cursor.toRadixString(16).padLeft(2, '0')}] '
+      '(continuation $_advertContinuationRound)',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildCapabilityAdvertResumeFrame(cursor));
+  }
+
+  void _handleCapabilityAdvertReply(OffbandCapabilityAdvert advert) {
+    _advertRequestOutstanding = false;
+    if (advert.malformed) {
+      // Firmware must not split a record across frames, so this is a firmware
+      // fault. The records before the bad one are kept: a hidden feature is
+      // safe, discarding a whole good reply over one trailing byte is not.
+      _appDebugLogService?.warn(
+        'advert reply malformed, keeping the records before it: $advert',
+        tag: 'DeviceUI',
+      );
+    }
+    for (final entry in advert.tags.entries) {
+      _advertTags.putIfAbsent(entry.key, () => entry.value);
+    }
+
+    final cursor = advert.continueCursor;
+    if (cursor != null) {
+      _advertContinuationRound++;
+      if (_advertContinuationRound > offbandInfoMaxContinuations) {
+        // Bounded on purpose: an unbounded request loop driven by device data
+        // is a worse failure than a truncated capability list.
+        _appDebugLogService?.warn(
+          'advert continuation exceeded $offbandInfoMaxContinuations rounds, '
+          'settling on ${_advertTags.length} tag(s)',
+          tag: 'DeviceUI',
+        );
+      } else if (_advertTags.containsKey(cursor)) {
+        // A cursor pointing at a tag already in hand would loop forever.
+        _appDebugLogService?.warn(
+          'advert continuation cursor 0x${cursor.toRadixString(16).padLeft(2, '0')} '
+          'does not advance, settling on ${_advertTags.length} tag(s)',
+          tag: 'DeviceUI',
+        );
+      } else {
+        unawaited(_requestCapabilityAdvertFrom(cursor));
+        return;
+      }
+    }
+
+    _settleCapabilityAdvert(
+      OffbandCapabilityAdvert(tags: Map<int, Uint8List>.from(_advertTags)),
+    );
+  }
+
+  /// The advert is now known, either as tags or as "this radio predates it".
+  ///
+  /// Capability-gated surfaces are invisible when a gate is shut, which looks
+  /// exactly like a bug, so the resolved gates are logged alongside the raw
+  /// tags (the same reasoning as the caps logging in [_handleDeviceInfo]).
+  void _settleCapabilityAdvert(OffbandCapabilityAdvert? advert) {
+    _capabilityAdvert = advert;
+    _advertState = advert == null
+        ? CapabilityAdvertState.unsupported
+        : CapabilityAdvertState.advertised;
+    _appDebugLogService?.info(
+      'advert settled: '
+      '${advert ?? 'UNSUPPORTED, falling back to device-info offsets'}'
+      ' chanNotify=$supportsChannelNotify'
+      ' rotation=$supportsDisplayRotation'
+      ' display=$supportsDisplayControl'
+      ' led=$supportsLedControl'
+      ' ackCapacity=${ackCapacity ?? 'absent'}',
+      tag: 'DeviceUI',
+    );
+    // A tag-gated feature could not be asked for before now.
+    _reconcileAdvertisedDeviceUi();
+    notifyListeners();
+  }
+
+  /// Requests that could only be gated once the advert settled.
+  ///
+  /// Channel notify is re-driven here because its gate can change when the
+  /// advert lands, and its read is additionally held behind the confirmed
+  /// channel list; [_readChannelNotifyModes] enforces that barrier itself, so
+  /// calling it before the list is synced is a no-op rather than a guess.
+  void _reconcileAdvertisedDeviceUi() {
+    unawaited(_readChannelNotifyModes());
+    // Rotation's gate is TAG_DISPLAY_ROTATION, so this is the first point at
+    // which it can be asked for at all (#1098).
+    if (supportsDisplayRotation) unawaited(requestDisplayRotation());
+  }
+
+  /// Ask the radio which notify mode [channel] has for its own buzzer (#544).
+  ///
+  /// Nothing here touches the app's per-channel notify setting: that drives
+  /// the phone, this drives the radio, and they are independent.
+  Future<void> requestChannelNotify(int channel) async {
+    if (!_deviceUiGateOpen('chnotify GET', advertised: supportsChannelNotify)) {
+      return;
+    }
+    _appDebugLogService?.info(
+      'chnotify GET -> [0xC5][0x18][$channel]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelNotifyGetFrame(channel));
+  }
+
+  /// Set the radio's notify mode for [channel]. Local state follows the
+  /// device's re-read reply, never the request, so a refused choice is never
+  /// shown as saved.
+  /// The slot [channel] currently occupies on the radio, by PSK identity, or
+  /// null when the synced list does not hold it. The caller's own
+  /// [Channel.index] is deliberately not trusted: it may have been captured
+  /// before a re-sync moved the channel, and writing to a stale slot is how a
+  /// setting lands on the wrong channel (#1060).
+  int? _liveSlotFor(Channel channel) {
+    if (!_channelListSynced) return null;
+    for (final c in _channels) {
+      if (c.pskHex == channel.pskHex && !c.isUnusable) return c.index;
+    }
+    return null;
+  }
+
+  Future<void> setChannelNotify(
+    Channel channel,
+    RadioChannelNotify mode,
+  ) async {
+    if (!_deviceUiGateOpen('chnotify SET', advertised: supportsChannelNotify)) {
+      return;
+    }
+    final slot = _liveSlotFor(channel);
+    if (slot == null) {
+      // Fail closed and visibly, per #1021's rule: refuse the write and say
+      // why, rather than addressing a slot whose occupant is unconfirmed.
+      _deviceUiError =
+          'This channel is not confirmed on the radio right now, so its '
+          'sound setting was not written. Refresh the channel list and try '
+          'again.';
+      _deviceUiErrorSurface = DeviceUiSurface.channelNotify;
+      _pendingDeviceUiWrite = null;
+      _appDebugLogService?.error(
+        'chnotify SET refused: "${channel.name}" (psk ${channel.pskHex}) '
+        'does not resolve to a confirmed slot; no frame sent',
+        tag: 'DeviceUI',
+      );
+      notifyListeners();
+      return;
+    }
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = DeviceUiSurface.channelNotify;
+    _appDebugLogService?.info(
+      'chnotify SET -> ch=$slot "${channel.name}" mode=${mode.name} '
+      'stored=${mode.stored} [0xC5][0x19]',
+      tag: 'DeviceUI',
+    );
+    await sendFrame(buildChannelNotifySetFrame(slot, mode));
   }
 
   /// Ask the radio how GPS is running (#969).
@@ -1472,6 +1903,70 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> setBatteryFull({required bool pin}) =>
       _sendScreenSet('batt SET', buildBatteryFullSetFrame(pin: pin));
 
+  Future<void> _sendIndicatorSet(
+    String what,
+    DeviceUiSurface surface,
+    Uint8List frame, {
+    required bool advertised,
+  }) async {
+    if (!_deviceUiGateOpen(what, advertised: advertised)) return;
+    _deviceUiError = null;
+    _deviceUiErrorSurface = null;
+    _pendingDeviceUiWrite = surface;
+    _appDebugLogService?.info('$what -> $frame', tag: 'DeviceUI');
+    await sendFrame(frame);
+  }
+
+  Future<void> setDisplayMode(DisplayMode mode) => _sendIndicatorSet(
+    'display SET',
+    DeviceUiSurface.display,
+    buildDisplaySetFrame(mode),
+    advertised: supportsDisplayControl,
+  );
+
+  /// Refused locally until the radio has answered the rotation GET, so
+  /// firmware that cannot rotate is never sent a SET.
+  Future<void> setDisplayRotation(int degrees) async {
+    if (!supportsDisplayRotation) {
+      _setDeviceUiError(
+        DeviceUiSurface.rotation,
+        'This radio has not reported a rotation it can change',
+      );
+      return;
+    }
+    await _sendIndicatorSet(
+      'rotation SET',
+      DeviceUiSurface.rotation,
+      buildRotationSetFrame(degrees),
+      advertised: supportsIndicators,
+    );
+  }
+
+  /// Read this radio's current rotation.
+  ///
+  /// This is a plain GET, not a capability probe. Rotation support comes from
+  /// `TAG_DISPLAY_ROTATION` in the `0x1C` advert, so the old probe (send
+  /// `0x18`, treat a refusal as "cannot rotate") is gone: contract §3 forbids
+  /// "discovering support by trying each feature's sub-code and watching for
+  /// errors", and the probe also had to borrow `_pendingDeviceUiWrite` for a
+  /// read, which meant a genuine write refusal could be eaten by it.
+  Future<void> requestDisplayRotation() async {
+    if (!_deviceUiGateOpen(
+      'rotation GET',
+      advertised: supportsDisplayRotation,
+    )) {
+      return;
+    }
+    await sendFrame(buildRotationGetFrame());
+  }
+
+  Future<void> setLedEnabled(bool on) => _sendIndicatorSet(
+    'led SET',
+    DeviceUiSurface.led,
+    buildLedSetFrame(on: on),
+    advertised: supportsLedControl,
+  );
+
   /// Re-read whatever headless-UI state this radio supports. Called after every
   /// device-info reply so a scope changed by triple-press on the device is
   /// never displayed stale, and so frame-arrival order does not matter. (#475)
@@ -1484,6 +1979,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _buttonMatrix = null;
     _lastDeviceUiSuppression = null;
     _deviceNotifyScope = null;
+    _channelNotifyModes.clear();
     _deviceUiError = null;
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = null;
@@ -1492,14 +1988,25 @@ class MeshCoreConnector extends ChangeNotifier {
     _eventTones.clear();
     _tuneSlots.clear();
     _screenSettings = null;
+    _capabilityAdvert = null;
+    _advertState = CapabilityAdvertState.unknown;
+    _advertRequestOutstanding = false;
+    _advertContinuationRound = 0;
+    _advertTags.clear();
   }
 
   void _reconcileDeviceUi() {
+    // The advert goes FIRST and is gated on nothing: it is the mechanism by
+    // which capabilities are discovered, so gating it on a capability would be
+    // circular. Everything tag-gated is (re)driven from the reply.
+    unawaited(requestCapabilityAdvert());
     if (supportsButtonMatrix) requestButtonMatrix();
     if (supportsNotifyScope) requestNotifyScope();
     if (supportsGpsMode) requestGpsMode();
     // Node Settings names the battery full point in its Battery row.
     if (supportsScreenSettings) requestScreenSettings();
+    // Rotation is NOT driven from here: its gate is an advert tag, which is
+    // not known yet at this point. It is driven from the advert reply instead.
   }
 
   /// Single entry point for `0xC5`: both surfaces and the shared error sub-code
@@ -1519,6 +2026,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleNotifyScopeReply(scope);
       return;
     }
+    final advert = parseCapabilityAdvertReply(frame);
+    if (advert != null) {
+      _handleCapabilityAdvertReply(advert);
+      return;
+    }
     final gps = parseGpsModeReply(frame);
     if (gps != null) {
       _handleGpsModeReply(gps);
@@ -1529,6 +2041,14 @@ class MeshCoreConnector extends ChangeNotifier {
       _handleChannelTuneReply(tune);
       return;
     }
+    final chNotify = parseChannelNotifyReply(frame);
+    if (chNotify != null) {
+      _handleChannelNotifyReply(
+        chNotify,
+        isWrite: frame[1] == offbandUiChannelNotifySet,
+      );
+      return;
+    }
     final tunes = parseTuneReply(frame);
     if (tunes != null) {
       _handleTuneReply(tunes);
@@ -1537,6 +2057,11 @@ class MeshCoreConnector extends ChangeNotifier {
     final screen = parseScreenSettingsReply(frame);
     if (screen != null) {
       _handleScreenSettingsReply(screen);
+      return;
+    }
+    final indicator = parseIndicatorReply(frame);
+    if (indicator != null) {
+      _handleIndicatorReply(indicator);
       return;
     }
     _appDebugLogService?.warn(
@@ -1551,6 +2076,18 @@ class MeshCoreConnector extends ChangeNotifier {
   /// write outstanding when it arrived; a refusal with none is still shown and
   /// logged, just not claimed by any one screen.
   void _handleDeviceUiError(OffbandUiReply reply) {
+    // A refusal of our zero-payload 0x1C request means this radio predates the
+    // advert, which is the NORMAL case for everything shipped so far and not a
+    // failure to show anyone. The frame names no sub-code, so it is claimed
+    // here only while an advert request is outstanding AND no write is: a write
+    // owns its own refusal, and stealing one would hide a real error.
+    if (_advertRequestOutstanding &&
+        _pendingDeviceUiWrite == null &&
+        reply.errorCode == offbandUiErrReasonMalformed) {
+      _advertRequestOutstanding = false;
+      _settleCapabilityAdvert(null);
+      return;
+    }
     final surface = _pendingDeviceUiWrite;
     _pendingDeviceUiWrite = null;
     _deviceUiErrorSurface = surface;
@@ -1567,6 +2104,10 @@ class MeshCoreConnector extends ChangeNotifier {
       DeviceUiSurface.tunePlay => 'Tune preview',
       DeviceUiSurface.tuneSlot => 'Tune slot',
       DeviceUiSurface.screenSettings => 'Screen settings',
+      DeviceUiSurface.channelNotify => 'Radio channel notifications',
+      DeviceUiSurface.display => 'Display',
+      DeviceUiSurface.led => 'LED',
+      DeviceUiSurface.rotation => 'Rotation',
       null => 'Device UI request',
     };
     _appDebugLogService?.warn(
@@ -1616,6 +2157,64 @@ class MeshCoreConnector extends ChangeNotifier {
       'scroff=${s.screenOffStored}/${s.screenOffSeconds}s tz=${s.timeZone} '
       'batt=${s.batteryFullStored}/${s.batteryFullMv}mV '
       'pinned=${s.batteryPinned}',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  /// The radio reported its own notify mode for one channel (#544).
+  ///
+  /// This writes the RADIO's state only. It deliberately does not read or
+  /// write the app's per-channel notify setting: the two are independent, and
+  /// a test asserts that a reply here leaves the app store untouched.
+  void _handleChannelNotifyReply(
+    RadioChannelNotifyReply reply, {
+    required bool isWrite,
+  }) {
+    if (isWrite && _pendingDeviceUiWrite == DeviceUiSurface.channelNotify) {
+      _pendingDeviceUiWrite = null;
+    }
+    // #1060: the wire gives a slot; the client stores an identity. Resolve the
+    // slot against the synced list and drop the reply if it cannot be
+    // resolved, rather than filing a mode under a slot number that may mean a
+    // different channel by the time anything reads it.
+    final channel = _findChannelByIndex(reply.channel);
+    if (channel == null || channel.isUnusable) {
+      _appDebugLogService?.warn(
+        'chnotify reply for slot ${reply.channel} '
+        '(mode=${reply.mode.name}) does not resolve to a known channel; '
+        'dropped rather than stored against a slot number',
+        tag: 'DeviceUI',
+      );
+      // A pending write was still cleared above, so the UI must be released
+      // from "saving" even though nothing was stored.
+      notifyListeners();
+      return;
+    }
+    _channelNotifyModes[channel.pskHex] = reply.mode;
+    _appDebugLogService?.info(
+      'chnotify reply: ch=${reply.channel} "${channel.name}" '
+      'mode=${reply.mode.name} (${isWrite ? 'write confirmed' : 'read'})',
+      tag: 'DeviceUI',
+    );
+    notifyListeners();
+  }
+
+  void _handleIndicatorReply(IndicatorReply reply) {
+    final surface = reply.surface;
+    if (reply.isWrite && _pendingDeviceUiWrite == surface) {
+      _pendingDeviceUiWrite = null;
+    }
+    if (reply.errorMessage != null) {
+      _setDeviceUiError(surface, reply.errorMessage!);
+      return;
+    }
+    if (reply.displayMode != null) _displayMode = reply.displayMode;
+    if (reply.rotation != null) _displayRotation = reply.rotation;
+    if (reply.ledOn != null) _ledEnabled = reply.ledOn;
+    _appDebugLogService?.info(
+      'indicator reply: display=${_displayMode?.name} '
+      'rotation=$_displayRotation led=$_ledEnabled',
       tag: 'DeviceUI',
     );
     notifyListeners();
@@ -1771,8 +2370,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Whether the connected radio persists a block list + drops blocked DMs
   /// (Offband firmware, capability-gated). Absent → app-local block only.
-  bool get supportsOffbandBlock =>
-      firmwareSupportsOffbandBlock(_offbandCaps, _firmwareVerCode);
+  bool get supportsOffbandBlock => firmwareSupportsOffbandBlock(_offbandCaps);
 
   /// True when the radio's block store hit `MAX_BLOCKED_KEYS` (32) and rejected
   /// an ADD (ok=0). Local block still applies; those keys just aren't portable.
@@ -1787,8 +2385,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// Never shortcut this to a model or version check.
   bool get supportsOffbandFemLna => firmwareSupportsOffbandFemLna(_offbandCaps);
 
-  bool get supportsOffbandCaplog =>
-      firmwareSupportsOffbandCaplog(_offbandCaps, _firmwareVerCode);
+  bool get supportsOffbandCaplog => firmwareSupportsOffbandCaplog(_offbandCaps);
 
   /// Current FEM LNA state as last reported by the radio, or null if unknown
   /// (pre-v16 firmware). Always reflects hardware truth, never a local guess.
@@ -2130,7 +2727,24 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> loadCachedChannels() async {
-    _cachedChannels = await _channelStore.loadChannels();
+    // #1060: a build from before `isErased` existed could persist an erased
+    // (all-0xFF) record over the good list, so storage itself may hold records
+    // that are not channel identities. Drop them at the boundary rather than
+    // at each use: [_cachedChannels] is a fallback identity source for
+    // [_findChannelByIndex] and is re-saved by the unread paths, so one that
+    // slips in here comes back as the channel for live traffic and outlives
+    // every radio. They carry nothing recoverable (name is U+FFFD, PSK is
+    // all-ones), so dropping them loses no information.
+    final loaded = await _channelStore.loadChannels();
+    final usable = loaded.where((c) => !c.isUnusable).toList();
+    if (usable.length != loaded.length) {
+      _appDebugLogService?.warn(
+        'Dropped ${loaded.length - usable.length} unusable channel record(s) '
+        'from storage on load; a pre-#1060 build had persisted erased slots',
+        tag: 'ChannelSync',
+      );
+    }
+    _cachedChannels = usable;
     _recalculateCachedChannelsUnreadTotal();
   }
 
@@ -2322,9 +2936,24 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     if (allMessages.isNotEmpty) {
       // Keep only the most recent N messages in memory to bound memory usage
-      final windowedMessages = allMessages.length > _messageWindowSize
-          ? allMessages.sublist(allMessages.length - _messageWindowSize)
-          : allMessages;
+      final windowedMessages = List<ChannelMessage>.from(
+        allMessages.length > _messageWindowSize
+            ? allMessages.sublist(allMessages.length - _messageWindowSize)
+            : allMessages,
+      );
+
+      // A message can land in memory while this load is reading the store
+      // (the slot-identity reload racing a flushed held frame, #1063 review).
+      // The store save merges, so disk already has it; keep it visible too
+      // instead of clobbering the list with the pre-arrival history.
+      final current = _channelMessages[channelIndex];
+      if (current != null) {
+        for (final m in current) {
+          if (_findChannelRepeatIndex(windowedMessages, m) < 0) {
+            windowedMessages.add(m);
+          }
+        }
+      }
 
       _channelMessages[channelIndex] = windowedMessages;
       notifyListeners();
@@ -3257,6 +3886,16 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setSelfPublicKeyForTest(Uint8List key) => _selfPublicKey = key;
 
+  /// Wires the channel message store the way the SELF_INFO handshake does
+  /// (device scoping + PSK resolver), so integration tests (#1064) exercise
+  /// the real PSK-keyed persistence path. Call after [setSelfPublicKeyForTest].
+  @visibleForTesting
+  void wireMessageStoreForTest() {
+    _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
+    _channelMessageStore.channelPskResolver = (index) =>
+        _findChannelByIndex(index)?.pskHex;
+  }
+
   @visibleForTesting
   static bool shouldResetStateAfterTcpConnectAbort({
     required MeshCoreConnectionState state,
@@ -3979,6 +4618,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _unreadStore.setPublicKeyHex = '';
     _discoveryContactStore.setPublicKeyHex = '';
     storageService?.setPublicKeyHex = '';
+    // Device-scoped: the next radio's device info supplies its own pin (#1100).
+    _deviceBlePin = null;
+    // Kept history a key change could not land belongs to this radio (#1128).
+    _sparedFromPurge.clear();
     _applySelfKeyToBlockService();
   }
 
@@ -3993,6 +4636,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer?.cancel();
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // Drop the previous radio's in-memory history before a new connection loads
     // its own. These caches are keyed by channel index / contact key, not by
     // radio, so without this a radio switch would keep showing the prior
@@ -4026,6 +4670,12 @@ class MeshCoreConnector extends ChangeNotifier {
   void setContactSettingsKeyForTest(String radioKeyHex) =>
       _contactSettingsStore.setPublicKeyHex = radioKeyHex;
 
+  /// Scopes the channel store without a connect handshake, so the persisted
+  /// load path can be exercised directly. (#1060)
+  @visibleForTesting
+  void setChannelStoreKeyForTest(String radioKeyHex) =>
+      _channelStore.setPublicKeyHex = radioKeyHex;
+
   /// Feeds a device frame through the normal dispatch, so parse paths can be
   /// exercised without a radio. (#578)
   @visibleForTesting
@@ -4035,12 +4685,49 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void Function(Uint8List data)? sendFrameOverrideForTest;
 
+  /// Observes [_maybeNotifyChannelMessage]'s decision: the slot, the display
+  /// label, and the PSK + mode the notification was evaluated against (null
+  /// psk/mode = suppressed because the slot was unconfirmed). Lets tests
+  /// assert notify routing (#1064) without reaching the NotificationService
+  /// singleton.
+  @visibleForTesting
+  void Function(
+    int channelIndex,
+    String channelName,
+    String? pskHex,
+    ChannelNotifyMode? mode,
+  )?
+  channelNotifyProbeForTest;
+
   @visibleForTesting
   void setConnectedForTest() => _state = MeshCoreConnectionState.connected;
+
+  // #1062 test hooks: drive the sync timeout path without real timers, seed
+  // the offline cache, and observe the fail-closed slot lookup.
+  @visibleForTesting
+  void handleChannelSyncTimeoutForTest(int channelIndex) =>
+      _handleChannelSyncTimeout(channelIndex);
+
+  @visibleForTesting
+  void seedCachedChannelsForTest(List<Channel> channels) {
+    _cachedChannels = List<Channel>.from(channels);
+  }
+
+  /// The last fully-confirmed channel list this client persisted. Survives a
+  /// sync that found erased slots, which is what makes a restore possible
+  /// (#1060).
+  List<Channel> get cachedChannels => List.unmodifiable(_cachedChannels);
+
+  @visibleForTesting
+  Channel? findChannelByIndexForTest(int index) => _findChannelByIndex(index);
 
   @visibleForTesting
   void setAppDebugLogServiceForTest(AppDebugLogService service) =>
       _appDebugLogService = service;
+
+  @visibleForTesting
+  void setAppSettingsServiceForTest(AppSettingsService service) =>
+      _appSettingsService = service;
 
   /// The state a BLE link leaves behind: a radio to go back to. (#997)
   @visibleForTesting
@@ -4125,6 +4812,16 @@ class MeshCoreConnector extends ChangeNotifier {
     _nextChannelIndexToRequest = 0;
     _totalChannelsToRequest = 0;
     _previousChannelsCache.clear();
+    // #1062: a new connection starts with an unconfirmed list. Held MESSAGE
+    // frames are kept: the radio already popped them from its queue, so they
+    // exist nowhere else, and the holding radio's next confirmed sync files
+    // them (per-radio, so a radio switch cannot leak them, #1063 review).
+    // Raw sniff frames are lossy observations; a dead connection's are stale.
+    _channelListSynced = false;
+    _unconfirmedChannelSlots.clear();
+    _erasedChannelSlots.clear();
+    _slotIdentityChanges.clear();
+    _heldRawChannelFrames.clear();
   }
 
   bool get _shouldAutoReconnect =>
@@ -4402,6 +5099,16 @@ class MeshCoreConnector extends ChangeNotifier {
     _offbandCaps = null;
     _offbandCaps2 = null;
     _femLnaEnabled = null;
+    // The advert dies with the connection for the same reason, so the next
+    // radio is never gated on this one's tags (#1095).
+    _capabilityAdvert = null;
+    _advertState = CapabilityAdvertState.unknown;
+    _advertRequestOutstanding = false;
+    _advertContinuationRound = 0;
+    _advertTags.clear();
+    _ledEnabled = null;
+    _displayMode = null;
+    _displayRotation = null;
     _blockListRetryTimer?.cancel();
     // Per-connection debounce timers must die with the connection so a timer
     // scheduled against this radio can't fire against the next one (#838 review).
@@ -4417,6 +5124,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryRequested = false;
     _awaitingSelfInfo = false;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     _maxContacts = _defaultMaxContacts;
     _maxChannels = _defaultMaxChannels;
     _resetSyncProgressState();
@@ -5654,6 +6362,14 @@ class MeshCoreConnector extends ChangeNotifier {
     return ts;
   }
 
+  /// Whether an outgoing write for [channelIndex] is allowed (#1063 review).
+  /// False while this connection has not confirmed the slot: the PSK resolver
+  /// would return null and the persisted copy would fall back to the legacy
+  /// slot-index key, orphaning it (adoption only runs on an empty PSK key).
+  /// Callers must refuse the write and tell the user why, not grey a button.
+  bool canSendOnChannel(int channelIndex) =>
+      _channelListSynced && !_unconfirmedChannelSlots.contains(channelIndex);
+
   Future<void> sendChannelMessage(
     Channel channel,
     String text, {
@@ -5662,6 +6378,16 @@ class MeshCoreConnector extends ChangeNotifier {
     String? translationModelId,
   }) async {
     if (!isConnected || text.isEmpty) return;
+    if (!canSendOnChannel(channel.index)) {
+      // Fail closed at the write, loudly: the message would persist under an
+      // unknown identity. The UI surfaces this via [canSendOnChannel].
+      _appDebugLogService?.error(
+        'Refused to send on channel slot ${channel.index}: the slot is not '
+        'confirmed by this connection (#1063). Retry the channel sync.',
+        tag: 'ChannelSync',
+      );
+      return;
+    }
 
     // Check if this is a reaction - if so, process it immediately instead of adding as a message
     final reactionInfo = ReactionHelper.parseReaction(text);
@@ -6185,8 +6911,82 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildRebootFrame());
   }
 
+  FactoryResetStatus? _factoryResetStatus;
+  FactoryResetStatus? get factoryResetStatus => _factoryResetStatus;
+
+  void dismissFactoryResetStatus() {
+    _factoryResetStatus = null;
+    notifyListeners();
+  }
+
+  String? get _radioPrefix {
+    final hex = selfPublicKeyHex;
+    return hex.length >= 10 ? hex.substring(0, 10) : null;
+  }
+
+  /// Wipes the connected radio (#1054). Null when sent, else why not.
+  ///
+  /// With [deleteAppData], the radio's app data is deleted once the link is
+  /// closed, so nothing from this session writes it back.
+  Future<FactoryResetRefusal?> factoryResetDevice({
+    required bool deleteAppData,
+  }) async {
+    final prefix = _radioPrefix;
+    if (!isConnected || prefix == null) {
+      return FactoryResetRefusal.notConnected;
+    }
+
+    final overBle = _activeTransport == MeshCoreTransportType.bluetooth;
+    _appDebugLogService?.info(
+      'Factory reset sent radio=$prefix deleteAppData=$deleteAppData',
+      tag: 'Connection',
+    );
+    await sendFrame(buildFactoryResetFrame());
+    _factoryResetStatus = overBle
+        ? FactoryResetStatus.sentBle
+        : FactoryResetStatus.sent;
+    notifyListeners();
+    // Give the frame time to leave before the transport closes.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await disconnect();
+
+    if (deleteAppData) {
+      try {
+        final removed = await wipeRadioData(prefix);
+        await _appSettingsService?.forgetRadio(prefix);
+        _appDebugLogService?.info(
+          'Factory reset removed $removed stored items for $prefix',
+          tag: 'Connection',
+        );
+      } catch (e) {
+        _appDebugLogService?.error(
+          'Factory reset: deleting app data for $prefix failed: $e',
+          tag: 'Connection',
+        );
+        _factoryResetStatus = FactoryResetStatus.deleteFailed;
+        notifyListeners();
+      }
+    }
+    return null;
+  }
+
   Future<void> setPrivacyMode(bool enabled) async {
     await sendCliCommand('set privacy ${enabled ? 'on' : 'off'}');
+  }
+
+  /// Sets the radio's BLE pairing pin over CMD_SET_DEVICE_PIN (#1100).
+  /// [pin] is 0 (return to the firmware build default) or a 6-digit value;
+  /// the range mirrors firmware's own validation, which answers ERR outside
+  /// it. The OS bond becomes stale after a change: the UI tells the user a
+  /// forget/re-pair may be needed.
+  Future<void> setDevicePin(int pin) async {
+    if (!isConnected) return;
+    if (pin != 0 && (pin < 100000 || pin > 999999)) {
+      throw ArgumentError.value(pin, 'pin', 'must be 0 or a 6-digit pin');
+    }
+    await sendFrame(buildSetDevicePinFrame(pin));
+    _deviceBlePin = pin;
+    notifyListeners();
   }
 
   Future<void> setTelemetryModeBase(
@@ -6215,6 +7015,19 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   Future<void> getChannels({int? maxChannels, bool force = false}) async {
+    // A sync started while a channel write waits for its reply would share the
+    // reply queue with it. Replies are matched by order, so the sync's
+    // empty-slot ERR could be taken as the write's answer. Deferred until the
+    // writes finish, then run once (#1026). The writers' own re-reads call
+    // [_syncChannels] directly.
+    if (_channelWritesInFlight > 0) {
+      _channelSyncDeferredByWrite = true;
+      return;
+    }
+    return _syncChannels(maxChannels: maxChannels, force: force);
+  }
+
+  Future<void> _syncChannels({int? maxChannels, bool force = false}) async {
     if (!isConnected) return;
     if (_isSyncingChannels) {
       debugPrint('[ChannelSync] Already syncing channels, ignoring request');
@@ -6232,6 +7045,12 @@ class MeshCoreConnector extends ChangeNotifier {
     _isLoadingChannels = true;
     _isSyncingChannels = true;
     _hasLoadedChannels = false;
+    // Re-engage the ingress barrier for the duration of the sync: filing
+    // against a list that is mid-replacement is the same hazard as filing
+    // against a stale one (#1062).
+    _channelListSynced = false;
+    _unconfirmedChannelSlots.clear();
+    _erasedChannelSlots.clear();
     _previousChannelsCache = List<Channel>.from(_channels);
     _channels.clear();
     _nextChannelIndexToRequest = 0;
@@ -6252,6 +7071,11 @@ class MeshCoreConnector extends ChangeNotifier {
       _cleanupChannelSync(completed: false);
       return;
     }
+
+    // Queued continuations from retries can land after the sync already
+    // finished; without this guard they re-enter _completeChannelSync against
+    // the reset counters (#1062).
+    if (!_isSyncingChannels) return;
 
     if (_channelSyncInFlight) return;
 
@@ -6297,25 +7121,17 @@ class MeshCoreConnector extends ChangeNotifier {
       _channelSyncInFlight = false;
       unawaited(_requestNextChannel());
     } else {
-      // Max retries reached for this channel, restore from cache and move to next
-      debugPrint(
-        '[ChannelSync] Max retries reached for channel $channelIndex, attempting cache restore',
+      // Max retries reached: the slot's contents are UNKNOWN. It used to be
+      // restored from the previous list here, which silently pinned a
+      // pre-reconfiguration channel at this index and misrouted notifications
+      // and conversations (#1060). Fail closed instead: leave the slot empty,
+      // record it, surface it (#1062).
+      _unconfirmedChannelSlots.add(channelIndex);
+      _appDebugLogService?.error(
+        'Channel sync: device never answered for slot $channelIndex; '
+        'slot left unknown, not restored from cache',
+        tag: 'ChannelSync',
       );
-
-      // Try to restore this channel from cache
-      try {
-        final cachedChannel = _previousChannelsCache.firstWhere(
-          (c) => c.index == channelIndex,
-        );
-        if (!cachedChannel.isEmpty) {
-          _channels.add(cachedChannel);
-          debugPrint(
-            '[ChannelSync] Restored channel $channelIndex (${cachedChannel.name}) from cache',
-          );
-        }
-      } catch (e) {
-        // No cached channel found, that's okay
-      }
 
       // Move to next channel
       _nextChannelIndexToRequest++;
@@ -6330,25 +7146,108 @@ class MeshCoreConnector extends ChangeNotifier {
     _channelSyncTimeout?.cancel();
 
     debugPrint(
-      '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels',
+      '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels'
+      '${_unconfirmedChannelSlots.isEmpty ? '' : ', unconfirmed slots: $_unconfirmedChannelSlots'}',
     );
+    // A sync before device info, or one asked for fewer slots, has not seen
+    // every channel, so it cannot say what the radio does not hold (#1128).
+    final askedSlots = _totalChannelsToRequest;
+    final sawEverySlot = _slotCountKnown && askedSlots >= _maxChannels;
 
     _cleanupChannelSync(completed: true);
 
-    // Cache channels for offline use
-    _cachedChannels = List<Channel>.from(_channels);
-    unawaited(
-      _channelStore.saveChannels(_channels).catchError((Object e) {
-        _appDebugLogService?.error(
-          'Failed to persist channels (channel sync): $e',
-          tag: 'ChannelStore',
+    // #1062: per-slot identity diff against the last persisted truth. A slot
+    // whose PSK changed got a different channel; say so once instead of
+    // letting per-slot state ride across identities.
+    _slotIdentityChanges.clear();
+    for (final fresh in _channels) {
+      final prior = _cachedChannels.cast<Channel?>().firstWhere(
+        (c) => c?.index == fresh.index,
+        orElse: () => null,
+      );
+      if (prior != null &&
+          !prior.isEmpty &&
+          !fresh.isEmpty &&
+          prior.pskHex != fresh.pskHex) {
+        _slotIdentityChanges.add(
+          'slot ${fresh.index}: ${prior.name} -> ${fresh.name}',
         );
-      }),
-    );
+        _appDebugLogService?.warn(
+          'Channel slot ${fresh.index} changed identity on the radio: '
+          '"${prior.name}" -> "${fresh.name}"',
+          tag: 'ChannelSync',
+        );
+        // #1063: the in-memory conversation is the one per-slot message store
+        // left (persisted history is PSK-keyed, #194). Drop the old occupant's
+        // messages so they cannot render under the new channel, then reload
+        // this slot from the store; the resolver now sees the fresh list, so
+        // the load reads the NEW identity's own history.
+        _channelMessages.remove(fresh.index);
+        unawaited(_loadChannelMessages(fresh.index));
+      }
+    }
+
+    if (_erasedChannelSlots.isNotEmpty) {
+      // #1060: the radio answered, but for erased slots. "Device is truth"
+      // assumes the device HAS the truth; erased flash is the device having
+      // lost it. Writing this over the cache would turn one-sided loss on the
+      // radio into total loss, so the cached list stands and the UI offers to
+      // push it back.
+      _appDebugLogService?.error(
+        'Channel sync found ERASED slots $_erasedChannelSlots. The radio has '
+        'lost those channels. Cached list NOT overwritten (${_cachedChannels.where((c) => !c.isUnusable).length} '
+        'channel(s) retained); use Restore to write them back to the radio.',
+        tag: 'ChannelSync',
+      );
+      _logHistoryCheckSkipped('the radio has erased slots (Restore case)');
+    } else if (_unconfirmedChannelSlots.isEmpty) {
+      // Full confirmation: the fresh list is the truth, replace the cache.
+      _cachedChannels = List<Channel>.from(_channels);
+      unawaited(
+        _channelStore.saveChannels(_channels).catchError((Object e) {
+          _appDebugLogService?.error(
+            'Failed to persist channels (channel sync): $e',
+            tag: 'ChannelStore',
+          );
+        }),
+      );
+      // Only here: an erased slot means the radio lost channels that Restore
+      // can put back with their history, and a hole means the list is not
+      // known. Neither is a list to judge history against (#1128).
+      if (sawEverySlot) {
+        unawaited(_purgeHistoryNotOnRadio());
+      } else {
+        _logHistoryCheckSkipped(
+          _slotCountKnown
+              ? 'this sync read $askedSlots of the radio\'s $_maxChannels slots'
+              : 'device info has not said how many slots the radio has',
+        );
+      }
+    } else {
+      // Holes: keep the last fully-confirmed persisted list for offline use
+      // rather than overwriting it with a partial one. The holes are surfaced
+      // via [unconfirmedChannelSlots] and lookups for those slots fail closed.
+      _appDebugLogService?.error(
+        'Channel sync finished with unconfirmed slots '
+        '$_unconfirmedChannelSlots; cached list NOT overwritten. '
+        'Retry the sync to confirm them.',
+        tag: 'ChannelSync',
+      );
+      _logHistoryCheckSkipped(
+        'slots $_unconfirmedChannelSlots are unconfirmed',
+      );
+    }
     _recalculateCachedChannelsUnreadTotal();
 
     // Apply ordering and notify UI
     _applyChannelOrder();
+
+    // #1062: open the ingress barrier and file what arrived mid-sync.
+    _channelListSynced = true;
+    _flushHeldChannelFrames();
+    // #544 B3: slot indices are only meaningful past this barrier, so the
+    // radio's per-channel notify modes are read here and nowhere earlier.
+    unawaited(_readChannelNotifyModes());
     notifyListeners();
 
     // #839: one-time migration of the pre-per-radio notify state into THIS
@@ -6379,6 +7278,75 @@ class MeshCoreConnector extends ChangeNotifier {
     );
   }
 
+  /// Read the radio's own notify mode for every channel slot it reported
+  /// (#544 B3). One GET per slot, on the shipped one-entry-per-frame pattern.
+  ///
+  /// Gated on [_channelListSynced], #1062's confirmed-list barrier, for the
+  /// same reason the ingress hold exists: a slot index is only meaningful once
+  /// the device has answered for the list, and addressing one before that is
+  /// the guessed-slot error. A channel the radio never reported is not in
+  /// [_channels] and is therefore never addressed.
+  Future<void> _readChannelNotifyModes() async {
+    if (!supportsChannelNotify) return;
+    if (!_channelListSynced) return;
+    for (final channel in List<Channel>.from(_channels)) {
+      if (!isConnected) return;
+      await requestChannelNotify(channel.index);
+    }
+  }
+
+  /// Replays channel traffic held while the list was unconfirmed (#1062).
+  /// Runs after [_channelListSynced] flips true, so the handlers file against
+  /// the fresh list; a frame whose slot is still unconfirmed re-holds.
+  void _flushHeldChannelFrames() {
+    // Frames held before this connection learned its radio key belong to this
+    // connection (nothing flows before the handshake); adopt them first.
+    if (selfPublicKeyHex.isNotEmpty) {
+      final unattributed = _heldChannelMsgFramesByRadio.remove('');
+      if (unattributed != null) {
+        _heldChannelMsgFrames.insertAll(0, unattributed);
+      }
+    }
+    if (_heldChannelMsgFrames.isEmpty && _heldRawChannelFrames.isEmpty) return;
+    final msgFrames = List<Uint8List>.from(_heldChannelMsgFrames);
+    final rawFrames = List<Uint8List>.from(_heldRawChannelFrames);
+    _heldChannelMsgFrames.clear();
+    _heldRawChannelFrames.clear();
+    _appDebugLogService?.info(
+      'Channel list synced; filing ${msgFrames.length} held message frame(s) '
+      'and ${rawFrames.length} held raw frame(s)',
+      tag: 'ChannelSync',
+    );
+    for (final f in msgFrames) {
+      _handleIncomingChannelMessage(f);
+    }
+    for (final f in rawFrames) {
+      _handleLogRxData(f);
+    }
+  }
+
+  /// Holds a frame behind the ingress barrier. Message frames are pull-based
+  /// replies the radio has already popped from its queue, so they are NEVER
+  /// dropped (the hold only lives for the seconds a sync takes). Raw sniff
+  /// frames are lossy by nature and stay bounded: overflow drops the oldest
+  /// and says so loudly (#1062).
+  void _holdChannelFrame(
+    List<Uint8List> queue,
+    Uint8List frame,
+    String kind, {
+    required bool bounded,
+  }) {
+    if (bounded && queue.length >= _maxHeldChannelFrames) {
+      queue.removeAt(0);
+      _appDebugLogService?.error(
+        'Held-$kind queue overflow while the channel list is unconfirmed; '
+        'dropped the oldest held frame',
+        tag: 'ChannelSync',
+      );
+    }
+    queue.add(Uint8List.fromList(frame));
+  }
+
   void _cleanupChannelSync({required bool completed}) {
     _isSyncingChannels = false;
     _channelSyncInFlight = false;
@@ -6405,6 +7373,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Keep cache on failure/disconnection for future attempts
     if (!completed) {
+      // #1062: a failed sync on a live connection leaves the ingress barrier
+      // closed with nothing scheduled to open it; retry rather than letting
+      // held messages starve. (A dead connection re-syncs on reconnect.)
+      if (isConnected) {
+        _channelsChangedDebounce?.cancel();
+        _channelsChangedDebounce = Timer(
+          const Duration(seconds: 3),
+          () => unawaited(getChannels(force: true)),
+        );
+      }
       notifyListeners();
     }
   }
@@ -6419,40 +7397,399 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  Future<void> setChannel(int index, String name, Uint8List psk) async {
-    if (!isConnected) return;
+  /// How long a channel write waits for the radio's OK or ERR. (#1026)
+  @visibleForTesting
+  Duration channelWriteReplyTimeout = const Duration(seconds: 5);
 
-    // Channel history is stored keyed by the reusable slot [index], not by the
-    // channel's PSK. If this slot is being (re)assigned to a different channel
-    // than the one whose history is stored here, clear the stale history so a
-    // previous occupant's messages (e.g. #echo) don't surface under the newly
-    // added channel. Preserve only when the slot already holds the SAME channel
-    // (same PSK), e.g. a rename. (#193)
-    final existing = _findChannelByIndex(index);
-    final sameChannel = existing != null && listEquals(existing.psk, psk);
+  int _channelWritesInFlight = 0;
+  bool _channelSyncDeferredByWrite = false;
+  final Set<String> _sparedFromPurge = {};
 
-    await sendFrame(buildSetChannelFrame(index, name, psk));
+  /// True while the channel list cannot be trusted to show which slots are
+  /// free: a sync is re-reading it, or a write has not been answered yet. A
+  /// slot chosen against it could already be taken. (#1021, #1026)
+  bool get isChannelTableBusy =>
+      _isSyncingChannels || _channelWritesInFlight > 0;
 
-    if (!sameChannel) {
-      await _channelMessageStore.clearChannelMessages(index);
-      _channelMessages.remove(index);
+  void _beginChannelWrite() => _channelWritesInFlight++;
+
+  /// Asks for a re-read once every channel write has its answer. A writer
+  /// never starts one itself: another write may still be waiting on the same
+  /// reply queue. Nested and batched writes therefore re-read once, at the end.
+  void _syncAfterChannelWrites() => _channelSyncDeferredByWrite = true;
+
+  /// Ends one write; the last one to end runs the sync requested by a writer,
+  /// or by [getChannels] while writes were waiting for their replies.
+  void _endChannelWrite() {
+    _channelWritesInFlight--;
+    if (_channelWritesInFlight == 0 && _channelSyncDeferredByWrite) {
+      _channelSyncDeferredByWrite = false;
+      unawaited(_syncChannels(force: true));
     }
-
-    // Refresh channels after setting
-    await getChannels(force: true);
   }
 
-  Future<void> deleteChannel(int index) async {
-    if (!isConnected) return;
+  /// Runs several channel writes as one, so no sync or other add can start
+  /// between two of them. Each write inside passes `refresh: false`, and the
+  /// caller re-reads the list once afterwards. (#1026)
+  Future<T> batchChannelWrites<T>(Future<T> Function() writes) async {
+    _beginChannelWrite();
+    try {
+      return await writes();
+    } finally {
+      _endChannelWrite();
+    }
+  }
 
-    // Delete by setting empty name and zero PSK
-    await sendFrame(buildSetChannelFrame(index, '', Uint8List(16)));
-    // Clear stored messages for this channel
-    await _channelMessageStore.clearChannelMessages(index);
-    // Clear in-memory messages for this channel
+  /// Cached channels the radio no longer has: what a restore would put back.
+  List<Channel> get channelsMissingFromRadio {
+    final liveKeys = _channels.map((c) => c.pskHex).toSet();
+    final seen = <String>{};
+    return [
+      for (final c in _cachedChannels)
+        if (!c.isUnusable && !liveKeys.contains(c.pskHex) && seen.add(c.pskHex))
+          c,
+    ];
+  }
+
+  /// Writes the client's cached channels back onto a radio that lost them
+  /// (#1060), placed by identity (see [planChannelRestore]) so it works on
+  /// firmware that refuses occupied slots (#1865) and keeps slot 0 for Public
+  /// (#1896).
+  ///
+  /// Each write waits for the radio's OK or ERR, so the result says what the
+  /// radio confirmed, not what was sent. Nothing here clears history: the
+  /// identities being restored are the ones that own it.
+  ///
+  /// Returns null when the link is down or nothing is missing.
+  Future<ChannelRestoreResult?> restoreChannelsToRadio() async {
+    if (!isConnected) return null;
+    final plan = planChannelRestore(
+      cached: _cachedChannels,
+      live: _channels,
+      erasedSlots: _erasedChannelSlots,
+      maxChannels: _maxChannels,
+    );
+    if (plan.steps.isEmpty && plan.noRoom.isEmpty) return null;
+
+    _appDebugLogService?.info(
+      'Restoring ${plan.steps.length} cached channel(s) to the radio: '
+      '${plan.steps.map((s) => 'slot ${s.slot} "${s.channel.name}"${s.clearFirst ? ' (clear first)' : ''}').join(', ')}'
+      '${plan.noRoom.isEmpty ? '' : '; no room for ${plan.noRoom.map((c) => '"${c.name}"').join(', ')}'}',
+      tag: 'ChannelSync',
+    );
+
+    // Counted as a write in flight for its whole length, so an add made while
+    // it runs is refused instead of choosing a slot this is about to fill
+    // (#1021, #1026). Each write is answered before the next goes out, which
+    // also paces the radio.
+    _beginChannelWrite();
+    try {
+      var confirmed = 0;
+      final notRestored = <Channel>[...plan.noRoom];
+      for (final step in plan.steps) {
+        if (step.clearFirst) {
+          final cleared = await _writeChannelSlot(step.slot, '', Uint8List(16));
+          if (cleared != ChannelWrite.ok) {
+            notRestored.add(step.channel);
+            continue;
+          }
+        }
+        final written = await _writeChannelSlot(
+          step.slot,
+          step.channel.name,
+          step.channel.psk,
+        );
+        if (written == ChannelWrite.ok) {
+          confirmed++;
+        } else {
+          notRestored.add(step.channel);
+        }
+      }
+      _syncAfterChannelWrites();
+      return ChannelRestoreResult(
+        confirmed: confirmed,
+        total: plan.steps.length + plan.noRoom.length,
+        notRestored: notRestored,
+      );
+    } finally {
+      _endChannelWrite();
+    }
+  }
+
+  /// Writes [name] and [psk] into slot [index] and reports what the radio said.
+  ///
+  /// [refresh] re-reads the channel list afterwards. A caller writing several
+  /// channels passes false and refreshes once at the end, because a write sent
+  /// during a sync cannot tell its reply from the sync's.
+  Future<ChannelWrite> setChannel(
+    int index,
+    String name,
+    Uint8List psk, {
+    bool refresh = true,
+  }) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    return _setChannel(
+      index,
+      name,
+      psk,
+      occupantPsk: _findChannelByIndex(index)?.psk,
+      refresh: refresh,
+    );
+  }
+
+  /// Writes an edit of [channel]. A rename keeps the key and is a plain write.
+  /// A new key is clear-then-add: firmware with
+  /// OffbandMesh/meshcore-firmware#1864 refuses a different channel over an
+  /// occupied slot, and that is what a new key in place is.
+  ///
+  /// A new key needs [history], the user's answer to what happens to the old
+  /// key's messages (#1128). It is applied as soon as the radio confirms the
+  /// clear, never waiting on the add, so the old key's history is never left
+  /// hidden: Keep moves it and the notify mode to the new key, Delete removes
+  /// it as Delete Channel would.
+  ///
+  /// If the clear lands and the add does not, the slot is left empty and this
+  /// returns [ChannelWrite.clearedNotAdded], so the user is told the channel is
+  /// gone rather than that the change may not have happened.
+  Future<ChannelWrite> editChannel(
+    Channel channel,
+    String name,
+    Uint8List psk, {
+    KeyChangeHistory? history,
+  }) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    final keyChanges = !listEquals(channel.psk, psk);
+    if (keyChanges && history == null) {
+      throw ArgumentError(
+        'A key change needs the keep-or-delete history answer (#1128)',
+      );
+    }
+    if (!keyChanges) {
+      return _setChannel(
+        channel.index,
+        name,
+        psk,
+        occupantPsk: channel.psk,
+        refresh: true,
+      );
+    }
+    _beginChannelWrite();
+    try {
+      final cleared = await _writeChannelSlot(channel.index, '', Uint8List(16));
+      if (cleared != ChannelWrite.ok) {
+        _syncAfterChannelWrites();
+        return cleared;
+      }
+      final newPskHex = Channel(
+        index: channel.index,
+        name: name,
+        psk: psk,
+      ).pskHex;
+      final moved = await _applyKeyChangeHistory(channel, newPskHex, history!);
+      // The user said keep. What could not be moved stays under the old key,
+      // and the sync after this write must not delete it as hidden.
+      if (!moved) _sparedFromPurge.add(channel.pskHex);
+      await _retireSlotOccupant(channel.index);
+      final added = await _setChannel(
+        channel.index,
+        name,
+        psk,
+        occupantPsk: null,
+        refresh: true,
+      );
+      if (added != ChannelWrite.ok) {
+        // The kept history now waits under a key the radio does not hold, for
+        // the user to add the channel again; the sync after this write must
+        // not delete it as hidden (#1128).
+        if (history == KeyChangeHistory.keep) _sparedFromPurge.add(newPskHex);
+        return ChannelWrite.clearedNotAdded;
+      }
+      return moved ? ChannelWrite.ok : ChannelWrite.historyNotMoved;
+    } finally {
+      _endChannelWrite();
+    }
+  }
+
+  Future<ChannelWrite> deleteChannel(int index, {bool refresh = true}) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    _beginChannelWrite();
+    try {
+      // A slot is deleted by writing an empty name and a zero PSK. Its history
+      // goes outright (the true-delete path, #1063), once the radio has said
+      // OK: a refused delete leaves the channel, and it keeps its history.
+      final result = await _writeChannelSlot(index, '', Uint8List(16));
+      if (result == ChannelWrite.ok) {
+        await _channelMessageStore.clearChannelMessages(index);
+        _channelMessages.remove(index);
+      }
+      if (refresh) _syncAfterChannelWrites();
+      return result;
+    } finally {
+      _endChannelWrite();
+    }
+  }
+
+  Future<ChannelWrite> _setChannel(
+    int index,
+    String name,
+    Uint8List psk, {
+    required Uint8List? occupantPsk,
+    required bool refresh,
+  }) async {
+    _beginChannelWrite();
+    try {
+      // A rename (same PSK) keeps everything; a different PSK retires the
+      // slot's previous occupant (see [_retireSlotOccupant]).
+      final sameChannel = occupantPsk != null && listEquals(occupantPsk, psk);
+
+      final result = await _writeChannelSlot(index, name, psk);
+
+      // Only after the radio says OK. A refused write leaves the slot's
+      // channel in place, and its slot-keyed state has to stay with it. (#1026)
+      if (result == ChannelWrite.ok && !sameChannel) {
+        await _retireSlotOccupant(index);
+      }
+
+      // Re-read on every outcome: after a refusal the list we chose the slot
+      // from was wrong, and after no reply nobody knows what the slot holds.
+      if (refresh) _syncAfterChannelWrites();
+      return result;
+    } finally {
+      _endChannelWrite();
+    }
+  }
+
+  /// Sends one `CMD_SET_CHANNEL` and waits for the radio's OK or ERR, using
+  /// the generic-ack queue the channel-message sends already use.
+  ///
+  /// That queue matches replies to commands by order, which holds because the
+  /// firmware answers commands one at a time in the order they arrive.
+  Future<ChannelWrite> _writeChannelSlot(
+    int index,
+    String name,
+    Uint8List psk,
+  ) async {
+    if (!isConnected) return ChannelWrite.noReply;
+    final reply = Completer<int?>();
+    final pending = _PendingCommandAck(
+      commandCode: cmdSetChannel,
+      reply: reply,
+    );
+    // Queued before the frame goes out, so a fast reply cannot arrive first.
+    _pendingGenericAckQueue.add(pending);
+    try {
+      await sendFrame(buildSetChannelFrame(index, name, psk));
+    } catch (e) {
+      _pendingGenericAckQueue.remove(pending);
+      _appDebugLogService?.error(
+        'Channel write to slot $index was not sent: $e',
+        tag: 'ChannelWrite',
+      );
+      return ChannelWrite.noReply;
+    }
+    final int? errCode;
+    try {
+      errCode = await reply.future.timeout(channelWriteReplyTimeout);
+    } on TimeoutException {
+      // Dropped so a late or lost reply cannot be matched to the next command.
+      _pendingGenericAckQueue.remove(pending);
+      _appDebugLogService?.warn(
+        'Radio did not answer the channel write to slot $index',
+        tag: 'ChannelWrite',
+      );
+      return ChannelWrite.noReply;
+    }
+    if (errCode == null) return ChannelWrite.ok;
+    _appDebugLogService?.warn(
+      'Radio refused the channel write to slot $index (error $errCode)',
+      tag: 'ChannelWrite',
+    );
+    return errCode == errCodeBadState
+        ? ChannelWrite.occupied
+        : ChannelWrite.rejected;
+  }
+
+  /// Drops the slot-keyed remnants of a slot's previous occupant once the slot
+  /// has been given to a different channel.
+  ///
+  /// Persisted channel history is keyed by the channel's PSK identity (#194),
+  /// so reassigning this slot to a different channel cannot surface the old
+  /// occupant's messages THERE. Two slot-keyed remnants still can:
+  ///  - legacy slot-index keys (pre-#194) would be adopted onto the new
+  ///    occupant by the store's one-time migration; purge them (#193/#1063).
+  ///  - the in-memory conversation map is slot-keyed; drop this slot's entry.
+  /// The old occupant's PSK-keyed history is settled by the full sync every
+  /// write ends with, not here: firmware that moves a channel out of the way
+  /// (#1896) still holds it, so it keeps its history, and a channel the radio
+  /// no longer holds has its history deleted by that sync (#1128).
+  Future<void> _retireSlotOccupant(int index) async {
+    await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
-    // Refresh channels after deleting
-    await getChannels(force: true);
+  }
+
+  /// Applies the user's keep-or-delete answer for a key change once the radio
+  /// has confirmed the clear (#1128). Returns false when Keep could not move
+  /// the history; the store has logged why and left it under the old key.
+  Future<bool> _applyKeyChangeHistory(
+    Channel channel,
+    String newPskHex,
+    KeyChangeHistory history,
+  ) async {
+    _appDebugLogService?.info(
+      'Key change on slot ${channel.index} "${channel.name}": user chose to '
+      '${history.name} its message history',
+      tag: 'ChannelWrite',
+    );
+    if (history == KeyChangeHistory.delete) {
+      await _channelMessageStore.deleteChannelHistory(channel.pskHex);
+      return true;
+    }
+    final moved = await _channelMessageStore.moveChannelHistory(
+      channel.pskHex,
+      newPskHex,
+    );
+    await _appSettingsService?.moveChannelNotifyMode(
+      devicePrefix: selfPublicKeyHex,
+      fromPskHex: channel.pskHex,
+      toPskHex: newPskHex,
+    );
+    return moved != null;
+  }
+
+  /// Every sync says what became of the hidden-history check, so a log never
+  /// leaves "ran and found nothing" indistinguishable from "did not run".
+  void _logHistoryCheckSkipped(String why) => _appDebugLogService?.info(
+    'Hidden channel history check skipped for radio '
+    '${_channelMessageStore.publicKeyHex}: $why. Nothing deleted (#1128)',
+    tag: 'Storage',
+  );
+
+  /// Deletes this radio's channel history that no channel on it shows, after
+  /// a sync the radio fully confirmed with nothing erased (#1128). Not while a
+  /// write is waiting on the radio: the list could be mid-change.
+  ///
+  /// [_sparedFromPurge] holds keys whose kept history a key change could not
+  /// put on the radio: the add was not confirmed, or the move failed. It lasts
+  /// for this connection, and a key leaves it once the radio holds it again,
+  /// so a later delete of that channel is judged normally.
+  Future<void> _purgeHistoryNotOnRadio() async {
+    if (_channelWritesInFlight > 0) {
+      _logHistoryCheckSkipped('a channel write is waiting on the radio');
+      return;
+    }
+    final onRadio = _channels.where((c) => !c.isUnusable).toList();
+    _sparedFromPurge.removeAll(onRadio.map((c) => c.pskHex));
+    try {
+      await _channelMessageStore.purgeHistoryNotOnRadio(
+        radioPskHex: {...onRadio.map((c) => c.pskHex), ..._sparedFromPurge},
+        occupiedSlots: onRadio.map((c) => c.index).toSet(),
+      );
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Could not delete history no channel on the radio shows: $e',
+        tag: 'Storage',
+      );
+    }
   }
 
   // --- Offband GPS query (CMD_OFFBAND_GPS / RESP_CODE_OFFBAND_GPS = 0xC1) (#135)
@@ -7668,6 +9005,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final failedAck = _pendingGenericAckQueue.removeAt(0);
+    failedAck.answer(errCode);
     if (failedAck.commandCode != cmdSendChannelTxtMsg ||
         failedAck.channelSendQueueId == null) {
       return;
@@ -7766,6 +9104,13 @@ class MeshCoreConnector extends ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    _appDebugLogService?.info(
+      'App ${appLogger.appVersion} connected to radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} '
+      '"${_selfName ?? ''}"',
+      tag: 'Connector',
+    );
 
     //set all the stores' public key so they can load the correct data
     _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
@@ -7877,11 +9222,42 @@ class MeshCoreConnector extends ChangeNotifier {
   static int? parseOffbandCaps2(Uint8List frame) =>
       frame.length >= 85 ? frame[84] : null;
 
+  // There is NO caps byte 3, and there will not be one. A third capability
+  // byte would have to be appended to upstream's device-info frame, which
+  // contract §2 forbids permanently: three features each computed offset 87 as
+  // "the next free byte" and each was right in isolation. Capabilities past
+  // caps2 `0x80` are TAGS in the `0xC5` `0x1C` advert, which cannot run out.
+  // (#1096; the removed reader was `parseOffbandCaps3` at offset 87.)
+
+  /// The configured BLE pairing pin, bytes 4..7 LE of device info's 8-byte
+  /// header, written unconditionally by the companion firmware right after
+  /// max contacts/channels (MyMesh.cpp, CMD_DEVICE_QUERY). Null only on a
+  /// frame too short to carry it. (#1100)
+  static int? parseDevicePin(Uint8List frame) => frame.length >= 8
+      ? frame[4] | (frame[5] << 8) | (frame[6] << 16) | (frame[7] << 24)
+      : null;
+
+  /// LED (byte 85) and display mode (byte 86), appended unconditionally on
+  /// v21+ (firmware #542). Each is null when the frame stops short of it. Like
+  /// the FEM byte, presence says nothing about capability:
+  /// [supportsDisplayControl] and [supportsLedControl] do.
+  ///
+  /// Bytes 82 to 86 keep working and are explicitly untouched by the advert
+  /// contract (§7). Nothing here reads 87, and nothing may: rotation is read
+  /// over `0x1A`/`0x1B` and advertised by `TAG_DISPLAY_ROTATION`.
+  static ({bool? ledOn, DisplayMode? mode}) parseIndicatorBytes(
+    Uint8List frame,
+  ) => (
+    ledOn: frame.length >= 86 ? frame[85] != 0 : null,
+    mode: frame.length >= 87 ? DisplayMode.fromCode(frame[86]) : null,
+  );
+
   void _handleDeviceInfo(Uint8List frame) {
     if (frame.length < 4) return;
     if (_shouldGateInitialChannelSync) {
       _hasReceivedDeviceInfo = true;
     }
+    _slotCountKnown = true;
     _firmwareVerCode = frame[1];
 
     // Readable build date / model / firmware version, NUL-terminated strings
@@ -7946,10 +9322,19 @@ class MeshCoreConnector extends ChangeNotifier {
       _femLnaEnabled = parseFemLnaState(frame);
       // Second caps byte rides at offset 84, past the FEM state byte (#480).
       _offbandCaps2 = parseOffbandCaps2(frame);
+      // LED (85) and display mode (86) ride past caps2 (#523). Bytes 82 to 86
+      // keep working; offset 87 is where three features collided and is read
+      // by nothing. Capabilities beyond caps2 live in the 0x1C advert (#1096).
+      final indicators = parseIndicatorBytes(frame);
+      _ledEnabled = indicators.ledOn;
+      _displayMode = indicators.mode;
     } else {
       _offbandCaps = null;
       _femLnaEnabled = null;
       _offbandCaps2 = null;
+      _ledEnabled = null;
+      _displayMode = null;
+      _displayRotation = null;
     }
     // Capability-gated features are invisible when a bit is clear, which looks
     // identical to a bug. Log the raw inputs so "the toggle didn't appear" can
@@ -7973,6 +9358,9 @@ class MeshCoreConnector extends ChangeNotifier {
     _reconcileGpsPolling();
     // Caps landed, if the radio speaks block, pull its list and union-reconcile.
     _reconcileFirmwareBlock();
+
+    // BLE pairing pin, bytes 4..7 of the header (#1100).
+    _deviceBlePin = parseDevicePin(frame) ?? _deviceBlePin;
 
     // Firmware reports MAX_CONTACTS / 2 for v3+ device info.
     final reportedContacts = frame[2];
@@ -9206,16 +10594,28 @@ class MeshCoreConnector extends ChangeNotifier {
     String? channelName,
     TranslationResult? translationResult,
   }) {
-    if (message.isOutgoing || _appSettingsService == null) return;
+    if (message.isOutgoing) return;
     final channelIndex = message.channelIndex;
-    if (channelIndex == null) return;
+    if (_appSettingsService == null || channelIndex == null) {
+      _appDebugLogService?.error(
+        'CHAN NOTIFY not evaluated: '
+        '${_appSettingsService == null ? 'settings service missing' : 'message has no channel slot'}',
+        tag: 'Notification',
+      );
+      return;
+    }
+    final label = channelName ?? _channelDisplayName(channelIndex);
 
     final settings = _appSettingsService!.settings;
     if (!settings.notificationsEnabled || !settings.notifyOnNewChannelMessage) {
+      _appDebugLogService?.info(
+        'CHAN NOTIFY slot $channelIndex "$label": suppressed, app setting '
+        'off (notifications=${settings.notificationsEnabled}, '
+        'channel messages=${settings.notifyOnNewChannelMessage})',
+        tag: 'Notification',
+      );
       return;
     }
-
-    final label = channelName ?? _channelDisplayName(channelIndex);
 
     // Reuse translation result only if completed and non-empty; else use original text
     final resolvedText =
@@ -9228,18 +10628,47 @@ class MeshCoreConnector extends ChangeNotifier {
     // Per-channel notification level, keyed by the channel's PSK identity so
     // the setting survives a rename and does not follow a reused slot (#259).
     // Evaluated against resolvedText so a translated mention still matches.
-    final mode = _appSettingsService!.channelNotifyMode(
-      devicePrefix: selfPublicKeyHex,
-      pskHex: _findChannelByIndex(channelIndex)?.pskHex,
-    );
-    switch (mode) {
-      case ChannelNotifyMode.off:
-        return;
-      case ChannelNotifyMode.mentionsOnly:
-        if (!_mentionsSelf(resolvedText)) return;
-      case ChannelNotifyMode.all:
-        break;
+    // #1062: an unknown slot means an unknown PSK means an unknowable mode;
+    // fail closed (no notification) rather than defaulting to noisy.
+    final slotLookup = _findChannelByIndexWithSource(channelIndex);
+    final slotChannel = slotLookup.channel;
+    if (slotChannel == null &&
+        _unconfirmedChannelSlots.contains(channelIndex)) {
+      _appDebugLogService?.warn(
+        'Suppressing notification for channel slot $channelIndex: slot is '
+        'unconfirmed, its notify mode cannot be resolved',
+        tag: 'ChannelSync',
+      );
+      channelNotifyProbeForTest?.call(channelIndex, label, null, null);
+      return;
     }
+    final resolved = _appSettingsService!.resolveChannelNotifyMode(
+      devicePrefix: selfPublicKeyHex,
+      pskHex: slotChannel?.pskHex,
+    );
+    final mode = resolved.mode;
+    channelNotifyProbeForTest?.call(
+      channelIndex,
+      label,
+      slotChannel?.pskHex,
+      mode,
+    );
+    final String? suppressed = switch (mode) {
+      ChannelNotifyMode.off => 'mode off',
+      ChannelNotifyMode.mentionsOnly when !_mentionsSelf(resolvedText) =>
+        'mentions only, no mention',
+      _ => null,
+    };
+    _appDebugLogService?.info(
+      'CHAN NOTIFY slot $channelIndex "$label": radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)}, slot holds '
+      '"${slotChannel?.name ?? ''}" psk '
+      '${AppSettingsService.pskFingerprint(slotChannel?.pskHex)} '
+      '(${slotLookup.source}), mode ${mode.name} (${resolved.source}) -> '
+      '${suppressed == null ? 'posting' : 'suppressed, $suppressed'}',
+      tag: 'Notification',
+    );
+    if (suppressed != null) return;
 
     unawaited(
       () async {
@@ -9265,8 +10694,33 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_isSyncingQueuedMessages) {
       _handleQueuedMessageReceived();
     }
+    // #1062 ingress barrier: never file a message against a channel list that
+    // this connection has not confirmed; hold it and flush post-sync.
+    if (isConnected && !_channelListSynced) {
+      _holdChannelFrame(
+        _heldChannelMsgFrames,
+        frame,
+        'message',
+        bounded: false,
+      );
+      return;
+    }
     final parsed = ChannelMessage.fromFrame(frame);
     if (parsed != null && parsed.channelIndex != null) {
+      // #1062 fail-closed, slot-level: the list is synced but THIS slot never
+      // confirmed. Filing by index would attach the message to an unknown
+      // identity and persist it under the legacy index key, so re-hold until
+      // a sync confirms the slot (found by the #1064 integration tests).
+      if (isConnected &&
+          _unconfirmedChannelSlots.contains(parsed.channelIndex)) {
+        _holdChannelFrame(
+          _heldChannelMsgFrames,
+          frame,
+          'message',
+          bounded: false,
+        );
+        return;
+      }
       // Device-composed (outgoing) messages legitimately carry our own name and
       // no path; don't let the self-echo guard drop them (#429 part B).
       if (!parsed.isOutgoing &&
@@ -9337,11 +10791,16 @@ class MeshCoreConnector extends ChangeNotifier {
       final channelHash = payload.readByte();
       final encrypted = Uint8List.fromList(payload.readRemainingBytes());
 
-      // Use cached channels as fallback if live channels not yet loaded
-      final channelsToSearch = _channels.isNotEmpty
-          ? _channels
-          : _cachedChannels;
-      for (final channel in channelsToSearch) {
+      // #1062 ingress barrier: a raw frame is filed by matching its channel
+      // hash against the CLIENT's list and reusing that object's index, so a
+      // stale or mid-sync list files it into the wrong conversation. Hold
+      // until this connection's list is confirmed; never match the offline
+      // cache (its indexes may describe a layout the radio no longer has).
+      if (!_channelListSynced) {
+        _holdChannelFrame(_heldRawChannelFrames, frame, 'raw', bounded: true);
+        return;
+      }
+      for (final channel in _channels) {
         if (channel.isEmpty) continue;
         final hash = _computeChannelHash(channel.psk);
         if (hash != channelHash) continue;
@@ -9557,6 +11016,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final pendingAck = _pendingGenericAckQueue.removeAt(0);
+    pendingAck.answer(null);
     if (pendingAck.commandCode != cmdSendChannelTxtMsg ||
         pendingAck.channelSendQueueId == null) {
       return;
@@ -9644,12 +11104,30 @@ class MeshCoreConnector extends ChangeNotifier {
       '[ChannelSync] Received channel ${channel.index}: ${channel.isEmpty ? "empty" : channel.name}',
     );
 
-    // Preserve unread count from cached channel
+    // #1060: an erased record is the radio having LOST this slot, not the
+    // radio reporting a channel. Adopting it would render replacement
+    // characters as a channel name, and persisting it would destroy the
+    // client's own good copy. Refuse it here, loudly, and let the sync
+    // completion keep the cached list.
+    if (channel.isErased) {
+      if (_erasedChannelSlots.add(channel.index)) {
+        _appDebugLogService?.error(
+          'Channel slot ${channel.index} came back ERASED (all-0xFF name/PSK). '
+          'The radio has lost this channel. Refusing to adopt it, and the '
+          'cached channel list will NOT be overwritten.',
+          tag: 'ChannelSync',
+        );
+      }
+    }
+
+    // Preserve unread count from the cached channel, but only when the slot
+    // still holds the SAME channel. An unread count following the slot across
+    // an identity change is another channel's count (#1062).
     final cachedChannel = _cachedChannels.cast<Channel?>().firstWhere(
       (c) => c?.index == channel.index,
       orElse: () => null,
     );
-    if (cachedChannel != null) {
+    if (cachedChannel != null && cachedChannel.pskHex == channel.pskHex) {
       channel.unreadCount = cachedChannel.unreadCount;
     }
 
@@ -9661,8 +11139,9 @@ class MeshCoreConnector extends ChangeNotifier {
         _channelSyncInFlight = false;
         _channelSyncRetries = 0; // Reset retry counter on success
 
-        // Only add non-empty channels
-        if (!channel.isEmpty) {
+        // Only add slots that carry a usable channel. An erased slot is
+        // skipped exactly like an empty one (#1060).
+        if (!channel.isUnusable) {
           _channels.add(channel);
         }
 
@@ -9678,7 +11157,7 @@ class MeshCoreConnector extends ChangeNotifier {
           '[ChannelSync] Received unexpected channel ${channel.index}, expected $_nextChannelIndexToRequest',
         );
         // Add it anyway but don't advance sync
-        if (!channel.isEmpty &&
+        if (!channel.isUnusable &&
             !_channels.any((c) => c.index == channel.index)) {
           _channels.add(channel);
         }
@@ -9687,7 +11166,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     // Not syncing, or received unsolicited update - handle normally
-    if (!channel.isEmpty) {
+    if (!channel.isUnusable) {
       // Update or add channel
       final existingIndex = _channels.indexWhere(
         (c) => c.index == channel.index,
@@ -9748,15 +11227,28 @@ class MeshCoreConnector extends ChangeNotifier {
     return contact.type != advTypeRepeater;
   }
 
-  Channel? _findChannelByIndex(int index) {
-    return _channels.cast<Channel?>().firstWhere(
-          (c) => c?.index == index,
-          orElse: () => null,
-        ) ??
-        _cachedChannels.cast<Channel?>().firstWhere(
-          (c) => c?.index == index,
-          orElse: () => null,
-        );
+  Channel? _findChannelByIndex(int index) =>
+      _findChannelByIndexWithSource(index).channel;
+
+  /// [_findChannelByIndex] plus which list answered, for the log.
+  ({Channel? channel, String source}) _findChannelByIndexWithSource(int index) {
+    // #1062: an unconfirmed slot's contents are unknown. Returning the cached
+    // occupant here is how a stale identity (wrong PSK, wrong name) attached
+    // itself to live traffic; fail closed instead.
+    if (_unconfirmedChannelSlots.contains(index)) {
+      return (channel: null, source: 'slot unconfirmed');
+    }
+    final live = _channels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    if (live != null) return (channel: live, source: 'live list');
+    final cached = _cachedChannels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    if (cached != null) return (channel: cached, source: 'cached list');
+    return (channel: null, source: 'no channel in slot');
   }
 
   void _maybeIncrementChannelUnread(
@@ -10426,6 +11918,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Preserve deviceId and displayName for UI display during reconnection
     // They're only cleared on manual disconnect via disconnect() method
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // But NOT the identity that scopes stored data (#158). A manual
     // disconnect() clears _selfPublicKey; an unexpected drop did not, so
     // every per-radio store, and the one channels_screen builds from
@@ -11112,7 +12605,20 @@ class _PendingCommandAck {
   final int commandCode;
   final String? channelSendQueueId;
 
-  _PendingCommandAck({required this.commandCode, this.channelSendQueueId});
+  /// Completed with null for OK or with the error code for ERR, for a caller
+  /// that waits on the reply. (#1026)
+  final Completer<int?>? reply;
+
+  _PendingCommandAck({
+    required this.commandCode,
+    this.channelSendQueueId,
+    this.reply,
+  });
+
+  void answer(int? errCode) {
+    final waiter = reply;
+    if (waiter != null && !waiter.isCompleted) waiter.complete(errCode);
+  }
 }
 
 /// A `0xC5` request waiting for its reply.

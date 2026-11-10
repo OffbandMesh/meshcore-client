@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/connector/observer_config_client.dart';
 
 void main() {
@@ -38,14 +39,21 @@ void main() {
       final caps = MeshCoreConnector.parseOffbandCaps(
         frame(83, caps: ObserverConfigClient.capWifiObserver),
       )!;
-      expect(
-        ObserverConfigClient.supportsConfig(
-          firmwareVerCode: ObserverConfigClient.minVerCode,
-          offbandCaps: caps,
-        ),
-        isTrue,
-      );
+      expect(ObserverConfigClient.supportsConfig(offbandCaps: caps), isTrue);
     });
+
+    test(
+      'a clear observer bit is unsupported (#1065: the bit is the gate)',
+      () {
+        final caps = MeshCoreConnector.parseOffbandCaps(frame(83, caps: 0x00))!;
+        expect(ObserverConfigClient.supportsConfig(offbandCaps: caps), isFalse);
+        // Another feature's bit must not open the config command.
+        expect(
+          ObserverConfigClient.supportsConfig(offbandCaps: offbandCapCaplog),
+          isFalse,
+        );
+      },
+    );
 
     test('hostile/truncated short frames never throw, always null', () {
       for (final n in [0, 1, 4, 80, 81, 82]) {

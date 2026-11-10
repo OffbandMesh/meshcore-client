@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Offband Meshcore",
+  "appTitle": "Offband MeshCore",
   "nav_contacts": "Contacts",
   "nav_channels": "Channels",
   "nav_map": "Map",
@@ -50,7 +50,7 @@
   },
   "common_autoRefresh": "Autorefresh",
   "common_interval": "Interval",
-  "scanner_title": "Offband Meshcore",
+  "scanner_title": "Offband MeshCore",
   "connectionChoiceUsbLabel": "USB",
   "connectionChoiceBluetoothLabel": "Bluetooth",
   "connectionChoiceTcpLabel": "TCP",
@@ -158,6 +158,14 @@
   "scanner_scan": "Scan",
   "scanner_bluetoothOff": "Bluetooth is off",
   "scanner_bluetoothOffMessage": "Please turn on Bluetooth to scan for devices",
+  "scanner_scanFailedLocationOff": "Location is off, so Android won't let the app scan for Bluetooth radios. Turn on Location in your phone's quick settings, then tap Scan again.",
+  "@scanner_scanFailedLocationOff": {
+    "description": "Shown when a Bluetooth scan is refused because system Location is off (Android 11 and below) (#1033)."
+  },
+  "scanner_scanFailedGeneric": "Could not start the Bluetooth scan. Tap Scan to try again. If it keeps failing, turn Bluetooth off and on.",
+  "@scanner_scanFailedGeneric": {
+    "description": "Shown for any other failure to start a Bluetooth scan; the raw error goes to the log only (#1033)."
+  },
   "scanner_connectFailedTransient": "The radio refused the connection (a common transient Bluetooth error). It was already retried; wait a few seconds and try again.",
   "@scanner_connectFailedTransient": {
     "description": "Human-readable text for an Android GATT 133 connect failure after the bounded retry also failed (#698)."
@@ -377,6 +385,8 @@
   "settings_buttonActionsSubtitle": "Assign what the button does",
   "settings_badgeScreen": "Screen",
   "settings_badgeScreenSubtitle": "Text size, screen off, time zone",
+  "settings_indicators": "Display and LED",
+  "settings_indicatorsSubtitle": "Display mode, rotation, status LED",
   "settings_badgeBattery": "Battery",
   "settings_badgeBatterySubtitle": "100% at {mv} mV",
   "@settings_badgeBatterySubtitle": {
@@ -423,6 +433,38 @@
   "settings_rebootDevice": "Reboot Device",
   "settings_rebootDeviceSubtitle": "Restart the MeshCore device",
   "settings_rebootDeviceConfirm": "Are you sure you want to reboot the device? You will be disconnected.",
+  "settings_factoryReset":"Factory Reset",
+  "settings_factoryResetSubtitle": "Erase the radio and give it a new identity",
+  "settings_factoryResetConfirm": "This erases everything on the radio: its identity, contacts, channels and settings. It can't be undone.",
+  "settings_factoryResetDeleteAppData": "Also delete this radio's data stored in the app",
+  "settings_factoryResetNotConnected": "Factory reset not sent: no radio is connected.",
+  "factoryResetSentTitle": "Factory reset sent",
+  "factoryResetSentBody": "The radio is erasing itself and will restart with a new identity.",
+  "factoryResetSentBleBody": "The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer's Bluetooth settings, then reconnect.",
+  "factoryResetDeleteFailedTitle": "Factory reset sent, app cleanup failed",
+  "factoryResetDeleteFailedBody": "The reset was sent, but deleting this radio's data from the app failed.",
+  "settings_blePin": "BLE pairing PIN",
+  "settings_blePinDefault": "Firmware default",
+  "settings_blePinHelp": "6 digits (100000-999999). New phones and PCs must enter it when pairing. Reset to default to return to the firmware's built-in behavior.",
+  "settings_blePinInvalid": "Enter a 6-digit PIN between 100000 and 999999",
+  "settings_blePinSaved": "PIN set to {pin}. Already-paired devices may need to forget the radio and pair again.",
+  "@settings_blePinSaved": {
+    "placeholders": {
+      "pin": {
+        "type": "String"
+      }
+    }
+  },
+  "settings_blePinResetDone": "PIN reset to the firmware default. Already-paired devices may need to forget the radio and pair again.",
+  "settings_blePinSendFailed": "The PIN was not changed: sending to the radio failed ({error})",
+  "@settings_blePinSendFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settings_blePinResetAction": "Reset to default",
   "settings_debug": "Debug",
   "settings_experimental": "Experimental",
   "settings_experimentalSubtitle": "Advanced and in-development features",
@@ -447,7 +489,7 @@
   "settings_appDebugLog": "App Debug Log",
   "settings_appDebugLogSubtitle": "Application debug messages",
   "settings_about": "About",
-  "settings_aboutVersion": "Offband Meshcore v{version}",
+  "settings_aboutVersion": "Offband MeshCore v{version}",
   "@settings_aboutVersion": {
     "placeholders": {
       "version": {
@@ -456,11 +498,17 @@
     }
   },
   "settings_aboutLegalese": "© 2026 Offband. Based on MeshCore Open by zjs81, MIT licensed.",
-  "settings_aboutDescription": "Offband Meshcore is an open-source client for MeshCore LoRa mesh networking devices.",
+  "settings_aboutDescription": "Offband MeshCore is an open-source client for MeshCore LoRa mesh networking devices.",
   "settings_aboutLicenses": "View licenses",
   "settings_aboutWebsite": "Offband website",
   "settings_aboutPlayStore": "Google Play",
   "settings_aboutDonate": "Donate or sponsor",
+  "sponsorPrompt_title": "Support Offband",
+  "sponsorPrompt_body": "Offband MeshCore is free, open source, and built by an independent developer. If it's useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.",
+  "sponsorPrompt_sponsor": "Sponsor",
+  "sponsorPrompt_anytime": "You can support Offband anytime from About in Settings, or at offband.org/donate.",
+  "sponsorPrompt_notNow": "Not now",
+  "sponsorPrompt_never": "Never Show Again",
   "settings_aboutLinkFailed": "Could not open the link",
   "settings_aboutOpenMeteoAttribution": "LOS elevation data: Open-Meteo (CC BY 4.0)",
   "settings_aboutPresetsAttribution": "Regional radio presets: MeshCore's suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.",
@@ -828,6 +876,68 @@
   "channels_noChannelsConfigured": "No channels configured",
   "channels_addPublicChannel": "Add Public Channel",
   "channels_searchChannels": "Search channels...",
+  "channels_unconfirmedSlots": "The radio did not confirm channel slot(s) {slots}. Those channels are unknown until a sync succeeds.",
+  "@channels_unconfirmedSlots": {
+    "placeholders": {
+      "slots": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_retrySync": "Retry sync",
+  "channels_erasedSlots": "The radio has lost the channels in slot(s) {slots}; it reported them as erased. Your channel list here has been kept and was not overwritten.",
+  "@channels_erasedSlots": {
+    "placeholders": {
+      "slots": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_restoreToRadio": "Restore to radio",
+  "channels_restoreToRadioConfirm": "Write {count} channel(s) back to the radio: {names}. Channels the radio still has are left as they are.",
+  "@channels_restoreToRadioConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_restoreToRadioDone": "The radio confirmed all {count} channel(s).",
+  "@channels_restoreToRadioDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channels_restoreToRadioPartial": "The radio confirmed {confirmed} of {total} channel(s). Not restored: {names}.",
+  "@channels_restoreToRadioPartial": {
+    "description": "Restore to radio finished with some channels refused, unanswered, or without a free slot. Persistent (#1117).",
+    "placeholders": {
+      "confirmed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_restoreToRadioFailed": "Could not restore the channel list: nothing cached to restore, or the radio is not connected.",
+  "channels_slotIdentityChanged": "Channel layout changed on the radio: {changes}",
+  "@channels_slotIdentityChanged": {
+    "placeholders": {
+      "changes": {
+        "type": "String"
+      }
+    }
+  },
+  "common_dismiss": "Dismiss",
   "channels_noChannelsFound": "No channels found",
   "channels_channelIndex": "Channel {index}",
   "@channels_channelIndex": {
@@ -850,10 +960,22 @@
   "channels_editChannel": "Edit channel",
   "channels_muteChannel": "Mute channel",
   "channels_unmuteChannel": "Unmute channel",
-  "channels_notifications": "Notifications",
+  "channels_notifications": "Phone notifications",
   "channels_notifyAll": "All messages",
   "channels_notifyMentionsOnly": "Mentions only",
   "channels_notifyOff": "Off",
+  "channels_radioSound": "Radio sound",
+  "channels_radioSoundUnset": "Not set",
+  "channels_radioSoundFollows": "Follows the radio: {scope}",
+  "@channels_radioSoundFollows": {
+    "placeholders": {
+      "scope": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_radioSoundMutedByRadio": "Silent: the radio is set to None",
+  "channels_radioSoundReading": "Reading from the radio",
   "channels_deleteChannel": "Delete channel",
   "channels_deleteChannelConfirm": "Delete \"{name}\"? This cannot be undone.",
   "@channels_deleteChannelConfirm": {
@@ -941,6 +1063,61 @@
     }
   },
   "channels_publicChannelAdded": "Public channel added",
+  "channels_slotBusySyncing": "The radio is still updating its channel list. Try again in a moment.",
+  "channels_slotsAllFull": "All {count} channel slots are in use. Delete a channel first.",
+  "@channels_slotsAllFull": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "channels_publicAlreadyAdded": "The Public channel is already on this radio.",
+  "channels_publicCannotBeRemoved": "Public can't be removed from the radio. It always stays in slot 0.",
+  "@channels_publicCannotBeRemoved": {
+    "description": "Refusal when the user tries to delete the Public channel. Firmware #1896 keeps Public permanently in slot 0. Persistent (#1117)."
+  },
+  "channels_writeOccupied": "The radio refused: another channel already uses that slot, and it was left unchanged. Try again now that the list has been re-read.",
+  "@channels_writeOccupied": {
+    "description": "The radio refused a channel write because a different channel holds the slot (ERR_CODE_BAD_STATE, firmware #1864). Persistent (#1026)."
+  },
+  "channels_writeRejected": "The radio refused the change, so the channel is as it was.",
+  "@channels_writeRejected": {
+    "description": "The radio answered a channel write with an error other than slot-occupied. Persistent (#1026)."
+  },
+  "channels_writeNoReply": "The radio did not confirm the change. Check the channel list before trying again.",
+  "@channels_writeNoReply": {
+    "description": "A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026)."
+  },
+  "channels_writeClearedNotAdded": "The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.",
+  "@channels_writeClearedNotAdded": {
+    "description": "A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026)."
+  },
+  "channels_writeHistoryNotMoved": "The channel was changed, but its message history could not be moved to it. The app log has the details.",
+  "@channels_writeHistoryNotMoved": {
+    "description": "The user chose to keep message history across a key change; the radio took the new key but the app could not move the stored messages. Persistent (#1128)."
+  },
+  "channels_keyChangeHistoryTitle": "Keep message history?",
+  "@channels_keyChangeHistoryTitle": {
+    "description": "Title of the question asked before a channel's key changes (a hashtag rename, or a new private key) (#1128)."
+  },
+  "channels_keyChangeHistoryBody": "This gives \"{name}\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.",
+  "@channels_keyChangeHistoryBody": {
+    "description": "Body of the keep-or-delete question for a channel key change (#1128).",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_keyChangeKeepHistory": "Keep message history",
+  "@channels_keyChangeKeepHistory": {
+    "description": "Moves the channel's stored messages to its new key (#1128)."
+  },
+  "channels_keyChangeDeleteHistory": "Delete message history",
+  "@channels_keyChangeDeleteHistory": {
+    "description": "Deletes the channel's stored messages, as Delete Channel does (#1128)."
+  },
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",
   "channels_sortAZ": "A-Z",
@@ -1046,9 +1223,10 @@
   "debugLog_shareLog": "Share logs",
   "debugLog_saveLog": "Save logs",
   "debugLog_downloadLog": "Download logs",
-  "debugLog_shareSubject": "Offband Meshcore logs",
+  "debugLog_shareSubject": "Offband MeshCore logs",
   "debugLog_logSaved": "Log saved",
   "debugLog_logUnavailable": "No log available to export",
+  "debugLog_exportFailed": "Couldn't share the log. Please try again.",
   "debugLog_copied": "Debug log copied",
   "debugLog_bleCopied": "BLE log copied",
   "debugLog_noEntries": "No debug logs yet",
@@ -1178,6 +1356,13 @@
     }
   },
   "channel_senderAddNotConnected": "Not connected to a radio, so this sender can't be added yet",
+  "channels_pskDerivedFromName": "Key derives from the channel name",
+  "channels_communityDerived": "Derived from the community secret; manage it through the community",
+  "channels_copyPsk": "Copy key",
+  "channels_pskCopied": "Key copied",
+  "channels_hashtagMustKeepHash": "A hashtag channel's name must start with a single #. Add a new channel to use a different type.",
+  "channels_channelChangedReopen": "This channel changed on the radio while the dialog was open. Nothing was saved; reopen it and try again.",
+  "channel_slotUnconfirmedSendBlocked": "Message not sent: the radio hasn't confirmed this channel slot yet. Retry the channel sync, then send again.",
   "channel_senderAddFailed": "Couldn't add this sender: {error}",
   "@channel_senderAddFailed": {
     "placeholders": {
@@ -2415,7 +2600,6 @@
   "channels_scanQrDesc": "Add a community or channel from a QR code",
   "channels_scanQrInstructions": "Point at a MeshCore QR code",
   "channels_invalidQr": "Invalid QR code",
-  "channels_noFreeSlot": "No free channel slot",
   "channels_qrAddConfirm": "Add channel \"{name}\"?",
   "@channels_qrAddConfirm": {
     "placeholders": {
@@ -3305,6 +3489,10 @@
   "importConfig_reasonNoFreeSlot": "no free channel slot on the device",
   "@importConfig_reasonNoFreeSlot": {
     "description": "Skip reason: every channel slot is occupied (#576)."
+  },
+  "importConfig_reasonChannelsSyncing": "channels were still being read from the radio; import again in a moment",
+  "@importConfig_reasonChannelsSyncing": {
+    "description": "Skip reason: the channel list was mid-sync, so no slot could be trusted to be free (#1021)."
   },
   "importConfig_reasonAbsentFromFile": "not present in this file",
   "@importConfig_reasonAbsentFromFile": {

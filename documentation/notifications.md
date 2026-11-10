@@ -2,7 +2,7 @@
 
 ## Overview
 
-Offband Meshcore provides both **system notifications** (push-style OS alerts) and **in-app unread badges** to inform users of new activity.
+Offband MeshCore provides both **system notifications** (push-style OS alerts) and **in-app unread badges** to inform users of new activity.
 
 ## Notification Types
 

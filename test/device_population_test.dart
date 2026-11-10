@@ -314,5 +314,23 @@ void main() {
       // Pre-split floors (same meaning on every population) stay available.
       expect(connector.supportsCompanionRadioStats, isTrue);
     });
+
+    test('stock at ver 14 lights nothing either (#1065): the real stock code,'
+        ' now that the fork rolls back onto the same number', () {
+      // The case above uses 22, which no stock device reports. 14 is what real
+      // stock 1.18 sends AND what the fork reports after the rollback, so this
+      // is the collision in its actual form. The three gates whose version
+      // floors were removed in #1065 must still be false here, and they are,
+      // because the 82-byte shape classifies stockModern and the connector
+      // nulls both caps bytes.
+      connector.handleFrameForTest(
+        deviceInfo(verCode: 14, version: 'v1.18.0-81dbae5'),
+      );
+      expect(connector.offbandCaps, isNull);
+      expect(connector.offbandCaps2, isNull);
+      expect(connector.supportsOffbandBlock, isFalse);
+      expect(connector.supportsOffbandCaplog, isFalse);
+      expect(connector.supportsPktHash, isFalse);
+    });
   });
 }

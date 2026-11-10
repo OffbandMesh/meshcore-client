@@ -1,0 +1,232 @@
+name: macOS signed build
+
+# Builds the macOS app, signs it with the Developer ID Application identity,
+# notarizes it with Apple and staples the ticket, so it opens on any Mac with
+# no Gatekeeper warning (#1109, epic #1107). Called by release-signed.yml.
+#
+# Three jobs, so no Mac runner ever sits waiting on Apple's queue:
+#   1. build-sign-submit (Mac):  build, sign, submit, keep the signed app.
+#   2. notary-wait (Linux):      poll Apple for that submission, up to 340 min.
+#   3. staple (Mac):             staple the ticket, verify, publish the zip.
+# If Apple holds a submission past the poll deadline, job 2 fails, the signed
+# app stays an artifact of the run, and "Re-run failed jobs" checks the SAME
+# submission again later. Nothing is rebuilt or resubmitted.
+#
+# SEPARATION: this lane uses its own `apple-macos` Environment and its own
+# App Store Connect key. It shares no Environment, secret or key with the
+# iOS lane (`apple-signing`), so a hold, revocation or failure in one Apple
+# lane cannot break the other.
+#
+# SECURITY: this repo is PUBLIC, and jobs 1 and 2 hold the Developer ID key
+# and the notary API key.
+#
+#   - NEVER call this from a `pull_request` workflow. A PR (incl. from a fork)
+#     must never run a job that can read these secrets.
+#   - Only jobs 1 and 2 reference the `apple-macos` Environment, so only they
+#     receive secrets, and only after the required reviewer approves. Job 3
+#     needs none: stapling fetches the public ticket by the app's hash.
+#   - Secret files live in RUNNER_TEMP and are removed with `if: always()`.
+#   - Values are passed via env:, never echoed. The identity name holds the
+#     owner's legal name and is masked.
+#
+# There is deliberately no skip-notarization input: an unsigned or
+# unnotarized app must fail this lane, never pass it (#904).
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-sign-submit:
+    runs-on: macos-latest
+    environment: apple-macos # required-reviewer gate; do not remove
+    timeout-minutes: 60
+    outputs:
+      submission-id: ${{ steps.submit.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the signing secrets are present
+        env:
+          MACOS_DEVID_P12_BASE64: ${{ secrets.MACOS_DEVID_P12_BASE64 }}
+          MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -eu
+          missing=0
+          for name in MACOS_DEVID_P12_BASE64 MACOS_DEVID_P12_PASSWORD \
+                      MACOS_NOTARY_KEY_P8_BASE64 MACOS_NOTARY_KEY_ID MACOS_NOTARY_ISSUER_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Secret ${name} is empty or absent in this run."
+              missing=1
+            fi
+          done
+          exit "${missing}"
+
+      - name: Temporary keychain with the Developer ID identity
+        env:
+          MACOS_DEVID_P12_BASE64: ${{ secrets.MACOS_DEVID_P12_BASE64 }}
+          MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
+        run: |
+          set -eu
+          umask 077
+          KC="${RUNNER_TEMP}/signing.keychain-db"
+          KP="$(openssl rand -hex 16)"
+          echo "::add-mask::${KP}"
+          echo "KC=${KC}" >> "$GITHUB_ENV"
+          security create-keychain -p "${KP}" "${KC}"
+          security set-keychain-settings -lut 21600 "${KC}"
+          security unlock-keychain -p "${KP}" "${KC}"
+          P12="${RUNNER_TEMP}/devid.p12"
+          printf '%s' "${MACOS_DEVID_P12_BASE64}" | base64 --decode > "${P12}"
+          security import "${P12}" -k "${KC}" -P "${MACOS_DEVID_P12_PASSWORD}" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "${P12}"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${KP}" "${KC}" > /dev/null
+          security list-keychains -d user -s "${KC}" $(security list-keychains -d user | tr -d '"')
+          IDENTITIES="$(security find-identity -v -p codesigning "${KC}")"
+          COUNT="$(printf '%s\n' "${IDENTITIES}" | grep -c '"Developer ID Application: ' || true)"
+          if [ "${COUNT}" != "1" ]; then
+            echo "::error::Expected one Developer ID Application identity in the keychain, found ${COUNT}."
+            exit 1
+          fi
+          IDENTITY="$(printf '%s\n' "${IDENTITIES}" | sed -n 's/.*"\(Developer ID Application: .*\)".*/\1/p')"
+          echo "::add-mask::${IDENTITY}"
+          echo "IDENTITY=${IDENTITY}" >> "$GITHUB_ENV"
+          echo "Keychain ready with one Developer ID Application identity."
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Write dart_defines.json
+        env:
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+        run: jq -n --arg k "$GIPHY_API_KEY" '{GIPHY_API_KEY:$k}' > dart_defines.json
+      - name: Enable native assets (bundles sqlite3 + llamadart libs, #445)
+        run: flutter config --enable-native-assets
+      - run: flutter build macos --release --no-pub --dart-define-from-file=dart_defines.json
+
+      # Inside-out: every nested Mach-O first, then each framework bundle, then
+      # the app with its entitlements. Hardened Runtime and a secure timestamp
+      # are what notarization requires.
+      - name: Sign with Developer ID
+        run: |
+          set -eu
+          APP=build/macos/Build/Products/Release/offband_meshcore.app
+          echo "APP=${APP}" >> "$GITHUB_ENV"
+          SIGN=(codesign --force --options runtime --timestamp --sign "${IDENTITY}" --keychain "${KC}")
+          while IFS= read -r -d '' f; do
+            if file -b "${f}" | grep -q 'Mach-O'; then
+              "${SIGN[@]}" "${f}"
+            fi
+          done < <(find "${APP}/Contents/Frameworks" -type f -print0)
+          while IFS= read -r -d '' fw; do
+            "${SIGN[@]}" "${fw}"
+          done < <(find "${APP}/Contents/Frameworks" -depth -name '*.framework' -type d -print0)
+          "${SIGN[@]}" --entitlements macos/Runner/Release.entitlements "${APP}"
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+          lipo -archs "${APP}/Contents/MacOS/offband_meshcore"
+
+      # ditto, not zip: it preserves the .app bundle's symlinks (#1108). The
+      # same zip is what Apple notarizes and what job 3 staples.
+      - name: Zip the signed app
+        run: ditto -c -k --keepParent "${APP}" offband-macos-signed.zip
+
+      # Upload only, no --wait: the verdict is job 2's business.
+      - name: Submit for notarization
+        id: submit
+        env:
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -eu
+          umask 077
+          P8="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s' "${MACOS_NOTARY_KEY_P8_BASE64}" | base64 --decode > "${P8}"
+          OUT="${RUNNER_TEMP}/notarize.json"
+          xcrun notarytool submit offband-macos-signed.zip --key "${P8}" \
+            --key-id "${MACOS_NOTARY_KEY_ID}" --issuer "${MACOS_NOTARY_ISSUER_ID}" \
+            --output-format json > "${OUT}"
+          cat "${OUT}"
+          ID="$(jq -r '.id // empty' "${OUT}")"
+          if [ -z "${ID}" ]; then
+            echo "::error::notarytool returned no submission id."
+            exit 1
+          fi
+          echo "id=${ID}" >> "$GITHUB_OUTPUT"
+          echo "Submitted for notarization: ${ID}"
+
+      # Kept 30 days so a held submission can be finished by a re-run.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-signed-unstapled
+          path: offband-macos-signed.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove the signing material
+        if: always()
+        run: |
+          set +e
+          if [ -n "${KC:-}" ]; then security delete-keychain "${KC}"; fi
+          rm -f dart_defines.json "${RUNNER_TEMP}/devid.p12" "${RUNNER_TEMP}/AuthKey.p8"
+
+  notary-wait:
+    needs: build-sign-submit
+    runs-on: ubuntu-latest
+    environment: apple-macos # holds the notary key; do not remove
+    # GitHub's job limit is 360 minutes. A Linux runner on a public repo costs
+    # nothing to keep polling, and a hold of a few hours then finishes with no
+    # manual re-run. The poll deadline leaves room for setup inside the limit.
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet "PyJWT[crypto]==2.10.1"
+      - name: Wait for Apple's verdict (340 min max)
+        env:
+          SUBMISSION_ID: ${{ needs.build-sign-submit.outputs.submission-id }}
+          MACOS_NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -eu
+          umask 077
+          export P8="${RUNNER_TEMP}/AuthKey.p8"
+          printf '%s' "${MACOS_NOTARY_KEY_P8_BASE64}" | base64 --decode > "${P8}"
+          python3 .github/scripts/notary-wait.py "${SUBMISSION_ID}" 340
+      - name: Remove the notary key
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/AuthKey.p8"
+
+  staple:
+    needs: notary-wait
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-signed-unstapled
+      - name: Staple and verify
+        run: |
+          set -eu
+          ditto -x -k offband-macos-signed.zip .
+          APP=offband_meshcore.app
+          xcrun stapler staple "${APP}"
+          xcrun stapler validate "${APP}"
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+          spctl --assess --type execute --verbose=4 "${APP}"
+          ditto -c -k --keepParent "${APP}" offband-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: offband-macos.zip
+          if-no-files-found: error
+          retention-days: 7

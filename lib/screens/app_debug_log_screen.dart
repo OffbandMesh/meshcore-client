@@ -28,12 +28,7 @@ class AppDebugLogScreen extends StatelessWidget {
                 icon: Icon(LogExport.icon),
                 onPressed: () => LogExport.shareLogs(
                   context,
-                  webContent: () => entries
-                      .map(
-                        (entry) =>
-                            '[${entry.formattedTime}] [${entry.levelLabel}] [${entry.tag}] ${entry.message}',
-                      )
-                      .join('\n'),
+                  webContent: () => LogExport.appLogText(entries),
                 ),
               ),
               IconButton(
@@ -41,12 +36,7 @@ class AppDebugLogScreen extends StatelessWidget {
                 icon: const Icon(Icons.copy),
                 onPressed: hasEntries
                     ? () async {
-                        final text = entries
-                            .map(
-                              (entry) =>
-                                  '[${entry.formattedTime}] [${entry.levelLabel}] [${entry.tag}] ${entry.message}',
-                            )
-                            .join('\n');
+                        final text = LogExport.appLogText(entries);
                         await Clipboard.setData(ClipboardData(text: text));
                         if (!context.mounted) return;
                         showDismissibleSnackBar(

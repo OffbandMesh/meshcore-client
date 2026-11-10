@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../models/app_settings.dart';
 import '../models/channel.dart';
 import '../services/app_settings_service.dart';
+import '../utils/app_logger.dart';
 
 /// Shared per-channel notify-mode affordance (#262), reachable both from the
 /// Channels list and from inside a channel's chat (#275). Single implementation
@@ -36,9 +37,17 @@ String channelNotifyModeLabel(BuildContext context, ChannelNotifyMode mode) {
 void showChannelNotifyModeDialog(BuildContext context, Channel channel) {
   final settingsService = context.read<AppSettingsService>();
   final devicePrefix = context.read<MeshCoreConnector>().selfPublicKeyHex;
-  final current = settingsService.channelNotifyMode(
+  final resolved = settingsService.resolveChannelNotifyMode(
     devicePrefix: devicePrefix,
     pskHex: channel.pskHex,
+  );
+  final current = resolved.mode;
+  appLogger.info(
+    'Notify mode dialog opened: radio '
+    '${AppSettingsService.radioScopePrefix(devicePrefix)} slot ${channel.index} '
+    '"${channel.name}" psk ${AppSettingsService.pskFingerprint(channel.pskHex)} '
+    'shows ${current.name} (${resolved.source})',
+    tag: 'NotifyMode',
   );
 
   showDialog<void>(
@@ -61,6 +70,7 @@ void showChannelNotifyModeDialog(BuildContext context, Channel channel) {
                   pskHex: channel.pskHex,
                   channelName: channel.name,
                   mode: mode,
+                  channelIndex: channel.index,
                 );
               },
             ),
