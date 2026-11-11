@@ -271,6 +271,12 @@ jobs:
             echo "::error::CFBundleName is '${NAME}', expected 'Offband MeshCore' (#1140)."
             exit 1
           fi
+          codesign -d --entitlements - --xml "${APP}" > "${RUNNER_TEMP}/entitlements.plist"
+          SAVE="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "${RUNNER_TEMP}/entitlements.plist" || true)"
+          if [ "${SAVE}" != "true" ]; then
+            echo "::error::App lacks files.user-selected.read-write; the sandbox will refuse the Save dialog (#1143)."
+            exit 1
+          fi
           lipo -archs "${APP}/Contents/MacOS/Offband MeshCore" || true
           ditto -c -k --keepParent "${APP}" offband-macos.zip
       - name: Upload macOS build
