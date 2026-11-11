@@ -152,7 +152,7 @@ jobs:
           echo "Refused, as required."
       - name: Assert the app holds its native-asset frameworks (#1037)
         if: needs.classify.outputs.docs_only != 'true'
-        run: bash .github/scripts/ios-assert-frameworks.sh build/ios/iphoneos/Runner.app
+        run: bash .github/scripts/ios-assert-frameworks.sh "build/ios/iphoneos/Offband MeshCore.app"
       # ios-signed.yml cannot run on a PR, so its output check is proven here,
       # with no secrets: every case that must not count as success (#1040).
       - name: "Negative: the altool check refuses anything but success"
@@ -265,8 +265,19 @@ jobs:
         if: needs.classify.outputs.docs_only != 'true'
         run: |
           set -eu
-          APP=build/macos/Build/Products/Release/offband_meshcore.app
-          lipo -archs "${APP}/Contents/MacOS/offband_meshcore" || true
+          APP="build/macos/Build/Products/Release/Offband MeshCore.app"
+          NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${APP}/Contents/Info.plist")"
+          if [ "${NAME}" != "Offband MeshCore" ]; then
+            echo "::error::CFBundleName is '${NAME}', expected 'Offband MeshCore' (#1140)."
+            exit 1
+          fi
+          codesign -d --entitlements - --xml "${APP}" > "${RUNNER_TEMP}/entitlements.plist"
+          SAVE="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "${RUNNER_TEMP}/entitlements.plist" || true)"
+          if [ "${SAVE}" != "true" ]; then
+            echo "::error::App lacks files.user-selected.read-write; the sandbox will refuse the Save dialog (#1143)."
+            exit 1
+          fi
+          lipo -archs "${APP}/Contents/MacOS/Offband MeshCore" || true
           ditto -c -k --keepParent "${APP}" offband-macos.zip
       - name: Upload macOS build
         if: needs.classify.outputs.docs_only != 'true'

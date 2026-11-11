@@ -1774,6 +1774,18 @@ abstract class AppLocalizations {
   /// **'Never Show Again'**
   String get sponsorPrompt_never;
 
+  /// No description provided for @iosOnMac_title.
+  ///
+  /// In en, this message translates to:
+  /// **'iPhone app on a Mac'**
+  String get iosOnMac_title;
+
+  /// No description provided for @iosOnMac_body.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the iPhone version of Offband MeshCore. It\'s made for iPhone and iPad, so on a Mac it runs in a fixed phone-sized window.'**
+  String get iosOnMac_body;
+
   /// No description provided for @settings_aboutLinkFailed.
   ///
   /// In en, this message translates to:

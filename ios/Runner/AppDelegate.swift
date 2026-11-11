@@ -12,5 +12,15 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OffbandPlatform") {
+      FlutterMethodChannel(name: "offband/platform", binaryMessenger: registrar.messenger())
+        .setMethodCallHandler { call, result in
+          if call.method == "isiOSAppOnMac" {
+            result(ProcessInfo.processInfo.isiOSAppOnMac)
+          } else {
+            result(FlutterMethodNotImplemented)
+          }
+        }
+    }
   }
 }

@@ -316,6 +316,14 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/widgets/sponsor_prompt.dart',
   ),
   StorageSurface(
+    'ios_on_mac_notice_shown_for',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'the app version the iPhone-on-a-Mac notice last showed for (#1140). '
+        'A fact about the installed app, not a radio',
+    owner: 'lib/widgets/ios_on_mac_notice.dart',
+  ),
+  StorageSurface(
     'anr_last_exit_ts_ms',
     verdict: ScopingVerdict.globalOnPurpose,
     reason:
