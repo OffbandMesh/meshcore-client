@@ -137,6 +137,12 @@ jobs:
           done < <(find "${APP}/Contents/Frameworks" -depth -name '*.framework' -type d -print0)
           "${SIGN[@]}" --entitlements macos/Runner/Release.entitlements "${APP}"
           codesign --verify --deep --strict --verbose=2 "${APP}"
+          codesign -d --entitlements - --xml "${APP}" > "${RUNNER_TEMP}/entitlements.plist"
+          SAVE="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "${RUNNER_TEMP}/entitlements.plist" || true)"
+          if [ "${SAVE}" != "true" ]; then
+            echo "::error::Signed app lacks files.user-selected.read-write; the sandbox will refuse the Save dialog (#1143)."
+            exit 1
+          fi
           lipo -archs "${APP}/Contents/MacOS/Offband MeshCore"
 
       # ditto, not zip: it preserves the .app bundle's symlinks (#1108). The
