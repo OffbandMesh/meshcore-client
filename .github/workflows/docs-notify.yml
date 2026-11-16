@@ -1,0 +1,32 @@
+name: Notify the docs site
+
+# A change to the app manual on dev tells offband-site to rebuild and publish
+# docs.offband.org/app/ (#1148, offband-site#77). GitHub cannot trigger a
+# workflow in another repository, so this side sends a repository dispatch. The
+# site validates the payload and builds the current dev head itself; the SHA is
+# a notification, not a checkout.
+on:
+  push:
+    branches: [dev]
+    paths: ['docs/user/**']
+# No workflow_dispatch: it would run a branch's own copy of this file with the
+# PAT. To republish by hand, run offband-site's Documentation workflow instead.
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Send the app-docs dispatch to offband-site
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: >-
+          python scripts/docs_site_dispatch.py "$SOURCE_SHA" |
+          gh api repos/OffbandMesh/offband-site/dispatches --method POST --input -
