@@ -20,13 +20,16 @@ jobs:
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          persist-credentials: false
+      # The payload is offband-site's version-1 contract (its scripts/build_docs.py
+      # validate_event): exactly these four fields, or the site refuses the run.
       - name: Send the app-docs dispatch to offband-site
         env:
           GH_TOKEN: ${{ secrets.PROJECT_PAT }}
           SOURCE_SHA: ${{ github.sha }}
         run: >-
-          python scripts/docs_site_dispatch.py "$SOURCE_SHA" |
-          gh api repos/OffbandMesh/offband-site/dispatches --method POST --input -
+          gh api repos/OffbandMesh/offband-site/dispatches --method POST
+          -f event_type=app-docs
+          -F 'client_payload[schema_version]=1'
+          -f 'client_payload[source_repository]=OffbandMesh/meshcore-client'
+          -f 'client_payload[source_ref]=refs/heads/dev'
+          -f "client_payload[source_sha]=$SOURCE_SHA"
