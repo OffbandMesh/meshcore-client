@@ -377,6 +377,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String deviceCli_localUnsupported(String command) {
+    return '$command: not sent. Your radio\'s firmware doesn\'t support the device CLI.';
+  }
+
+  @override
   String deviceCli_sendFailed(String error) {
     return 'Send failed: $error';
   }

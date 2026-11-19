@@ -233,11 +233,14 @@ class _DeviceCliScreenState extends State<DeviceCliScreen> {
       );
     } on CliConsoleUnsupported {
       if (!mounted) return;
-      // The connected radio refused the send itself (pre-1.18 firmware), so
-      // nothing went out: say so now instead of waiting out a timeout that
-      // would blame the target.
+      // Nothing went out: the radio refused a remote send (pre-1.18 firmware),
+      // or the client refused a local one (#1158). Say so now instead of
+      // waiting out a timeout that would blame the target. The row stays in
+      // the transcript, so the error persists until the console is closed.
       entry = _ConsoleEntry.sendFailed(
-        context.l10n.deviceCli_remoteUnsupported(command),
+        _isRemote
+            ? context.l10n.deviceCli_remoteUnsupported(command)
+            : context.l10n.deviceCli_localUnsupported(command),
       );
     } catch (e) {
       if (!mounted) return;
