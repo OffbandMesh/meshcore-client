@@ -3,8 +3,10 @@
 // correlated RESP_CODE_CLI_REPLY. No mesh legs, so no retries: the transport
 // is the connected link, and a lost frame surfaces as a timeout.
 //
-// Population gating is NOT here: callers (the console entry point, #884)
-// must only construct/offer this where the classifier allows frame 66.
+// Callers (the console entry point, #884) only offer this where the radio
+// supports frame 66. This also refuses the WRITE when it does not (#1158), so a
+// caller that slips past the entry gate gets a loud, explained refusal rather
+// than a frame the radio cannot run.
 
 import 'dart:async';
 
@@ -28,6 +30,17 @@ class LocalCliTimeout implements Exception {
   String toString() => 'CLI command timed out after $secondsText s';
 }
 
+/// Thrown, before anything is sent, when the connected radio does not run the
+/// local CLI ([MeshCoreConnector.supportsLocalCli] is false) (#1158).
+class LocalCliUnsupported implements Exception {
+  const LocalCliUnsupported({required this.command});
+
+  final String command;
+
+  @override
+  String toString() => 'The connected radio does not support the device CLI';
+}
+
 class LocalCliService {
   LocalCliService(this._connector) {
     _detach = _connector.addCliReplyListenerForLocalCli(_handleReply);
@@ -46,8 +59,18 @@ class LocalCliService {
   static const Duration defaultTimeout = Duration(seconds: 10);
 
   /// Sends [command] to the connected device; completes with the correlated
-  /// reply or throws [LocalCliTimeout] / [ArgumentError] (codec rejections).
+  /// reply or throws [LocalCliTimeout] / [ArgumentError] (codec rejections) /
+  /// [LocalCliUnsupported] (nothing sent).
   Future<CliReply> run(String command, {Duration? timeout}) async {
+    if (!_connector.supportsLocalCli) {
+      // The command text is not logged: it may carry a secret (set wifi.pwd).
+      appLogger.warn(
+        'CLI command refused, not sent: the connected radio does not '
+        'support the device CLI',
+        tag: 'LocalCli',
+      );
+      throw LocalCliUnsupported(command: command);
+    }
     final window = timeout ?? defaultTimeout;
     final prefix = _prefixes.next(_pending.keys.toSet());
     final frame = buildRunCliCommandFrame(command, prefix: prefix);

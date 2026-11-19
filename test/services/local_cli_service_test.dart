@@ -5,6 +5,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/cli_command_codec.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/offband_capability_advert.dart';
+import 'package:meshcore_open/connector/offband_device_ui.dart';
 import 'package:meshcore_open/services/app_debug_log_service.dart';
 import 'package:meshcore_open/services/command_correlation.dart';
 import 'package:meshcore_open/services/local_cli_service.dart';
@@ -13,6 +15,24 @@ import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+Uint8List _deviceInfo(int length, int verCode, String version) {
+  final v = ascii.encode(version);
+  final f = Uint8List(length);
+  f[0] = 13;
+  f[1] = verCode;
+  f.setRange(60, 60 + v.length, v);
+  return f;
+}
+
+Uint8List stock118DeviceInfo() => _deviceInfo(82, 14, 'v1.18.0');
+Uint8List offbandDeviceInfo() => _deviceInfo(87, 22, '1.8.0-1.18.0');
+
+Uint8List advert(List<int> tags) => Uint8List.fromList([
+  cmdOffbandDeviceUi,
+  offbandUiInfoGet,
+  for (final t in tags) ...[t, 0x00],
+]);
 
 void main() {
   group('PrefixAllocator / splitCorrelated', () {
@@ -57,6 +77,9 @@ void main() {
       sent = [];
       connector.sendFrameOverrideForTest = sent.add;
       connector.setConnectedForTest();
+      // A stock 1.18 radio, so the service may send frame 66 (#1158).
+      connector.handleFrameForTest(stock118DeviceInfo());
+      sent.clear();
       service = LocalCliService(connector);
     });
 
@@ -73,6 +96,39 @@ void main() {
         ...ascii.encode('$prefix$text'),
       ]);
     }
+
+    // #1158: block the write, not only the button.
+    test('a radio without the device CLI: refused, nothing sent', () async {
+      connector.handleFrameForTest(offbandDeviceInfo());
+      connector.handleFrameForTest(advert([offbandInfoTagCliRemote]));
+      sent.clear();
+
+      await expectLater(
+        service.run('get radio'),
+        throwsA(
+          isA<LocalCliUnsupported>().having(
+            (e) => e.command,
+            'command',
+            'get radio',
+          ),
+        ),
+      );
+      expect(
+        sent.where((f) => f.isNotEmpty && f[0] == cmdRunCliCommand),
+        isEmpty,
+      );
+    });
+
+    test('an Offband radio advertising 0x06: the command goes out', () async {
+      connector.handleFrameForTest(offbandDeviceInfo());
+      connector.handleFrameForTest(advert([offbandInfoTagCliLocal]));
+      sent.clear();
+
+      final future = service.run('get radio');
+      expect(sent.single[0], cmdRunCliCommand);
+      connector.handleFrameForTest(replyFor(sent.single, '> ok'));
+      expect((await future).text, '> ok');
+    });
 
     test('round trip: command out, correlated reply completes it', () async {
       final future = service.run('get radio');
