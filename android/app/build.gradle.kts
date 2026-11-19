@@ -14,14 +14,17 @@ val keystorePropertiesEnv = System.getenv("OFFBAND_KEY_PROPERTIES")
 val keystorePropertiesFile = if (keystorePropertiesEnv.isNullOrBlank()) {
     rootProject.file("key.properties")
 } else {
-    file(keystorePropertiesEnv).also {
-        if (!it.exists()) {
-            throw GradleException("OFFBAND_KEY_PROPERTIES is set but $it does not exist")
+    rootProject.file(keystorePropertiesEnv).also {
+        if (!it.isFile) {
+            throw GradleException("OFFBAND_KEY_PROPERTIES is set but $it is not a file")
         }
     }
 }
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+    if (keystoreProperties["storeFile"] == null) {
+        throw GradleException("$keystorePropertiesFile has no storeFile entry")
+    }
 }
 
 android {
