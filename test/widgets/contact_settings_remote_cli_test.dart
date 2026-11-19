@@ -81,24 +81,31 @@ void main() {
     contact = makeContact();
   });
 
+  bool isUpdateFrame(Uint8List f) =>
+      f.isNotEmpty && f[0] == updateFrame(contact, 0)[0];
+
   /// Tap Close, then let the connector's 3 s contact re-read time out so it
   /// falls back to [contact] and writes the update frame.
   Future<void> closeAndSave(WidgetTester tester) async {
     sent.clear();
     await tester.tap(find.text('Close'));
     await tester.pump();
-    // sendFrame completes on real async work the fake clock does not run, so
-    // let real time pass on both sides of advancing the fake 3 s timeout.
-    for (var i = 0; i < 2; i++) {
+    // The save chain finishes on real async work the fake clock does not run,
+    // and how long that takes depends on load. Wait for the update frame
+    // itself, advancing the fake 3 s re-read timeout as we go, and fail loudly
+    // if it never comes rather than asserting on a half-finished save.
+    for (var i = 0; i < 200 && !sent.any(isUpdateFrame); i++) {
       await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
       await tester.pump(const Duration(seconds: 4));
     }
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
     await tester.pumpAndSettle();
+    expect(
+      sent.any(isUpdateFrame),
+      isTrue,
+      reason: 'Close never wrote a contact update frame',
+    );
   }
 
   bool wrote(Uint8List frame) => sent.any(
