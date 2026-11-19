@@ -64,6 +64,14 @@ void main() {
     sent = [];
     connector.sendFrameOverrideForTest = sent.add;
     connector.setConnectedForTest();
+    // A stock 1.18 radio, so the console may send frame 66 (#1158).
+    final v = ascii.encode('v1.18.0');
+    final info = Uint8List(82)
+      ..[0] = 13
+      ..[1] = 14
+      ..setRange(60, 60 + v.length, v);
+    connector.handleFrameForTest(info);
+    sent.clear();
   });
 
   tearDown(() async {
@@ -397,5 +405,36 @@ void main() {
       // Not the #891 row, which would blame the target.
       expect(find.textContaining('may not allow remote CLI'), findsNothing);
     });
+  });
+
+  // #1158: a local command on a radio without the device CLI is refused before
+  // anything is sent, and the console row says why and stays.
+  testWidgets('local: a radio without the device CLI refuses, nothing sent', (
+    tester,
+  ) async {
+    final v = ascii.encode('1.4.0-1.17.0');
+    final offband = Uint8List(87)
+      ..[0] = 13
+      ..[1] = 22
+      ..setRange(60, 60 + v.length, v);
+    connector.handleFrameForTest(offband);
+    sent.clear();
+    await pumpScreen(tester);
+
+    await send(tester, 'get radio');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        "get radio: not sent. Your radio's firmware doesn't support the "
+        'device CLI.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      sent.where((f) => f.isNotEmpty && f[0] == cmdRunCliCommand),
+      isEmpty,
+    );
+    expect(find.textContaining('no reply'), findsNothing);
   });
 }

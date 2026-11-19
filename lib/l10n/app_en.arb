@@ -240,6 +240,15 @@
       }
     }
   },
+  "deviceCli_localUnsupported": "{command}: not sent. Your radio's firmware doesn't support the device CLI.",
+  "@deviceCli_localUnsupported": {
+    "description": "Console row when the client refuses to send a local CLI command because the connected radio does not support the device CLI (#1158). Nothing was transmitted.",
+    "placeholders": {
+      "command": {
+        "type": "String"
+      }
+    }
+  },
   "deviceCli_sendFailed": "Send failed: {error}",
   "@deviceCli_sendFailed": {
     "placeholders": {
