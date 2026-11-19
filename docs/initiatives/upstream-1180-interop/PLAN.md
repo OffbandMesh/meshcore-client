@@ -94,6 +94,14 @@ All four features' verification epics closed on recorded evidence; the client be
 | D6 | Saved-network PSK at rest | platform secure storage, per-network opt-in; alternative is prompt-at-apply (safer, more friction). |
 | — | Issue filing | on plan approval: initiative + 4 features + E-epics with lifecycle tasks, per the counted sizing (25–27 tasks, 87–119 pts + E4.3's 7–16). |
 
+### Decided since approval (Epic #1155, owner, 2026-11-19)
+
+| # | What changed | Now |
+|---|---|---|
+| D1 | No device-info marker. The firmware contract (`docs/offband_info_frame_contract.md` §2) forbids new Offband fields in upstream's device-info frame. | An Offband radio's CLI is advertised per radio in the `0xC5 0x1C` advert: `0x06` CLI_LOCAL opens Device CLI, `0x07` CLI_REMOTE opens remote CLI and the contact permission switch (firmware #2211 claimed them, `8d94ef78`; #2213 emits them). No tag, no advert, or an advert still in flight keeps them hidden. `resolveCliSupport` in `lib/connector/device_population.dart` is the one gate; `Classification.allowsCliFrame` stays the stock-only door. |
+| — | Local CLI refused at the write | A local CLI send on a radio without `0x06` sends nothing and leaves a console row saying why (owner decision 2, #1158). |
+| D3 | `_sys` retired by firmware #2210 | No client change: no client code names the `_sys` channel (searched `lib/` and `test/`, 0 hits, 2026-11-19). |
+
 ## 10. Carried-in work
 
 #857 (diagnosis record — re-parent), #375 (corrected into E4.1), #138 (profiles import/apply — feeds E4.2), #795 (caplog-forward settings — consumer of F4, stays outside this plan), #529/#473 timeout work (already shipped in the service F2/F3 reuse).
