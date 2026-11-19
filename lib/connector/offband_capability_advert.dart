@@ -40,6 +40,15 @@ const int offbandInfoTagAckCapacity = 0x03;
 /// bit. Values are read over `0x05`/`0x06` and `0x07`/`0x08`.
 const int offbandInfoTagDisplayControl = 0x04;
 const int offbandInfoTagLedControl = 0x05;
+
+/// The 1.18 companion CLI (firmware #2211, merged `8d94ef78`; emitted by
+/// #2213). `0x06` CLI_LOCAL: this radio's own client can run CLI lines
+/// (`CMD_RUN_CLI_COMMAND` 66, `RESP_CODE_CLI_REPLY` 29). `0x07` CLI_REMOTE: it
+/// sends `TXT_TYPE_CLI_COMMAND` (3) for the client, and runs one from a contact
+/// granted remote CLI (contact flag `0x10`). Gated by `resolveCliSupport` in
+/// `device_population.dart`.
+const int offbandInfoTagCliLocal = 0x06;
+const int offbandInfoTagCliRemote = 0x07;
 const int offbandInfoTagContinue = 0xFF;
 
 /// `0x00` is not a valid tag.
