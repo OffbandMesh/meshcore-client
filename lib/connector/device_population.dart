@@ -14,6 +14,8 @@
 
 import 'dart:typed_data';
 
+import 'offband_capability_advert.dart';
+
 /// Which firmware family the connected radio belongs to, as far as wire
 /// behavior is concerned.
 enum DevicePopulation {
@@ -56,10 +58,39 @@ class Classification {
   /// cap-bit gates.
   bool get allowsOffbandFrames => population == DevicePopulation.offband;
 
-  /// CMD_RUN_CLI_COMMAND (66) may be emitted. Deliberately false for
-  /// [DevicePopulation.offband] on the current fork base; the absorb flips
-  /// this at the D1 seam together with the durable marker.
+  /// The STOCK door to CMD_RUN_CLI_COMMAND (66): a stock 1.18+ radio has it by
+  /// definition. False for [DevicePopulation.offband], whose CLI is advertised
+  /// per radio by tags `0x06`/`0x07` instead of a device-info marker (#1155).
+  /// Gate on [resolveCliSupport], never on this alone.
   bool get allowsCliFrame => population == DevicePopulation.stockModern;
+}
+
+/// Which CLI surfaces this radio supports (#1155, firmware #2186).
+///
+/// - Stock 1.18+: both, from the classifier alone. A stock radio is never sent
+///   the advert request, so it has no tags to read.
+/// - Offband: each surface only when its advert tag is PRESENT. No advert yet,
+///   a radio that predates the advert, or an advert without the tag all mean
+///   hidden, which is what every Offband radio had before the tags existed.
+/// - Anything else, including no classification yet: neither.
+///
+/// Tags are read only for an Offband radio, so nothing opens the CLI on a radio
+/// the classifier could not place.
+({bool local, bool remote}) resolveCliSupport({
+  required Classification? classification,
+  required OffbandCapabilityAdvert? advert,
+}) {
+  final population = classification?.population;
+  if (population == DevicePopulation.stockModern) {
+    return (local: true, remote: true);
+  }
+  if (population != DevicePopulation.offband || advert == null) {
+    return (local: false, remote: false);
+  }
+  return (
+    local: advert.has(offbandInfoTagCliLocal),
+    remote: advert.has(offbandInfoTagCliRemote),
+  );
 }
 
 /// Stock device-info replies are exactly this long; the first fork byte

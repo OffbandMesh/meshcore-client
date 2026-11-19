@@ -1195,6 +1195,20 @@ class MeshCoreConnector extends ChangeNotifier {
   /// has anything to show (#523, #1132).
   bool get supportsIndicators => supportsDisplayControl || supportsLedControl;
 
+  /// Whether this radio runs CLI lines from its own client (frames 66/29):
+  /// stock 1.18+, or Offband advertising `0x06` (#1155).
+  bool get supportsLocalCli => resolveCliSupport(
+    classification: _classification,
+    advert: _capabilityAdvert,
+  ).local;
+
+  /// Whether this radio sends remote CLI (TXT type 3) and honors the contact
+  /// remote-CLI grant: stock 1.18+, or Offband advertising `0x07` (#1155).
+  bool get supportsRemoteCli => resolveCliSupport(
+    classification: _classification,
+    advert: _capabilityAdvert,
+  ).remote;
+
   /// The LED and display state the radio last reported, from device-info or a
   /// reply. Null when it has not said.
   bool? get ledEnabled => _ledEnabled;
@@ -1500,6 +1514,8 @@ class MeshCoreConnector extends ChangeNotifier {
       ' rotation=$supportsDisplayRotation'
       ' display=$supportsDisplayControl'
       ' led=$supportsLedControl'
+      ' cliLocal=$supportsLocalCli'
+      ' cliRemote=$supportsRemoteCli'
       ' ackCapacity=${ackCapacity ?? 'absent'}',
       tag: 'DeviceUI',
     );
