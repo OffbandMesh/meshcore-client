@@ -24,6 +24,9 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
   bool teleLocEnabled = contact.teleLocEnabled;
   bool teleEnvEnabled = contact.teleEnvEnabled;
   bool remoteCliEnabled = contact.remoteCliAllowed;
+  // Flag 0x10 only means something to a radio that runs remote CLI (#1157).
+  // Decided once, when the dialog opens, so the switch cannot vanish mid-edit.
+  final showRemoteCli = connector.supportsRemoteCli;
   showDialog(
     context: context,
     builder: (context) => StatefulBuilder(
@@ -116,16 +119,18 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
                   setDialogState(() => teleEnvEnabled = value);
                 },
               ),
-              const Divider(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(context.l10n.contact_remoteCli),
-                subtitle: Text(context.l10n.contact_remoteCliSubtitle),
-                value: remoteCliEnabled,
-                onChanged: (value) {
-                  setDialogState(() => remoteCliEnabled = value);
-                },
-              ),
+              if (showRemoteCli) ...[
+                const Divider(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(context.l10n.contact_remoteCli),
+                  subtitle: Text(context.l10n.contact_remoteCliSubtitle),
+                  value: remoteCliEnabled,
+                  onChanged: (value) {
+                    setDialogState(() => remoteCliEnabled = value);
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -137,7 +142,8 @@ void showContactSettingsDialog(BuildContext context, Contact contact) {
                 teleBase: teleBaseEnabled,
                 teleLoc: teleLocEnabled,
                 teleEnv: teleEnvEnabled,
-                remoteCli: remoteCliEnabled,
+                // Hidden switch: leave the stored flag exactly as it was.
+                remoteCli: showRemoteCli ? remoteCliEnabled : null,
               );
               Navigator.pop(context);
             },
