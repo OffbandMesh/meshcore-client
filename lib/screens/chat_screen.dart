@@ -427,10 +427,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                     // Remote CLI is a companion feature (#999), and the
-                    // connected radio must speak the 1.18 CLI to send it.
+                    // connected radio must send it (#1157).
                     if (DeviceCliScreen.offersRemoteConsole(
                       contact: widget.contact,
-                      classification: connector.classification,
+                      radioSupportsRemoteCli: connector.supportsRemoteCli,
                     ))
                       PopupMenuItem(
                         value: 'cliConsole',

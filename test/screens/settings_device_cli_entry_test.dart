@@ -1,8 +1,8 @@
 // Pins the #884 Device CLI entry gate: a "Device CLI" row appears at the TOP of
-// the Debug pane only when the classifier places the connected radio at stock
-// v14+ (allowsCliFrame). It is absent when disconnected, on a stock-legacy
-// radio, and on an Offband device (which gains the frame-66 CLI only at the
-// upstream-1.18 absorb). Tapping it opens the console.
+// the Debug pane only when the connected radio runs the frame-66 CLI: stock
+// 1.18+, or an Offband radio advertising tag 0x06 (#1157). It is absent when
+// disconnected, on a stock-legacy radio, and on an Offband radio without the
+// tag. Tapping it opens the console.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -11,6 +11,8 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/offband_capability_advert.dart';
+import 'package:meshcore_open/connector/offband_device_ui.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
 import 'package:meshcore_open/screens/device_cli_screen.dart';
 import 'package:meshcore_open/screens/settings_screen.dart';
@@ -133,12 +135,41 @@ void main() {
     expect(find.text('Device CLI'), findsNothing);
   });
 
-  testWidgets('Offband radio: no Device CLI row (CLI arrives at the absorb)', (
+  testWidgets('Offband radio, no advert answer: no Device CLI row', (
     tester,
   ) async {
     connector.handleFrameForTest(
       deviceInfo(length: 85, verCode: 22, version: '1.4.0-1.17.0'),
     );
+    await pumpAndOpenDebug(tester);
+    expect(find.text('Device CLI'), findsNothing);
+  });
+
+  // #1157: an Offband radio's Device CLI follows advert tag 0x06.
+  Uint8List advert(List<int> tags) => Uint8List.fromList([
+    cmdOffbandDeviceUi,
+    offbandUiInfoGet,
+    for (final t in tags) ...[t, 0x00],
+  ]);
+
+  testWidgets('Offband radio advertising 0x06: Device CLI row shows', (
+    tester,
+  ) async {
+    connector.handleFrameForTest(
+      deviceInfo(length: 85, verCode: 22, version: '1.8.0-1.18.0'),
+    );
+    connector.handleFrameForTest(advert([offbandInfoTagCliLocal]));
+    await pumpAndOpenDebug(tester);
+    expect(find.text('Device CLI'), findsOneWidget);
+  });
+
+  testWidgets('Offband radio advertising only 0x07: no Device CLI row', (
+    tester,
+  ) async {
+    connector.handleFrameForTest(
+      deviceInfo(length: 85, verCode: 22, version: '1.8.0-1.18.0'),
+    );
+    connector.handleFrameForTest(advert([offbandInfoTagCliRemote]));
     await pumpAndOpenDebug(tester);
     expect(find.text('Device CLI'), findsNothing);
   });
