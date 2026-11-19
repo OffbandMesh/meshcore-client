@@ -1027,11 +1027,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDebugCard(BuildContext context) {
     final l10n = context.l10n;
     // #884: the Device CLI console is offered only when the connected radio
-    // speaks the frame-66 CLI (stock v14+ today; Offband flips allowsCliFrame
-    // at the upstream-1.18 absorb). select() so only this gate flipping
-    // rebuilds the pane, not every connector update (the #81 lesson).
+    // speaks the frame-66 CLI (stock 1.18+, or Offband advertising 0x06,
+    // #1157). select() so only this gate flipping rebuilds the pane, not every
+    // connector update (the #81 lesson).
     final cliCapable = context.select<MeshCoreConnector, bool>(
-      (c) => c.classification?.allowsCliFrame ?? false,
+      (c) => c.supportsLocalCli,
     );
     return Card(
       child: Column(
