@@ -330,6 +330,21 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   }
 
   /// Open the Set Region Scope picker for the current channel (#815).
+  /// Clear Chat deletes the stored history after a red confirm. It used to
+  /// empty the screen only, and the history came back on the next load (#1163).
+  Future<void> _confirmClearHistory(BuildContext context) async {
+    final l10n = context.l10n;
+    final connector = context.read<MeshCoreConnector>();
+    final channel = _currentChannel;
+    final confirmed = await confirmDelete(
+      context,
+      title: l10n.chat_clearHistoryTitle,
+      body: l10n.chat_clearChannelHistoryConfirm(channel.name),
+    );
+    if (!confirmed) return;
+    await connector.clearChannelHistory(channel);
+  }
+
   Future<void> _openRegionScopeDialog() async {
     final connector = context.read<MeshCoreConnector>();
     final channelIndex = _currentChannel.index;
@@ -486,9 +501,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
                 requestChannelRadioTone(connector, _currentChannel.index);
                 showChannelRadioToneDialog(context, _currentChannel);
               } else if (value == 'clearChat') {
-                context.read<MeshCoreConnector>().clearMessagesForChannel(
-                  _currentChannel.index,
-                );
+                unawaited(_confirmClearHistory(context));
               } else if (value == 'setRegionScope') {
                 _openRegionScopeDialog();
               }

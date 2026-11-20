@@ -35,3 +35,35 @@ Future<bool> showDisconnectDialog(
   }
   return false;
 }
+
+/// Asks before deleting something that cannot be undone. The confirming button
+/// is red, as Reboot and Factory Reset are. True only on an explicit confirm.
+Future<bool> confirmDelete(
+  BuildContext context, {
+  required String title,
+  required String body,
+  String? action,
+}) async {
+  final l10n = context.l10n;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(l10n.common_cancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(
+            action ?? l10n.common_delete,
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}

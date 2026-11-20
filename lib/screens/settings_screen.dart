@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../utils/dialog_utils.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -877,6 +879,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 1),
           ListTile(
+            leading: const Icon(Icons.delete_sweep_outlined, color: Colors.red),
+            title: Text(l10n.settings_deleteMessageHistory),
+            subtitle: Text(l10n.settings_deleteMessageHistorySubtitle),
+            onTap: () => unawaited(_confirmDeleteMessageHistory(connector)),
+          ),
+          const Divider(height: 1),
+          ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
             title: Text(l10n.settings_factoryReset),
             subtitle: Text(l10n.settings_factoryResetSubtitle),
@@ -1291,6 +1300,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// #1163: start fresh for this radio. Channels and direct messages together
+  /// (owner, 2026-11-19); contacts, channels and settings stay.
+  Future<void> _confirmDeleteMessageHistory(MeshCoreConnector connector) async {
+    final l10n = context.l10n;
+    final confirmed = await confirmDelete(
+      context,
+      title: l10n.settings_deleteMessageHistory,
+      body: l10n.settings_deleteMessageHistoryConfirm,
+    );
+    if (!confirmed) return;
+    final refusal = await connector.deleteMessageHistoryForThisRadio();
+    if (!mounted) return;
+    showDismissibleSnackBar(
+      context,
+      content: Text(switch (refusal) {
+        null => l10n.settings_deleteMessageHistoryDone,
+        HistoryWipeRefusal.notConnected =>
+          l10n.settings_deleteMessageHistoryNotConnected,
+        HistoryWipeRefusal.failed => l10n.settings_deleteMessageHistoryFailed,
+      }),
+      backgroundColor: refusal == null ? null : Colors.red,
+      persist: refusal != null,
     );
   }
 

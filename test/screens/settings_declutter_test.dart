@@ -40,7 +40,9 @@ void main() {
   Future<void> pumpSettings(WidgetTester tester) async {
     // Narrow layout: the category list renders and each detail pane builds
     // lazily when its tile is tapped (so unrelated panes never construct).
-    tester.view.physicalSize = const Size(400, 900);
+    // Tall enough that every Actions row builds: the panes are lazy ListViews,
+    // and #1163's Delete message history row pushed the export card past 900.
+    tester.view.physicalSize = const Size(400, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -84,6 +86,8 @@ void main() {
     expect(find.byIcon(Icons.download_outlined), findsNWidgets(3));
     // The pre-existing Actions still here.
     expect(find.byIcon(Icons.restart_alt), findsOneWidget); // reboot
+    // Delete message history for this radio (#1163).
+    expect(find.byIcon(Icons.delete_sweep_outlined), findsOneWidget);
   });
 
   testWidgets('Debug keeps only diagnostics, correctly ordered', (

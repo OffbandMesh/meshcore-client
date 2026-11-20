@@ -47,3 +47,39 @@ Future<int> wipeRadioData(String radioPrefix) async {
 
   return removed;
 }
+
+/// Deletes one radio's message history, its channel messages and its direct
+/// messages, and nothing else: contacts, channels and settings stay (#1163).
+///
+/// For a history that is already mixed up. The owner's ruling: start fresh
+/// for that radio, channels and DMs together. Same prefix rule and the same
+/// refusal of anything but a 10-hex prefix as [wipeRadioData].
+///
+/// Returns how many keys and row groups were removed.
+Future<int> wipeRadioMessageHistory(String radioPrefix) async {
+  if (!RegExp(r'^[0-9a-f]{10}$').hasMatch(radioPrefix)) {
+    throw ArgumentError.value(
+      radioPrefix,
+      'radioPrefix',
+      'must be the 10-hex radio key prefix',
+    );
+  }
+
+  final blobs = BlobStore.instance;
+  final prefixes = ['channel_messages_$radioPrefix', 'messages_$radioPrefix'];
+
+  var removed = 0;
+  for (final prefix in prefixes) {
+    for (final key in await blobs.keysWithPrefix(prefix)) {
+      await blobs.deleteEverywhere(key);
+      removed++;
+    }
+  }
+  for (final storeKey in await blobs.messageStoreKeys()) {
+    if (prefixes.any(storeKey.startsWith)) {
+      await blobs.deleteMessageRows(storeKey);
+      removed++;
+    }
+  }
+  return removed;
+}
