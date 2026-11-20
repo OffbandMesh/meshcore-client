@@ -73,6 +73,22 @@ void main() {
     });
   });
 
+  test('a disconnect during the re-read ends the wait at once', () async {
+    // The radio goes quiet: no reply to the write, none to the re-read.
+    c.sendFrameOverrideForTest = (_) {};
+    final write = c.setChannel(3, 'Weather', _psk(0x22));
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(c.isSyncingChannels, isTrue, reason: 'the re-read is running');
+
+    await c.disconnect(manual: true);
+
+    expect(
+      await write.timeout(const Duration(seconds: 5)),
+      ChannelWrite.noReply,
+      reason: 'before the fix this waited out the 30 s guard',
+    );
+  });
+
   group('a delete with no reply', () {
     test('is reported done when the re-read shows the slot empty', () async {
       final result = await c.deleteChannel(3);

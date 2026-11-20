@@ -4865,6 +4865,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _queueSyncTimeout = null;
     _queueSyncRetries = 0;
     _isSyncingChannels = false;
+    // A write waiting on its re-read must hear now that the re-read will not
+    // finish, not after its 30 s guard. Every disconnect passes here (#1163).
+    final syncDone = _channelSyncDone;
+    _channelSyncDone = null;
+    if (syncDone != null && !syncDone.isCompleted) syncDone.complete(false);
     _channelSyncInFlight = false;
     _channelSyncTimeout?.cancel();
     _channelSyncTimeout = null;
@@ -12751,6 +12756,14 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!isConnected || prefix.isEmpty) {
       return HistoryWipeRefusal.notConnected;
     }
+    // Emptied first: a message arriving during the wipe then lands in a fresh
+    // window, and the wipe's snapshot leaves its stored copy alone, so it
+    // stays both on screen and on disk.
+    _channelMessages.clear();
+    _windowPskHex.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
+    notifyListeners();
     final int removed;
     try {
       removed = await wipeRadioMessageHistory(prefix);
@@ -12761,10 +12774,6 @@ class MeshCoreConnector extends ChangeNotifier {
       );
       return HistoryWipeRefusal.failed;
     }
-    _channelMessages.clear();
-    _windowPskHex.clear();
-    _conversations.clear();
-    _loadedConversationKeys.clear();
     for (final channel in List<Channel>.of(_channels)) {
       markChannelRead(channel.index);
     }

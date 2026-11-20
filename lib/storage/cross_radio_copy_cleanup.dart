@@ -151,12 +151,25 @@ class CrossRadioCopyCleanup {
       for (final r in decision.copies) {
         byKey.putIfAbsent(r.storeKey, () => []).add(r.mergeKey);
       }
+      var blobsHeld = 0;
       for (final entry in byKey.entries) {
         await blobs.moveMessageRows(
           entry.key,
           '$heldPrefix${entry.key}',
           entry.value,
         );
+        // A key left with no rows reads its frozen pre-#920 blob instead,
+        // which would put the copies straight back on screen. Rows are a
+        // superset of that blob (the #952 gate), so when every row was a copy
+        // the blob holds only copies: it is held aside too (review of #1163).
+        if (await blobs.messageRowCount(entry.key) == 0) {
+          final blob = await blobs.read(entry.key);
+          if (blob != null) {
+            await blobs.write('$heldPrefix${entry.key}', blob);
+            await blobs.deleteEverywhere(entry.key);
+            blobsHeld++;
+          }
+        }
       }
       await blobs.write(
         doneMarkerKey,
@@ -164,6 +177,7 @@ class CrossRadioCopyCleanup {
           'at': DateTime.now().toIso8601String(),
           'held': decision.copies.length,
           'undecided': decision.undecided,
+          'blobsHeld': blobsHeld,
           'keys': {for (final e in byKey.entries) e.key: e.value.length},
         }),
       );
