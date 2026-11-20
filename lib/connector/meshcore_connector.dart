@@ -369,6 +369,12 @@ class MeshCoreConnector extends ChangeNotifier {
   final Map<String, List<Message>> _conversations = {};
   final Map<int, List<ChannelMessage>> _channelMessages = {};
 
+  /// The channel PSK each slot's in-memory window was loaded under (null: the
+  /// slot had not resolved, so the slot-index key was read). A confirmed sync
+  /// reloads any slot whose channel differs from this, which the comparison
+  /// against the saved list alone cannot see (#1163).
+  final Map<int, String?> _windowPskHex = {};
+
   /// Last send timestamp (seconds) used per channel, to keep every channel
   /// send's `(ts, channel_idx)` key unique for 0xC6 correlation (#524).
   final Map<int, int> _lastChannelSendTsSecs = {};
@@ -2931,10 +2937,20 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Load persisted channel messages for a specific channel
   Future<void> _loadChannelMessages(int channelIndex) async {
+    final lookup = _findChannelByIndexWithSource(channelIndex);
     final allMessages = await _channelMessageStore.loadChannelMessages(
       channelIndex,
     );
     if (allMessages.isNotEmpty) {
+      _windowPskHex[channelIndex] = lookup.channel?.pskHex;
+      _appDebugLogService?.info(
+        'History load: radio '
+        '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} slot '
+        '$channelIndex "${lookup.channel?.name ?? ''}" psk '
+        '${AppSettingsService.pskFingerprint(lookup.channel?.pskHex)} '
+        '(${lookup.source}): ${allMessages.length} stored message(s)',
+        tag: 'Storage',
+      );
       // Keep only the most recent N messages in memory to bound memory usage
       final windowedMessages = List<ChannelMessage>.from(
         allMessages.length > _messageWindowSize
@@ -4679,6 +4695,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// reloads from this radio's own store at SELF_INFO.
   void _dropPreviousRadioState() {
     _channelMessages.clear();
+    _windowPskHex.clear();
     _conversations.clear();
     _loadedConversationKeys.clear();
     _channels.clear();
@@ -6440,7 +6457,10 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       // Get the in-memory messages list (same as _addChannelMessage uses)
-      _channelMessages.putIfAbsent(channel.index, () => []);
+      if (!_channelMessages.containsKey(channel.index)) {
+        _channelMessages[channel.index] = [];
+        _windowPskHex[channel.index] = channel.pskHex;
+      }
       final messages = _channelMessages[channel.index]!;
 
       // Process reaction locally to update the UI immediately. This is our own
@@ -7219,8 +7239,33 @@ class MeshCoreConnector extends ChangeNotifier {
         // this slot from the store; the resolver now sees the fresh list, so
         // the load reads the NEW identity's own history.
         _channelMessages.remove(fresh.index);
+        _windowPskHex.remove(fresh.index);
         unawaited(_loadChannelMessages(fresh.index));
       }
+    }
+
+    // #1163: the diff above compares the radio with the SAVED list, so it
+    // cannot see a window that was loaded under some other list. Compare each
+    // window with the key it was actually loaded under instead, and reload
+    // any that does not match the channel the radio just confirmed.
+    for (final fresh in _channels) {
+      if (!_channelMessages.containsKey(fresh.index) ||
+          !_windowPskHex.containsKey(fresh.index)) {
+        continue;
+      }
+      final loadedAs = _windowPskHex[fresh.index];
+      final confirmed = fresh.isEmpty ? null : fresh.pskHex;
+      if (loadedAs == confirmed) continue;
+      _appDebugLogService?.warn(
+        'Slot ${fresh.index} history was loaded under psk '
+        '${AppSettingsService.pskFingerprint(loadedAs)} but the radio holds '
+        '"${fresh.name}" psk ${AppSettingsService.pskFingerprint(confirmed)}; '
+        'reloading it from that channel\'s own history',
+        tag: 'ChannelSync',
+      );
+      _channelMessages.remove(fresh.index);
+      _windowPskHex.remove(fresh.index);
+      if (confirmed != null) unawaited(_loadChannelMessages(fresh.index));
     }
 
     if (_erasedChannelSlots.isNotEmpty) {
@@ -7657,6 +7702,7 @@ class MeshCoreConnector extends ChangeNotifier {
       if (result == ChannelWrite.ok) {
         await _channelMessageStore.clearChannelMessages(index);
         _channelMessages.remove(index);
+        _windowPskHex.remove(index);
       }
       if (refresh) _syncAfterChannelWrites();
       return result;
@@ -7761,6 +7807,7 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> _retireSlotOccupant(int index) async {
     await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
+    _windowPskHex.remove(index);
   }
 
   /// Applies the user's keep-or-delete answer for a key change once the radio
@@ -11692,7 +11739,11 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   bool _addChannelMessage(int channelIndex, ChannelMessage message) {
-    _channelMessages.putIfAbsent(channelIndex, () => []);
+    final lookup = _findChannelByIndexWithSource(channelIndex);
+    if (!_channelMessages.containsKey(channelIndex)) {
+      _channelMessages[channelIndex] = [];
+      _windowPskHex[channelIndex] = lookup.channel?.pskHex;
+    }
     final messages = _channelMessages[channelIndex]!;
 
     // Parse reaction info. Our own format first, then the PocketMesh /
@@ -11781,6 +11832,16 @@ class MeshCoreConnector extends ChangeNotifier {
       }
     } else {
       messages.add(processedMessage);
+      _appDebugLogService?.info(
+        'CHAN FILED slot $channelIndex "${lookup.channel?.name ?? ''}" psk '
+        '${AppSettingsService.pskFingerprint(lookup.channel?.pskHex)} '
+        '(${lookup.source}), window psk '
+        '${AppSettingsService.pskFingerprint(_windowPskHex[channelIndex])}, '
+        'radio ${AppSettingsService.radioScopePrefix(selfPublicKeyHex)}, '
+        'sender=${processedMessage.senderName}',
+        tag: 'Ingest',
+        noNotify: true,
+      );
     }
 
     // A message just landed, so a reaction that arrived before it may now have
