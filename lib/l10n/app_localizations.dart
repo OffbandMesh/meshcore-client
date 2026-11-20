@@ -7466,6 +7466,12 @@ abstract class AppLocalizations {
   /// **'No location data'**
   String get channelPath_noLocationData;
 
+  /// A repeater's last known location and how long ago its advert carrying it was sent
+  ///
+  /// In en, this message translates to:
+  /// **'{location} • {age}'**
+  String channelPath_locationWithAge(String location, String age);
+
   /// No description provided for @channelPath_timeWithDate.
   ///
   /// In en, this message translates to:

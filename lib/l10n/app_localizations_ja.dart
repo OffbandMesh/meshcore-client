@@ -4219,6 +4219,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get channelPath_noLocationData => '場所に関するデータはありません';
 
   @override
+  String channelPath_locationWithAge(String location, String age) {
+    return '$location • $age';
+  }
+
+  @override
   String channelPath_timeWithDate(int day, int month, String time) {
     return '$day/$month $time';
   }

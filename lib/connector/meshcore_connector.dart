@@ -5553,11 +5553,10 @@ class MeshCoreConnector extends ChangeNotifier {
       (c) => c.publicKeyHex == contact.publicKeyHex,
       orElse: () => contact,
     );
-    return contact.copyWith(
-      rawPacket: tmp.rawPacket,
-      latitude: tmp.latitude,
-      longitude: tmp.longitude,
-    );
+    // Only the raw advert, which the radio's contact record does not carry.
+    // The location stays the radio's: a copy the app stored is never newer
+    // than what the radio sends (#1166).
+    return contact.copyWith(rawPacket: tmp.rawPacket);
   }
 
   Future<void> getContacts({int? since, bool preserveExisting = false}) async {
@@ -9945,8 +9944,9 @@ class MeshCoreConnector extends ChangeNotifier {
           tag: 'Connector',
         );
 
-        // Preserve user-selected path settings and previously known GPS when
-        // refreshed frames omit coordinates (lat/lon encoded as 0,0).
+        // Preserve user-selected path settings. The location is the radio's,
+        // including "none": the radio record is the truth, not a position the
+        // app kept from before (#1166).
         // `contact` is built from the device frame, which carries no custom
         // name, so copyWith from it drops the user's label. Reattach it. (#750)
         _contacts[existingIndex] = _withCustomName(
@@ -9954,8 +9954,6 @@ class MeshCoreConnector extends ChangeNotifier {
             lastMessageAt: mergedLastMessageAt,
             pathOverride: existing.pathOverride, // Preserve user's path choice
             pathOverrideBytes: existing.pathOverrideBytes,
-            latitude: contact.latitude ?? existing.latitude,
-            longitude: contact.longitude ?? existing.longitude,
           ),
         );
 
@@ -12416,6 +12414,11 @@ class MeshCoreConnector extends ChangeNotifier {
         latitude = packet.readInt32LE() / 1e6;
         longitude = packet.readInt32LE() / 1e6;
       }
+      // 0,0 is a repeater with no location set, not a place (#1166).
+      if (!hasValidLocation(latitude, longitude)) {
+        latitude = null;
+        longitude = null;
+      }
       if (hasName && packet.remaining > 0) {
         name = packet.readCString();
       }
@@ -12439,6 +12442,15 @@ class MeshCoreConnector extends ChangeNotifier {
         lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
       ),
     );
+  }
+
+  /// Whether an advert sent at [advertAt] replaces the one applied at
+  /// [appliedAt]: not older, unless the applied one is dated ahead of this
+  /// phone. Node clocks can be wrong, and one advert from a clock set in the
+  /// future must not shut out every correct advert after it (#1166).
+  static bool isNewerAdvert(DateTime advertAt, DateTime appliedAt) {
+    if (!advertAt.isBefore(appliedAt)) return true;
+    return appliedAt.isAfter(DateTime.now().add(const Duration(hours: 1)));
   }
 
   bool hasValidLocation(double? latitude, double? longitude) {
@@ -12489,8 +12501,12 @@ class MeshCoreConnector extends ChangeNotifier {
         latitude = advert.readInt32LE() / 1e6;
         longitude = advert.readInt32LE() / 1e6;
       }
-      // Validate location values if present
+      // No flag, or 0,0, both mean "no location": never stored as a place.
       hasLocation = hasValidLocation(latitude, longitude);
+      if (!hasLocation) {
+        latitude = null;
+        longitude = null;
+      }
 
       if (hasName && advert.remaining > 0) {
         name = advert.readCString();
@@ -12557,10 +12573,17 @@ class MeshCoreConnector extends ChangeNotifier {
         tag: 'Connector',
       );
 
+      // The newest advert sets the location, including "none". One older than
+      // the advert already applied (a slow flood copy) leaves the location and
+      // its age alone (#1166).
+      final advertAt = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+      final isNewer = isNewerAdvert(advertAt, existing.lastSeen);
+
       // CRITICAL: Preserve user's path override when contact is refreshed from device
       _contacts[existingIndex] = existing.copyWith(
-        latitude: hasLocation ? latitude : existing.latitude,
-        longitude: hasLocation ? longitude : existing.longitude,
+        latitude: isNewer ? latitude : null,
+        longitude: isNewer ? longitude : null,
+        clearLocation: isNewer && !hasLocation,
         // The received name updates; the user's custom name is untouched, so
         // what they see does not move. This is the whole point of #750: before
         // it, an advert took the user's chosen name back every time, which is
@@ -12572,10 +12595,11 @@ class MeshCoreConnector extends ChangeNotifier {
         path: Uint8List.fromList(path.reversed.toList()),
         pathLength: path.length,
         lastMessageAt: mergedLastMessageAt,
-        lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
+        lastSeen: isNewer ? advertAt : null,
         pathOverride: existing.pathOverride, // Preserve user's path choice
         pathOverrideBytes: existing.pathOverrideBytes,
       );
+      if (isNewer) notifyListeners();
 
       // Add path to history if we have a valid path
       if (_pathHistoryService != null &&
@@ -12657,19 +12681,23 @@ class MeshCoreConnector extends ChangeNotifier {
 
     // Update existing contact
     if (existingIndex >= 0) {
-      _discoveredContacts[existingIndex] = _discoveredContacts[existingIndex]
-          .copyWith(
-            rawPacket: rawPacket,
-            receivedName: contact.receivedName,
-            type: contact.type,
-            pathLength: contact.pathLength,
-            path: contact.path,
-            latitude: contact.latitude,
-            longitude: contact.longitude,
-            lastSeen: contact.lastSeen,
-            flags: 0,
-            isActive: addActive,
-          );
+      final existing = _discoveredContacts[existingIndex];
+      // The newest advert sets the location, including "none". An older one
+      // arriving late (a slow flood copy) leaves it and its age alone (#1166).
+      final isNewer = isNewerAdvert(contact.lastSeen, existing.lastSeen);
+      _discoveredContacts[existingIndex] = existing.copyWith(
+        rawPacket: rawPacket,
+        receivedName: contact.receivedName,
+        type: contact.type,
+        pathLength: contact.pathLength,
+        path: contact.path,
+        latitude: isNewer ? contact.latitude : null,
+        longitude: isNewer ? contact.longitude : null,
+        clearLocation: isNewer && contact.latitude == null,
+        lastSeen: isNewer ? contact.lastSeen : null,
+        flags: 0,
+        isActive: addActive,
+      );
       notifyListeners();
       unawaited(_persistDiscoveredContacts());
       return;
