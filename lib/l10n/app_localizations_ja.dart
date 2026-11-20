@@ -1628,6 +1628,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get channels_retrySync => 'Retry sync';
 
   @override
+  String get channels_resync => 'Resync channels';
+
+  @override
   String channels_erasedSlots(String slots) {
     return 'The radio has lost the channels in slot(s) $slots; it reported them as erased. Your channel list here has been kept and was not overwritten.';
   }
@@ -1866,7 +1869,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channels_writeNoReply =>
-      'The radio did not confirm the change. Check the channel list before trying again.';
+      'The radio did not confirm the change, and re-reading its channels did not show it either. Resync, then check the list before trying again.';
 
   @override
   String get channels_writeClearedNotAdded =>
