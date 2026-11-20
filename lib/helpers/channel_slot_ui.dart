@@ -132,10 +132,7 @@ void resyncChannels(BuildContext context, MeshCoreConnector connector) {
   }
   unawaited(
     connector.getChannels(force: true).catchError((Object e) {
-      appLogger.error(
-        'Resync channels failed to start: $e',
-        tag: 'ChannelSync',
-      );
+      appLogger.error('Resync channels failed: $e', tag: 'ChannelSync');
     }),
   );
 }
