@@ -145,6 +145,30 @@ void main() {
       },
     );
 
+    test('a key left with no rows has its old blob held aside too, so the '
+        'copies cannot come back from it', () async {
+      await seedFieldPattern();
+      // B's offband history from before rows (#920): the same copy, frozen.
+      await blobs.write(
+        _key(_b, 'offband'),
+        jsonEncode([
+          {'text': 'alert', 'rxTime': _t0 + _min},
+        ]),
+      );
+
+      await CrossRadioCopyCleanup.run(blobs);
+
+      expect(await blobs.read(_key(_b, 'offband')), isNull);
+      expect(
+        await blobs.read(
+          '${CrossRadioCopyCleanup.heldPrefix}${_key(_b, 'offband')}',
+        ),
+        isNotNull,
+        reason: 'held, not deleted',
+      );
+      expect(await blobs.messageMergeKeys(_key(_a, 'claude')), {'alert'});
+    });
+
     test(
       'runs once: a later launch does not touch the history again',
       () async {

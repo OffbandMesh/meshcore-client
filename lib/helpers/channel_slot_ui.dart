@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../models/channel.dart';
+import '../utils/app_logger.dart';
 import 'channel_slot_decision.dart';
 import 'snack_bar_builder.dart';
 
@@ -129,7 +130,14 @@ void resyncChannels(BuildContext context, MeshCoreConnector connector) {
     }
     return;
   }
-  unawaited(connector.getChannels(force: true));
+  unawaited(
+    connector.getChannels(force: true).catchError((Object e) {
+      appLogger.error(
+        'Resync channels failed to start: $e',
+        tag: 'ChannelSync',
+      );
+    }),
+  );
 }
 
 /// Asks what a key change does with [channelName]'s message history: kept

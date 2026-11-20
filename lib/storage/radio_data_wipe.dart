@@ -68,6 +68,14 @@ Future<int> wipeRadioMessageHistory(String radioPrefix) async {
   final blobs = BlobStore.instance;
   final prefixes = ['channel_messages_$radioPrefix', 'messages_$radioPrefix'];
 
+  // What exists now is what goes. A message saved while this runs is not in
+  // the snapshot and survives, the #1128 rule (review of #1163).
+  final rowSnapshot = <String, Set<String>>{
+    for (final storeKey in await blobs.messageStoreKeys())
+      if (prefixes.any(storeKey.startsWith))
+        storeKey: await blobs.messageMergeKeys(storeKey),
+  };
+
   var removed = 0;
   for (final prefix in prefixes) {
     for (final key in await blobs.keysWithPrefix(prefix)) {
@@ -75,11 +83,9 @@ Future<int> wipeRadioMessageHistory(String radioPrefix) async {
       removed++;
     }
   }
-  for (final storeKey in await blobs.messageStoreKeys()) {
-    if (prefixes.any(storeKey.startsWith)) {
-      await blobs.deleteMessageRows(storeKey);
-      removed++;
-    }
+  for (final entry in rowSnapshot.entries) {
+    await blobs.deleteMessageRowsIn(entry.key, entry.value);
+    removed++;
   }
   return removed;
 }
