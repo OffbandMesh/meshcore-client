@@ -4182,6 +4182,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get channelPath_noLocationData => '위치 정보 없음';
 
   @override
+  String channelPath_locationWithAge(String location, String age) {
+    return '$location • $age';
+  }
+
+  @override
   String channelPath_timeWithDate(int day, int month, String time) {
     return '$day/$month $time';
   }

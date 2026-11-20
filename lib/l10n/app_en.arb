@@ -2438,6 +2438,18 @@
     }
   },
   "channelPath_noLocationData": "No location data",
+  "channelPath_locationWithAge": "{location} • {age}",
+  "@channelPath_locationWithAge": {
+    "description": "A repeater's last known location and how long ago its advert carrying it was sent",
+    "placeholders": {
+      "location": {
+        "type": "String"
+      },
+      "age": {
+        "type": "String"
+      }
+    }
+  },
   "channelPath_timeWithDate": "{day}/{month} {time}",
   "@channelPath_timeWithDate": {
     "placeholders": {

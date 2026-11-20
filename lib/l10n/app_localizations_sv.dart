@@ -4318,6 +4318,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get channelPath_noLocationData => 'Ingen platsdata';
 
   @override
+  String channelPath_locationWithAge(String location, String age) {
+    return '$location • $age';
+  }
+
+  @override
   String channelPath_timeWithDate(int day, int month, String time) {
     return '$day/$month kl. $time';
   }

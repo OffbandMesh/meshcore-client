@@ -147,6 +147,10 @@ class Contact {
     bool clearPathOverride = false,
     double? latitude,
     double? longitude,
+
+    /// Sets the location to unknown. A null [latitude] means "leave it alone",
+    /// so withdrawing a location needs its own flag. (#1166)
+    bool clearLocation = false,
     DateTime? lastSeen,
     DateTime? lastMessageAt,
     DateTime? lastModified,
@@ -168,8 +172,8 @@ class Contact {
       pathOverrideBytes: clearPathOverride
           ? null
           : (pathOverrideBytes ?? this.pathOverrideBytes),
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
+      latitude: clearLocation ? null : (latitude ?? this.latitude),
+      longitude: clearLocation ? null : (longitude ?? this.longitude),
       lastSeen: lastSeen ?? this.lastSeen,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       lastModified: lastModified ?? this.lastModified,
@@ -261,7 +265,6 @@ class Contact {
         final latRaw = reader.readInt32LE();
         final lonRaw = reader.readInt32LE();
         final lastModRaw = reader.readUInt32LE();
-        // TODO: should this be &&?
         if (latRaw != 0 || lonRaw != 0) {
           lat = latRaw / 1e6;
           lon = lonRaw / 1e6;

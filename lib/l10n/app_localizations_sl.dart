@@ -4338,6 +4338,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get channelPath_noLocationData => 'Nihče ni določil lokacije.';
 
   @override
+  String channelPath_locationWithAge(String location, String age) {
+    return '$location • $age';
+  }
+
+  @override
   String channelPath_timeWithDate(int day, int month, String time) {
     return '$day/$month $time';
   }
