@@ -221,7 +221,6 @@ class ChannelMessagePathScreen extends StatelessWidget {
   }
 
   List<Widget> _buildHopTiles(BuildContext context, List<_PathHop> hops) {
-    final l10n = context.l10n;
     return [
       for (final hop in hops)
         Card(
@@ -236,12 +235,7 @@ class ChannelMessagePathScreen extends StatelessWidget {
               ),
             ),
             title: Text(hop.displayLabel),
-            subtitle: Text(
-              hop.hasLocation
-                  ? '${hop.position!.latitude.toStringAsFixed(5)}, '
-                        '${hop.position!.longitude.toStringAsFixed(5)}'
-                  : l10n.channelPath_noLocationData,
-            ),
+            subtitle: Text(hop.locationLabel),
           ),
         ),
     ];
@@ -910,12 +904,7 @@ class _ChannelMessagePathMapScreenState
                               ),
                             ),
                             title: Text(hop.displayLabel),
-                            subtitle: Text(
-                              hop.hasLocation
-                                  ? '${hop.position!.latitude.toStringAsFixed(5)}, '
-                                        '${hop.position!.longitude.toStringAsFixed(5)}'
-                                  : l10n.channelPath_noLocationData,
-                            ),
+                            subtitle: Text(hop.locationLabel),
                           );
                         },
                       ),
@@ -944,6 +933,27 @@ class _PathHop {
   });
 
   bool get hasLocation => position != null;
+
+  /// The coordinates and how old they are. The location is the last one the
+  /// node advertised, kept until a newer advert replaces or withdraws it, so
+  /// its age is the age of that advert (#1166).
+  String get locationLabel {
+    final p = position;
+    if (p == null) return l10n.channelPath_noLocationData;
+    final coords =
+        '${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}';
+    final c = contact;
+    if (c == null || !c.isAdvertVerified) return coords;
+    return l10n.channelPath_locationWithAge(coords, _advertAge(c.lastSeen));
+  }
+
+  String _advertAge(DateTime advertAt) {
+    final diff = DateTime.now().difference(advertAt);
+    if (diff.inMinutes < 1) return l10n.time_justNow;
+    if (diff.inHours < 1) return l10n.time_minutesAgo(diff.inMinutes);
+    if (diff.inDays < 1) return l10n.time_hoursAgo(diff.inHours);
+    return l10n.time_daysAgo(diff.inDays);
+  }
 
   String get displayLabel {
     final prefixLabel = _formatHash(hash);
