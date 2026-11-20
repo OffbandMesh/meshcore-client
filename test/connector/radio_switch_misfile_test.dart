@@ -198,6 +198,45 @@ void main() {
     );
   });
 
+  test('a confirmed sync reloads a slot whose history was loaded under another '
+      'channel, even when the saved list already matches the radio', () async {
+    final alpha = _channel(0, 'Alpha', 10);
+    final gamma = _channel(0, 'Gamma', 70);
+    Future<void> storeHistory(Channel ch, String text) async {
+      final store = ChannelMessageStore()
+        ..setPublicKeyHex = _hex(_radioB)
+        ..channelPskResolver = ((_) => ch.pskHex);
+      await store.saveChannelMessages(ch.index, [
+        ChannelMessage(
+          senderName: 'X',
+          text: text,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(5000),
+          isOutgoing: false,
+          status: ChannelMessageStatus.sent,
+          channelIndex: 0,
+        ),
+      ]);
+    }
+
+    await storeHistory(alpha, 'alpha history');
+    await storeHistory(gamma, 'gamma history');
+
+    c.setConnectedForTest();
+    c.setSelfPublicKeyForTest(_radioB);
+    c.wireMessageStoreForTest();
+    // The window loads while slot 0 resolves to Alpha...
+    c.seedCachedChannelsForTest([alpha]);
+    await c.loadAllChannelMessages(maxChannels: 1);
+    expect(c.channelMessagesForTest[0]!.map((m) => m.text), ['alpha history']);
+
+    // ...then the saved list says Gamma, and the radio confirms Gamma. The
+    // saved-list diff sees no change on slot 0.
+    await becomeRadio(_radioB, [gamma], savedList: [gamma]);
+    await _settle();
+
+    expect(c.channelMessagesForTest[0]!.map((m) => m.text), ['gamma history']);
+  });
+
   test(
     'a new message saves only itself, never the rest of the window',
     () async {
