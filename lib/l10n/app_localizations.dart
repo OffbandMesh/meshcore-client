@@ -2986,6 +2986,12 @@ abstract class AppLocalizations {
   /// **'Retry sync'**
   String get channels_retrySync;
 
+  /// Re-reads every channel slot from the radio. App bar action on the Channels screen, and the button on a channel error (#1163).
+  ///
+  /// In en, this message translates to:
+  /// **'Resync channels'**
+  String get channels_resync;
+
   /// No description provided for @channels_erasedSlots.
   ///
   /// In en, this message translates to:
@@ -3370,10 +3376,10 @@ abstract class AppLocalizations {
   /// **'The radio refused the change, so the channel is as it was.'**
   String get channels_writeRejected;
 
-  /// A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026).
+  /// A channel write got no reply, and the automatic re-read of the radio's channels did not show the change (or could not finish), or the radio is not connected. Persistent, with a Resync button (#1026, #1163).
   ///
   /// In en, this message translates to:
-  /// **'The radio did not confirm the change. Check the channel list before trying again.'**
+  /// **'The radio did not confirm the change, and re-reading its channels did not show it either. Resync, then check the list before trying again.'**
   String get channels_writeNoReply;
 
   /// A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026).

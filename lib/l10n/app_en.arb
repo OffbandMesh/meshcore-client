@@ -885,6 +885,10 @@
     }
   },
   "channels_retrySync": "Retry sync",
+  "channels_resync": "Resync channels",
+  "@channels_resync": {
+    "description": "Re-reads every channel slot from the radio. App bar action on the Channels screen, and the button on a channel error (#1163)."
+  },
   "channels_erasedSlots": "The radio has lost the channels in slot(s) {slots}; it reported them as erased. Your channel list here has been kept and was not overwritten.",
   "@channels_erasedSlots": {
     "placeholders": {
@@ -1085,9 +1089,9 @@
   "@channels_writeRejected": {
     "description": "The radio answered a channel write with an error other than slot-occupied. Persistent (#1026)."
   },
-  "channels_writeNoReply": "The radio did not confirm the change. Check the channel list before trying again.",
+  "channels_writeNoReply": "The radio did not confirm the change, and re-reading its channels did not show it either. Resync, then check the list before trying again.",
   "@channels_writeNoReply": {
-    "description": "A channel write got no reply before the timeout, or the radio is not connected; it may or may not have landed. Persistent (#1026)."
+    "description": "A channel write got no reply, and the automatic re-read of the radio's channels did not show the change (or could not finish), or the radio is not connected. Persistent, with a Resync button (#1026, #1163)."
   },
   "channels_writeClearedNotAdded": "The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.",
   "@channels_writeClearedNotAdded": {

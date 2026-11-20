@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
@@ -88,8 +90,46 @@ bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
     ChannelWrite.historyNotMoved => l10n.channels_writeHistoryNotMoved,
   };
   if (message == null) return false;
-  showChannelBlockedMessage(context, message);
+  if (result == ChannelWrite.noReply) {
+    showChannelErrorWithResync(context, message);
+  } else {
+    showChannelBlockedMessage(context, message);
+  }
   return true;
+}
+
+/// A persistent channel error with a Resync button, for when the channel list
+/// itself is in doubt. The message names the fix; the button is the fix
+/// (#1163).
+void showChannelErrorWithResync(BuildContext context, String message) {
+  final connector = context.read<MeshCoreConnector>();
+  showDismissibleSnackBar(
+    context,
+    persist: true,
+    content: Row(
+      children: [
+        Expanded(child: Text(message)),
+        TextButton(
+          onPressed: () => resyncChannels(context, connector),
+          child: Text(context.l10n.channels_resync),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Re-reads every channel slot from the radio, or says why it cannot right
+/// now. Never a silent no-op: a sync already running is the only refusal, and
+/// it is explained (#1163).
+void resyncChannels(BuildContext context, MeshCoreConnector connector) {
+  if (connector.isChannelTableBusy) {
+    // The toast holding the button can outlive the screen that showed it.
+    if (context.mounted) {
+      showChannelBlockedMessage(context, context.l10n.channels_slotBusySyncing);
+    }
+    return;
+  }
+  unawaited(connector.getChannels(force: true));
 }
 
 /// Asks what a key change does with [channelName]'s message history: kept

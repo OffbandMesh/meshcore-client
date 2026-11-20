@@ -670,6 +670,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
   // Channel syncing state (sequential pattern)
   bool _isSyncingChannels = false;
+
+  /// Completes when the running channel sync ends: true if every slot was
+  /// read, false if it failed. Null when no sync is running (#1163).
+  Completer<bool>? _channelSyncDone;
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
   Timer? _channelsChangedDebounce;
@@ -7100,6 +7104,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
     _isLoadingChannels = true;
     _isSyncingChannels = true;
+    _channelSyncDone = Completer<bool>();
     _hasLoadedChannels = false;
     // Re-engage the ingress barrier for the duration of the sync: filing
     // against a list that is mid-replacement is the same hazard as filing
@@ -7430,6 +7435,9 @@ class MeshCoreConnector extends ChangeNotifier {
 
   void _cleanupChannelSync({required bool completed}) {
     _isSyncingChannels = false;
+    final done = _channelSyncDone;
+    _channelSyncDone = null;
+    if (done != null && !done.isCompleted) done.complete(completed);
     _channelSyncInFlight = false;
     _isLoadingChannels = false;
     _channelSyncTimeout?.cancel();
@@ -7609,13 +7617,72 @@ class MeshCoreConnector extends ChangeNotifier {
     bool refresh = true,
   }) async {
     if (!isConnected) return ChannelWrite.noReply;
-    return _setChannel(
+    final occupantPsk = _findChannelByIndex(index)?.psk;
+    final result = await _setChannel(
       index,
       name,
       psk,
-      occupantPsk: _findChannelByIndex(index)?.psk,
+      occupantPsk: occupantPsk,
       refresh: refresh,
     );
+    if (result != ChannelWrite.noReply || !refresh) return result;
+    final landed = await _rereadConfirms(
+      index,
+      'write',
+      (slot) => slot != null && slot.name == name && listEquals(slot.psk, psk),
+    );
+    if (!landed) return result;
+    if (occupantPsk == null || !listEquals(occupantPsk, psk)) {
+      await _retireSlotOccupant(index);
+    }
+    return ChannelWrite.ok;
+  }
+
+  /// After a write the radio did not answer: waits for the re-read the write
+  /// asked for, and says whether slot [index] now holds what was written.
+  ///
+  /// A lost reply does not mean a lost write. Saying "the radio did not
+  /// confirm" when the channel is in fact there sends the user to fix
+  /// something that is not broken, so the error is shown only when the re-read
+  /// still disagrees, or could not finish (#1163).
+  Future<bool> _rereadConfirms(
+    int index,
+    String what,
+    bool Function(Channel? slot) holdsTheChange,
+  ) async {
+    final done = _channelSyncDone;
+    if (done == null) return false;
+    final complete = await done.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => false,
+    );
+    if (!complete || _unconfirmedChannelSlots.contains(index)) {
+      _appDebugLogService?.warn(
+        'Channel $what to slot $index got no reply, and the re-read could not '
+        'confirm the slot either',
+        tag: 'ChannelWrite',
+      );
+      return false;
+    }
+    final slot = _channels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    final landed = holdsTheChange(slot);
+    if (landed) {
+      _appDebugLogService?.info(
+        'Channel $what to slot $index got no reply, but the re-read shows it '
+        'landed; reporting it as done',
+        tag: 'ChannelWrite',
+      );
+    } else {
+      _appDebugLogService?.warn(
+        'Channel $what to slot $index got no reply, and the re-read shows it '
+        'did not land (slot holds "${slot?.name ?? ''}")',
+        tag: 'ChannelWrite',
+      );
+    }
+    return landed;
   }
 
   /// Writes an edit of [channel]. A rename keeps the key and is a plain write.
@@ -7693,6 +7760,32 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Future<ChannelWrite> deleteChannel(int index, {bool refresh = true}) async {
     if (!isConnected) return ChannelWrite.noReply;
+    final victimPskHex = _findChannelByIndex(index)?.pskHex;
+    final result = await _deleteChannel(index, refresh: refresh);
+    if (result != ChannelWrite.noReply || !refresh) return result;
+    final landed = await _rereadConfirms(
+      index,
+      'delete',
+      (slot) => slot == null || slot.isEmpty,
+    );
+    if (!landed) return result;
+    // The slot is empty now, so it no longer resolves to the deleted channel:
+    // clear that channel's history by its own key.
+    if (victimPskHex != null) {
+      await _channelMessageStore.clearChannelMessagesForPsk(
+        victimPskHex,
+        index,
+      );
+    }
+    _channelMessages.remove(index);
+    _windowPskHex.remove(index);
+    return ChannelWrite.ok;
+  }
+
+  Future<ChannelWrite> _deleteChannel(
+    int index, {
+    required bool refresh,
+  }) async {
     _beginChannelWrite();
     try {
       // A slot is deleted by writing an empty name and a zero PSK. Its history
