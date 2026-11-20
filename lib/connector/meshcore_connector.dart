@@ -309,6 +309,9 @@ enum ContactKeyCheckResult { onRadio, notFound, unresolved }
 /// Why a factory reset was not sent. (#1054)
 enum FactoryResetRefusal { notConnected }
 
+/// Why a radio's message history was not deleted. (#1163)
+enum HistoryWipeRefusal { notConnected, failed }
+
 /// Where a factory reset stands, for the app-wide banner. (#1054)
 enum FactoryResetStatus {
   /// Sent. Over BLE the radio's pairing is gone too, so the OS one must go.
@@ -3933,6 +3936,7 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void wireMessageStoreForTest() {
     _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
+    _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelMessageStore.channelPskResolver = (index) =>
         _findChannelByIndex(index)?.pskHex;
   }
@@ -12705,23 +12709,75 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearMessagesForContact(Contact contact) {
+  /// Deletes the stored direct messages with [contact] and empties them on
+  /// screen. Saving the emptied list, which this used to do, deleted nothing
+  /// once saves merged (#343): the conversation came back (#1163).
+  Future<void> clearMessagesForContact(Contact contact) async {
     final contactKeyHex = contact.publicKeyHex;
-    final messages = _conversations[contactKeyHex];
-    if (messages == null) return;
-    messages.clear();
-    unawaited(_messageStore.saveMessages(contactKeyHex, messages));
+    await _messageStore.clearMessages(contactKeyHex);
+    _conversations[contactKeyHex]?.clear();
     markContactRead(contactKeyHex);
     notifyListeners();
   }
 
-  void clearMessagesForChannel(int channelIndex) {
-    final messages = _channelMessages[channelIndex];
-    if (messages == null) return;
-    messages.clear();
-    unawaited(_channelMessageStore.saveChannelMessages(channelIndex, messages));
-    markChannelRead(channelIndex);
+  /// Deletes [channel]'s stored message history, by its own key, and empties
+  /// it on screen (#1163).
+  ///
+  /// This used to save the emptied window, and since saves merge (#343) that
+  /// deleted nothing: the history came back on the next load.
+  Future<void> clearChannelHistory(Channel channel) async {
+    await _channelMessageStore.clearChannelMessagesForPsk(
+      channel.pskHex,
+      channel.index,
+    );
+    _channelMessages.remove(channel.index);
+    _windowPskHex.remove(channel.index);
+    markChannelRead(channel.index);
+    _appDebugLogService?.info(
+      'Cleared channel history: radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} slot '
+      '${channel.index} "${channel.name}" psk '
+      '${AppSettingsService.pskFingerprint(channel.pskHex)} (#1163)',
+      tag: 'Storage',
+    );
     notifyListeners();
+  }
+
+  /// Deletes the connected radio's message history, channel messages and
+  /// direct messages, and empties both on screen. Contacts, channels and
+  /// settings stay (#1163). Null when done; otherwise why it was not.
+  Future<HistoryWipeRefusal?> deleteMessageHistoryForThisRadio() async {
+    final prefix = _channelMessageStore.publicKeyHex;
+    if (!isConnected || prefix.isEmpty) {
+      return HistoryWipeRefusal.notConnected;
+    }
+    final int removed;
+    try {
+      removed = await wipeRadioMessageHistory(prefix);
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Deleting message history for radio $prefix failed: $e (#1163)',
+        tag: 'Storage',
+      );
+      return HistoryWipeRefusal.failed;
+    }
+    _channelMessages.clear();
+    _windowPskHex.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
+    for (final channel in List<Channel>.of(_channels)) {
+      markChannelRead(channel.index);
+    }
+    for (final key in List<String>.of(_contactUnreadCount.keys)) {
+      markContactRead(key);
+    }
+    _appDebugLogService?.info(
+      'Deleted message history for radio $prefix: $removed key(s) and row '
+      'group(s), channels and direct messages (#1163)',
+      tag: 'Storage',
+    );
+    notifyListeners();
+    return null;
   }
 
   void deleteAllPaths() {

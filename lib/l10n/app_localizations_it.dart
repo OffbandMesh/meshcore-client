@@ -829,6 +829,42 @@ class AppLocalizationsIt extends AppLocalizations {
       'Factory reset not sent: no radio is connected.';
 
   @override
+  String get settings_deleteMessageHistory => 'Delete message history';
+
+  @override
+  String get settings_deleteMessageHistorySubtitle =>
+      'Start fresh: remove this radio\'s channel and direct messages from the app';
+
+  @override
+  String get settings_deleteMessageHistoryConfirm =>
+      'This deletes every channel message and direct message this app has stored for this radio. Contacts, channels and settings stay. It can\'t be undone.';
+
+  @override
+  String get settings_deleteMessageHistoryDone =>
+      'Message history deleted for this radio.';
+
+  @override
+  String get settings_deleteMessageHistoryNotConnected =>
+      'Message history not deleted: no radio is connected.';
+
+  @override
+  String get settings_deleteMessageHistoryFailed =>
+      'Some or all of this radio\'s message history could not be deleted. The app log has the details.';
+
+  @override
+  String get chat_clearHistoryTitle => 'Clear message history?';
+
+  @override
+  String chat_clearChannelHistoryConfirm(String channel) {
+    return 'Delete every message stored in $channel for this radio? It can\'t be undone.';
+  }
+
+  @override
+  String chat_clearContactHistoryConfirm(String name) {
+    return 'Delete every message stored with $name for this radio? It can\'t be undone.';
+  }
+
+  @override
   String get factoryResetSentTitle => 'Factory reset sent';
 
   @override

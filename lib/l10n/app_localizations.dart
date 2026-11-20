@@ -1516,6 +1516,60 @@ abstract class AppLocalizations {
   /// **'Factory reset not sent: no radio is connected.'**
   String get settings_factoryResetNotConnected;
 
+  /// Settings action: deletes the connected radio's channel and direct message history stored in the app (#1163).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message history'**
+  String get settings_deleteMessageHistory;
+
+  /// No description provided for @settings_deleteMessageHistorySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start fresh: remove this radio\'s channel and direct messages from the app'**
+  String get settings_deleteMessageHistorySubtitle;
+
+  /// No description provided for @settings_deleteMessageHistoryConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes every channel message and direct message this app has stored for this radio. Contacts, channels and settings stay. It can\'t be undone.'**
+  String get settings_deleteMessageHistoryConfirm;
+
+  /// No description provided for @settings_deleteMessageHistoryDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Message history deleted for this radio.'**
+  String get settings_deleteMessageHistoryDone;
+
+  /// No description provided for @settings_deleteMessageHistoryNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Message history not deleted: no radio is connected.'**
+  String get settings_deleteMessageHistoryNotConnected;
+
+  /// No description provided for @settings_deleteMessageHistoryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Some or all of this radio\'s message history could not be deleted. The app log has the details.'**
+  String get settings_deleteMessageHistoryFailed;
+
+  /// No description provided for @chat_clearHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear message history?'**
+  String get chat_clearHistoryTitle;
+
+  /// No description provided for @chat_clearChannelHistoryConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete every message stored in {channel} for this radio? It can\'t be undone.'**
+  String chat_clearChannelHistoryConfirm(String channel);
+
+  /// No description provided for @chat_clearContactHistoryConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete every message stored with {name} for this radio? It can\'t be undone.'**
+  String chat_clearContactHistoryConfirm(String name);
+
   /// No description provided for @factoryResetSentTitle.
   ///
   /// In en, this message translates to:
