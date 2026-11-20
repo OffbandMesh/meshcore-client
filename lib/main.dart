@@ -36,6 +36,7 @@ import 'services/store_consolidation_service.dart';
 import 'services/stale_history_sweep.dart';
 import 'services/storage_health_service.dart';
 import 'services/radio_preset_service.dart';
+import 'storage/cross_radio_copy_cleanup.dart';
 import 'storage/drift/blob_store.dart';
 import 'widgets/contact_sync_shortfall_banner.dart';
 import 'widgets/factory_reset_banner.dart';
@@ -82,6 +83,11 @@ void main() async {
 
   // Start always-on file logging (#97); no-op on web.
   await FileLogService.instance.init();
+
+  // Hold aside channel messages a Bluetooth radio switch copied into another
+  // radio's history (#1163). One-time, before any store is read into memory,
+  // and after file logging so its counts reach the log.
+  await CrossRadioCopyCleanup.run();
 
   // Restore the desktop window's saved position/size (#349); no-op off desktop.
   await WindowGeometryService.instance.initialize();
