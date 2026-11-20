@@ -3416,8 +3416,29 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     messages[index] = update(messages[index]);
-    _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    _channelMessageStore.saveChannelMessages(channelIndex, [messages[index]]);
     notifyListeners();
+  }
+
+  /// Saves only the messages in [messages] that are not in [before]: the ones a
+  /// mutation added or replaced. Every edit to a channel message replaces it
+  /// with a `copyWith` copy, so object identity tells changed from unchanged.
+  ///
+  /// Saving the whole window instead wrote every message in memory into the
+  /// channel's stored history, so one wrong view, such as another radio's
+  /// messages left on this slot, became permanent on the next save (#1163).
+  Future<void> _saveChannelChanges(
+    int channelIndex,
+    List<ChannelMessage> messages,
+    List<ChannelMessage> before,
+  ) async {
+    final unchanged = Set<ChannelMessage>.identity()..addAll(before);
+    final changed = [
+      for (final m in messages)
+        if (!unchanged.contains(m)) m,
+    ];
+    if (changed.isEmpty) return;
+    await _channelMessageStore.saveChannelMessages(channelIndex, changed);
   }
 
   void _recordPathResult(
@@ -3957,6 +3978,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
       _resetConnectionHandshakeState();
+    } else {
+      _dropPreviousRadioState();
     }
     unawaited(_backgroundService?.start());
     notifyListeners();
@@ -4637,19 +4660,31 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
     _slotCountKnown = false;
-    // Drop the previous radio's in-memory history before a new connection loads
-    // its own. These caches are keyed by channel index / contact key, not by
-    // radio, so without this a radio switch would keep showing the prior
-    // radio's channel and DM history (a new radio's empty store cannot
-    // overwrite them). On-disk stores are already per-radio (device+PSK); this
-    // is purely the runtime cache. Repopulated on connect by
-    // loadAllChannelMessages and _loadMessagesForContact. (#472)
-    _channelMessages.clear();
-    _conversations.clear();
-    _loadedConversationKeys.clear();
+    _dropPreviousRadioState();
     _resetSyncProgressState();
     _bleInitialSyncStarted = false;
     _pathHashByteWidth = 1;
+  }
+
+  /// Drops everything in memory that belongs to the last radio, before a new
+  /// connection loads its own. Every connect calls this, on every transport.
+  ///
+  /// These caches are keyed by slot index or contact key, never by radio. Kept
+  /// across a switch, the previous radio's slot-N messages sat in the next
+  /// radio's slot-N window, and its next message on that slot saved the whole
+  /// window into its own channel there (#1163; #472 put the clear only in
+  /// [_resetConnectionHandshakeState], which the Bluetooth connect ran on the
+  /// web alone). The channel lists go too: they answer which channel a slot
+  /// holds, and the previous radio's answer is wrong for this one. All of it
+  /// reloads from this radio's own store at SELF_INFO.
+  void _dropPreviousRadioState() {
+    _channelMessages.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
+    _channels.clear();
+    _previousChannelsCache.clear();
+    _cachedChannels = [];
+    _recalculateCachedChannelsUnreadTotal();
   }
 
   @visibleForTesting
@@ -6410,8 +6445,9 @@ class MeshCoreConnector extends ChangeNotifier {
 
       // Process reaction locally to update the UI immediately. This is our own
       // outgoing reaction, so the reactor is us.
+      final before = List<ChannelMessage>.of(messages);
       _processReaction(messages, reactionInfo, _selfName ?? 'Me');
-      await _channelMessageStore.saveChannelMessages(channel.index, messages);
+      await _saveChannelChanges(channel.index, messages, before);
 
       // Mark this reaction as processed
       _processedChannelReactions[channel.index]!.add(reactionIdentifier);
@@ -10978,7 +11014,9 @@ class MeshCoreConnector extends ChangeNotifier {
         );
         _pendingChannelSentQueue.remove(messageId);
         unawaited(
-          _channelMessageStore.saveChannelMessages(entry.key, channelMessages),
+          _channelMessageStore.saveChannelMessages(entry.key, [
+            channelMessages[i],
+          ]),
         );
         notifyListeners();
         return true;
@@ -11003,7 +11041,9 @@ class MeshCoreConnector extends ChangeNotifier {
         status: ChannelMessageStatus.failed,
       );
       unawaited(
-        _channelMessageStore.saveChannelMessages(channelIndex, channelMessages),
+        _channelMessageStore.saveChannelMessages(channelIndex, [
+          channelMessages[i],
+        ]),
       );
       notifyListeners();
       return;
@@ -11675,6 +11715,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
       if (!isDuplicate) {
         // New reaction - process it. The reactor is the frame's sender.
+        final before = List<ChannelMessage>.of(messages);
         final matched = _processReaction(
           messages,
           reactionInfo,
@@ -11689,8 +11730,7 @@ class MeshCoreConnector extends ChangeNotifier {
             DateTime.now(),
           );
         }
-        // Save updated messages
-        _channelMessageStore.saveChannelMessages(channelIndex, messages);
+        unawaited(_saveChannelChanges(channelIndex, messages, before));
 
         // Mark as processed
         _processedChannelReactions[channelIndex]!.add(reactionIdentifier);
@@ -11702,6 +11742,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // auto reply-block (it guessed the target by most-recent sender, which
     // mis-attributed and ate screen space). See #37.
     final ChannelMessage processedMessage = message;
+    final before = List<ChannelMessage>.of(messages);
 
     final existingIndex = _findChannelRepeatIndex(messages, processedMessage);
     var isNew = true;
@@ -11751,8 +11792,7 @@ class MeshCoreConnector extends ChangeNotifier {
       DateTime.now(),
     );
 
-    // Save to persistent storage
-    _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    unawaited(_saveChannelChanges(channelIndex, messages, before));
     return isNew;
   }
 
