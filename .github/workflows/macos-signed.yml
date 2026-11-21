@@ -119,7 +119,12 @@ jobs:
       - name: Sign with Developer ID
         run: |
           set -eu
-          APP=build/macos/Build/Products/Release/offband_meshcore.app
+          APP="build/macos/Build/Products/Release/Offband MeshCore.app"
+          NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "${APP}/Contents/Info.plist")"
+          if [ "${NAME}" != "Offband MeshCore" ]; then
+            echo "::error::CFBundleName is '${NAME}', expected 'Offband MeshCore' (#1140)."
+            exit 1
+          fi
           echo "APP=${APP}" >> "$GITHUB_ENV"
           SIGN=(codesign --force --options runtime --timestamp --sign "${IDENTITY}" --keychain "${KC}")
           while IFS= read -r -d '' f; do
@@ -132,7 +137,13 @@ jobs:
           done < <(find "${APP}/Contents/Frameworks" -depth -name '*.framework' -type d -print0)
           "${SIGN[@]}" --entitlements macos/Runner/Release.entitlements "${APP}"
           codesign --verify --deep --strict --verbose=2 "${APP}"
-          lipo -archs "${APP}/Contents/MacOS/offband_meshcore"
+          codesign -d --entitlements - --xml "${APP}" > "${RUNNER_TEMP}/entitlements.plist"
+          SAVE="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-write' "${RUNNER_TEMP}/entitlements.plist" || true)"
+          if [ "${SAVE}" != "true" ]; then
+            echo "::error::Signed app lacks files.user-selected.read-write; the sandbox will refuse the Save dialog (#1143)."
+            exit 1
+          fi
+          lipo -archs "${APP}/Contents/MacOS/Offband MeshCore"
 
       # ditto, not zip: it preserves the .app bundle's symlinks (#1108). The
       # same zip is what Apple notarizes and what job 3 staples.
@@ -218,7 +229,7 @@ jobs:
         run: |
           set -eu
           ditto -x -k offband-macos-signed.zip .
-          APP=offband_meshcore.app
+          APP="Offband MeshCore.app"
           xcrun stapler staple "${APP}"
           xcrun stapler validate "${APP}"
           codesign --verify --deep --strict --verbose=2 "${APP}"
