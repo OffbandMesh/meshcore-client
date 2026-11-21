@@ -7,10 +7,24 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// OFFBAND_KEY_PROPERTIES points every checkout at one signing file (#1161).
+// Set but missing fails the build: it must never fall back to debug signing.
 val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
+val keystorePropertiesEnv = System.getenv("OFFBAND_KEY_PROPERTIES")
+val keystorePropertiesFile = if (keystorePropertiesEnv.isNullOrBlank()) {
+    rootProject.file("key.properties")
+} else {
+    rootProject.file(keystorePropertiesEnv).also {
+        if (!it.isFile) {
+            throw GradleException("OFFBAND_KEY_PROPERTIES is set but $it is not a file")
+        }
+    }
+}
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+    if (keystoreProperties["storeFile"] == null) {
+        throw GradleException("$keystorePropertiesFile has no storeFile entry")
+    }
 }
 
 android {
