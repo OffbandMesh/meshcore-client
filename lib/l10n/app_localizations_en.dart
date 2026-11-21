@@ -817,6 +817,42 @@ class AppLocalizationsEn extends AppLocalizations {
       'Factory reset not sent: no radio is connected.';
 
   @override
+  String get settings_deleteMessageHistory => 'Delete message history';
+
+  @override
+  String get settings_deleteMessageHistorySubtitle =>
+      'Start fresh: remove this radio\'s channel and direct messages from the app';
+
+  @override
+  String get settings_deleteMessageHistoryConfirm =>
+      'This deletes every channel message and direct message this app has stored for this radio. Contacts, channels and settings stay. It can\'t be undone.';
+
+  @override
+  String get settings_deleteMessageHistoryDone =>
+      'Message history deleted for this radio.';
+
+  @override
+  String get settings_deleteMessageHistoryNotConnected =>
+      'Message history not deleted: no radio is connected.';
+
+  @override
+  String get settings_deleteMessageHistoryFailed =>
+      'Some or all of this radio\'s message history could not be deleted. The app log has the details.';
+
+  @override
+  String get chat_clearHistoryTitle => 'Clear message history?';
+
+  @override
+  String chat_clearChannelHistoryConfirm(String channel) {
+    return 'Delete every message stored in $channel for this radio? It can\'t be undone.';
+  }
+
+  @override
+  String chat_clearContactHistoryConfirm(String name) {
+    return 'Delete every message stored with $name for this radio? It can\'t be undone.';
+  }
+
+  @override
   String get factoryResetSentTitle => 'Factory reset sent';
 
   @override
@@ -1660,6 +1696,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channels_retrySync => 'Retry sync';
 
   @override
+  String get channels_resync => 'Resync channels';
+
+  @override
   String channels_erasedSlots(String slots) {
     return 'The radio has lost the channels in slot(s) $slots; it reported them as erased. Your channel list here has been kept and was not overwritten.';
   }
@@ -1900,7 +1939,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channels_writeNoReply =>
-      'The radio did not confirm the change. Check the channel list before trying again.';
+      'The radio did not confirm the change, and re-reading its channels did not show it either. Resync, then check the list before trying again.';
 
   @override
   String get channels_writeClearedNotAdded =>

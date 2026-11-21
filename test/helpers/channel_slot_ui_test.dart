@@ -11,6 +11,7 @@ import 'package:meshcore_open/connector/meshcore_connector.dart';
 import 'package:meshcore_open/helpers/channel_slot_ui.dart';
 import 'package:meshcore_open/l10n/app_localizations.dart';
 import 'package:meshcore_open/models/channel.dart';
+import 'package:provider/provider.dart';
 
 class _FakeConn extends MeshCoreConnector {
   _FakeConn({this.list = const [], this.max = 40, this.busy = false});
@@ -18,6 +19,7 @@ class _FakeConn extends MeshCoreConnector {
   final List<Channel> list;
   final int max;
   final bool busy;
+  int resyncs = 0;
 
   @override
   List<Channel> get channels => list;
@@ -25,6 +27,10 @@ class _FakeConn extends MeshCoreConnector {
   int get maxChannels => max;
   @override
   bool get isChannelTableBusy => busy;
+  @override
+  Future<void> getChannels({int? maxChannels, bool force = false}) async {
+    if (force) resyncs++;
+  }
 }
 
 Channel _ch(int index, String name, int fill) => Channel(
@@ -50,18 +56,21 @@ final _allMessages = [
   _l10n.channels_writeClearedNotAdded,
 ];
 
-Future<BuildContext> _host(WidgetTester tester) async {
+Future<BuildContext> _host(WidgetTester tester, [_FakeConn? conn]) async {
   late BuildContext context;
   await tester.pumpWidget(
-    MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Builder(
-          builder: (c) {
-            context = c;
-            return const SizedBox.shrink();
-          },
+    ChangeNotifierProvider<MeshCoreConnector>.value(
+      value: conn ?? _FakeConn(),
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (c) {
+              context = c;
+              return const SizedBox.shrink();
+            },
+          ),
         ),
       ),
     ),
@@ -247,6 +256,35 @@ void main() {
 
       expect(explainUnconfirmedChannelWrite(context, ChannelWrite.ok), isFalse);
       await _expectNoRefusal(tester);
+    });
+
+    // #1163: the message said to resync and offered no way to.
+    testWidgets('noReply: its Resync button re-reads the channels', (
+      tester,
+    ) async {
+      final conn = _FakeConn();
+      final context = await _host(tester, conn);
+
+      explainUnconfirmedChannelWrite(context, ChannelWrite.noReply);
+      await tester.pump();
+      await tester.tap(find.text(_l10n.channels_resync));
+      await tester.pump();
+
+      expect(conn.resyncs, 1);
+    });
+
+    testWidgets('noReply: Resync during a sync says so instead', (
+      tester,
+    ) async {
+      final conn = _FakeConn(busy: true);
+      final context = await _host(tester, conn);
+
+      explainUnconfirmedChannelWrite(context, ChannelWrite.noReply);
+      await tester.pump();
+      await tester.tap(find.text(_l10n.channels_resync));
+
+      expect(conn.resyncs, 0);
+      await _expectPersistent(tester, _l10n.channels_slotBusySyncing);
     });
   });
 

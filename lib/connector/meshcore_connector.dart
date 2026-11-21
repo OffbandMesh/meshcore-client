@@ -309,6 +309,9 @@ enum ContactKeyCheckResult { onRadio, notFound, unresolved }
 /// Why a factory reset was not sent. (#1054)
 enum FactoryResetRefusal { notConnected }
 
+/// Why a radio's message history was not deleted. (#1163)
+enum HistoryWipeRefusal { notConnected, failed }
+
 /// Where a factory reset stands, for the app-wide banner. (#1054)
 enum FactoryResetStatus {
   /// Sent. Over BLE the radio's pairing is gone too, so the OS one must go.
@@ -368,6 +371,12 @@ class MeshCoreConnector extends ChangeNotifier {
   final List<Channel> _channels = [];
   final Map<String, List<Message>> _conversations = {};
   final Map<int, List<ChannelMessage>> _channelMessages = {};
+
+  /// The channel PSK each slot's in-memory window was loaded under (null: the
+  /// slot had not resolved, so the slot-index key was read). A confirmed sync
+  /// reloads any slot whose channel differs from this, which the comparison
+  /// against the saved list alone cannot see (#1163).
+  final Map<int, String?> _windowPskHex = {};
 
   /// Last send timestamp (seconds) used per channel, to keep every channel
   /// send's `(ts, channel_idx)` key unique for 0xC6 correlation (#524).
@@ -664,6 +673,10 @@ class MeshCoreConnector extends ChangeNotifier {
 
   // Channel syncing state (sequential pattern)
   bool _isSyncingChannels = false;
+
+  /// Completes when the running channel sync ends: true if every slot was
+  /// read, false if it failed. Null when no sync is running (#1163).
+  Completer<bool>? _channelSyncDone;
   bool _channelSyncInFlight = false;
   Timer? _channelSyncTimeout;
   Timer? _channelsChangedDebounce;
@@ -2931,10 +2944,20 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Load persisted channel messages for a specific channel
   Future<void> _loadChannelMessages(int channelIndex) async {
+    final lookup = _findChannelByIndexWithSource(channelIndex);
     final allMessages = await _channelMessageStore.loadChannelMessages(
       channelIndex,
     );
     if (allMessages.isNotEmpty) {
+      _windowPskHex[channelIndex] = lookup.channel?.pskHex;
+      _appDebugLogService?.info(
+        'History load: radio '
+        '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} slot '
+        '$channelIndex "${lookup.channel?.name ?? ''}" psk '
+        '${AppSettingsService.pskFingerprint(lookup.channel?.pskHex)} '
+        '(${lookup.source}): ${allMessages.length} stored message(s)',
+        tag: 'Storage',
+      );
       // Keep only the most recent N messages in memory to bound memory usage
       final windowedMessages = List<ChannelMessage>.from(
         allMessages.length > _messageWindowSize
@@ -3416,8 +3439,29 @@ class MeshCoreConnector extends ChangeNotifier {
       return;
     }
     messages[index] = update(messages[index]);
-    _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    _channelMessageStore.saveChannelMessages(channelIndex, [messages[index]]);
     notifyListeners();
+  }
+
+  /// Saves only the messages in [messages] that are not in [before]: the ones a
+  /// mutation added or replaced. Every edit to a channel message replaces it
+  /// with a `copyWith` copy, so object identity tells changed from unchanged.
+  ///
+  /// Saving the whole window instead wrote every message in memory into the
+  /// channel's stored history, so one wrong view, such as another radio's
+  /// messages left on this slot, became permanent on the next save (#1163).
+  Future<void> _saveChannelChanges(
+    int channelIndex,
+    List<ChannelMessage> messages,
+    List<ChannelMessage> before,
+  ) async {
+    final unchanged = Set<ChannelMessage>.identity()..addAll(before);
+    final changed = [
+      for (final m in messages)
+        if (!unchanged.contains(m)) m,
+    ];
+    if (changed.isEmpty) return;
+    await _channelMessageStore.saveChannelMessages(channelIndex, changed);
   }
 
   void _recordPathResult(
@@ -3892,6 +3936,7 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void wireMessageStoreForTest() {
     _channelMessageStore.setPublicKeyHex = selfPublicKeyHex;
+    _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelMessageStore.channelPskResolver = (index) =>
         _findChannelByIndex(index)?.pskHex;
   }
@@ -3957,6 +4002,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _bleInitialSyncStarted = false;
     if (PlatformInfo.isWeb) {
       _resetConnectionHandshakeState();
+    } else {
+      _dropPreviousRadioState();
     }
     unawaited(_backgroundService?.start());
     notifyListeners();
@@ -4637,19 +4684,32 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
     _slotCountKnown = false;
-    // Drop the previous radio's in-memory history before a new connection loads
-    // its own. These caches are keyed by channel index / contact key, not by
-    // radio, so without this a radio switch would keep showing the prior
-    // radio's channel and DM history (a new radio's empty store cannot
-    // overwrite them). On-disk stores are already per-radio (device+PSK); this
-    // is purely the runtime cache. Repopulated on connect by
-    // loadAllChannelMessages and _loadMessagesForContact. (#472)
-    _channelMessages.clear();
-    _conversations.clear();
-    _loadedConversationKeys.clear();
+    _dropPreviousRadioState();
     _resetSyncProgressState();
     _bleInitialSyncStarted = false;
     _pathHashByteWidth = 1;
+  }
+
+  /// Drops everything in memory that belongs to the last radio, before a new
+  /// connection loads its own. Every connect calls this, on every transport.
+  ///
+  /// These caches are keyed by slot index or contact key, never by radio. Kept
+  /// across a switch, the previous radio's slot-N messages sat in the next
+  /// radio's slot-N window, and its next message on that slot saved the whole
+  /// window into its own channel there (#1163; #472 put the clear only in
+  /// [_resetConnectionHandshakeState], which the Bluetooth connect ran on the
+  /// web alone). The channel lists go too: they answer which channel a slot
+  /// holds, and the previous radio's answer is wrong for this one. All of it
+  /// reloads from this radio's own store at SELF_INFO.
+  void _dropPreviousRadioState() {
+    _channelMessages.clear();
+    _windowPskHex.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
+    _channels.clear();
+    _previousChannelsCache.clear();
+    _cachedChannels = [];
+    _recalculateCachedChannelsUnreadTotal();
   }
 
   @visibleForTesting
@@ -4805,6 +4865,11 @@ class MeshCoreConnector extends ChangeNotifier {
     _queueSyncTimeout = null;
     _queueSyncRetries = 0;
     _isSyncingChannels = false;
+    // A write waiting on its re-read must hear now that the re-read will not
+    // finish, not after its 30 s guard. Every disconnect passes here (#1163).
+    final syncDone = _channelSyncDone;
+    _channelSyncDone = null;
+    if (syncDone != null && !syncDone.isCompleted) syncDone.complete(false);
     _channelSyncInFlight = false;
     _channelSyncTimeout?.cancel();
     _channelSyncTimeout = null;
@@ -6405,13 +6470,17 @@ class MeshCoreConnector extends ChangeNotifier {
       }
 
       // Get the in-memory messages list (same as _addChannelMessage uses)
-      _channelMessages.putIfAbsent(channel.index, () => []);
+      if (!_channelMessages.containsKey(channel.index)) {
+        _channelMessages[channel.index] = [];
+        _windowPskHex[channel.index] = channel.pskHex;
+      }
       final messages = _channelMessages[channel.index]!;
 
       // Process reaction locally to update the UI immediately. This is our own
       // outgoing reaction, so the reactor is us.
+      final before = List<ChannelMessage>.of(messages);
       _processReaction(messages, reactionInfo, _selfName ?? 'Me');
-      await _channelMessageStore.saveChannelMessages(channel.index, messages);
+      await _saveChannelChanges(channel.index, messages, before);
 
       // Mark this reaction as processed
       _processedChannelReactions[channel.index]!.add(reactionIdentifier);
@@ -7044,6 +7113,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
     _isLoadingChannels = true;
     _isSyncingChannels = true;
+    _channelSyncDone = Completer<bool>();
     _hasLoadedChannels = false;
     // Re-engage the ingress barrier for the duration of the sync: filing
     // against a list that is mid-replacement is the same hazard as filing
@@ -7183,8 +7253,33 @@ class MeshCoreConnector extends ChangeNotifier {
         // this slot from the store; the resolver now sees the fresh list, so
         // the load reads the NEW identity's own history.
         _channelMessages.remove(fresh.index);
+        _windowPskHex.remove(fresh.index);
         unawaited(_loadChannelMessages(fresh.index));
       }
+    }
+
+    // #1163: the diff above compares the radio with the SAVED list, so it
+    // cannot see a window that was loaded under some other list. Compare each
+    // window with the key it was actually loaded under instead, and reload
+    // any that does not match the channel the radio just confirmed.
+    for (final fresh in _channels) {
+      if (!_channelMessages.containsKey(fresh.index) ||
+          !_windowPskHex.containsKey(fresh.index)) {
+        continue;
+      }
+      final loadedAs = _windowPskHex[fresh.index];
+      final confirmed = fresh.isEmpty ? null : fresh.pskHex;
+      if (loadedAs == confirmed) continue;
+      _appDebugLogService?.warn(
+        'Slot ${fresh.index} history was loaded under psk '
+        '${AppSettingsService.pskFingerprint(loadedAs)} but the radio holds '
+        '"${fresh.name}" psk ${AppSettingsService.pskFingerprint(confirmed)}; '
+        'reloading it from that channel\'s own history',
+        tag: 'ChannelSync',
+      );
+      _channelMessages.remove(fresh.index);
+      _windowPskHex.remove(fresh.index);
+      if (confirmed != null) unawaited(_loadChannelMessages(fresh.index));
     }
 
     if (_erasedChannelSlots.isNotEmpty) {
@@ -7349,6 +7444,9 @@ class MeshCoreConnector extends ChangeNotifier {
 
   void _cleanupChannelSync({required bool completed}) {
     _isSyncingChannels = false;
+    final done = _channelSyncDone;
+    _channelSyncDone = null;
+    if (done != null && !done.isCompleted) done.complete(completed);
     _channelSyncInFlight = false;
     _isLoadingChannels = false;
     _channelSyncTimeout?.cancel();
@@ -7528,13 +7626,72 @@ class MeshCoreConnector extends ChangeNotifier {
     bool refresh = true,
   }) async {
     if (!isConnected) return ChannelWrite.noReply;
-    return _setChannel(
+    final occupantPsk = _findChannelByIndex(index)?.psk;
+    final result = await _setChannel(
       index,
       name,
       psk,
-      occupantPsk: _findChannelByIndex(index)?.psk,
+      occupantPsk: occupantPsk,
       refresh: refresh,
     );
+    if (result != ChannelWrite.noReply || !refresh) return result;
+    final landed = await _rereadConfirms(
+      index,
+      'write',
+      (slot) => slot != null && slot.name == name && listEquals(slot.psk, psk),
+    );
+    if (!landed) return result;
+    if (occupantPsk == null || !listEquals(occupantPsk, psk)) {
+      await _retireSlotOccupant(index);
+    }
+    return ChannelWrite.ok;
+  }
+
+  /// After a write the radio did not answer: waits for the re-read the write
+  /// asked for, and says whether slot [index] now holds what was written.
+  ///
+  /// A lost reply does not mean a lost write. Saying "the radio did not
+  /// confirm" when the channel is in fact there sends the user to fix
+  /// something that is not broken, so the error is shown only when the re-read
+  /// still disagrees, or could not finish (#1163).
+  Future<bool> _rereadConfirms(
+    int index,
+    String what,
+    bool Function(Channel? slot) holdsTheChange,
+  ) async {
+    final done = _channelSyncDone;
+    if (done == null) return false;
+    final complete = await done.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => false,
+    );
+    if (!complete || _unconfirmedChannelSlots.contains(index)) {
+      _appDebugLogService?.warn(
+        'Channel $what to slot $index got no reply, and the re-read could not '
+        'confirm the slot either',
+        tag: 'ChannelWrite',
+      );
+      return false;
+    }
+    final slot = _channels.cast<Channel?>().firstWhere(
+      (c) => c?.index == index,
+      orElse: () => null,
+    );
+    final landed = holdsTheChange(slot);
+    if (landed) {
+      _appDebugLogService?.info(
+        'Channel $what to slot $index got no reply, but the re-read shows it '
+        'landed; reporting it as done',
+        tag: 'ChannelWrite',
+      );
+    } else {
+      _appDebugLogService?.warn(
+        'Channel $what to slot $index got no reply, and the re-read shows it '
+        'did not land (slot holds "${slot?.name ?? ''}")',
+        tag: 'ChannelWrite',
+      );
+    }
+    return landed;
   }
 
   /// Writes an edit of [channel]. A rename keeps the key and is a plain write.
@@ -7612,6 +7769,32 @@ class MeshCoreConnector extends ChangeNotifier {
 
   Future<ChannelWrite> deleteChannel(int index, {bool refresh = true}) async {
     if (!isConnected) return ChannelWrite.noReply;
+    final victimPskHex = _findChannelByIndex(index)?.pskHex;
+    final result = await _deleteChannel(index, refresh: refresh);
+    if (result != ChannelWrite.noReply || !refresh) return result;
+    final landed = await _rereadConfirms(
+      index,
+      'delete',
+      (slot) => slot == null || slot.isEmpty,
+    );
+    if (!landed) return result;
+    // The slot is empty now, so it no longer resolves to the deleted channel:
+    // clear that channel's history by its own key.
+    if (victimPskHex != null) {
+      await _channelMessageStore.clearChannelMessagesForPsk(
+        victimPskHex,
+        index,
+      );
+    }
+    _channelMessages.remove(index);
+    _windowPskHex.remove(index);
+    return ChannelWrite.ok;
+  }
+
+  Future<ChannelWrite> _deleteChannel(
+    int index, {
+    required bool refresh,
+  }) async {
     _beginChannelWrite();
     try {
       // A slot is deleted by writing an empty name and a zero PSK. Its history
@@ -7621,6 +7804,7 @@ class MeshCoreConnector extends ChangeNotifier {
       if (result == ChannelWrite.ok) {
         await _channelMessageStore.clearChannelMessages(index);
         _channelMessages.remove(index);
+        _windowPskHex.remove(index);
       }
       if (refresh) _syncAfterChannelWrites();
       return result;
@@ -7725,6 +7909,7 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> _retireSlotOccupant(int index) async {
     await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
+    _windowPskHex.remove(index);
   }
 
   /// Applies the user's keep-or-delete answer for a key change once the radio
@@ -10978,7 +11163,9 @@ class MeshCoreConnector extends ChangeNotifier {
         );
         _pendingChannelSentQueue.remove(messageId);
         unawaited(
-          _channelMessageStore.saveChannelMessages(entry.key, channelMessages),
+          _channelMessageStore.saveChannelMessages(entry.key, [
+            channelMessages[i],
+          ]),
         );
         notifyListeners();
         return true;
@@ -11003,7 +11190,9 @@ class MeshCoreConnector extends ChangeNotifier {
         status: ChannelMessageStatus.failed,
       );
       unawaited(
-        _channelMessageStore.saveChannelMessages(channelIndex, channelMessages),
+        _channelMessageStore.saveChannelMessages(channelIndex, [
+          channelMessages[i],
+        ]),
       );
       notifyListeners();
       return;
@@ -11652,7 +11841,11 @@ class MeshCoreConnector extends ChangeNotifier {
   }
 
   bool _addChannelMessage(int channelIndex, ChannelMessage message) {
-    _channelMessages.putIfAbsent(channelIndex, () => []);
+    final lookup = _findChannelByIndexWithSource(channelIndex);
+    if (!_channelMessages.containsKey(channelIndex)) {
+      _channelMessages[channelIndex] = [];
+      _windowPskHex[channelIndex] = lookup.channel?.pskHex;
+    }
     final messages = _channelMessages[channelIndex]!;
 
     // Parse reaction info. Our own format first, then the PocketMesh /
@@ -11675,6 +11868,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
       if (!isDuplicate) {
         // New reaction - process it. The reactor is the frame's sender.
+        final before = List<ChannelMessage>.of(messages);
         final matched = _processReaction(
           messages,
           reactionInfo,
@@ -11689,8 +11883,7 @@ class MeshCoreConnector extends ChangeNotifier {
             DateTime.now(),
           );
         }
-        // Save updated messages
-        _channelMessageStore.saveChannelMessages(channelIndex, messages);
+        unawaited(_saveChannelChanges(channelIndex, messages, before));
 
         // Mark as processed
         _processedChannelReactions[channelIndex]!.add(reactionIdentifier);
@@ -11702,6 +11895,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // auto reply-block (it guessed the target by most-recent sender, which
     // mis-attributed and ate screen space). See #37.
     final ChannelMessage processedMessage = message;
+    final before = List<ChannelMessage>.of(messages);
 
     final existingIndex = _findChannelRepeatIndex(messages, processedMessage);
     var isNew = true;
@@ -11740,6 +11934,16 @@ class MeshCoreConnector extends ChangeNotifier {
       }
     } else {
       messages.add(processedMessage);
+      _appDebugLogService?.info(
+        'CHAN FILED slot $channelIndex "${lookup.channel?.name ?? ''}" psk '
+        '${AppSettingsService.pskFingerprint(lookup.channel?.pskHex)} '
+        '(${lookup.source}), window psk '
+        '${AppSettingsService.pskFingerprint(_windowPskHex[channelIndex])}, '
+        'radio ${AppSettingsService.radioScopePrefix(selfPublicKeyHex)}, '
+        'sender=${processedMessage.senderName}',
+        tag: 'Ingest',
+        noNotify: true,
+      );
     }
 
     // A message just landed, so a reaction that arrived before it may now have
@@ -11751,8 +11955,7 @@ class MeshCoreConnector extends ChangeNotifier {
       DateTime.now(),
     );
 
-    // Save to persistent storage
-    _channelMessageStore.saveChannelMessages(channelIndex, messages);
+    unawaited(_saveChannelChanges(channelIndex, messages, before));
     return isNew;
   }
 
@@ -12511,23 +12714,79 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearMessagesForContact(Contact contact) {
+  /// Deletes the stored direct messages with [contact] and empties them on
+  /// screen. Saving the emptied list, which this used to do, deleted nothing
+  /// once saves merged (#343): the conversation came back (#1163).
+  Future<void> clearMessagesForContact(Contact contact) async {
     final contactKeyHex = contact.publicKeyHex;
-    final messages = _conversations[contactKeyHex];
-    if (messages == null) return;
-    messages.clear();
-    unawaited(_messageStore.saveMessages(contactKeyHex, messages));
+    await _messageStore.clearMessages(contactKeyHex);
+    _conversations[contactKeyHex]?.clear();
     markContactRead(contactKeyHex);
     notifyListeners();
   }
 
-  void clearMessagesForChannel(int channelIndex) {
-    final messages = _channelMessages[channelIndex];
-    if (messages == null) return;
-    messages.clear();
-    unawaited(_channelMessageStore.saveChannelMessages(channelIndex, messages));
-    markChannelRead(channelIndex);
+  /// Deletes [channel]'s stored message history, by its own key, and empties
+  /// it on screen (#1163).
+  ///
+  /// This used to save the emptied window, and since saves merge (#343) that
+  /// deleted nothing: the history came back on the next load.
+  Future<void> clearChannelHistory(Channel channel) async {
+    await _channelMessageStore.clearChannelMessagesForPsk(
+      channel.pskHex,
+      channel.index,
+    );
+    _channelMessages.remove(channel.index);
+    _windowPskHex.remove(channel.index);
+    markChannelRead(channel.index);
+    _appDebugLogService?.info(
+      'Cleared channel history: radio '
+      '${AppSettingsService.radioScopePrefix(selfPublicKeyHex)} slot '
+      '${channel.index} "${channel.name}" psk '
+      '${AppSettingsService.pskFingerprint(channel.pskHex)} (#1163)',
+      tag: 'Storage',
+    );
     notifyListeners();
+  }
+
+  /// Deletes the connected radio's message history, channel messages and
+  /// direct messages, and empties both on screen. Contacts, channels and
+  /// settings stay (#1163). Null when done; otherwise why it was not.
+  Future<HistoryWipeRefusal?> deleteMessageHistoryForThisRadio() async {
+    final prefix = _channelMessageStore.publicKeyHex;
+    if (!isConnected || prefix.isEmpty) {
+      return HistoryWipeRefusal.notConnected;
+    }
+    // Emptied first: a message arriving during the wipe then lands in a fresh
+    // window, and the wipe's snapshot leaves its stored copy alone, so it
+    // stays both on screen and on disk.
+    _channelMessages.clear();
+    _windowPskHex.clear();
+    _conversations.clear();
+    _loadedConversationKeys.clear();
+    notifyListeners();
+    final int removed;
+    try {
+      removed = await wipeRadioMessageHistory(prefix);
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Deleting message history for radio $prefix failed: $e (#1163)',
+        tag: 'Storage',
+      );
+      return HistoryWipeRefusal.failed;
+    }
+    for (final channel in List<Channel>.of(_channels)) {
+      markChannelRead(channel.index);
+    }
+    for (final key in List<String>.of(_contactUnreadCount.keys)) {
+      markContactRead(key);
+    }
+    _appDebugLogService?.info(
+      'Deleted message history for radio $prefix: $removed key(s) and row '
+      'group(s), channels and direct messages (#1163)',
+      tag: 'Storage',
+    );
+    notifyListeners();
+    return null;
   }
 
   void deleteAllPaths() {

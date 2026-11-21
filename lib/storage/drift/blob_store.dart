@@ -401,6 +401,57 @@ class BlobStore {
     }
   }
 
+  /// Every message row whose store key starts with [prefix], as its store key,
+  /// identity and the app's receive time (`rxTime`, null when absent).
+  ///
+  /// The receive time is read with `json_extract` in SQLite, so a scan of the
+  /// whole history moves three small columns instead of every payload (#1163).
+  Future<List<({String storeKey, String mergeKey, int? rxTime})>>
+  messageRowTimes(String prefix) async {
+    final rows = await _db
+        .customSelect(
+          "SELECT store_key, merge_key, json_extract(payload, '\$.rxTime') AS rx "
+          'FROM message_records WHERE substr(store_key, 1, ?) = ?',
+          variables: [
+            Variable.withInt(prefix.length),
+            Variable.withString(prefix),
+          ],
+          readsFrom: {_db.messageRecords},
+        )
+        .get();
+    return [
+      for (final r in rows)
+        (
+          storeKey: r.read<String>('store_key'),
+          mergeKey: r.read<String>('merge_key'),
+          rxTime: r.readNullable<int>('rx'),
+        ),
+    ];
+  }
+
+  /// Moves the rows under [fromKey] whose identity is in [mergeKeys] to
+  /// [toKey], in one transaction. Nothing is deleted: the rows keep their
+  /// payloads and can be moved back (#1163).
+  Future<void> moveMessageRows(
+    String fromKey,
+    String toKey,
+    Iterable<String> mergeKeys,
+  ) async {
+    final keys = mergeKeys.toList();
+    await _db.transaction(() async {
+      for (var i = 0; i < keys.length; i += 500) {
+        final chunk = keys.sublist(
+          i,
+          i + 500 > keys.length ? keys.length : i + 500,
+        );
+        await (_db.update(_db.messageRecords)..where(
+              (t) => t.storeKey.equals(fromKey) & t.mergeKey.isIn(chunk),
+            ))
+            .write(MessageRecordsCompanion(storeKey: Value(toKey)));
+      }
+    });
+  }
+
   /// Removes every message under [storeKey], for the stores' clear paths.
   Future<void> deleteMessageRows(String storeKey) async {
     await (_db.delete(
