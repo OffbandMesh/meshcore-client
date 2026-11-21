@@ -4,16 +4,16 @@
 |---|---|
 | **Feature** | [#1053](https://github.com/OffbandMesh/meshcore-client/issues/1053) · Citadel `meshcore-open-sme` |
 | **Serves** | Standalone. Extends the release pipeline (epic #312) and mirrors the iOS lane (#1013). |
-| **Status** | Owner approved 2026-11-03 ("Plan approved."). Review fixes applied afterwards (section 12). In force when this PR merges. |
+| **Status** | Owner approved 2026-11-03 ("Plan approved."). Review fixes applied afterwards (section 12). Revised 2026-11-21 on the owner's call to bring Internal back as a target (decision 3). |
 | **Owner** | @Strycher |
-| **Last updated** | 2026-11-03 |
+| **Last updated** | 2026-11-21 |
 
 ## At a glance
 
-- **What:** a tagged release reaches Play through CI. You send it to External (Play's closed testing) or straight to production, and promote from External to production when you're ready. Test builds stay `adb` sideloads.
+- **What:** a tagged release reaches Play through CI. For each release you choose where it starts: Internal, External (Play's closed testing) or production. From Internal or External you promote it onward when you're ready, skipping any step. Test builds stay `adb` sideloads.
 - **Why now:** a cut takes five manual Play steps.
 - **How:** two Epics. API access and the upload tool, then the publish workflow.
-- **Done when:** a release reaches External or production from one word to me and one click from you, with no file handling.
+- **Done when:** a release reaches Internal, External or production from one word to me and one click from you, with no file handling.
 
 ### What a cut looks like afterwards
 
@@ -24,15 +24,15 @@
 | Bump `+N` in `pubspec` | Me, at the cut | Me, at the cut (unchanged) |
 | Get the AAB | Me, into Downloads | Gone. It stays on the GitHub release, where CI reads it. |
 | Upload, paste notes, name the release | You | CI, from `play/<version>.txt` |
-| Send to External or production | You, in Console | You say "External" or "production at N%", I dispatch it, you approve one click |
-| Move from External to production | You, in Console | You say "production at N%", I dispatch it, you approve one click |
+| Send to Internal, External or production | You, in Console | You say "Internal", "External" or "production at N%", I dispatch it, you approve one click |
+| Promote Internal to External, or either to production | You, in Console | You say where it goes next, I dispatch it, you approve one click. The same bundle moves; no new upload, no new version code. |
 | Post to Discord | You | You (unchanged, CI never sends) |
 
 ### Things you should know up front
 
-1. **Test builds never touch Play.** Every upload uses a version code forever, so only tagged releases upload, one code per release, as today. Test builds stay `adb` sideloads.
-2. **External goes to your whole closed tester list,** after Google's review. Production takes `draft` or a percentage.
-3. **Anyone opted in to Internal testing gets only Internal builds.** Google says they aren't eligible for closed or open builds. Nothing will upload to Internal, so anyone already opted in, your phone included, needs to opt out of Internal to get External builds.
+1. **Test builds never touch Play.** Every upload uses a version code forever, so only tagged releases upload, one code per release, as today. Test builds stay `adb` sideloads. Promoting a release from one track to another moves the same bundle and uses no new code, so Internal, then External, then production still costs one code.
+2. **Internal and External go to their whole tester lists.** External goes after Google's review. Production takes `draft` or a percentage.
+3. **Anyone opted in to Internal testing gets only Internal builds.** Google says they aren't eligible for closed or open builds. So a release that starts on External, skipping Internal, doesn't reach anyone opted in to Internal, your phone included. Starting a release on Internal and promoting it reaches both lists.
 4. **The workflow can only be proven on a real release.** It runs only from a `v*` tag, so its live proof is the next cut.
 5. **`release-signed.yml` gets one small addition:** a provenance attestation on the AAB, so the publish workflow can prove the file it sends to Play is the one the signed run built. Added after review (section 12).
 
@@ -45,6 +45,7 @@
 | 3 | A version code can never be reused, and Play has seen up to 68. | Android docs: "You can't upload an APK to the Play Store with a `versionCode` you have already used." Bucket stats list 64, 65, 67, 68. | Uploading test builds would use up codes. Only releases upload. |
 | 4 | The closed testing track already exists and has been used. Open testing never was. | Cuts #214, #265 (1.1.2), #563 (1.5.0-beta.1). #159: "Open testing skipped." | External is that track. |
 | 5 | Internal testers receive only Internal builds. | Play help, "Version code requirements." | Item 3 of the up-front list. |
+| 7 | Promoting a release moves a bundle Play already holds onto another track. | A release names version codes, not files; the upload step is separate. | One version code per release, however many tracks it passes through. Settled live by B3. |
 | 6 | Release assets can be replaced after publishing, and a local release-signed build carries the same certificate and version code. Workflow artifacts expire after 7 days. | `release-signed.yml`: `gh release upload --clobber` on re-run, `retention-days: 7`. | A certificate and version code check can't tell the CI build from a local one. Provenance can. |
 
 ## 2. Scope
@@ -52,12 +53,12 @@
 **In:**
 - One Google service account, keyless, usable only from CI.
 - `tools/play/`: the upload tool and its tests.
-- `play-publish.yml`: send a tagged release to External or production, and promote External to production.
+- `play-publish.yml`: send a tagged release to Internal, External or production, and promote it from Internal or External onward.
 - A provenance attestation on the AAB in `release-signed.yml`.
 - The cut runbook update.
 
 **Out:**
-- Test builds to Play on any track, and internal app sharing. Test builds stay sideloads.
+- Test builds to Play on any track, Internal included, and internal app sharing. Test builds stay sideloads. Tagged releases on Internal are in scope.
 - Open testing.
 - Store listing text and screenshots through the API.
 - Discord. It stays human-pasted.
@@ -71,8 +72,8 @@
 
 | Task | Pts |
 |---|---|
-| **A1 · Tool, tests first:** `tools/play/play_release.py`, standard library only. Given the AAB, the tag, a track and a rollout: checks the certificate against the pin `release-signed.yml` uses, checks the bundle's version code matches the tag's `pubspec`, and checks the code is higher than everything on Play unless Play already holds this exact release. Then builds the edit, uploads only if Play doesn't have the bundle, sets the track with the notes, and commits. Track status: `draft` stays `draft`; 100 is `completed`; 10, 25 or 50 is `inProgress` with that fraction, production only. Idempotent: if the track already carries this release at the requested rollout or wider, it reports success and changes nothing, so a re-run after a lost result is safe. It never removes another release from a track, and stops if the target track has a different version mid-rollout. A failed run deletes its uncommitted edit. Tests prove each refusal in section 6 by failing first. | 3 |
-| **A2 · Identity:** in the existing `offband-reporting` project, enable the Android Publisher API and create one service account, `play-publisher`, with a GitHub keyless (Workload Identity) pool. Its condition requires all of: this repo's numeric ID, the `play-release` environment, a tag ref starting `refs/tags/v`, and `workflow_ref` naming `play-publish.yml` at that tag. The environment's own deployment policy also allows only `v*` tags. No JSON key is ever created, and no Play credential exists on this machine. **Owner steps:** invite the account in Play Console, limited to this app, with "Release to production, exclude devices, and use Play App Signing" and "Release apps to testing tracks". Confirm the closed track's tester list is still who you want. | 3 |
+| **A1 · Tool, tests first:** `tools/play/play_release.py`, standard library only. Given the AAB, the tag, a track and a rollout: checks the certificate against the pin `release-signed.yml` uses, checks the bundle's version code matches the tag's `pubspec`, and checks the code is higher than everything on Play unless Play already holds this exact release. Then builds the edit, uploads only if Play doesn't have the bundle, sets the track with the notes, and commits. Targets: `internal`, `external` (Play's `alpha`) and `production`. Track status: `draft` stays `draft`; 100 is `completed`; 10, 25 or 50 is `inProgress` with that fraction, production only. Idempotent: if the track already carries this release at the requested rollout or wider, it reports success and changes nothing, so a re-run after a lost result is safe. It never removes another release from a track, and stops if the target track has a different version mid-rollout. A failed run deletes its uncommitted edit. Tests prove each refusal in section 6 by failing first. | 3 |
+| **A2 · Identity:** in the existing `offband-reporting` project, enable the Android Publisher API and create one service account, `play-publisher`, with a GitHub keyless (Workload Identity) pool. Its condition requires all of: this repo's numeric ID, the `play-release` environment, a tag ref starting `refs/tags/v`, and `workflow_ref` naming `play-publish.yml` at that tag. The environment's own deployment policy also allows only `v*` tags. No JSON key is ever created, and no Play credential exists on this machine. **Owner steps:** invite the account in Play Console, limited to this app, with "Release to production, exclude devices, and use Play App Signing" and "Release apps to testing tracks". Confirm the Internal and closed track tester lists are still who you want. | 3 |
 | **A3 · Epic verification:** a read-only dispatch lists every track and its version codes, which proves the identity works and reads the real track names. Then the negative test: a dispatch from anything but a `v*` tag must be refused. Also settles the provenance check B0 relies on: `gh attestation verify --source-ref` passes for an attested public release at its own tag and fails when given a different tag. | 2 |
 
 ### Epic B: the publish workflow
@@ -80,9 +81,9 @@
 | Task | Pts |
 |---|---|
 | **B0 · Provenance:** the `android` job in `release-signed.yml` attests the AAB with `actions/attest-build-provenance`. Before anything reaches Play, the publish workflow runs `gh attestation verify` with `--signer-workflow` set to `release-signed.yml`, `--source-ref` set to the tag, and `--deny-self-hosted-runners`. A file swapped onto the release, or built anywhere else, fails. | 2 |
-| **B1 · Workflow:** `play-publish.yml`, `workflow_dispatch` only, from a `v*` tag. One `concurrency` group for the whole app, never cancelling a run in progress, so two dispatches can't race on Play's edits. Refuses a tag whose commit isn't on `main`, so a tag pushed onto an unreviewed commit can't publish even if its signing run was approved. Permissions: `contents: read`, `attestations: read`, and `id-token: write` for the keyless token. Inputs: `target` (`external` or `production`) and `rollout` (`draft`, 10, 25, 50 or 100; External takes `draft` or 100). Downloads `app-release.aab` from that tag's GitHub release and runs the tool. New environment `play-release`, you as reviewer. No `pull_request` trigger, no keystore. The first dispatch for a tag uploads; later ones move the same bundle, so External and production get the same bytes. Re-dispatching a higher percentage widens a production rollout. | 3 |
+| **B1 · Workflow:** `play-publish.yml`, `workflow_dispatch` only, from a `v*` tag. One `concurrency` group for the whole app, never cancelling a run in progress, so two dispatches can't race on Play's edits. Refuses a tag whose commit isn't on `main`, so a tag pushed onto an unreviewed commit can't publish even if its signing run was approved. Permissions: `contents: read`, `attestations: read`, and `id-token: write` for the keyless token. Inputs: `target` (`internal`, `external` or `production`) and `rollout` (`draft`, 10, 25, 50 or 100; Internal and External take `draft` or 100). Downloads `app-release.aab` from that tag's GitHub release and runs the tool. New environment `play-release`, you as reviewer. No `pull_request` trigger, no keystore. The first dispatch for a tag uploads; later ones move the same bundle, so every track a release passes through gets the same bytes. Re-dispatching a higher percentage widens a production rollout. | 3 |
 | **B2 · Cut runbook:** the new steps go in `CLAUDE.local.md` and my cut notes, and the AAB download to Downloads is dropped. | 1 |
-| **B3 · Epic verification:** static checks at merge. The live proof is the next real cut, through whichever route you choose. The other route is proven the first time you use it. This task stays open until both have run. | 2 |
+| **B3 · Epic verification:** static checks at merge. The live proof is the next real cut, through whichever route you choose. Each other route is proven the first time you use it. This task stays open until a promotion has run as well as a first upload. | 2 |
 
 ## 4. Order and dependencies
 
@@ -126,7 +127,7 @@ Epics: A is #1082, B is #1083.
 | Numbering | Tracks unreadable | **stop** |
 | Numbering | Code not higher than Play's highest, and not already this release | **stop** |
 | Notes | Missing, empty, or over 500 characters | **stop** |
-| Target | External given a percentage below 100 | **stop**. External goes to its whole tester list. |
+| Target | Internal or External given a percentage below 100 | **stop**. Testing tracks go to their whole tester list. |
 | Target | Requested rollout is narrower than what the track already serves | **stop**. Narrowing or halting is done in Console. |
 | Target | A different version is mid-rollout on the target track | **stop**. Finish or halt it in Console first. |
 | Target | Track already carries this release at the requested rollout or wider | Succeeds and changes nothing. Both states are known. |
@@ -148,8 +149,8 @@ Epics: A is #1082, B is #1083.
 
 ## 8. Done when
 
-- A release reaches External or production from one word to me and one click from you, with no file handling.
-- A release on External reaches production with one more.
+- A release reaches Internal, External or production from one word to me and one click from you, with no file handling.
+- A release on Internal or External reaches the next track with one more, without a new upload.
 - No Google key file exists anywhere, and no Play credential exists on this machine.
 - Test builds never touch Play.
 
@@ -159,10 +160,12 @@ Epics: A is #1082, B is #1083.
 |---|---|---|
 | 1 | Where does a release go after signing? | Nowhere until you choose. Then External, or straight to production. From External, on to production. (2026-11-01, revised 2026-11-03) |
 | 2 | Do test builds go to Play? | No. They stay sideloads, so no version codes are used on them. (2026-11-03) |
+| 3 | Can a release start on Internal? | Yes. You choose per release: Internal, External or production. From Internal or External it promotes onward, any step skippable. Nothing uploads until you choose. "Revise it so I can choose what to push to, and then there's the path to promote if it goes to internal or closed first." (2026-11-21, revising decision 1) |
 
 ## 10. Alternatives considered but not chosen
 
-- **Test builds on the Internal track:** each one uses a version code. You declined it on 2026-11-03.
+- **Test builds on the Internal track:** each one uses a version code. You declined it on 2026-11-03. Tagged releases on Internal are a different thing and are in (decision 3).
+- **Uploading every tag to Internal automatically:** Internal would always hold the newest release, but every tag would land on Play whether you wanted it or not. You chose per-release choice on 2026-11-21.
 - **Internal app sharing for test builds:** uses no version codes, but means a new link per build, 100 people per link, links expire after 60 days, and no automatic updates. Not asked for.
 - **Uploading to External automatically on every tag:** every tag would reach testers before you decided. A dispatch keeps it your call.
 - **Open testing as External:** anyone with the link could join. Closed testing keeps External to the people you list.
