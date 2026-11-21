@@ -4,8 +4,10 @@
 Standard library only. Two commands:
 
   tracks   Read-only: list every track and its releases. Changes nothing.
-  publish  Check the bundle, then put this release on External (closed
-           testing) or production at the rollout asked for.
+  publish  Check the bundle, then put this release on Internal, External
+           (closed testing) or production at the rollout asked for. The
+           first publish of a release uploads it; later ones promote the same
+           bundle to another track.
 
 The access token comes from the PLAY_ACCESS_TOKEN environment variable and is
 never printed. Every check that can't tell what is true stops the run (PLAN.md
@@ -34,8 +36,10 @@ EXPECTED_CERT_SHA256 = (
     "e7da8cd5bf22ac3eda7cb954b8b120a18b6c4382d1b6e6fdd204ddedddaf5488"
 )
 
-# Play's API names for the two targets. A3 reads the real names live.
-TRACKS = {"external": "alpha", "production": "production"}
+# Play's API names for the three targets. A3 reads the real names live.
+TRACKS = {"internal": "internal", "external": "alpha", "production": "production"}
+# Testing tracks go to their whole tester list: no percentage.
+WHOLE_LIST = {"internal": "Internal", "external": "External"}
 ROLLOUTS = ("draft", "10", "25", "50", "100")
 NOTES_MAX = 500
 NOTES_LANGUAGE = "en-US"
@@ -262,8 +266,8 @@ def check_bundle(bundle: dict, version_code: int) -> None:
 def wanted_release(rollout: str, target: str) -> dict:
     if rollout not in ROLLOUTS:
         raise Stop(f"rollout {rollout} is not one of {', '.join(ROLLOUTS)}")
-    if target == "external" and rollout not in ("draft", "100"):
-        raise Stop("External goes to its whole tester list: use draft or 100")
+    if target in WHOLE_LIST and rollout not in ("draft", "100"):
+        raise Stop(f"{WHOLE_LIST[target]} goes to its whole tester list: use draft or 100")
     if rollout == "draft":
         return {"status": "draft"}
     if rollout == "100":
@@ -403,7 +407,7 @@ def list_tracks(play: Play, out=print) -> None:
 def publish(play: Play, aab: Path, pubspec: Path, notes_dir: Path, tag: str,
             target: str, rollout: str, out=print) -> str:
     if target not in TRACKS:
-        raise Stop(f"target {target} is not external or production")
+        raise Stop(f"target {target} is not internal, external or production")
     wanted = wanted_release(rollout, target)
     version, version_code = pubspec_version(pubspec)
     check_tag(tag, version)

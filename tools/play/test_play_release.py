@@ -99,6 +99,7 @@ class FakePlay(p.Play):
     def __init__(self, tracks=None, bundles=None):
         super().__init__("token")
         self.live_tracks = tracks if tracks is not None else [
+            {"track": "internal", "releases": []},
             {"track": "alpha", "releases": []},
             {"track": "production", "releases": [
                 {"name": "68 (1.7.0)", "versionCodes": ["68"], "status": "completed"}
@@ -285,7 +286,17 @@ class Refusals(Base):
 
     def test_external_with_a_percentage_stops(self):
         for rollout in ("10", "25", "50"):
-            self.assertStops("whole tester list", rollout=rollout)
+            self.assertStops("External goes to its whole tester list", rollout=rollout)
+        self.assertEqual(self.play.calls, [])
+
+    def test_internal_with_a_percentage_stops(self):
+        for rollout in ("10", "25", "50"):
+            self.assertStops("Internal goes to its whole tester list",
+                             target="internal", rollout=rollout)
+        self.assertEqual(self.play.calls, [])
+
+    def test_unknown_target_stops(self):
+        self.assertStops("not internal, external or production", target="beta")
         self.assertEqual(self.play.calls, [])
 
     def test_narrowing_stops(self):
@@ -359,6 +370,29 @@ class Publishing(Base):
         self.assertEqual([r["versionCodes"] for r in releases], [["68"], ["69"]])
         self.assertEqual(releases[1]["status"], "inProgress")
         self.assertEqual(releases[1]["userFraction"], 0.1)
+
+    def test_internal_uploads_to_the_internal_track(self):
+        self.assertEqual(self.run_publish(target="internal", rollout="100"), "published")
+        [release] = self.play.track("internal")["releases"]
+        self.assertEqual(release["status"], "completed")
+        self.assertEqual(release["versionCodes"], ["69"])
+        self.assertEqual(self.play.track("alpha")["releases"], [])
+
+    def test_promote_internal_to_external_to_production_uploads_once(self):
+        self.run_publish(target="internal", rollout="100")
+        self.run_publish(target="external", rollout="100")
+        self.run_publish(target="production", rollout="10")
+        self.assertEqual(self.play.calls.count("upload"), 1)
+        for track in ("internal", "alpha"):
+            self.assertEqual(self.play.track(track)["releases"][0]["versionCodes"], ["69"])
+        self.assertEqual(self.play.track("production")["releases"][1]["userFraction"], 0.1)
+
+    def test_promote_internal_straight_to_production(self):
+        self.run_publish(target="internal", rollout="100")
+        self.run_publish(target="production", rollout="100")
+        self.assertEqual(self.play.calls.count("upload"), 1)
+        self.assertEqual(self.play.track("alpha")["releases"], [])
+        self.assertEqual(self.play.track("production")["releases"][-1]["status"], "completed")
 
     def test_promote_reuses_the_bundle(self):
         self.run_publish(target="external", rollout="100")
