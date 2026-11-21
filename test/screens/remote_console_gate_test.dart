@@ -1,12 +1,12 @@
-// #999 reopen: the companion "CLI console" entry is offered only when BOTH the
-// target is a companion AND the connected radio speaks the 1.18 CLI. A
-// pre-1.18 radio (stock 1.17, or Offband before the absorb) refuses a type-3
-// send, so offering the console there only produces failures.
+// #999 reopen, #1157: the companion "CLI console" entry is offered only when
+// BOTH the target is a companion AND the connected radio sends remote CLI
+// (stock 1.18+, or Offband advertising 0x07; the gate itself is pinned in
+// test/connector/cli_advert_gate_test.dart). A radio that cannot send a type-3
+// command only produces failures, so it is not offered there.
 
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshcore_open/connector/device_population.dart';
 import 'package:meshcore_open/connector/meshcore_protocol.dart';
 import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/screens/device_cli_screen.dart';
@@ -20,52 +20,33 @@ Contact _contact(int type) => Contact(
   lastSeen: DateTime.fromMillisecondsSinceEpoch(0),
 );
 
-Classification _radio(DevicePopulation population) =>
-    Classification(population: population, conflict: false, evidence: 'test');
-
 void main() {
-  test('a companion on a 1.18 radio is offered the console', () {
+  test('a companion, on a radio that sends remote CLI, is offered it', () {
     expect(
       DeviceCliScreen.offersRemoteConsole(
         contact: _contact(advTypeChat),
-        classification: _radio(DevicePopulation.stockModern),
+        radioSupportsRemoteCli: true,
       ),
       isTrue,
     );
   });
 
-  test('no console when the connected radio is pre-1.18 or Offband', () {
-    for (final population in [
-      DevicePopulation.stockLegacy,
-      DevicePopulation.offband,
-    ]) {
-      expect(
-        DeviceCliScreen.offersRemoteConsole(
-          contact: _contact(advTypeChat),
-          classification: _radio(population),
-        ),
-        isFalse,
-        reason: '$population cannot send a type-3 command',
-      );
-    }
-  });
-
-  test('no console when the radio is not classified (disconnected)', () {
+  test('no console when the connected radio cannot send remote CLI', () {
     expect(
       DeviceCliScreen.offersRemoteConsole(
         contact: _contact(advTypeChat),
-        classification: null,
+        radioSupportsRemoteCli: false,
       ),
       isFalse,
     );
   });
 
-  test('no console for a repeater or room server, even on a 1.18 radio', () {
+  test('no console for a repeater or room server, even on a capable radio', () {
     for (final type in [advTypeRepeater, advTypeRoom, advTypeSensor]) {
       expect(
         DeviceCliScreen.offersRemoteConsole(
           contact: _contact(type),
-          classification: _radio(DevicePopulation.stockModern),
+          radioSupportsRemoteCli: true,
         ),
         isFalse,
         reason: 'type $type has its own CLI via the repeater hub',

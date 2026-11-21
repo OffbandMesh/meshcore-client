@@ -790,6 +790,12 @@ abstract class AppLocalizations {
   /// **'{command}: not sent. Your radio\'s firmware doesn\'t support remote CLI.'**
   String deviceCli_remoteUnsupported(String command);
 
+  /// Console row when the client refuses to send a local CLI command because the connected radio does not support the device CLI (#1158). Nothing was transmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'{command}: not sent. Your radio\'s firmware doesn\'t support the device CLI.'**
+  String deviceCli_localUnsupported(String command);
+
   /// No description provided for @deviceCli_sendFailed.
   ///
   /// In en, this message translates to:

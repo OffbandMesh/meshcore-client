@@ -37,10 +37,11 @@ class CliConsoleTimeout implements Exception {
   String toString() => 'CLI command timed out after $secondsText s';
 }
 
-/// The connected radio refused to send a remote CLI command at all: its
-/// firmware does not accept TXT_TYPE_CLI_COMMAND (pre-1.18 answers
-/// ERR_CODE_UNSUPPORTED_CMD). Distinct from [CliConsoleTimeout], which means
-/// the command went out and the target never answered.
+/// The command was not run because the connected radio cannot run it. Remote:
+/// its firmware refused TXT_TYPE_CLI_COMMAND (pre-1.18 answers
+/// ERR_CODE_UNSUPPORTED_CMD). Local: the client refused before sending, as the
+/// radio does not support the device CLI (#1158). Distinct from
+/// [CliConsoleTimeout], which means the command went out and nothing answered.
 class CliConsoleUnsupported implements Exception {
   const CliConsoleUnsupported({required this.command});
 
@@ -73,6 +74,8 @@ class LocalCliTransport implements CliConsoleTransport {
       return await _service.run(command, timeout: timeout);
     } on LocalCliTimeout catch (e) {
       throw CliConsoleTimeout(command: command, secondsText: e.secondsText);
+    } on LocalCliUnsupported {
+      throw CliConsoleUnsupported(command: command);
     }
   }
 
