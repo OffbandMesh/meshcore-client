@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'offband_capability_advert.dart';
 import 'offband_device_ui.dart';
 
 /// The radio's display and LED over `0xC5` (#523, #944): display mode, display
@@ -32,7 +33,9 @@ import 'offband_device_ui.dart';
 /// advert, NOT by caps2 `0x04` INDICATORS and NOT by probing `0x1A` and
 /// watching for a refusal. Contract §3 forbids that probing outright:
 /// "what is forbidden is discovering support by trying each feature's sub-code
-/// and watching for errors." Display mode and the LED keep the INDICATORS bit.
+/// and watching for errors." Display mode and the LED each have their own
+/// advert tag, with the INDICATORS bit as the fallback: see
+/// [resolveIndicatorSupport].
 ///
 /// A board without a display, or without a controllable LED, refuses that
 /// half with reason 6; a display that cannot turn refuses rotation with 10.
@@ -51,6 +54,42 @@ const List<int> displayRotations = [0, 180];
 
 bool firmwareSupportsIndicators(int? offbandCaps2) =>
     offbandCaps2 != null && (offbandCaps2 & offbandCap2Indicators) != 0;
+
+/// Which indicator controls this radio has, each on its own (#1132, firmware
+/// #2069).
+///
+/// caps2 `0x04` answers display AND LED with one bit, so a board with a real
+/// display and no controllable LED showed an LED switch the radio then refused
+/// with `[0xC5][0x7F][0x06]` (firmware #2065: a T096, a T1000-E, a QCC badge).
+/// Precedence, from the firmware header on `firmware-base`, the same shape as
+/// channel notify:
+///
+/// - the advert carries `TAG_DISPLAY_CONTROL` and/or `TAG_LED_CONTROL`: the
+///   tags decide, each control on its own, and the bit is ignored;
+/// - the advert answered with neither tag: firmware from before the tags, so
+///   the bit answers both, as it always has;
+/// - no advert (the radio predates `0x1C`, or has not answered yet): the bit
+///   answers both.
+///
+/// The bit is not retired: radios on firmware 1.7.0 and earlier answer the
+/// advert without these tags, and dropping the bit would hide working display
+/// control on them. Support is never found by sending a GET and reading the
+/// refusal (contract §3).
+({bool display, bool led}) resolveIndicatorSupport({
+  required int? offbandCaps2,
+  required OffbandCapabilityAdvert? advert,
+}) {
+  if (advert != null &&
+      (advert.has(offbandInfoTagDisplayControl) ||
+          advert.has(offbandInfoTagLedControl))) {
+    return (
+      display: advert.has(offbandInfoTagDisplayControl),
+      led: advert.has(offbandInfoTagLedControl),
+    );
+  }
+  final bit = firmwareSupportsIndicators(offbandCaps2);
+  return (display: bit, led: bit);
+}
 
 /// When the radio's screen is lit. Values are the wire encoding.
 enum DisplayMode {

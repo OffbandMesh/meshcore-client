@@ -1,0 +1,3 @@
+Offband MeshCore 1.8.0
+
+Message history now follows the channel, not its slot on the radio. History for channels your radio no longer holds is cleared on the first sync. Changing a channel's key asks whether to keep or delete its history. Adds can't overwrite another channel, and wiped channels can be restored. With Offband firmware 1.7.0: per-channel radio sound, display and LED settings. Also a Bluetooth PIN setting and factory reset.

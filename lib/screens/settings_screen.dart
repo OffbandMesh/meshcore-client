@@ -497,8 +497,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
-              // Display mode, rotation and LED (#523). Strictly on the 0x04
-              // bit: no bit, no row, no command.
+              // Display mode, rotation and LED (#523). Shown when the radio
+              // has display control or LED control (#1132).
               if (connector.supportsIndicators) ...[
                 const Divider(height: 1),
                 ListTile(

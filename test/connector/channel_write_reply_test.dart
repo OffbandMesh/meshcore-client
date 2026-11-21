@@ -183,7 +183,12 @@ void main() {
     });
 
     test('a new key is clear-then-add, so #1864 firmware accepts it', () async {
-      final edit = connector.editChannel(current, 'Weather', psk(0x99));
+      final edit = connector.editChannel(
+        current,
+        'Weather',
+        psk(0x99),
+        history: KeyChangeHistory.delete,
+      );
       await untilSetFrames(1);
       // The clear: an empty name.
       expect(setFrames()[0][2], 0);
@@ -198,7 +203,12 @@ void main() {
     });
 
     test('a refused clear writes nothing more and keeps the history', () async {
-      final edit = connector.editChannel(current, 'Weather', psk(0x99));
+      final edit = connector.editChannel(
+        current,
+        'Weather',
+        psk(0x99),
+        history: KeyChangeHistory.delete,
+      );
       await untilSetFrames(1);
       err(errCodeNotFound);
 
@@ -210,7 +220,12 @@ void main() {
     test(
       'a clear that lands and an add that fails says the slot is empty',
       () async {
-        final edit = connector.editChannel(current, 'Weather', psk(0x99));
+        final edit = connector.editChannel(
+          current,
+          'Weather',
+          psk(0x99),
+          history: KeyChangeHistory.keep,
+        );
         await untilSetFrames(1);
         ok(); // the clear lands
 

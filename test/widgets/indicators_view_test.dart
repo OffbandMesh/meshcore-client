@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:meshcore_open/connector/meshcore_connector.dart';
+import 'package:meshcore_open/connector/offband_indicators.dart';
 import 'package:meshcore_open/screens/settings/indicators_view.dart';
 
 /// Rotation is advertised, but the radio has not answered the GET yet. This is
@@ -82,6 +83,30 @@ void main() {
     expect(button.selected, {180});
   });
 
+  // #1132: display and LED show independently.
+  testWidgets('display control only: no Status LED switch', (tester) async {
+    await _pump(tester, _Controls(display: true, led: false));
+
+    expect(find.text('Display'), findsOneWidget);
+    expect(find.text('Status LED'), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
+  });
+
+  testWidgets('LED control only: no Display block', (tester) async {
+    await _pump(tester, _Controls(display: false, led: true));
+
+    expect(find.text('Display'), findsNothing);
+    expect(find.byType(SegmentedButton<DisplayMode>), findsNothing);
+    expect(find.text('Status LED'), findsOneWidget);
+  });
+
+  testWidgets('both controls: both shown', (tester) async {
+    await _pump(tester, _Controls(display: true, led: true));
+
+    expect(find.text('Display'), findsOneWidget);
+    expect(find.text('Status LED'), findsOneWidget);
+  });
+
   testWidgets('a radio that does not advertise rotation gets no control', (
     tester,
   ) async {
@@ -93,3 +118,13 @@ void main() {
 }
 
 class _DummyConnector extends MeshCoreConnector {}
+
+class _Controls extends MeshCoreConnector {
+  _Controls({required this.display, required this.led});
+  final bool display;
+  final bool led;
+  @override
+  bool get supportsDisplayControl => display;
+  @override
+  bool get supportsLedControl => led;
+}

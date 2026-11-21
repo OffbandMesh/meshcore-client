@@ -2,6 +2,139 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.8.0] - 2026-11-09
+
+Production successor to 1.7.0. A channels release: message state keyed by channel identity
+instead of slot, no hidden history, every channel write confirmed by the radio, the firmware
+1.7.0 slot rules, plus radio-side settings over the `0xC5 0x1C` capability advert. Radio
+sound, Display and LED, and rotation need Offband firmware 1.7.0 or newer. Database schema
+unchanged (2).
+
+### Upgrade notes
+
+- First full sync purges history under channel keys the radio does not hold, plus pre-#194
+  slot-index keys for empty slots. Runs only when the sync saw every slot device info
+  reported, every slot confirmed, none erased, no write in flight, and at least one channel;
+  every sync logs the result or the skip reason (#1128).
+- Slot 0 reserved for Public on every firmware; on stock or older firmware one slot of 40 goes
+  unused without Public. An existing non-Public occupant of slot 0 is left alone (#1117).
+- 65 new UI strings, English-only in all 17 other locales; `untranslated.json` regenerated.
+  One string retired (`channels_noFreeSlot`).
+
+### Channels and message history
+
+- Key change (hashtag rename or new private key) asks keep or delete. Applied once the radio
+  confirms the clear. Keep runs `moveChannelHistory` (copy, verify, delete only copied rows,
+  up to 3 passes; a blob-only old key moved onto rows first) plus `moveChannelNotifyMode`.
+  Delete runs `deleteChannelHistory`. Failed move returns `historyNotMoved`, persistent. A key
+  whose change could not land is spared from the purge until the connection ends. A different
+  channel written over an occupied slot is settled by the next full sync, since firmware 1.7.0
+  may move the occupant (#1128).
+- Fail-closed channel sync: an unanswered slot is UNKNOWN, surfaced by a persistent Retry
+  banner, never backfilled from the previous list; lookups and notify evaluation for it fail
+  closed (suppress). Ingress barrier holds live channel traffic until the list is confirmed,
+  keyed per radio, and re-holds frames for still-unconfirmed slots; pull-based frames are
+  never dropped; raw-RX no longer matches the offline cache. Unread survives a sync only for
+  the same PSK; identity changes listed in a dismissible notice. A sync with unconfirmed slots
+  does not overwrite the last fully confirmed cache; a failed sync on a live link retries
+  (#1062, #1064).
+- In-memory conversation dropped and reloaded on a slot identity change; reassignment clears
+  only legacy slot-index keys; `sendChannelMessage` refuses an unconfirmed slot with a
+  persistent error; `_loadChannelMessages` merges messages that arrived during the read
+  (#1063).
+- Channel writes (`setChannel`, `deleteChannel`, `editChannel`) await OK/ERR via the generic
+  ack queue with a 5 s timeout and return `ok`, `occupied`, `rejected`, `noReply` or
+  `clearedNotAdded`; history cleared only after OK; key change is clear-then-add; success
+  toasts only after OK, refusals persistent (#1026, #1025).
+- Slot chosen at the write by `decideChannelSlot` / `allocateChannelSlotOrExplain`; refuses
+  while syncing and when full (no more `return 0`); covers channels screen, QR share, community
+  join (green toast only when written) and config import (`planChannelImport` requires
+  `isSyncing`, skips with `channelsSyncing`). Syncs defer while a write is in flight; batches
+  hold the guard; the last write runs one re-read (#1021, #1022, #1023, #1024, #1025).
+- Firmware 1.7.0 slot rules: Public to slot 0, nothing else ever to slot 0; second Public
+  refused on every path; Delete Public refused at the attempt; Public's key locked in Edit and
+  refused on another channel; hashtag "public" (namesPublic rule) writes the real Public
+  (#1117, #1029).
+- Restore to radio: `planChannelRestore` places by identity (live keys skipped, Public to slot
+  0, others to their remembered slot if free or erased and not 0, else lowest free, live slots
+  never a destination, erased slots cleared first); every write awaits OK/ERR; reports the
+  confirmed count and names what did not land; busy table refuses (#1060, #1117).
+- Erased (`0xFF`) records and undecodable names refused from the wire and dropped at
+  `loadCachedChannels`; a sync seeing an erased slot keeps the cache (#1060).
+- Edit Channel: hashtag PSK read-only, copyable, re-derived on rename; non-hashtag or `##`
+  names refused; community hashtag name and key read-only; Save refused when the slot's live
+  occupant changed since the dialog opened (#1103).
+
+### Radio settings
+
+- `0xC5 0x1C` capability advert (TLV, `TAG_CONTINUE` bounded at 8 rounds, unknown tags kept
+  and skipped) replaces device-info offset 87, which nothing reads now (#1094, #1095, #1096,
+  #1097).
+- Capability gates on caps bits, not `FIRMWARE_VER_CODE`: block list, caplog, packet hash and
+  observer config (`OFFBAND_CONFIG_MIN_VER` deleted). Companion radio stats `>= 8` and region
+  scope `>= 13` stay version-gated by owner ruling; removal tracked in #1066 (#1065).
+- Radio per-channel notify over `0xC5 0x18/0x19` (unset, all, mentions, off), gated on caps2
+  `0x80` and `TAG_CHAN_NOTIFY`, read on every completed sync, keyed by PSK, slot resolved at
+  send time; independent of the phone setting, which is relabeled Phone notifications (#1068,
+  #1060).
+- Display mode and status LED (device-info bytes 86, 85) and rotation over `0xC5 0x1A/0x1B`
+  gated on `TAG_DISPLAY_ROTATION` (#523, #1098). Display and LED gated independently on advert
+  tags `0x04` TAG_DISPLAY_CONTROL and `0x05` TAG_LED_CONTROL, falling back to caps2 `0x04`
+  when neither tag is advertised, the advert is refused, or it is not answered yet; each SET
+  refused locally without its own capability; rotation SET gate unchanged. Client half of
+  firmware #2069; the tags are on firmware-base, not in `offband-v1.7.0` (#1132).
+- BLE pairing PIN: `CMD_SET_DEVICE_PIN` (37), read from device-info bytes 4..7, shown in plain
+  text, 100000-999999 or 0 for the firmware default (#1100).
+- Factory reset: `CMD_FACTORY_RESET` (51), no version floor. "Also delete this radio's data
+  stored in the app" (default on) deletes every perRadio surface from `scoping_inventory.dart`
+  when the reset is sent; no confirmation from the radio is possible. Failed delete shows a
+  persistent banner (#1057, #1118).
+
+### App
+
+- Sponsor window: 3rd launch and 7 days, Not now 30 days, Sponsor 90 days, Never Show Again;
+  hidden on iOS; test builds keyed by `GIT_SHA` show once per commit; five global
+  `sponsor_prompt_*` prefs keys (#1129).
+- App-only settings from the connect screen: App Settings, Debug (Share logs, logging switch,
+  log viewers) and About without a radio; export failures persistent (#693, #1030).
+- Bluetooth scan start failure shown persistently, with a Location-off message (#1033).
+- Tile User-Agent `OffbandMeshCore (app.offband.meshcore; +https://offband.org)` (not on web);
+  OSM credit on all six maps (#1111).
+- Notify-mode saves, notify decisions and the slot lookup's source logged (#1122).
+- Long menus scroll; links beside @mentions tappable (#1074, #1075, #1079).
+- "Offband MeshCore" spelling in launcher, titles, strings, notifications, web; Windows
+  `ProductName` unchanged so the data folder does not move (#1050).
+- iOS: Google Play link, Donate and Experimental hidden; back arrow, edge swipe, keyboard
+  dismiss; `ITSAppUsesNonExemptEncryption` false (#1043, #1048, #1051, #1052).
+
+### Build and release
+
+- First App Store release (iOS 1.7.0) went live 2026-11-09. The release `ios` job uploads
+  1.8.0 to App Store Connect; submitting it for review is a manual step there (#200, #961).
+- macOS build as a release asset (#1108), now Developer ID signed and notarized (#1109):
+  `macos-signed.yml` (env `apple-macos`) builds, signs and submits on a Mac without waiting,
+  `notary-wait` polls Apple on Linux for up to 340 minutes, `staple` runs on a Mac, and
+  `macos-attach` adds `offband-macos.zip` to the published release. Not in `release`'s needs;
+  an unnotarized app is never published.
+- iOS signing toolchain, signed IPA, TestFlight upload, App Store review package (#958, #1012,
+  #1013, #1014, #1016, #1017, #1019, #1037, #1038, #1039, #1040, #1041, #1044, #1045, #1046,
+  #1047).
+- Plan of record for Play publishing automation (#1077, #1091).
+- Release texts gain `announcements/<version>.md`, the GitHub Discussions Announcements post
+  (#1137).
+
+### Known issues
+
+- #1121 Phone notifications Off can still notify.
+- #1123 Factory reset leaves stale data for that radio on other devices.
+- #1132 On firmware 1.7.0, boards with a display and no controllable LED still show the LED
+  switch (needs the firmware tags).
+- #1124 `_sendIndicatorSet` never clears its pending-write flag, so a stale read can overwrite
+  a newer change.
+- #1028 A refused contact add shows as added; DMs fail silently after 8 s.
+- #1134 Position Reporting Interval reports success when the radio refuses it (T1000-E).
+- #1066 Two capability reads still use `FIRMWARE_VER_CODE`.
+
 ## [1.7.0] - 2026-10-26
 
 Production successor to 1.6.0. A foundations release: per-message storage with a

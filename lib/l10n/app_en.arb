@@ -439,15 +439,10 @@
   "settings_factoryResetDeleteAppData": "Also delete this radio's data stored in the app",
   "settings_factoryResetNotConnected": "Factory reset not sent: no radio is connected.",
   "factoryResetSentTitle": "Factory reset sent",
-  "factoryResetSentBody": "The radio is erasing itself and will restart with a new identity. Reconnect to it to finish.",
-  "factoryResetSentBleBody": "The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer's Bluetooth settings, then reconnect to finish.",
-  "factoryResetCompleteTitle": "Factory reset complete",
-  "factoryResetCompleteBody": "The radio has a new identity. Its old data was deleted from the app.",
-  "factoryResetCompleteKeptBody": "The radio has a new identity. Its old data was kept in the app.",
-  "factoryResetNotResetTitle": "Factory reset did not happen",
-  "factoryResetNotResetBody": "The radio reconnected with the same identity, so it was not erased. Nothing was deleted from the app.",
-  "factoryResetDeleteFailedTitle": "Factory reset done, app cleanup failed",
-  "factoryResetDeleteFailedBody": "The radio was erased, but deleting its old data from the app failed. The app will try again the next time this radio connects.",
+  "factoryResetSentBody": "The radio is erasing itself and will restart with a new identity.",
+  "factoryResetSentBleBody": "The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer's Bluetooth settings, then reconnect.",
+  "factoryResetDeleteFailedTitle": "Factory reset sent, app cleanup failed",
+  "factoryResetDeleteFailedBody": "The reset was sent, but deleting this radio's data from the app failed.",
   "settings_blePin": "BLE pairing PIN",
   "settings_blePinDefault": "Firmware default",
   "settings_blePinHelp": "6 digits (100000-999999). New phones and PCs must enter it when pairing. Reset to default to return to the firmware's built-in behavior.",
@@ -508,6 +503,12 @@
   "settings_aboutWebsite": "Offband website",
   "settings_aboutPlayStore": "Google Play",
   "settings_aboutDonate": "Donate or sponsor",
+  "sponsorPrompt_title": "Support Offband",
+  "sponsorPrompt_body": "Offband MeshCore is free, open source, and built by an independent developer. If it's useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.",
+  "sponsorPrompt_sponsor": "Sponsor",
+  "sponsorPrompt_anytime": "You can support Offband anytime from About in Settings, or at offband.org/donate.",
+  "sponsorPrompt_notNow": "Not now",
+  "sponsorPrompt_never": "Never Show Again",
   "settings_aboutLinkFailed": "Could not open the link",
   "settings_aboutOpenMeteoAttribution": "LOS elevation data: Open-Meteo (CC BY 4.0)",
   "settings_aboutPresetsAttribution": "Regional radio presets: MeshCore's suggested settings, maintained by Liam Cottle (api.meshcore.nz), with Offband additions.",
@@ -1091,6 +1092,31 @@
   "channels_writeClearedNotAdded": "The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.",
   "@channels_writeClearedNotAdded": {
     "description": "A channel key change is clear-then-add; the clear landed and the add did not, so the edited channel is gone from the radio. Persistent (#1026)."
+  },
+  "channels_writeHistoryNotMoved": "The channel was changed, but its message history could not be moved to it. The app log has the details.",
+  "@channels_writeHistoryNotMoved": {
+    "description": "The user chose to keep message history across a key change; the radio took the new key but the app could not move the stored messages. Persistent (#1128)."
+  },
+  "channels_keyChangeHistoryTitle": "Keep message history?",
+  "@channels_keyChangeHistoryTitle": {
+    "description": "Title of the question asked before a channel's key changes (a hashtag rename, or a new private key) (#1128)."
+  },
+  "channels_keyChangeHistoryBody": "This gives \"{name}\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.",
+  "@channels_keyChangeHistoryBody": {
+    "description": "Body of the keep-or-delete question for a channel key change (#1128).",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "channels_keyChangeKeepHistory": "Keep message history",
+  "@channels_keyChangeKeepHistory": {
+    "description": "Moves the channel's stored messages to its new key (#1128)."
+  },
+  "channels_keyChangeDeleteHistory": "Delete message history",
+  "@channels_keyChangeDeleteHistory": {
+    "description": "Deletes the channel's stored messages, as Delete Channel does (#1128)."
   },
   "channels_sortBy": "Sort by",
   "channels_sortManual": "Manual",

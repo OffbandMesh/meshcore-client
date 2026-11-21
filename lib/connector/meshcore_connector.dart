@@ -56,7 +56,6 @@ import '../storage/client_id_store.dart';
 import '../storage/contact_discovery_store.dart';
 import '../storage/contact_settings_store.dart';
 import '../storage/contact_store.dart';
-import '../storage/factory_reset_store.dart';
 import '../storage/message_store.dart';
 import '../storage/radio_data_wipe.dart';
 import '../storage/unread_store.dart';
@@ -236,7 +235,15 @@ enum ChannelWrite {
   /// An edit to a new key cleared the old channel, but the new one was not
   /// confirmed, so the slot is now empty. (#1026)
   clearedNotAdded,
+
+  /// The radio took the new key, but the old key's message history, which
+  /// the user chose to keep, could not be moved to it. (#1128)
+  historyNotMoved,
 }
+
+/// What a channel key change does with the old key's message history. The
+/// user is asked; history is never kept hidden (#1128).
+enum KeyChangeHistory { keep, delete }
 
 /// Result of [MeshCoreConnector.exportPrivateKey]. [identity] is
 /// non-null only when [outcome] is [IdentityTransfer.ok]. (#578)
@@ -308,16 +315,7 @@ enum FactoryResetStatus {
   sentBle,
   sent,
 
-  /// The radio came back with a new identity and its app data was deleted.
-  complete,
-
-  /// New identity; the user chose to keep the app data.
-  completeKept,
-
-  /// Same identity on reconnect: the radio was not wiped. Nothing deleted.
-  notReset,
-
-  /// New identity, but deleting the old app data failed. Retried next connect.
+  /// Sent, but deleting the radio's app data failed.
   deleteFailed,
 }
 
@@ -548,6 +546,11 @@ class MeshCoreConnector extends ChangeNotifier {
   bool _batteryRequested = false;
   bool _awaitingSelfInfo = false;
   bool _hasReceivedDeviceInfo = false;
+
+  /// This connection's device info has said how many channel slots the radio
+  /// has, on every transport ([_hasReceivedDeviceInfo] is set only where the
+  /// initial sync is gated on it). (#1128)
+  bool _slotCountKnown = false;
   // Initial sync is serialized for predictable progress. Firmware exposes one
   // FIFO queued-message stream, so direct/room frames are buffered until after
   // contacts are known.
@@ -1161,9 +1164,23 @@ class MeshCoreConnector extends ChangeNotifier {
   bool get supportsScreenSettings =>
       firmwareSupportsScreenSettings(_offbandCaps2);
 
-  /// Whether this radio has a settable display or LED (#523, caps byte 2
-  /// `0x04`). Which of the two it has, it says only by refusing the other.
-  bool get supportsIndicators => firmwareSupportsIndicators(_offbandCaps2);
+  /// Whether this radio's display mode can be set (#1132, firmware #2069).
+  /// See [resolveIndicatorSupport] for the precedence between the advert tags
+  /// and caps2 `0x04`.
+  bool get supportsDisplayControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).display;
+
+  /// Whether this radio's status LED can be set (#1132, firmware #2069).
+  bool get supportsLedControl => resolveIndicatorSupport(
+    offbandCaps2: _offbandCaps2,
+    advert: _capabilityAdvert,
+  ).led;
+
+  /// Whether this radio has a settable display or LED, so the Indicators page
+  /// has anything to show (#523, #1132).
+  bool get supportsIndicators => supportsDisplayControl || supportsLedControl;
 
   /// The LED and display state the radio last reported, from device-info or a
   /// reply. Null when it has not said.
@@ -1468,6 +1485,8 @@ class MeshCoreConnector extends ChangeNotifier {
       '${advert ?? 'UNSUPPORTED, falling back to device-info offsets'}'
       ' chanNotify=$supportsChannelNotify'
       ' rotation=$supportsDisplayRotation'
+      ' display=$supportsDisplayControl'
+      ' led=$supportsLedControl'
       ' ackCapacity=${ackCapacity ?? 'absent'}',
       tag: 'DeviceUI',
     );
@@ -1887,9 +1906,10 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<void> _sendIndicatorSet(
     String what,
     DeviceUiSurface surface,
-    Uint8List frame,
-  ) async {
-    if (!_deviceUiGateOpen(what, advertised: supportsIndicators)) return;
+    Uint8List frame, {
+    required bool advertised,
+  }) async {
+    if (!_deviceUiGateOpen(what, advertised: advertised)) return;
     _deviceUiError = null;
     _deviceUiErrorSurface = null;
     _pendingDeviceUiWrite = surface;
@@ -1901,6 +1921,7 @@ class MeshCoreConnector extends ChangeNotifier {
     'display SET',
     DeviceUiSurface.display,
     buildDisplaySetFrame(mode),
+    advertised: supportsDisplayControl,
   );
 
   /// Refused locally until the radio has answered the rotation GET, so
@@ -1917,6 +1938,7 @@ class MeshCoreConnector extends ChangeNotifier {
       'rotation SET',
       DeviceUiSurface.rotation,
       buildRotationSetFrame(degrees),
+      advertised: supportsIndicators,
     );
   }
 
@@ -1942,6 +1964,7 @@ class MeshCoreConnector extends ChangeNotifier {
     'led SET',
     DeviceUiSurface.led,
     buildLedSetFrame(on: on),
+    advertised: supportsLedControl,
   );
 
   /// Re-read whatever headless-UI state this radio supports. Called after every
@@ -4597,6 +4620,8 @@ class MeshCoreConnector extends ChangeNotifier {
     storageService?.setPublicKeyHex = '';
     // Device-scoped: the next radio's device info supplies its own pin (#1100).
     _deviceBlePin = null;
+    // Kept history a key change could not land belongs to this radio (#1128).
+    _sparedFromPurge.clear();
     _applySelfKeyToBlockService();
   }
 
@@ -4611,6 +4636,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _selfInfoRetryTimer?.cancel();
     _selfInfoRetryTimer = null;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // Drop the previous radio's in-memory history before a new connection loads
     // its own. These caches are keyed by channel index / contact key, not by
     // radio, so without this a radio switch would keep showing the prior
@@ -4698,6 +4724,10 @@ class MeshCoreConnector extends ChangeNotifier {
   @visibleForTesting
   void setAppDebugLogServiceForTest(AppDebugLogService service) =>
       _appDebugLogService = service;
+
+  @visibleForTesting
+  void setAppSettingsServiceForTest(AppSettingsService service) =>
+      _appSettingsService = service;
 
   /// The state a BLE link leaves behind: a radio to go back to. (#997)
   @visibleForTesting
@@ -5094,6 +5124,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _batteryRequested = false;
     _awaitingSelfInfo = false;
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     _maxContacts = _defaultMaxContacts;
     _maxChannels = _defaultMaxChannels;
     _resetSyncProgressState();
@@ -6880,7 +6911,6 @@ class MeshCoreConnector extends ChangeNotifier {
     await sendFrame(buildRebootFrame());
   }
 
-  final FactoryResetStore _factoryResetStore = FactoryResetStore();
   FactoryResetStatus? _factoryResetStatus;
   FactoryResetStatus? get factoryResetStatus => _factoryResetStatus;
 
@@ -6889,19 +6919,6 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
-  @visibleForTesting
-  String? transportIdentityForTest;
-
-  /// Which physical device the link goes to, independent of its identity,
-  /// which a factory reset replaces.
-  String? get _transportIdentity =>
-      transportIdentityForTest ??
-      switch (_activeTransport) {
-        MeshCoreTransportType.bluetooth => _deviceId,
-        MeshCoreTransportType.usb => activeUsbPort,
-        MeshCoreTransportType.tcp => activeTcpEndpoint,
-      };
-
   String? get _radioPrefix {
     final hex = selfPublicKeyHex;
     return hex.length >= 10 ? hex.substring(0, 10) : null;
@@ -6909,30 +6926,19 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Wipes the connected radio (#1054). Null when sent, else why not.
   ///
-  /// The app data is NOT deleted here. The radio drops the link before it
-  /// formats, so nothing proves the wipe until it reconnects with a new
-  /// identity; see [_resolvePendingFactoryReset]. The session is ended on
-  /// purpose so it does not auto-reconnect into a wiped radio.
+  /// With [deleteAppData], the radio's app data is deleted once the link is
+  /// closed, so nothing from this session writes it back.
   Future<FactoryResetRefusal?> factoryResetDevice({
     required bool deleteAppData,
   }) async {
-    final deviceId = _transportIdentity;
     final prefix = _radioPrefix;
-    if (!isConnected || deviceId == null || prefix == null) {
+    if (!isConnected || prefix == null) {
       return FactoryResetRefusal.notConnected;
     }
 
-    await _factoryResetStore.save(
-      PendingFactoryReset(
-        deviceId: deviceId,
-        radioPrefix: prefix,
-        deleteAppData: deleteAppData,
-      ),
-    );
     final overBle = _activeTransport == MeshCoreTransportType.bluetooth;
     _appDebugLogService?.info(
-      'Factory reset sent device=$deviceId radio=$prefix '
-      'deleteAppData=$deleteAppData',
+      'Factory reset sent radio=$prefix deleteAppData=$deleteAppData',
       tag: 'Connection',
     );
     await sendFrame(buildFactoryResetFrame());
@@ -6943,63 +6949,26 @@ class MeshCoreConnector extends ChangeNotifier {
     // Give the frame time to leave before the transport closes.
     await Future<void>.delayed(const Duration(milliseconds: 500));
     await disconnect();
-    return null;
-  }
 
-  /// Settles a pending factory reset on the first SELF_INFO of a connect.
-  ///
-  /// Only a connect to the same device decides anything. Same identity means
-  /// the wipe did not happen and every byte of app data stays. A failed delete
-  /// keeps the record, so the next connect tries again.
-  Future<void> _resolvePendingFactoryReset() async {
-    final pending = _factoryResetStore.load();
-    final deviceId = _transportIdentity;
-    final prefix = _radioPrefix;
-    if (pending == null || deviceId == null || prefix == null) return;
-    final outcome = resolveFactoryReset(
-      pending,
-      deviceId: deviceId,
-      radioPrefix: prefix,
-    );
-    if (outcome == null) return;
-
-    if (outcome == FactoryResetOutcome.wipeAppData) {
+    if (deleteAppData) {
       try {
-        final removed = await wipeRadioData(pending.radioPrefix);
-        await _appSettingsService?.forgetRadio(pending.radioPrefix);
+        final removed = await wipeRadioData(prefix);
+        await _appSettingsService?.forgetRadio(prefix);
         _appDebugLogService?.info(
-          'Factory reset confirmed, removed $removed stored items for '
-          '${pending.radioPrefix}',
+          'Factory reset removed $removed stored items for $prefix',
           tag: 'Connection',
         );
       } catch (e) {
         _appDebugLogService?.error(
-          'Factory reset confirmed but deleting ${pending.radioPrefix} '
-          'failed, will retry next connect: $e',
+          'Factory reset: deleting app data for $prefix failed: $e',
           tag: 'Connection',
         );
         _factoryResetStatus = FactoryResetStatus.deleteFailed;
         notifyListeners();
-        return;
       }
     }
-
-    await _factoryResetStore.clear();
-    _factoryResetStatus = switch (outcome) {
-      FactoryResetOutcome.wipeAppData => FactoryResetStatus.complete,
-      FactoryResetOutcome.keepAppData => FactoryResetStatus.completeKept,
-      FactoryResetOutcome.notReset => FactoryResetStatus.notReset,
-    };
-    _appDebugLogService?.info(
-      'Factory reset resolved: $outcome',
-      tag: 'Connection',
-    );
-    notifyListeners();
+    return null;
   }
-
-  @visibleForTesting
-  Future<void> resolvePendingFactoryResetForTest() =>
-      _resolvePendingFactoryReset();
 
   Future<void> setPrivacyMode(bool enabled) async {
     await sendCliCommand('set privacy ${enabled ? 'on' : 'off'}');
@@ -7180,6 +7149,10 @@ class MeshCoreConnector extends ChangeNotifier {
       '[ChannelSync] Sync complete: received ${_channels.length}/$_totalChannelsToRequest channels'
       '${_unconfirmedChannelSlots.isEmpty ? '' : ', unconfirmed slots: $_unconfirmedChannelSlots'}',
     );
+    // A sync before device info, or one asked for fewer slots, has not seen
+    // every channel, so it cannot say what the radio does not hold (#1128).
+    final askedSlots = _totalChannelsToRequest;
+    final sawEverySlot = _slotCountKnown && askedSlots >= _maxChannels;
 
     _cleanupChannelSync(completed: true);
 
@@ -7226,6 +7199,7 @@ class MeshCoreConnector extends ChangeNotifier {
         'channel(s) retained); use Restore to write them back to the radio.',
         tag: 'ChannelSync',
       );
+      _logHistoryCheckSkipped('the radio has erased slots (Restore case)');
     } else if (_unconfirmedChannelSlots.isEmpty) {
       // Full confirmation: the fresh list is the truth, replace the cache.
       _cachedChannels = List<Channel>.from(_channels);
@@ -7237,6 +7211,18 @@ class MeshCoreConnector extends ChangeNotifier {
           );
         }),
       );
+      // Only here: an erased slot means the radio lost channels that Restore
+      // can put back with their history, and a hole means the list is not
+      // known. Neither is a list to judge history against (#1128).
+      if (sawEverySlot) {
+        unawaited(_purgeHistoryNotOnRadio());
+      } else {
+        _logHistoryCheckSkipped(
+          _slotCountKnown
+              ? 'this sync read $askedSlots of the radio\'s $_maxChannels slots'
+              : 'device info has not said how many slots the radio has',
+        );
+      }
     } else {
       // Holes: keep the last fully-confirmed persisted list for offline use
       // rather than overwriting it with a partial one. The holes are surfaced
@@ -7246,6 +7232,9 @@ class MeshCoreConnector extends ChangeNotifier {
         '$_unconfirmedChannelSlots; cached list NOT overwritten. '
         'Retry the sync to confirm them.',
         tag: 'ChannelSync',
+      );
+      _logHistoryCheckSkipped(
+        'slots $_unconfirmedChannelSlots are unconfirmed',
       );
     }
     _recalculateCachedChannelsUnreadTotal();
@@ -7414,6 +7403,7 @@ class MeshCoreConnector extends ChangeNotifier {
 
   int _channelWritesInFlight = 0;
   bool _channelSyncDeferredByWrite = false;
+  final Set<String> _sparedFromPurge = {};
 
   /// True while the channel list cannot be trusted to show which slots are
   /// free: a sync is re-reading it, or a write has not been answered yet. A
@@ -7552,9 +7542,11 @@ class MeshCoreConnector extends ChangeNotifier {
   /// OffbandMesh/meshcore-firmware#1864 refuses a different channel over an
   /// occupied slot, and that is what a new key in place is.
   ///
-  /// A new key is a slot reassignment for history purposes, the same as
-  /// before the clear-then-add: the old key's PSK-keyed history is kept, so
-  /// it comes back if that key is ever re-added (#1063).
+  /// A new key needs [history], the user's answer to what happens to the old
+  /// key's messages (#1128). It is applied as soon as the radio confirms the
+  /// clear, never waiting on the add, so the old key's history is never left
+  /// hidden: Keep moves it and the notify mode to the new key, Delete removes
+  /// it as Delete Channel would.
   ///
   /// If the clear lands and the add does not, the slot is left empty and this
   /// returns [ChannelWrite.clearedNotAdded], so the user is told the channel is
@@ -7562,10 +7554,17 @@ class MeshCoreConnector extends ChangeNotifier {
   Future<ChannelWrite> editChannel(
     Channel channel,
     String name,
-    Uint8List psk,
-  ) async {
+    Uint8List psk, {
+    KeyChangeHistory? history,
+  }) async {
     if (!isConnected) return ChannelWrite.noReply;
-    if (listEquals(channel.psk, psk)) {
+    final keyChanges = !listEquals(channel.psk, psk);
+    if (keyChanges && history == null) {
+      throw ArgumentError(
+        'A key change needs the keep-or-delete history answer (#1128)',
+      );
+    }
+    if (!keyChanges) {
       return _setChannel(
         channel.index,
         name,
@@ -7581,6 +7580,15 @@ class MeshCoreConnector extends ChangeNotifier {
         _syncAfterChannelWrites();
         return cleared;
       }
+      final newPskHex = Channel(
+        index: channel.index,
+        name: name,
+        psk: psk,
+      ).pskHex;
+      final moved = await _applyKeyChangeHistory(channel, newPskHex, history!);
+      // The user said keep. What could not be moved stays under the old key,
+      // and the sync after this write must not delete it as hidden.
+      if (!moved) _sparedFromPurge.add(channel.pskHex);
       await _retireSlotOccupant(channel.index);
       final added = await _setChannel(
         channel.index,
@@ -7589,9 +7597,14 @@ class MeshCoreConnector extends ChangeNotifier {
         occupantPsk: null,
         refresh: true,
       );
-      return added == ChannelWrite.ok
-          ? ChannelWrite.ok
-          : ChannelWrite.clearedNotAdded;
+      if (added != ChannelWrite.ok) {
+        // The kept history now waits under a key the radio does not hold, for
+        // the user to add the channel again; the sync after this write must
+        // not delete it as hidden (#1128).
+        if (history == KeyChangeHistory.keep) _sparedFromPurge.add(newPskHex);
+        return ChannelWrite.clearedNotAdded;
+      }
+      return moved ? ChannelWrite.ok : ChannelWrite.historyNotMoved;
     } finally {
       _endChannelWrite();
     }
@@ -7705,11 +7718,78 @@ class MeshCoreConnector extends ChangeNotifier {
   ///  - legacy slot-index keys (pre-#194) would be adopted onto the new
   ///    occupant by the store's one-time migration; purge them (#193/#1063).
   ///  - the in-memory conversation map is slot-keyed; drop this slot's entry.
-  /// The old occupant's PSK-keyed history is deliberately left intact: if
-  /// that channel is ever re-added (any slot), its history comes back (#1063).
+  /// The old occupant's PSK-keyed history is settled by the full sync every
+  /// write ends with, not here: firmware that moves a channel out of the way
+  /// (#1896) still holds it, so it keeps its history, and a channel the radio
+  /// no longer holds has its history deleted by that sync (#1128).
   Future<void> _retireSlotOccupant(int index) async {
     await _channelMessageStore.clearLegacySlotHistory(index);
     _channelMessages.remove(index);
+  }
+
+  /// Applies the user's keep-or-delete answer for a key change once the radio
+  /// has confirmed the clear (#1128). Returns false when Keep could not move
+  /// the history; the store has logged why and left it under the old key.
+  Future<bool> _applyKeyChangeHistory(
+    Channel channel,
+    String newPskHex,
+    KeyChangeHistory history,
+  ) async {
+    _appDebugLogService?.info(
+      'Key change on slot ${channel.index} "${channel.name}": user chose to '
+      '${history.name} its message history',
+      tag: 'ChannelWrite',
+    );
+    if (history == KeyChangeHistory.delete) {
+      await _channelMessageStore.deleteChannelHistory(channel.pskHex);
+      return true;
+    }
+    final moved = await _channelMessageStore.moveChannelHistory(
+      channel.pskHex,
+      newPskHex,
+    );
+    await _appSettingsService?.moveChannelNotifyMode(
+      devicePrefix: selfPublicKeyHex,
+      fromPskHex: channel.pskHex,
+      toPskHex: newPskHex,
+    );
+    return moved != null;
+  }
+
+  /// Every sync says what became of the hidden-history check, so a log never
+  /// leaves "ran and found nothing" indistinguishable from "did not run".
+  void _logHistoryCheckSkipped(String why) => _appDebugLogService?.info(
+    'Hidden channel history check skipped for radio '
+    '${_channelMessageStore.publicKeyHex}: $why. Nothing deleted (#1128)',
+    tag: 'Storage',
+  );
+
+  /// Deletes this radio's channel history that no channel on it shows, after
+  /// a sync the radio fully confirmed with nothing erased (#1128). Not while a
+  /// write is waiting on the radio: the list could be mid-change.
+  ///
+  /// [_sparedFromPurge] holds keys whose kept history a key change could not
+  /// put on the radio: the add was not confirmed, or the move failed. It lasts
+  /// for this connection, and a key leaves it once the radio holds it again,
+  /// so a later delete of that channel is judged normally.
+  Future<void> _purgeHistoryNotOnRadio() async {
+    if (_channelWritesInFlight > 0) {
+      _logHistoryCheckSkipped('a channel write is waiting on the radio');
+      return;
+    }
+    final onRadio = _channels.where((c) => !c.isUnusable).toList();
+    _sparedFromPurge.removeAll(onRadio.map((c) => c.pskHex));
+    try {
+      await _channelMessageStore.purgeHistoryNotOnRadio(
+        radioPskHex: {...onRadio.map((c) => c.pskHex), ..._sparedFromPurge},
+        occupiedSlots: onRadio.map((c) => c.index).toSet(),
+      );
+    } catch (e) {
+      _appDebugLogService?.error(
+        'Could not delete history no channel on the radio shows: $e',
+        tag: 'Storage',
+      );
+    }
   }
 
   // --- Offband GPS query (CMD_OFFBAND_GPS / RESP_CODE_OFFBAND_GPS = 0xC1) (#135)
@@ -9056,10 +9136,6 @@ class MeshCoreConnector extends ChangeNotifier {
     // another radio's data.
     storageService?.setPublicKeyHex = selfPublicKeyHex;
 
-    // A factory reset is proven or disproven here, by the identity this
-    // device now reports (#1054).
-    unawaited(_resolvePendingFactoryReset());
-
     // Now that we have self info, we can load all the persisted data for this
     // node. Each step is timed: this sequence has stalled the UI isolate for
     // ~40s on a large store, and the timings say which step is responsible.
@@ -9164,7 +9240,7 @@ class MeshCoreConnector extends ChangeNotifier {
   /// LED (byte 85) and display mode (byte 86), appended unconditionally on
   /// v21+ (firmware #542). Each is null when the frame stops short of it. Like
   /// the FEM byte, presence says nothing about capability:
-  /// [supportsIndicators] does.
+  /// [supportsDisplayControl] and [supportsLedControl] do.
   ///
   /// Bytes 82 to 86 keep working and are explicitly untouched by the advert
   /// contract (§7). Nothing here reads 87, and nothing may: rotation is read
@@ -9181,6 +9257,7 @@ class MeshCoreConnector extends ChangeNotifier {
     if (_shouldGateInitialChannelSync) {
       _hasReceivedDeviceInfo = true;
     }
+    _slotCountKnown = true;
     _firmwareVerCode = frame[1];
 
     // Readable build date / model / firmware version, NUL-terminated strings
@@ -11841,6 +11918,7 @@ class MeshCoreConnector extends ChangeNotifier {
     // Preserve deviceId and displayName for UI display during reconnection
     // They're only cleared on manual disconnect via disconnect() method
     _hasReceivedDeviceInfo = false;
+    _slotCountKnown = false;
     // But NOT the identity that scopes stored data (#158). A manual
     // disconnect() clears _selfPublicKey; an unexpected drop did not, so
     // every per-radio store, and the one channels_screen builds from

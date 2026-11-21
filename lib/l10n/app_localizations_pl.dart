@@ -835,37 +835,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get factoryResetSentBody =>
-      'The radio is erasing itself and will restart with a new identity. Reconnect to it to finish.';
+      'The radio is erasing itself and will restart with a new identity.';
 
   @override
   String get factoryResetSentBleBody =>
-      'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect to finish.';
-
-  @override
-  String get factoryResetCompleteTitle => 'Factory reset complete';
-
-  @override
-  String get factoryResetCompleteBody =>
-      'The radio has a new identity. Its old data was deleted from the app.';
-
-  @override
-  String get factoryResetCompleteKeptBody =>
-      'The radio has a new identity. Its old data was kept in the app.';
-
-  @override
-  String get factoryResetNotResetTitle => 'Factory reset did not happen';
-
-  @override
-  String get factoryResetNotResetBody =>
-      'The radio reconnected with the same identity, so it was not erased. Nothing was deleted from the app.';
+      'The radio is erasing itself and will restart with a new identity. Its Bluetooth pairing is erased too: remove the old pairing for this radio in your phone or computer\'s Bluetooth settings, then reconnect.';
 
   @override
   String get factoryResetDeleteFailedTitle =>
-      'Factory reset done, app cleanup failed';
+      'Factory reset sent, app cleanup failed';
 
   @override
   String get factoryResetDeleteFailedBody =>
-      'The radio was erased, but deleting its old data from the app failed. The app will try again the next time this radio connects.';
+      'The reset was sent, but deleting this radio\'s data from the app failed.';
 
   @override
   String get settings_blePin => 'BLE pairing PIN';
@@ -982,6 +964,26 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get settings_aboutDonate => 'Donate or sponsor';
+
+  @override
+  String get sponsorPrompt_title => 'Support Offband';
+
+  @override
+  String get sponsorPrompt_body =>
+      'Offband MeshCore is free, open source, and built by an independent developer. If it\'s useful to you, sponsoring helps keep it maintained and improving. Thank you for using it.';
+
+  @override
+  String get sponsorPrompt_sponsor => 'Sponsor';
+
+  @override
+  String get sponsorPrompt_anytime =>
+      'You can support Offband anytime from About in Settings, or at offband.org/donate.';
+
+  @override
+  String get sponsorPrompt_notNow => 'Not now';
+
+  @override
+  String get sponsorPrompt_never => 'Never Show Again';
 
   @override
   String get settings_aboutLinkFailed => 'Could not open the link';
@@ -1937,6 +1939,24 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get channels_writeClearedNotAdded =>
       'The old channel was removed, but the radio did not confirm the new one, so that slot is now empty. Add the channel again.';
+
+  @override
+  String get channels_writeHistoryNotMoved =>
+      'The channel was changed, but its message history could not be moved to it. The app log has the details.';
+
+  @override
+  String get channels_keyChangeHistoryTitle => 'Keep message history?';
+
+  @override
+  String channels_keyChangeHistoryBody(String name) {
+    return 'This gives \"$name\" a new key. Keep its message history under the new key, or delete it? Deleted history cannot be recovered.';
+  }
+
+  @override
+  String get channels_keyChangeKeepHistory => 'Keep message history';
+
+  @override
+  String get channels_keyChangeDeleteHistory => 'Delete message history';
 
   @override
   String get channels_sortBy => 'Sortuj po';

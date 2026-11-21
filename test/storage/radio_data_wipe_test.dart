@@ -2,13 +2,12 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
 import 'package:meshcore_open/storage/drift/offband_database.dart';
-import 'package:meshcore_open/storage/factory_reset_store.dart';
 import 'package:meshcore_open/storage/prefs_manager.dart';
 import 'package:meshcore_open/storage/radio_data_wipe.dart';
 import 'package:meshcore_open/storage/scoping_inventory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// #1057: the factory-reset app-data wipe and the reconnect decision.
+/// #1057: the factory-reset app-data wipe.
 void main() {
   late OffbandDatabase db;
 
@@ -105,70 +104,5 @@ void main() {
       await expectLater(wipeRadioData(bad), throwsArgumentError);
     }
     expect(await allKeys(), before);
-  });
-
-  group('resolveFactoryReset', () {
-    const pending = PendingFactoryReset(
-      deviceId: 'dev-1',
-      radioPrefix: wiped,
-      deleteAppData: true,
-    );
-
-    test('new key on the same device with the box ticked wipes', () {
-      expect(
-        resolveFactoryReset(pending, deviceId: 'dev-1', radioPrefix: other),
-        FactoryResetOutcome.wipeAppData,
-      );
-    });
-
-    test('new key with the box unticked keeps', () {
-      const keep = PendingFactoryReset(
-        deviceId: 'dev-1',
-        radioPrefix: wiped,
-        deleteAppData: false,
-      );
-      expect(
-        resolveFactoryReset(keep, deviceId: 'dev-1', radioPrefix: other),
-        FactoryResetOutcome.keepAppData,
-      );
-    });
-
-    test('same key means the radio was not reset', () {
-      expect(
-        resolveFactoryReset(pending, deviceId: 'dev-1', radioPrefix: wiped),
-        FactoryResetOutcome.notReset,
-      );
-    });
-
-    test('a different device decides nothing', () {
-      expect(
-        resolveFactoryReset(pending, deviceId: 'dev-2', radioPrefix: other),
-        isNull,
-      );
-    });
-  });
-
-  test('the pending record survives a restart and clears', () async {
-    final store = FactoryResetStore();
-    await store.save(
-      const PendingFactoryReset(
-        deviceId: 'COM7',
-        radioPrefix: wiped,
-        deleteAppData: true,
-      ),
-    );
-
-    final reloaded = FactoryResetStore().load();
-    expect(reloaded?.deviceId, 'COM7');
-    expect(reloaded?.radioPrefix, wiped);
-    expect(reloaded?.deleteAppData, isTrue);
-
-    await store.clear();
-    expect(FactoryResetStore().load(), isNull);
-  });
-
-  test('an unreadable pending record loads as none', () async {
-    await PrefsManager.instance.setString('factory_reset_pending', '{oops');
-    expect(FactoryResetStore().load(), isNull);
   });
 }

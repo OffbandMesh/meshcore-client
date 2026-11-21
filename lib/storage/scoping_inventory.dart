@@ -249,15 +249,6 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/services/storage_service.dart',
   ),
   StorageSurface(
-    'factory_reset_pending',
-    verdict: ScopingVerdict.globalOnPurpose,
-    reason:
-        'one factory reset awaiting proof (#1054). It spans two identities of '
-        'the same device, the key before the wipe and the key after, so it '
-        'cannot live under either. It names the old radio inside the record',
-    owner: 'lib/storage/factory_reset_store.dart',
-  ),
-  StorageSurface(
     'map_removed_marker_ids',
     verdict: ScopingVerdict.globalOnPurpose,
     reason:
@@ -283,6 +274,46 @@ const List<StorageSurface> storageSurfaces = [
         'fetched from assets or upstream, not state belonging to a radio. NOT '
         'previously audited: surfaced by this inventory',
     owner: 'lib/services/radio_preset_service.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_first_launch_ms',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'when the app first launched with the sponsor window (#1129), for its '
+        '7-day first wait. A fact about the app install, not a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_launches',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'how many times the app has launched, for the sponsor window\'s '
+        '3-launch first wait (#1129). Counts app launches, not radios',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_next_ms',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'the earliest time the sponsor window may show again (#1129), set by '
+        'Not now or Sponsor. A choice about the app, not about a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_off',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        "the user's Never Show Again for the sponsor window (#1129). A choice "
+        'about the app, not about a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
+  ),
+  StorageSurface(
+    'sponsor_prompt_shown_for',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'the test build (version and commit) the sponsor window last showed '
+        'for (#1129). Follows the installed app, not a radio',
+    owner: 'lib/widgets/sponsor_prompt.dart',
   ),
   StorageSurface(
     'anr_last_exit_ts_ms',

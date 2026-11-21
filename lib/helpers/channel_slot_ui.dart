@@ -85,10 +85,49 @@ bool explainUnconfirmedChannelWrite(BuildContext context, ChannelWrite result) {
     ChannelWrite.rejected => l10n.channels_writeRejected,
     ChannelWrite.noReply => l10n.channels_writeNoReply,
     ChannelWrite.clearedNotAdded => l10n.channels_writeClearedNotAdded,
+    ChannelWrite.historyNotMoved => l10n.channels_writeHistoryNotMoved,
   };
   if (message == null) return false;
   showChannelBlockedMessage(context, message);
   return true;
+}
+
+/// Asks what a key change does with [channelName]'s message history: kept
+/// under the new key, or deleted. Null means the user backed out, and nothing
+/// may be written (#1128).
+Future<KeyChangeHistory?> askKeyChangeHistory(
+  BuildContext context,
+  String channelName,
+) {
+  return showDialog<KeyChangeHistory>(
+    context: context,
+    builder: (dialogContext) {
+      final l10n = dialogContext.l10n;
+      return AlertDialog(
+        title: Text(l10n.channels_keyChangeHistoryTitle),
+        content: Text(l10n.channels_keyChangeHistoryBody(channelName)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.common_cancel),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () =>
+                Navigator.pop(dialogContext, KeyChangeHistory.delete),
+            child: Text(l10n.channels_keyChangeDeleteHistory),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, KeyChangeHistory.keep),
+            child: Text(l10n.channels_keyChangeKeepHistory),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 /// Refuses a second Public channel, and says so. Returns true if it refused.
