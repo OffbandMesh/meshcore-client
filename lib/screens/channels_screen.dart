@@ -123,6 +123,13 @@ class _ChannelsScreenState extends State<ChannelsScreen>
         centerTitle: true,
         bottom: const SyncProgressAppBarBottom(),
         actions: [
+          // #1163: resync was reachable only by pulling the list down, which
+          // nothing on screen said, while errors told the user to resync.
+          IconButton(
+            icon: const Icon(Icons.sync),
+            tooltip: context.l10n.channels_resync,
+            onPressed: () => resyncChannels(context, connector),
+          ),
           // Disconnect and Settings moved to the panel footer (#290); only
           // the screen-level Communities entry remains, and it already only
           // appears once a community has been joined.

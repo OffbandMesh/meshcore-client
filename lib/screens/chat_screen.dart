@@ -52,6 +52,7 @@ import '../widgets/sync_progress_overlay.dart';
 import '../widgets/translated_message_content.dart';
 import '../utils/app_logger.dart';
 import '../l10n/l10n.dart';
+import '../utils/dialog_utils.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../widgets/unread_divider.dart';
 import 'telemetry_screen.dart';
@@ -364,7 +365,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     );
                   }
                   if (value == 'clearChat') {
-                    connector.clearMessagesForContact(widget.contact);
+                    // #1163: a red confirm, then a real delete. This used to
+                    // empty the screen only; the history came back on reload.
+                    unawaited(() async {
+                      final confirmed = await confirmDelete(
+                        context,
+                        title: context.l10n.chat_clearHistoryTitle,
+                        body: context.l10n.chat_clearContactHistoryConfirm(
+                          widget.contact.name,
+                        ),
+                      );
+                      if (confirmed) {
+                        await connector.clearMessagesForContact(widget.contact);
+                      }
+                    }());
                   }
                   if (value == 'block') {
                     context.read<BlockService>().block(

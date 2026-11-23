@@ -391,6 +391,22 @@ class ChannelMessageStore {
     }
   }
 
+  /// [clearChannelMessages] for a channel that no longer occupies its slot:
+  /// the history under [pskHex] and the slot's raw index key. For a delete the
+  /// radio confirmed only on a re-read, when the slot already resolves to
+  /// nothing (#1163).
+  Future<void> clearChannelMessagesForPsk(
+    String pskHex,
+    int channelIndex,
+  ) async {
+    if (publicKeyHex.isEmpty || pskHex.isEmpty) return;
+    final blobs = BlobStore.instance;
+    for (final key in {_pskKey(pskHex), _indexKey(channelIndex)}) {
+      await blobs.deleteEverywhere(key);
+      await blobs.deleteMessageRows(key);
+    }
+  }
+
   /// Purges only the LEGACY slot-keyed history for [channelIndex]: the
   /// device-scoped index key and the pre-device-scoping unscoped key. Used
   /// when a slot is reassigned to a different channel (#193): without this,
