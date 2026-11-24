@@ -725,8 +725,26 @@ class _ContactsScreenState extends State<ContactsScreen>
       120.0,
     ); //two 48px icon buttons + 1px divider
 
+    final notice = connector.contactTableNotice;
     return Column(
       children: [
+        if (notice != null)
+          MaterialBanner(
+            leading: const Icon(Icons.warning_amber_rounded),
+            content: Text(
+              notice.removedName != null
+                  ? context.l10n.contacts_radioRemovedBanner(
+                      notice.removedName!,
+                    )
+                  : context.l10n.contacts_radioFullBanner,
+            ),
+            actions: [
+              TextButton(
+                onPressed: connector.dismissContactTableNotice,
+                child: Text(context.l10n.common_dismiss),
+              ),
+            ],
+          ),
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Row(

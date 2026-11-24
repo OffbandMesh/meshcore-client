@@ -2048,6 +2048,16 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
           ),
+          if (isFailed && message.radioErrorCode != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                message.radioErrorCode == errCodeNotFound
+                    ? context.l10n.chat_sendRefusedNotFound
+                    : context.l10n.chat_sendRefused(message.radioErrorCode!),
+                style: TextStyle(fontSize: 11, color: colorScheme.error),
+              ),
+            ),
           if (message.reactions.isNotEmpty) ...[
             const SizedBox(height: 4),
             Padding(

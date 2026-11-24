@@ -32,6 +32,7 @@ import '../services/corescope_service.dart';
 import '../services/region_discovery_service.dart';
 import '../widgets/channel_region_scope_dialog.dart';
 import '../widgets/channel_notify_mode.dart';
+import '../widgets/contact_add_feedback.dart';
 import '../widgets/radio_channel_notify.dart';
 import '../widgets/radio_tone.dart';
 import '../services/block_service.dart';
@@ -940,8 +941,9 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       _showSenderError(l10n.channel_senderAddNotConnected);
       return;
     }
+    final ContactAddResult result;
     try {
-      await connector.importDiscoveredContact(candidate);
+      result = await connector.importDiscoveredContact(candidate);
     } catch (e) {
       appLogger.error('Adding channel sender ${candidate.name} failed: $e');
       if (!mounted) return;
@@ -949,10 +951,14 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       return;
     }
     if (!mounted) return;
-    showDismissibleSnackBar(
-      context,
-      content: Text(l10n.discoveredContacts_contactAdded),
-    );
+    if (result.added) {
+      showDismissibleSnackBar(
+        context,
+        content: Text(l10n.discoveredContacts_contactAdded),
+      );
+      return;
+    }
+    showContactAddResult(context, result, candidate.name);
   }
 
   void _showSenderError(String message) {

@@ -24,6 +24,7 @@ import '../services/map_tile_cache_service.dart';
 import '../utils/contact_search.dart';
 import '../utils/route_transitions.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/contact_add_feedback.dart';
 import '../widgets/map_layer_panel.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../icons/los_icon.dart';
@@ -1589,7 +1590,11 @@ class _MapScreenState extends State<MapScreen> {
             TextButton(
               onPressed: () {
                 if (!contact.isActive) {
-                  connector.importDiscoveredContact(contact);
+                  importDiscoveredContactWithFeedback(
+                    context,
+                    connector,
+                    contact,
+                  );
                 }
                 final unread = connector.getUnreadCountForContactKey(
                   contact.publicKeyHex,
@@ -1611,7 +1616,11 @@ class _MapScreenState extends State<MapScreen> {
             TextButton(
               onPressed: () {
                 if (!contact.isActive) {
-                  connector.importDiscoveredContact(contact);
+                  importDiscoveredContactWithFeedback(
+                    context,
+                    connector,
+                    contact,
+                  );
                 }
                 Navigator.pop(dialogContext);
                 _showRepeaterLogin(context, contact);
@@ -1622,7 +1631,11 @@ class _MapScreenState extends State<MapScreen> {
             TextButton(
               onPressed: () {
                 if (!contact.isActive) {
-                  connector.importDiscoveredContact(contact);
+                  importDiscoveredContactWithFeedback(
+                    context,
+                    connector,
+                    contact,
+                  );
                 }
                 Navigator.pop(dialogContext);
                 _showRoomLogin(context, contact);

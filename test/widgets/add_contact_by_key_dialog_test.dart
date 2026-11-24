@@ -18,12 +18,17 @@ import 'package:meshcore_open/widgets/add_contact_by_key_dialog.dart';
 const _key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
 class _CapturingConn extends MeshCoreConnector {
+  _CapturingConn({
+    this.result = const ContactAddResult(ContactAddOutcome.added),
+  });
+
+  final ContactAddResult result;
   final List<Contact> added = [];
 
   @override
-  Future<bool> addContactByKey(Contact stub) async {
+  Future<ContactAddResult> addContactByKey(Contact stub) async {
     added.add(stub);
-    return true;
+    return result;
   }
 }
 
@@ -179,6 +184,46 @@ void main() {
     expect(stub.type, advTypeRoom);
     expect(stub.lastSeen, DateTime.fromMillisecondsSinceEpoch(0));
   });
+
+  // #1028: the radio's answer reaches the user, and a refusal stays up.
+  for (final (label, result, text) in [
+    (
+      'full',
+      const ContactAddResult(
+        ContactAddOutcome.refused,
+        errCode: errCodeTableFull,
+      ),
+      "Bob was not added. The radio's contact list is full.",
+    ),
+    (
+      'refused',
+      const ContactAddResult(
+        ContactAddOutcome.refused,
+        errCode: errCodeIllegalArg,
+      ),
+      "Bob was not added. The radio didn't accept it (error 6).",
+    ),
+    (
+      'no reply',
+      const ContactAddResult(ContactAddOutcome.noReply),
+      "Bob was not added. The radio didn't respond.",
+    ),
+  ]) {
+    testWidgets('a $label add says so and stays on screen', (tester) async {
+      final conn = _CapturingConn(result: result);
+      await _open(tester, conn);
+
+      await tester.enterText(find.byType(TextField).first, _key);
+      await tester.enterText(find.byType(TextField).last, 'Bob');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 30));
+
+      expect(find.textContaining(text), findsOneWidget);
+      expect(find.textContaining('Added Bob'), findsNothing);
+    });
+  }
 
   testWidgets('a missing name falls back rather than blocking the add', (
     tester,

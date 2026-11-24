@@ -391,6 +391,45 @@ class MessageRetryService extends ChangeNotifier {
     _onMessageResolved(messageId, contact.publicKeyHex);
   }
 
+  /// The radio answered a DM send with RESP_CODE_ERR instead of RESP_CODE_SENT,
+  /// for example NOT_FOUND when it does not hold the contact. A retry cannot
+  /// succeed, so the message fails now and keeps the reason. Matched only when
+  /// exactly one send is waiting, as [_adoptUnpredictedSentHash] does. (#1028)
+  bool failAwaitingSendOnRadioError(int errCode) {
+    final awaiting = _sendsAwaitingConfirmation;
+    if (awaiting.length != 1) {
+      if (awaiting.isNotEmpty) {
+        _config?.debugLogService?.warn(
+          'Radio error $errCode with ${awaiting.length} sends waiting; '
+          'cannot tell which it refused',
+          tag: 'AckHash',
+        );
+      }
+      return false;
+    }
+    final messageId = awaiting.first;
+    final message = _pendingMessages[messageId];
+    final contact = _pendingContacts[messageId];
+    if (message == null || contact == null) return false;
+    _sentConfirmationTimers.remove(messageId)?.cancel();
+    _expectedHashToMessageId.removeWhere((_, id) => id == messageId);
+
+    final failed = message.copyWith(
+      status: MessageStatus.failed,
+      radioErrorCode: errCode,
+    );
+    _pendingMessages[messageId] = failed;
+    _config?.updateMessage(failed);
+    _config?.debugLogService?.warn(
+      'Radio refused the message to ${contact.name} (error $errCode), '
+      'marking send failed',
+      tag: 'AckHash',
+    );
+    notifyListeners();
+    _onMessageResolved(messageId, contact.publicKeyHex);
+    return true;
+  }
+
   /// Message ids whose send reached the radio but whose RESP_CODE_SENT has not
   /// arrived yet.
   List<String> get _sendsAwaitingConfirmation => _sentConfirmationTimers.keys

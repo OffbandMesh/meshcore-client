@@ -13,6 +13,7 @@ import '../utils/platform_info.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/list_filter_widget.dart';
 import '../widgets/blocked_badge.dart';
+import '../widgets/contact_add_feedback.dart';
 import '../services/block_service.dart';
 import '../helpers/snack_bar_builder.dart';
 
@@ -193,7 +194,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                           ),
                         ),
                         onTap: () {
-                          connector.importDiscoveredContact(contact);
+                          importDiscoveredContactWithFeedback(
+                            context,
+                            connector,
+                            contact,
+                          );
                         },
                         onLongPress: () =>
                             _showContactContextMenu(contact, connector),
@@ -269,7 +274,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
 
     switch (action) {
       case 'import_contact':
-        connector.importDiscoveredContact(contact);
+        importDiscoveredContactWithFeedback(context, connector, contact);
         break;
       case 'copy_contact':
         if (contact.rawPacket == null) return;
