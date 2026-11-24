@@ -12014,14 +12014,16 @@ class MeshCoreConnector extends ChangeNotifier {
     return -1;
   }
 
+  /// A repeat is the same packet heard again, so it carries the sender's exact
+  /// send second; that second is inside the encrypted payload and both receive
+  /// paths read it. Two sends get different seconds, so they never match (#1183).
   bool _isChannelRepeat(ChannelMessage existing, ChannelMessage incoming) {
     if (existing.text != incoming.text) return false;
 
-    final diffMs =
-        (existing.timestamp.millisecondsSinceEpoch -
-                incoming.timestamp.millisecondsSinceEpoch)
-            .abs();
-    if (diffMs > 30000) return false;
+    if (existing.timestamp.millisecondsSinceEpoch ~/ 1000 !=
+        incoming.timestamp.millisecondsSinceEpoch ~/ 1000) {
+      return false;
+    }
 
     if (existing.senderName == incoming.senderName) return true;
 
