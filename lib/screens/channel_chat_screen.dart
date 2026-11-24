@@ -941,24 +941,13 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       _showSenderError(l10n.channel_senderAddNotConnected);
       return;
     }
-    final ContactAddResult result;
     try {
-      result = await connector.importDiscoveredContact(candidate);
+      await importDiscoveredContactWithFeedback(context, connector, candidate);
     } catch (e) {
       appLogger.error('Adding channel sender ${candidate.name} failed: $e');
       if (!mounted) return;
       _showSenderError(l10n.channel_senderAddFailed(e.toString()));
-      return;
     }
-    if (!mounted) return;
-    if (result.added) {
-      showDismissibleSnackBar(
-        context,
-        content: Text(l10n.discoveredContacts_contactAdded),
-      );
-      return;
-    }
-    showContactAddResult(context, result, candidate.name);
   }
 
   void _showSenderError(String message) {

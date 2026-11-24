@@ -176,6 +176,57 @@ void main() {
     });
   });
 
+  // Owner test of the first build: on a full radio the Offband firmware makes
+  // room for a manual add by overwriting a contact, so the app must not send
+  // the add until the user has chosen what goes. (#1028, 2026-11-24)
+  group('a full radio', () {
+    Iterable<Uint8List> addFrames() =>
+        sent.where((f) => f.isNotEmpty && f[0] == cmdAddUpdateContact);
+
+    test('is sent no add by key', () async {
+      connector.handleFrameForTest([0x90]);
+      final add = connector.addContactByKey(_contact(0x11, 'Alpha'));
+      await settle(2);
+      ok();
+      await add;
+
+      expect(addFrames(), isEmpty);
+      expect(holds(0x11), isFalse);
+    });
+
+    test('is sent no add from Discovery', () async {
+      connector.handleFrameForTest([0x90]);
+      final add = connector.importDiscoveredContact(_contact(0x22, 'Bravo'));
+      await settle(2);
+      ok();
+      await add;
+
+      expect(addFrames(), isEmpty);
+      expect(holds(0x22), isFalse);
+    });
+
+    test('that just made room for one add is sent no second', () async {
+      connector.handleFrameForTest([0x8F, ..._key(0x99)]);
+      final add = connector.addContactByKey(_contact(0x11, 'Alpha'));
+      await settle(2);
+      ok();
+      await add;
+
+      expect(addFrames(), isEmpty);
+    });
+
+    test('still takes an update to a contact it already holds', () async {
+      connector.contactsForTest.add(_contact(0x22, 'Bravo'));
+      connector.handleFrameForTest([0x90]);
+      final add = connector.importDiscoveredContact(_contact(0x22, 'Bravo'));
+      await settle(2);
+      ok();
+      await add;
+
+      expect(addFrames(), hasLength(1));
+    });
+  });
+
   group('the radio removing a contact to make room', () {
     test('removes it from the app\'s contacts too', () async {
       final add = connector.addContactByKey(_contact(0x44, 'Delta'));
