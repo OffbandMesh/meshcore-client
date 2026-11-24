@@ -1,0 +1,118 @@
+name: Test gate
+
+# #1173: every fix and every new capability ships with a test that fails
+# without it. Check 1: a change to lib/ needs an added or changed *_test.dart.
+# Check 2: those test files, run against the base branch's lib/, must include
+# a real test that fails there. Logic and messages: tool/test_gate.dart.
+#
+# No skip flag or label, by design (#927). The only exemption is a PR title
+# whose conventional type claims no behavior change, and it is printed in the
+# job summary. `edited` is a trigger so a title change re-evaluates it.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  test-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # The title reaches the tool through the environment only. Pasting it
+      # into the script would let a crafted title run commands here.
+      - name: "Check 1: code change comes with a test change"
+        id: scope
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -eu
+          # checkout hands us the PR merge commit (forks included); parent 1
+          # is the base tip. -z: NUL-separated and never quoted, so no path
+          # can hide from the gate or split into two arguments.
+          git diff --name-status -z HEAD^1 HEAD > "$RUNNER_TEMP/changed.bin"
+          dart run tool/test_gate.dart scope \
+            --changed "$RUNNER_TEMP/changed.bin" \
+            --entries "$RUNNER_TEMP/entries.bin"
+
+      # The verdict below depends on reading the runner's JSON correctly. If a
+      # Flutter upgrade changes that format, the gate must fail, not quietly
+      # start passing. Known fixtures, known verdicts, on every check 2 run.
+      - name: "Gate self-check: the runner's output still reads correctly"
+        if: steps.scope.outputs.evaluate == 'true'
+        run: |
+          set -u
+          canary=test/zz_gate_canary
+          mkdir -p "$canary"
+          cat > "$canary/fails_test.dart" <<'EOF'
+          import 'package:flutter_test/flutter_test.dart';
+          void main() {
+            test('canary passes', () => expect(1, 1));
+            test('canary fails an expectation', () => expect(1, 2));
+          }
+          EOF
+          cat > "$canary/hook_only_test.dart" <<'EOF'
+          import 'package:flutter_test/flutter_test.dart';
+          void main() {
+            setUpAll(() => throw StateError('canary hook'));
+            test('canary never runs', () => expect(1, 1));
+          }
+          EOF
+          cat > "$canary/no_compile_test.dart" <<'EOF'
+          import 'package:flutter_test/flutter_test.dart';
+          void main() {
+            test('canary', () => expect(canaryUndefinedSymbol(), 1));
+          }
+          EOF
+          flutter test --reporter json "$canary/fails_test.dart" \
+            > "$RUNNER_TEMP/canary_real.jsonl" || true
+          flutter test --reporter json "$canary/hook_only_test.dart" \
+            "$canary/no_compile_test.dart" \
+            > "$RUNNER_TEMP/canary_none.jsonl" || true
+          rm -rf "$canary"
+          if ! dart run tool/test_gate.dart evaluate \
+              --results "$RUNNER_TEMP/canary_real.jsonl"; then
+            echo "::error::Gate self-check: a real failing test was not recognized. The runner's JSON format has changed; fix tool/test_gate.dart."
+            exit 1
+          fi
+          if dart run tool/test_gate.dart evaluate \
+              --results "$RUNNER_TEMP/canary_none.jsonl"; then
+            echo "::error::Gate self-check: a hook or compile failure was counted as proof. The runner's JSON format has changed; fix tool/test_gate.dart."
+            exit 1
+          fi
+          echo "Gate self-check passed."
+
+      - name: "Check 2: put back the base branch's code"
+        if: steps.scope.outputs.evaluate == 'true'
+        run: |
+          set -eu
+          rm -rf lib
+          git checkout HEAD^1 -- lib
+          echo "lib/ is now the base branch's; the tests are the PR's:"
+          tr '\0' '\n' < "$RUNNER_TEMP/entries.bin"
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: "Check 2: the changed tests must fail on the base code"
+        if: steps.scope.outputs.evaluate == 'true'
+        run: |
+          set -u
+          # Failing tests are the expected outcome here, so the runner's exit
+          # code is not the verdict; the evaluator reads every result instead.
+          xargs -0 -a "$RUNNER_TEMP/entries.bin" \
+            flutter test --reporter json > "$RUNNER_TEMP/results.jsonl" || true
+          dart run tool/test_gate.dart evaluate \
+            --results "$RUNNER_TEMP/results.jsonl"
