@@ -6,7 +6,7 @@
 | **Serves** | Standalone. Extends the release pipeline (epic #312) and mirrors the iOS lane (#1013). |
 | **Status** | Owner approved 2026-11-03 ("Plan approved."). Review fixes applied afterwards (section 12). Revised 2026-11-21 on the owner's call to bring Internal back as a target (decision 3). |
 | **Owner** | @Strycher |
-| **Last updated** | 2026-11-21 |
+| **Last updated** | 2026-11-23 |
 
 ## At a glance
 
@@ -74,7 +74,7 @@
 |---|---|
 | **A1 · Tool, tests first:** `tools/play/play_release.py`, standard library only. Given the AAB, the tag, a track and a rollout: checks the certificate against the pin `release-signed.yml` uses, checks the bundle's version code matches the tag's `pubspec`, and checks the code is higher than everything on Play unless Play already holds this exact release. Then builds the edit, uploads only if Play doesn't have the bundle, sets the track with the notes, and commits. Targets: `internal`, `external` (Play's `alpha`) and `production`. Track status: `draft` stays `draft`; 100 is `completed`; 10, 25 or 50 is `inProgress` with that fraction, production only. Idempotent: if the track already carries this release at the requested rollout or wider, it reports success and changes nothing, so a re-run after a lost result is safe. It never removes another release from a track, and stops if the target track has a different version mid-rollout. A failed run deletes its uncommitted edit. Tests prove each refusal in section 6 by failing first. | 3 |
 | **A2 · Identity:** in the existing `offband-reporting` project, enable the Android Publisher API and create one service account, `play-publisher`, with a GitHub keyless (Workload Identity) pool. Its condition requires all of: this repo's numeric ID, the `play-release` environment, a tag ref starting `refs/tags/v`, and `workflow_ref` naming `play-publish.yml` at that tag. The environment's own deployment policy also allows only `v*` tags. No JSON key is ever created, and no Play credential exists on this machine. **Owner steps:** invite the account in Play Console, limited to this app, with "Release to production, exclude devices, and use Play App Signing" and "Release apps to testing tracks". Confirm the Internal and closed track tester lists are still who you want. | 3 |
-| **A3 · Epic verification:** a read-only dispatch lists every track and its version codes, which proves the identity works and reads the real track names. Then the negative test: a dispatch from anything but a `v*` tag must be refused. Also settles the provenance check B0 relies on: `gh attestation verify --source-ref` passes for an attested public release at its own tag and fails when given a different tag. | 2 |
+| **A3 · Epic verification (revised 2026-11-23, done):** the A2 condition admits only `play-publish.yml` at a `v*` tag, and every `v*` tag also starts a signed release, so a read-only dispatch from GitHub can't come first. Instead: (1) the Play side is proven from the owner's machine by letting `support@offband.org` impersonate `play-publisher` for minutes, running `play_release.py tracks`, then removing that grant and confirming it's refused; (2) on a throwaway branch, Google refuses a GitHub sign-in from outside `play-release` by its attribute condition, GitHub refuses a branch job that asks for `play-release`, and a test build record verifies at its own ref while a wrong ref, a wrong signer workflow and an unrecorded file are refused. The first successful GitHub sign-in is B3's first publish. Results on #1086. | 2 |
 
 ### Epic B: the publish workflow
 
@@ -136,16 +136,18 @@ Epics: A is #1082, B is #1083.
 ## 7. Verification
 
 - **Named command:** `python -m unittest discover -s tools/play`, added to a PR check.
-- **Acceptance bar:** A3's track listing and refusal seen live, then B3's first real release.
+- **Acceptance bar:** A3's track listing and refusals seen live (done 2026-11-23), then B3's first real release.
 
 **Not verified yet, and how each gets settled:**
 
 | Claim | Status | Settled by |
 |---|---|---|
-| Closed testing's API track name is `alpha`. | Docs only | A3 reads the real names |
-| A keyless GitHub token can be exchanged for a Play-scoped token. | Believed, untested | A3 |
+| Closed testing's API track name is `alpha`. | **Settled 2026-11-23:** Play lists `production`, `beta`, `alpha`, `internal`; the closed test (66) is on `alpha` | A3 |
+| `play-publisher` can read Play. | **Settled 2026-11-23:** `tracks` ran as `play-publisher` | A3 |
+| A GitHub token from outside `play-release` is refused. | **Settled 2026-11-23:** HTTP 400, "rejected by the attribute condition" | A3 |
+| A keyless GitHub token from `play-publish.yml` at a `v*` tag can be exchanged for a Play-scoped token. | Believed, untested: the condition admits nothing else, and every `v*` tag is a real release | B3's first publish |
 | A bundle already on Play can be set on another track without re-uploading. | Believed, untested | B3 |
-| `gh attestation verify --source-ref` accepts the right tag and rejects a different one. | Flag confirmed in `gh` help; behavior untested | A3, before B is built |
+| `gh attestation verify --source-ref` accepts the right ref and rejects a different one. | **Settled 2026-11-23:** own ref passes; wrong ref, wrong `--signer-workflow` and an unrecorded file fail, with `--deny-self-hosted-runners` | A3 |
 
 ## 8. Done when
 
