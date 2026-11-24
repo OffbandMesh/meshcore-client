@@ -8500,6 +8500,84 @@ abstract class AppLocalizations {
   /// **'{name} was not added. The radio didn\'t respond.'**
   String contacts_addNoReply(String name);
 
+  /// No description provided for @contacts_makeRoomTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio\'s contact list is full'**
+  String get contacts_makeRoomTitle;
+
+  /// No description provided for @contacts_makeRoomBody.
+  ///
+  /// In en, this message translates to:
+  /// **'To add {name}, one contact has to come off the radio first.'**
+  String contacts_makeRoomBody(String name);
+
+  /// No description provided for @contacts_makeRoomRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}'**
+  String contacts_makeRoomRemove(String name);
+
+  /// No description provided for @contacts_lastHeardDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =0{Last heard today} =1{Last heard 1 day ago} other{Last heard {days} days ago}}'**
+  String contacts_lastHeardDays(int days);
+
+  /// No description provided for @contacts_pruneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prune stale contacts'**
+  String get contacts_pruneTitle;
+
+  /// No description provided for @contacts_pruneDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days'**
+  String contacts_pruneDays(int days);
+
+  /// No description provided for @contacts_pruneNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts not heard in this long. Favorites are never listed, and messages are kept.'**
+  String get contacts_pruneNote;
+
+  /// No description provided for @contacts_pruneEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts have gone unheard that long.'**
+  String get contacts_pruneEmpty;
+
+  /// No description provided for @contacts_pruneRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {count}'**
+  String contacts_pruneRemove(int count);
+
+  /// No description provided for @contacts_pruneDone.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Removed 1 contact from the radio.} other{Removed {count} contacts from the radio.}}'**
+  String contacts_pruneDone(int count);
+
+  /// No description provided for @contacts_pruneStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed {done} of {total}, then stopped.'**
+  String contacts_pruneStopped(int done, int total);
+
+  /// No description provided for @contacts_removeRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was not removed: the radio didn\'t accept it (error {code}).'**
+  String contacts_removeRefused(String name, int code);
+
+  /// No description provided for @contacts_removeNoReply.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was not removed: the radio didn\'t respond.'**
+  String contacts_removeNoReply(String name);
+
   /// No description provided for @contacts_radioFullBanner.
   ///
   /// In en, this message translates to:

@@ -67,6 +67,7 @@ import 'cli_command_codec.dart';
 import 'device_population.dart';
 import 'meshcore_protocol.dart';
 import '../helpers/region_key.dart';
+import '../helpers/stale_contacts.dart' as stale;
 import '../storage/channel_region_scope_store.dart';
 import 'offband_capability_advert.dart';
 import 'offband_channel_notify.dart';
@@ -306,15 +307,40 @@ class ContactSyncShortfall {
 /// What the radio said when asked for one contact by key. (#762)
 enum ContactKeyCheckResult { onRadio, notFound, unresolved }
 
-/// How a contact add ended. A contact is kept only on [added]. (#1028)
-enum ContactAddOutcome { added, refused, noReply, notConnected }
+/// How a contact add ended. A contact is kept only on [added]. [full] means
+/// the add was not sent: on a full radio the firmware would overwrite a
+/// contact to make room, so the user chooses what goes first. (#1028)
+enum ContactAddOutcome { added, refused, noReply, notConnected, full }
+
+/// How removing a contact from the radio ended. The app drops the contact
+/// only on [removed]. (#1182)
+enum ContactRemoveOutcome { removed, refused, noReply, notConnected }
+
+class ContactRemoveResult {
+  const ContactRemoveResult(this.outcome, {this.errCode});
+  final ContactRemoveOutcome outcome;
+  final int? errCode;
+  bool get removed => outcome == ContactRemoveOutcome.removed;
+}
+
+/// How a prune ended: [removed] contacts went, then [failed] (if any) was
+/// not removed, for the reason in [failure], and the run stopped. (#1182)
+class ContactPruneResult {
+  const ContactPruneResult(this.removed, {this.failed, this.failure});
+  final int removed;
+  final Contact? failed;
+  final ContactRemoveResult? failure;
+}
 
 class ContactAddResult {
-  const ContactAddResult(this.outcome, {this.errCode});
+  const ContactAddResult(this.outcome, {this.errCode, this.name});
   final ContactAddOutcome outcome;
 
   /// The radio's error code when [outcome] is [ContactAddOutcome.refused].
   final int? errCode;
+
+  /// The contact's name, when the add got as far as knowing it.
+  final String? name;
 
   bool get added => outcome == ContactAddOutcome.added;
   bool get radioFull => errCode == errCodeTableFull;
@@ -682,6 +708,16 @@ class MeshCoreConnector extends ChangeNotifier {
 
   ContactTableNotice? _contactTableNotice;
   ContactTableNotice? get contactTableNotice => _contactTableNotice;
+
+  /// True once the radio has shown its contact table is full on this
+  /// connection, until a confirmed removal frees a slot. While true a new
+  /// contact is not sent to the radio. (#1028)
+  bool _radioContactsFull = false;
+  bool get radioContactsFull => _radioContactsFull;
+
+  /// Keys added on this connection. Never offered for pruning: a contact
+  /// just added by key has no heard time yet and would read as stale. (#1182)
+  final Set<String> _addedThisConnection = {};
 
   void dismissContactTableNotice() {
     if (_contactTableNotice == null) return;
@@ -6716,6 +6752,8 @@ class MeshCoreConnector extends ChangeNotifier {
   /// anything, and re-adding the contact brings them back. (#1028)
   void _handleContactDeletedByRadio(Uint8List frame) {
     if (frame.length < 1 + pubKeySize) return;
+    // It had to make room, so it is full again once the new contact lands.
+    _radioContactsFull = true;
     final keyHex = pubKeyToHex(frame.sublist(1, 1 + pubKeySize));
     final index = _contacts.indexWhere((c) => c.publicKeyHex == keyHex);
     if (index < 0) {
@@ -6740,6 +6778,76 @@ class MeshCoreConnector extends ChangeNotifier {
     _contactTableNotice = ContactTableNotice.removed(contact.name);
     notifyListeners();
   }
+
+  /// Removes [contact] from the radio and waits for its answer. The app drops
+  /// the contact only on OK, and keeps its DMs: a prune or a make-room choice
+  /// is not a request to delete conversations. (#1182)
+  Future<ContactRemoveResult> removeContactFromRadio(Contact contact) async {
+    if (!isConnected) {
+      return const ContactRemoveResult(ContactRemoveOutcome.notConnected);
+    }
+    final reply = await _sendAwaitingReply(
+      buildRemoveContactFrame(contact.publicKey),
+      'removal of contact ${contact.name}',
+      'ContactRemove',
+    );
+    if (!reply.answered) {
+      return const ContactRemoveResult(ContactRemoveOutcome.noReply);
+    }
+    final errCode = reply.errCode;
+    if (errCode != null) {
+      _appDebugLogService?.warn(
+        'Radio refused removing contact ${contact.name} (error $errCode); kept',
+        tag: 'ContactRemove',
+      );
+      return ContactRemoveResult(
+        ContactRemoveOutcome.refused,
+        errCode: errCode,
+      );
+    }
+    _contacts.removeWhere((c) => c.publicKeyHex == contact.publicKeyHex);
+    _knownContactKeys.remove(contact.publicKeyHex);
+    _handleDiscovery(
+      contact,
+      contact.rawPacket ?? Uint8List(0),
+      noNotify: true,
+    );
+    unawaited(_persistContacts());
+    _radioContactsFull = false;
+    _appDebugLogService?.info(
+      'Radio removed contact ${contact.name} on request; messages kept',
+      tag: 'ContactRemove',
+    );
+    notifyListeners();
+    return const ContactRemoveResult(ContactRemoveOutcome.removed);
+  }
+
+  /// Removes [contacts] one at a time, each only after the radio's OK, and
+  /// stops at the first that fails. (#1182)
+  Future<ContactPruneResult> pruneContacts(List<Contact> contacts) async {
+    var removed = 0;
+    for (final contact in contacts) {
+      final result = await removeContactFromRadio(contact);
+      if (!result.removed) {
+        return ContactPruneResult(removed, failed: contact, failure: result);
+      }
+      removed++;
+    }
+    return ContactPruneResult(removed);
+  }
+
+  /// Contacts that can be pruned: non-favorites not heard within
+  /// [olderThan], oldest first, never one added on this connection. (#1182)
+  List<Contact> staleContacts(Duration olderThan) => stale.staleContacts(
+    _contacts,
+    now: DateTime.now(),
+    olderThan: olderThan,
+    exclude: _addedThisConnection,
+  );
+
+  /// The contact to suggest removing when the radio is full. (#1028)
+  Contact? contactToMakeRoom() =>
+      stale.leastRecentlyHeard(_contacts, exclude: _addedThisConnection);
 
   Future<void> updateKnownDiscovered() async {
     if (!isConnected) return;
@@ -6780,7 +6888,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final result = await _sendContactAdd(
-      stub.name,
+      stub,
       buildUpdateContactPathFrame(
         stub.publicKey,
         // No path is known, so send an empty one and let the flood sentinel
@@ -6811,54 +6919,86 @@ class MeshCoreConnector extends ChangeNotifier {
     return result;
   }
 
-  /// Sends one `CMD_ADD_UPDATE_CONTACT` and waits for the radio's OK or ERR on
-  /// the order-matched generic-ack queue, like [_writeChannelSlot]. (#1028)
-  Future<ContactAddResult> _sendContactAdd(String name, Uint8List frame) async {
+  /// Sends one command and waits for the radio's OK or ERR on the
+  /// order-matched generic-ack queue, like [_writeChannelSlot]. Returns
+  /// `answered: false` when the frame could not go out or no reply came.
+  Future<({bool answered, int? errCode})> _sendAwaitingReply(
+    Uint8List frame,
+    String what,
+    String tag,
+  ) async {
     final reply = Completer<int?>();
-    final pending = _PendingCommandAck(
-      commandCode: cmdAddUpdateContact,
-      reply: reply,
-    );
+    final pending = _PendingCommandAck(commandCode: frame[0], reply: reply);
     // Queued before the frame goes out, so a fast reply cannot arrive first.
     _pendingGenericAckQueue.add(pending);
     try {
       await sendFrame(frame);
     } catch (e) {
       _pendingGenericAckQueue.remove(pending);
-      _appDebugLogService?.error(
-        'Contact add for $name was not sent: $e',
-        tag: 'ContactAdd',
-      );
-      return const ContactAddResult(ContactAddOutcome.noReply);
+      _appDebugLogService?.error('$what was not sent: $e', tag: tag);
+      return (answered: false, errCode: null);
     }
-    final int? errCode;
     try {
-      errCode = await reply.future.timeout(contactAddReplyTimeout);
+      final errCode = await reply.future.timeout(contactAddReplyTimeout);
+      return (answered: true, errCode: errCode);
     } on TimeoutException {
       // Dropped so a late or lost reply cannot be matched to the next command.
       _pendingGenericAckQueue.remove(pending);
+      _appDebugLogService?.warn('Radio did not answer: $what', tag: tag);
+      return (answered: false, errCode: null);
+    }
+  }
+
+  /// Sends one `CMD_ADD_UPDATE_CONTACT` and waits for the radio's answer.
+  /// A new contact is not sent while the radio is full: the firmware would
+  /// overwrite one to make room, so the user chooses what goes first. An
+  /// update to a contact the radio already holds needs no slot. (#1028)
+  Future<ContactAddResult> _sendContactAdd(
+    Contact contact,
+    Uint8List frame,
+  ) async {
+    final name = contact.name;
+    final keyHex = contact.publicKeyHex;
+    final held = _contacts.any((c) => c.publicKeyHex == keyHex);
+    if (_radioContactsFull && !held) {
       _appDebugLogService?.warn(
-        'Radio did not answer the contact add for $name; not added',
+        'Contact add for $name not sent: the radio is full and would '
+        'overwrite a contact; asking the user first',
         tag: 'ContactAdd',
       );
-      return const ContactAddResult(ContactAddOutcome.noReply);
+      return ContactAddResult(ContactAddOutcome.full, name: name);
     }
+    final reply = await _sendAwaitingReply(
+      frame,
+      'contact add for $name',
+      'ContactAdd',
+    );
+    if (!reply.answered) {
+      return ContactAddResult(ContactAddOutcome.noReply, name: name);
+    }
+    final errCode = reply.errCode;
     if (errCode == null) {
       _appDebugLogService?.info(
         'Radio accepted contact $name',
         tag: 'ContactAdd',
       );
-      return const ContactAddResult(ContactAddOutcome.added);
+      _addedThisConnection.add(keyHex);
+      return ContactAddResult(ContactAddOutcome.added, name: name);
     }
     _appDebugLogService?.warn(
       'Radio refused contact $name (error $errCode); not added',
       tag: 'ContactAdd',
     );
     if (errCode == errCodeTableFull) {
+      _radioContactsFull = true;
       _contactTableNotice = const ContactTableNotice.full();
       notifyListeners();
     }
-    return ContactAddResult(ContactAddOutcome.refused, errCode: errCode);
+    return ContactAddResult(
+      ContactAddOutcome.refused,
+      errCode: errCode,
+      name: name,
+    );
   }
 
   /// Adds a contact heard on the mesh. Kept only once the radio answers OK,
@@ -6869,7 +7009,7 @@ class MeshCoreConnector extends ChangeNotifier {
     }
 
     final result = await _sendContactAdd(
-      contact.name,
+      contact,
       buildUpdateContactPathFrame(
         contact.publicKey,
         contact.path,
@@ -9110,8 +9250,11 @@ class MeshCoreConnector extends ChangeNotifier {
           'Radio reports its contact list is full',
           tag: 'ContactSync',
         );
-        _contactTableNotice = const ContactTableNotice.full();
-        notifyListeners();
+        _radioContactsFull = true;
+        if (_contactTableNotice == null) {
+          _contactTableNotice = const ContactTableNotice.full();
+          notifyListeners();
+        }
         break;
       case pushCodeNewAdvert:
         debugPrint('Got New CONTACT');
@@ -9130,12 +9273,16 @@ class MeshCoreConnector extends ChangeNotifier {
         _hasLoadedContacts = true;
         _contactSyncUsesSinceFilter = false;
         if (wasFullSync) _finishFullContactSync();
-        if (wasFullSync && _contacts.length >= _maxContacts) {
-          _appDebugLogService?.warn(
-            'Radio contact list is full (${_contacts.length} of $_maxContacts)',
-            tag: 'ContactSync',
-          );
-          _contactTableNotice ??= const ContactTableNotice.full();
+        if (wasFullSync) {
+          _radioContactsFull = _contacts.length >= _maxContacts;
+          if (_radioContactsFull) {
+            _appDebugLogService?.warn(
+              'Radio contact list is full '
+              '(${_contacts.length} of $_maxContacts)',
+              tag: 'ContactSync',
+            );
+            _contactTableNotice ??= const ContactTableNotice.full();
+          }
         }
         _runQueuedContactRequest();
         unawaited(updateKnownDiscovered());
@@ -12300,6 +12447,8 @@ class MeshCoreConnector extends ChangeNotifier {
     _pendingGenericAckQueue.clear();
     _reactionSendQueueSequence = 0;
     _contactTableNotice = null;
+    _radioContactsFull = false;
+    _addedThisConnection.clear();
 
     _setState(MeshCoreConnectionState.disconnected);
     _scheduleReconnect();
@@ -12525,7 +12674,8 @@ class MeshCoreConnector extends ChangeNotifier {
     }
   }
 
-  void importContact(Uint8List frame) {
+  /// Adds a contact from a pasted advert. Null when the advert is malformed.
+  Future<ContactAddResult?> importContact(Uint8List frame) async {
     final packet = BufferReader(frame);
     int payloadType = 0;
     Uint8List pathBytes = Uint8List(0);
@@ -12546,7 +12696,7 @@ class MeshCoreConnector extends ChangeNotifier {
       pathBytes = packet.readBytes(pathByteLen);
     } catch (e) {
       appLogger.warn('Malformed RX frame: $e', tag: 'Connector');
-      return;
+      return null;
     }
     double? latitude;
     double? longitude;
@@ -12558,7 +12708,7 @@ class MeshCoreConnector extends ChangeNotifier {
     bool hasName = false;
     if (payloadType != payloadTypeADVERT) {
       appLogger.warn('Unexpected payload type: $payloadType', tag: 'Connector');
-      return;
+      return null;
     }
     try {
       publicKey = packet.readBytes(32);
@@ -12586,24 +12736,22 @@ class MeshCoreConnector extends ChangeNotifier {
       }
     } catch (e) {
       appLogger.warn('Malformed advert frame: $e', tag: 'Connector');
-      return;
+      return null;
     }
 
-    unawaited(
-      importDiscoveredContact(
-        Contact(
-          rawPacket: frame,
-          publicKey: publicKey,
-          receivedName: name,
-          type: type,
-          pathLength: pathBytes.isEmpty ? -1 : pathBytes.length,
-          path: Uint8List.fromList(
-            pathBytes.reversed.toList(),
-          ), // Store path in reverse for easier use in outgoing messages
-          latitude: latitude,
-          longitude: longitude,
-          lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
-        ),
+    return importDiscoveredContact(
+      Contact(
+        rawPacket: frame,
+        publicKey: publicKey,
+        receivedName: name,
+        type: type,
+        pathLength: pathBytes.isEmpty ? -1 : pathBytes.length,
+        path: Uint8List.fromList(
+          pathBytes.reversed.toList(),
+        ), // Store path in reverse for easier use in outgoing messages
+        latitude: latitude,
+        longitude: longitude,
+        lastSeen: DateTime.fromMillisecondsSinceEpoch(timestamp * 1000),
       ),
     );
   }

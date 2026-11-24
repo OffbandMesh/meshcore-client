@@ -3025,6 +3025,88 @@
       }
     }
   },
+  "contacts_makeRoomTitle": "The radio's contact list is full",
+  "contacts_makeRoomBody": "To add {name}, one contact has to come off the radio first.",
+  "@contacts_makeRoomBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_makeRoomRemove": "Remove {name}",
+  "@contacts_makeRoomRemove": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_lastHeardDays": "{days, plural, =0{Last heard today} =1{Last heard 1 day ago} other{Last heard {days} days ago}}",
+  "@contacts_lastHeardDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_pruneTitle": "Prune stale contacts",
+  "contacts_pruneDays": "{days} days",
+  "@contacts_pruneDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_pruneNote": "Contacts not heard in this long. Favorites are never listed, and messages are kept.",
+  "contacts_pruneEmpty": "No contacts have gone unheard that long.",
+  "contacts_pruneRemove": "Remove {count}",
+  "@contacts_pruneRemove": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_pruneDone": "{count, plural, =1{Removed 1 contact from the radio.} other{Removed {count} contacts from the radio.}}",
+  "@contacts_pruneDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_pruneStopped": "Removed {done} of {total}, then stopped.",
+  "@contacts_pruneStopped": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_removeRefused": "{name} was not removed: the radio didn't accept it (error {code}).",
+  "@contacts_removeRefused": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "code": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_removeNoReply": "{name} was not removed: the radio didn't respond.",
+  "@contacts_removeNoReply": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "contacts_radioFullBanner": "The radio's contact list is full. New contacts can't be added until you remove one.",
   "contacts_radioRemovedBanner": "The radio removed {name} to make room for a new contact. Your messages with {name} are kept.",
   "@contacts_radioRemovedBanner": {

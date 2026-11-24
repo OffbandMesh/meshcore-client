@@ -4994,6 +4994,77 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get contacts_makeRoomTitle => 'The radio\'s contact list is full';
+
+  @override
+  String contacts_makeRoomBody(String name) {
+    return 'To add $name, one contact has to come off the radio first.';
+  }
+
+  @override
+  String contacts_makeRoomRemove(String name) {
+    return 'Remove $name';
+  }
+
+  @override
+  String contacts_lastHeardDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Last heard $days days ago',
+      one: 'Last heard 1 day ago',
+      zero: 'Last heard today',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get contacts_pruneTitle => 'Prune stale contacts';
+
+  @override
+  String contacts_pruneDays(int days) {
+    return '$days days';
+  }
+
+  @override
+  String get contacts_pruneNote =>
+      'Contacts not heard in this long. Favorites are never listed, and messages are kept.';
+
+  @override
+  String get contacts_pruneEmpty => 'No contacts have gone unheard that long.';
+
+  @override
+  String contacts_pruneRemove(int count) {
+    return 'Remove $count';
+  }
+
+  @override
+  String contacts_pruneDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Removed $count contacts from the radio.',
+      one: 'Removed 1 contact from the radio.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String contacts_pruneStopped(int done, int total) {
+    return 'Removed $done of $total, then stopped.';
+  }
+
+  @override
+  String contacts_removeRefused(String name, int code) {
+    return '$name was not removed: the radio didn\'t accept it (error $code).';
+  }
+
+  @override
+  String contacts_removeNoReply(String name) {
+    return '$name was not removed: the radio didn\'t respond.';
+  }
+
+  @override
   String get contacts_radioFullBanner =>
       'The radio\'s contact list is full. New contacts can\'t be added until you remove one.';
 
