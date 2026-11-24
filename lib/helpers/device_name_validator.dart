@@ -24,4 +24,6 @@ List<String> forbiddenCharsIn(String name) =>
     forbiddenDeviceNameChars.where(name.contains).toList();
 
 /// True when [name] carries none of the forbidden characters.
-bool isValidDeviceName(String name) => forbiddenCharsIn(name).isEmpty;
+/// DEMO for #1173 (never merged): also rejects names over 31 characters.
+bool isValidDeviceName(String name) =>
+    forbiddenCharsIn(name).isEmpty && name.length <= 31;
