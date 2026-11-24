@@ -278,6 +278,7 @@ class MessageStore {
       'snr': msg.snr,
       'rssi': msg.rssi,
       'isFloodRoute': msg.isFloodRoute,
+      'radioErrorCode': msg.radioErrorCode,
     };
   }
 
@@ -343,6 +344,7 @@ class MessageStore {
       snr: (json['snr'] as num?)?.toDouble(),
       rssi: json['rssi'] as int?,
       isFloodRoute: json['isFloodRoute'] as bool?,
+      radioErrorCode: json['radioErrorCode'] as int?,
     );
   }
 }

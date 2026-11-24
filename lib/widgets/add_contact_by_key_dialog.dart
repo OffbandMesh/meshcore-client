@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../l10n/l10n.dart';
-import '../helpers/snack_bar_builder.dart';
 import '../models/contact.dart';
 import '../screens/contact_qr_scanner_screen.dart';
+import 'contact_add_feedback.dart';
 
 /// Adds a contact from an identity alone: a public key, a name and a type.
 ///
@@ -130,18 +130,11 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
 
     setState(() => _submitting = true);
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
-    final added = await connector.addContactByKey(stub);
+    final result = await connector.addContactByKey(stub);
     if (!mounted) return;
 
     Navigator.of(context).pop();
-    showDismissibleSnackBar(
-      context,
-      content: Text(
-        added
-            ? l10n.contacts_addByKeyAdded(stub.name)
-            : l10n.contacts_addByKeyFailed,
-      ),
-    );
+    showContactAddResult(context, result, stub.name);
   }
 
   @override
