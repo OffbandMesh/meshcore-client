@@ -5030,6 +5030,39 @@ class AppLocalizationsIt extends AppLocalizations {
       'Could not add the contact. Check the radio connection.';
 
   @override
+  String contacts_addRadioFull(String name) {
+    return '$name was not added. The radio\'s contact list is full. Remove a contact in Contacts to make room.';
+  }
+
+  @override
+  String contacts_addRadioRefused(String name, int code) {
+    return '$name was not added. The radio didn\'t accept it (error $code).';
+  }
+
+  @override
+  String contacts_addNoReply(String name) {
+    return '$name was not added. The radio didn\'t respond.';
+  }
+
+  @override
+  String get contacts_radioFullBanner =>
+      'The radio\'s contact list is full. New contacts can\'t be added until you remove one.';
+
+  @override
+  String contacts_radioRemovedBanner(String name) {
+    return 'The radio removed $name to make room for a new contact. Your messages with $name are kept.';
+  }
+
+  @override
+  String get chat_sendRefusedNotFound =>
+      'Not sent: this contact isn\'t on the radio. Add it again to message it.';
+
+  @override
+  String chat_sendRefused(int code) {
+    return 'Not sent: the radio didn\'t accept it (error $code).';
+  }
+
+  @override
   String get contacts_myContactQr => 'My contact QR';
 
   @override

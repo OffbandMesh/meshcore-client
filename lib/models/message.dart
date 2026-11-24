@@ -67,6 +67,11 @@ class Message {
   /// screen's "direct (routed)" vs "flood, N hops" label. (#438)
   final bool? isFloodRoute;
 
+  /// The radio's error code when it refused this outgoing message outright
+  /// (RESP_CODE_ERR instead of RESP_CODE_SENT), so a failed bubble can say
+  /// why. Null otherwise. (#1028)
+  final int? radioErrorCode;
+
   Message({
     required this.senderKey,
     required this.text,
@@ -97,6 +102,7 @@ class Message {
     this.snr,
     this.rssi,
     this.isFloodRoute,
+    this.radioErrorCode,
   }) : messageId =
            messageId ??
            '${timestamp.millisecondsSinceEpoch}_${pubKeyToHex(senderKey)}_${text.hashCode}',
@@ -133,6 +139,7 @@ class Message {
     double? snr,
     int? rssi,
     bool? isFloodRoute,
+    Object? radioErrorCode = _unset,
   }) {
     return Message(
       senderKey: senderKey,
@@ -173,6 +180,12 @@ class Message {
       snr: snr ?? this.snr,
       rssi: rssi ?? this.rssi,
       isFloodRoute: isFloodRoute ?? this.isFloodRoute,
+      // A resend moves the status off failed, and the old reason goes with it.
+      radioErrorCode: radioErrorCode == _unset
+          ? (status == null || status == MessageStatus.failed
+                ? this.radioErrorCode
+                : null)
+          : radioErrorCode as int?,
     );
   }
 

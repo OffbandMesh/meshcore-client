@@ -8482,6 +8482,48 @@ abstract class AppLocalizations {
   /// **'Could not add the contact. Check the radio connection.'**
   String get contacts_addByKeyFailed;
 
+  /// No description provided for @contacts_addRadioFull.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was not added. The radio\'s contact list is full. Remove a contact in Contacts to make room.'**
+  String contacts_addRadioFull(String name);
+
+  /// No description provided for @contacts_addRadioRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was not added. The radio didn\'t accept it (error {code}).'**
+  String contacts_addRadioRefused(String name, int code);
+
+  /// No description provided for @contacts_addNoReply.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was not added. The radio didn\'t respond.'**
+  String contacts_addNoReply(String name);
+
+  /// No description provided for @contacts_radioFullBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio\'s contact list is full. New contacts can\'t be added until you remove one.'**
+  String get contacts_radioFullBanner;
+
+  /// No description provided for @contacts_radioRemovedBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'The radio removed {name} to make room for a new contact. Your messages with {name} are kept.'**
+  String contacts_radioRemovedBanner(String name);
+
+  /// No description provided for @chat_sendRefusedNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent: this contact isn\'t on the radio. Add it again to message it.'**
+  String get chat_sendRefusedNotFound;
+
+  /// No description provided for @chat_sendRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent: the radio didn\'t accept it (error {code}).'**
+  String chat_sendRefused(int code);
+
   /// No description provided for @contacts_myContactQr.
   ///
   /// In en, this message translates to:

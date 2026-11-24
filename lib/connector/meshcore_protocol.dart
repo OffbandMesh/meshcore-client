@@ -503,6 +503,10 @@ const int errCodeUnsupportedCmd = 1;
 /// not hold. (#762)
 const int errCodeNotFound = 2;
 
+/// `ERR_CODE_TABLE_FULL`: e.g. `CMD_ADD_UPDATE_CONTACT` when the radio's
+/// contact table has no free slot. (#1028)
+const int errCodeTableFull = 3;
+
 /// `ERR_CODE_BAD_STATE`: e.g. `CMD_SET_CHANNEL` putting a different channel
 /// over an occupied slot, which firmware with OffbandMesh/meshcore-firmware#1864
 /// refuses. (#1026)
@@ -957,6 +961,10 @@ const int pushCodeTraceData = 0x89;
 const int pushCodeNewAdvert = 0x8A;
 const int pushCodeTelemetryResponse = 0x8B;
 const int pushCodeBinaryResponse = 0x8C;
+// #1028: the radio removed a contact to make room ([code][pub_key 32]), or has
+// no room for one ([code]).
+const int pushCodeContactDeleted = 0x8F;
+const int pushCodeContactsFull = 0x90;
 const int pushCodeChannelsChanged =
     0x91; // #429 part A: device channel table changed; re-poll getChannels
 

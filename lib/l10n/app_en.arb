@@ -2998,6 +2998,51 @@
     }
   },
   "contacts_addByKeyFailed": "Could not add the contact. Check the radio connection.",
+  "contacts_addRadioFull": "{name} was not added. The radio's contact list is full. Remove a contact in Contacts to make room.",
+  "@contacts_addRadioFull": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_addRadioRefused": "{name} was not added. The radio didn't accept it (error {code}).",
+  "@contacts_addRadioRefused": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "code": {
+        "type": "int"
+      }
+    }
+  },
+  "contacts_addNoReply": "{name} was not added. The radio didn't respond.",
+  "@contacts_addNoReply": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contacts_radioFullBanner": "The radio's contact list is full. New contacts can't be added until you remove one.",
+  "contacts_radioRemovedBanner": "The radio removed {name} to make room for a new contact. Your messages with {name} are kept.",
+  "@contacts_radioRemovedBanner": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_sendRefusedNotFound": "Not sent: this contact isn't on the radio. Add it again to message it.",
+  "chat_sendRefused": "Not sent: the radio didn't accept it (error {code}).",
+  "@chat_sendRefused": {
+    "placeholders": {
+      "code": {
+        "type": "int"
+      }
+    }
+  },
   "contacts_myContactQr": "My contact QR",
   "contacts_myContactQrInstructions": "Have them scan this, or send them the link below. It works even if they have never heard your advert.",
   "contacts_contactLinkCopied": "Contact link copied",
