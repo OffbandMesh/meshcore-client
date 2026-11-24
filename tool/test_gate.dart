@@ -37,6 +37,12 @@ String? prType(String title) {
   return match?.group(1)!.toLowerCase();
 }
 
+/// A `feat` PR adds a capability the base does not have, so there may be no
+/// old behavior for its tests to fail. Owner decision 2026-11-23: for a
+/// feature, a test that cannot compile against the base counts in check 2.
+/// Everything else, fixes above all, must fail on the base for real.
+bool isNewCapability(String title) => prType(title) == 'feat';
+
 /// App code the gate holds to the rule. Translations and their generated
 /// Dart are mechanical and excluded.
 bool isAppCode(String path) =>
@@ -159,7 +165,10 @@ bool _isPseudoTest(String name) =>
 
 /// Reads `flutter test --reporter json` output from a run of the PR's test
 /// files against the base branch's code.
-EvaluateDecision evaluateResults(String jsonLines) {
+EvaluateDecision evaluateResults(
+  String jsonLines, {
+  bool newCapability = false,
+}) {
   final names = <int, String>{};
   final suitePaths = <int, String>{};
   final testSuite = <int, int>{};
@@ -226,18 +235,34 @@ EvaluateDecision evaluateResults(String jsonLines) {
       'See the step log for the runner output.',
     );
   }
+  final unloadableList = unloadable.map((p) => '  $p').join('\n');
   if (failing.isNotEmpty) {
     final list = failing.map((n) => '  $n').join('\n');
+    final alsoNotCompiled = unloadable.isEmpty
+        ? ''
+        : '\nThese files also do not compile against the base code:\n'
+              '$unloadableList';
     return EvaluateDecision(
       true,
       'Check 2 passed: ${failing.length} test(s) fail on the base code, so '
-      'they guard this change:\n$list',
+      'they guard this change:\n$list$alsoNotCompiled',
+    );
+  }
+  if (newCapability && unloadable.isNotEmpty) {
+    return EvaluateDecision(
+      true,
+      'Check 2 passed for a new capability (feat): these test files need code '
+      'the base does not have, so they cannot pass without this change:\n'
+      '$unloadableList\n'
+      'WARNING: this is the weaker rule for new capabilities. A fix must not '
+      'be titled feat to use it: a fix needs a test that fails on the base '
+      'code itself.',
     );
   }
   final notCompiled = unloadable.isEmpty
       ? ''
       : '\nThese files do not compile against the base code, which proves '
-            'nothing about behavior:\n${unloadable.map((p) => '  $p').join('\n')}';
+            'nothing about behavior:\n$unloadableList';
   if (realTestsRun == 0) {
     return EvaluateDecision(
       false,
@@ -296,6 +321,7 @@ void main(List<String> args) {
     case 'evaluate':
       final decision = evaluateResults(
         File(_arg(args, '--results')).readAsStringSync(),
+        newCapability: isNewCapability(Platform.environment['PR_TITLE'] ?? ''),
       );
       _appendTo(summary, '${decision.message}\n');
       stdout.writeln(decision.message);

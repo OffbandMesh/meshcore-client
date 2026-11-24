@@ -87,7 +87,39 @@ void main() {
       run.suite('/repo/test/new_api_test.dart', compiles: false);
       final s = run.suite('/repo/test/behavior_test.dart');
       run.test(s, 'old behavior is wrong', 'failure');
-      expect(evaluateResults(run.finish()).passed, isTrue);
+      final d = evaluateResults(run.finish());
+      expect(d.passed, isTrue);
+      expect(d.message, contains('/repo/test/new_api_test.dart'));
+    });
+  });
+
+  // Owner decision 2026-11-23: a new capability has no old behavior to fail,
+  // so for a `feat` PR a test that cannot compile against the base counts.
+  // Fixes stay strict.
+  group('check 2 passes for a new capability', () {
+    test('when its tests need code the base does not have', () {
+      final run = _Run();
+      run.suite('/repo/test/new_widget_test.dart', compiles: false);
+      final d = evaluateResults(run.finish(), newCapability: true);
+      expect(d.passed, isTrue);
+      expect(d.message, contains('new capability'));
+      expect(d.message, contains('/repo/test/new_widget_test.dart'));
+      expect(d.message, contains('A fix must not be titled feat'));
+    });
+
+    test('when one file needs new code and another passes on the base', () {
+      final run = _Run();
+      run.suite('/repo/test/new_widget_test.dart', compiles: false);
+      final s = run.suite('/repo/test/old_test.dart');
+      run.test(s, 'unchanged behavior', 'success');
+      expect(evaluateResults(run.finish(), newCapability: true).passed, isTrue);
+    });
+
+    test('when a real test fails on the base, as for a fix', () {
+      final run = _Run();
+      final s = run.suite('/repo/test/a_test.dart');
+      run.test(s, 'fails on the base', 'failure');
+      expect(evaluateResults(run.finish(), newCapability: true).passed, isTrue);
     });
   });
 
@@ -164,6 +196,38 @@ void main() {
         '{"type":"done","success":false}',
       ];
       final d = evaluateResults(lines.join('\n'));
+      expect(d.passed, isFalse);
+    });
+
+    test('a fix whose tests only fail to compile is still refused', () {
+      final run = _Run();
+      run.suite('/repo/test/new_api_test.dart', compiles: false);
+      final d = evaluateResults(run.finish(), newCapability: false);
+      expect(d.passed, isFalse);
+    });
+
+    test('a feature whose compiled tests all pass, none new, fails', () {
+      final run = _Run();
+      final s = run.suite('/repo/test/a_test.dart');
+      run.test(s, 'token', 'success');
+      final d = evaluateResults(run.finish(), newCapability: true);
+      expect(d.passed, isFalse);
+    });
+
+    test('a feature with only a failing setUpAll hook fails', () {
+      final run = _Run();
+      final s = run.suite('/repo/test/a_test.dart');
+      run.failedSetUpAll(s);
+      expect(
+        evaluateResults(run.finish(), newCapability: true).passed,
+        isFalse,
+      );
+    });
+
+    test('a feature run that never finished fails', () {
+      final run = _Run();
+      run.suite('/repo/test/new_api_test.dart', compiles: false);
+      final d = evaluateResults(run.finish(done: false), newCapability: true);
       expect(d.passed, isFalse);
     });
 
