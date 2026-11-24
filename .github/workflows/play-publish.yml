@@ -1,0 +1,128 @@
+name: Play publish
+
+# Puts a tagged release on Google Play: Internal, External (closed testing,
+# Play's `alpha`) or production (#1053, #1088). The first run for a tag uploads
+# its bundle; later runs move that same bundle to another track, so every track
+# gets the same bytes and no new version code.
+#
+# Run it from the tag: Actions > Play publish > Run workflow, "Use workflow
+# from" the v tag, then pick target and rollout. The owner approves play-release.
+#
+# SECURITY: keyless; no Play credential exists anywhere. Google accepts only
+# this workflow, at a v* tag, in the play-release environment, from this repo
+# (#1085). `verify` holds no Google access and runs before the approval, so a
+# bad tag or bundle is refused without asking anyone. NEVER add a pull_request
+# or push trigger.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where it goes: internal, external (closed testing) or production"
+        type: choice
+        required: true
+        options: [internal, external, production]
+      rollout:
+        description: "draft, or a percentage. Internal and External take draft or 100."
+        type: choice
+        required: true
+        options: ["draft", "10", "25", "50", "100"]
+
+concurrency:
+  group: play-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    outputs:
+      aab_sha256: ${{ steps.bundle.outputs.sha256 }}
+    steps:
+      - name: Refuse anything but a v tag
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) ;;
+            *) echo "::error::Run this from a v* tag, not $GITHUB_REF"; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuse a tag whose commit isn't on main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main"
+            exit 1
+          fi
+
+      - name: Fetch the bundle from the tag's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern app-release.aab
+
+      - name: Refuse a bundle the signed run at this tag didn't build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify app-release.aab \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-signed.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
+
+      - id: bundle
+        run: echo "sha256=$(sha256sum app-release.aab | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: play-release   # required reviewer, v* tags only; do not remove
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the same bundle verify checked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED: ${{ needs.verify.outputs.aab_sha256 }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern app-release.aab
+          ACTUAL=$(sha256sum app-release.aab | cut -d' ' -f1)
+          if [ -z "$EXPECTED" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::The release's bundle changed after verify: $EXPECTED then, $ACTUAL now"
+            exit 1
+          fi
+
+      - id: google
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/166380075966/locations/global/workloadIdentityPools/github/providers/github-actions
+          service_account: play-publisher@offband-reporting.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+
+      - name: Publish
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+          TARGET: ${{ inputs.target }}
+          ROLLOUT: ${{ inputs.rollout }}
+        run: >-
+          python3 tools/play/play_release.py publish --aab app-release.aab
+          --tag "$GITHUB_REF_NAME" --target "$TARGET" --rollout "$ROLLOUT"
+
+      - name: Tracks after
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+        run: python3 tools/play/play_release.py tracks
