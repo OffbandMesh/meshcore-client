@@ -51,6 +51,13 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     environment: release-signing   # required-reviewer gate; do not remove
+    # id-token and attestations are only for the AAB's provenance record
+    # (#1087). Google refuses this job's token: its condition requires the
+    # play-release environment and play-publish.yml (#1085).
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -173,6 +180,13 @@ jobs:
             exit 1
           fi
           echo "AAB signing certificate verified: ${AAB_SHA}"
+
+      # play-publish.yml sends only a bundle this record vouches for: built by
+      # this workflow, at this tag, on a GitHub-hosted runner (#1087).
+      - name: Record the AAB's provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build/app/outputs/bundle/release/app-release.aab
 
       - name: Stage signed artifacts
         run: |
