@@ -2,7 +2,7 @@
 
 Each refusal in PLAN.md section 6 that the tool owns has a test here. The
 workflow-level rows (identity condition, tag on main, release asset present,
-provenance) belong to play-publish.yml and are tested there (#1087, #1088).
+provenance) belong to play-publish.yml; test_workflows.py guards them (#1087, #1088).
 """
 
 from __future__ import annotations
