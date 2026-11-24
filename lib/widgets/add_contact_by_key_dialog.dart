@@ -130,11 +130,14 @@ class _AddContactByKeyDialogState extends State<_AddContactByKeyDialog> {
 
     setState(() => _submitting = true);
     final connector = Provider.of<MeshCoreConnector>(context, listen: false);
-    final result = await connector.addContactByKey(stub);
+    await addContactWithFeedback(
+      context,
+      connector,
+      stub.name,
+      () => connector.addContactByKey(stub),
+    );
     if (!mounted) return;
-
     Navigator.of(context).pop();
-    showContactAddResult(context, result, stub.name);
   }
 
   @override

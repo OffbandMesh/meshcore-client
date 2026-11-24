@@ -36,6 +36,7 @@ import '../widgets/repeater_login_dialog.dart';
 import '../widgets/room_login_dialog.dart';
 import '../widgets/sync_progress_overlay.dart';
 import '../widgets/add_contact_by_key_dialog.dart';
+import '../widgets/contact_add_feedback.dart';
 import '../widgets/contact_verification_badge.dart';
 import '../widgets/my_contact_qr_dialog.dart';
 import '../widgets/unread_badge.dart';
@@ -45,6 +46,7 @@ import 'chat_screen.dart';
 import 'contact_qr_scanner_screen.dart';
 import 'discovery_screen.dart';
 import 'map_screen.dart';
+import 'prune_contacts_screen.dart';
 import 'repeater_hub_screen.dart';
 import 'settings_screen.dart';
 
@@ -300,8 +302,13 @@ class _ContactsScreenState extends State<ContactsScreen>
     try {
       final bytes = hex2Uint8List(hexString);
       final importContactFrame = buildImportContactFrame(bytes);
-      _pendingOperations.add(ContactOperationType.import);
-      connector.importContact(importContactFrame);
+      if (!mounted) return;
+      await addContactWithFeedback(
+        context,
+        connector,
+        '',
+        () => connector.importContact(importContactFrame),
+      );
     } catch (e) {
       if (mounted) {
         showDismissibleSnackBar(
@@ -452,6 +459,21 @@ class _ContactsScreenState extends State<ContactsScreen>
                   ],
                 ),
                 onTap: () => showMyContactQrDialog(context),
+              ),
+              PopupMenuItem(
+                child: Row(
+                  children: [
+                    const Icon(Icons.cleaning_services_outlined),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.contacts_pruneTitle),
+                  ],
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PruneContactsScreen(),
+                  ),
+                ),
               ),
             ],
             icon: const Icon(Icons.more_vert),
