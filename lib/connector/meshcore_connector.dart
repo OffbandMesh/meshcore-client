@@ -5293,6 +5293,23 @@ class MeshCoreConnector extends ChangeNotifier {
     if (!isConnected) {
       throw Exception("Not connected to a MeshCore device");
     }
+    // Registered before the write: a Bluetooth write can return after the
+    // radio's reply has been handled, and a reply that finds nothing waiting
+    // is lost while the late entry takes the next command's reply. (#1028)
+    final pending = _trackPendingGenericAck(
+      data,
+      channelSendQueueId: channelSendQueueId,
+      expectsGenericAck: expectsGenericAck,
+    );
+    try {
+      await _writeFrame(data);
+    } catch (_) {
+      if (pending != null) _pendingGenericAckQueue.remove(pending);
+      rethrow;
+    }
+  }
+
+  Future<void> _writeFrame(Uint8List data) async {
     final override = sendFrameOverrideForTest;
     if (override != null) {
       override(data);
@@ -5324,11 +5341,6 @@ class MeshCoreConnector extends ChangeNotifier {
         withoutResponse: canWriteWithoutResponse,
       );
     }
-    _trackPendingGenericAck(
-      data,
-      channelSendQueueId: channelSendQueueId,
-      expectsGenericAck: expectsGenericAck,
-    );
   }
 
   Future<void> requestBatteryStatus({bool force = false}) async {
@@ -12454,18 +12466,18 @@ class MeshCoreConnector extends ChangeNotifier {
     _scheduleReconnect();
   }
 
-  void _trackPendingGenericAck(
+  _PendingCommandAck? _trackPendingGenericAck(
     Uint8List data, {
     String? channelSendQueueId,
     required bool expectsGenericAck,
   }) {
-    if (!expectsGenericAck || data.isEmpty) return;
-    _pendingGenericAckQueue.add(
-      _PendingCommandAck(
-        commandCode: data[0],
-        channelSendQueueId: channelSendQueueId,
-      ),
+    if (!expectsGenericAck || data.isEmpty) return null;
+    final pending = _PendingCommandAck(
+      commandCode: data[0],
+      channelSendQueueId: channelSendQueueId,
     );
+    _pendingGenericAckQueue.add(pending);
+    return pending;
   }
 
   String _nextReactionSendQueueId() {
