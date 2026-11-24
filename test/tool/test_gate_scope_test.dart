@@ -158,6 +158,17 @@ void main() {
     });
   });
 
+  group('isNewCapability', () {
+    test('only a feat title is a new capability', () {
+      expect(isNewCapability('feat(#1): x'), isTrue);
+      expect(isNewCapability('Feat!: x'), isTrue);
+      expect(isNewCapability('fix(#1): x'), isFalse);
+      expect(isNewCapability('perf: x'), isFalse);
+      expect(isNewCapability('a feat with no type'), isFalse);
+      expect(isNewCapability(''), isFalse);
+    });
+  });
+
   group('exempt types', () {
     for (final type in exemptTypes) {
       test('$type is exempt and says so', () {

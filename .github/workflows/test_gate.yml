@@ -3,7 +3,9 @@ name: Test gate
 # #1173: every fix and every new capability ships with a test that fails
 # without it. Check 1: a change to lib/ needs an added or changed *_test.dart.
 # Check 2: those test files, run against the base branch's lib/, must include
-# a real test that fails there. Logic and messages: tool/test_gate.dart.
+# a real test that fails there. For a feat PR only, a test file that cannot
+# compile against the base also counts (owner decision 2026-11-23). Logic and
+# messages: tool/test_gate.dart.
 #
 # No skip flag or label, by design (#927). The only exemption is a PR title
 # whose conventional type claims no behavior change, and it is printed in the
@@ -94,7 +96,14 @@ jobs:
             echo "::error::Gate self-check: a hook or compile failure was counted as proof. The runner's JSON format has changed; fix tool/test_gate.dart."
             exit 1
           fi
-          echo "Gate self-check passed."
+          # The feat rule reads compile failures from the same output, so it
+          # gets its own known verdict: a feat PR passes on a compile failure.
+          if ! PR_TITLE="feat: gate self-check" dart run tool/test_gate.dart \
+              evaluate --results "$RUNNER_TEMP/canary_none.jsonl"; then
+            echo "::error::Gate self-check: a compile failure was not recognized for a feat PR. The runner's JSON format has changed; fix tool/test_gate.dart."
+            exit 1
+          fi
+          echo "Gate self-check passed (strict and feat readings)."
 
       - name: "Check 2: put back the base branch's code"
         if: steps.scope.outputs.evaluate == 'true'
@@ -106,8 +115,14 @@ jobs:
           tr '\0' '\n' < "$RUNNER_TEMP/entries.bin"
           dart run build_runner build --delete-conflicting-outputs
 
+      # A feat PR may count a test that cannot compile against the base (a
+      # new capability has no old behavior to fail); every other type must
+      # fail there for real. The self-check above runs without PR_TITLE, so
+      # it always checks the strict reading.
       - name: "Check 2: the changed tests must fail on the base code"
         if: steps.scope.outputs.evaluate == 'true'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -u
           # Failing tests are the expected outcome here, so the runner's exit
