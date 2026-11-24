@@ -25,3 +25,6 @@ List<String> forbiddenCharsIn(String name) =>
 
 /// True when [name] carries none of the forbidden characters.
 bool isValidDeviceName(String name) => forbiddenCharsIn(name).isEmpty;
+
+/// DEMO for #1173 (never merged): a new function the old code does not have.
+bool isTooLongDeviceName(String name) => name.length > 31;
