@@ -418,6 +418,7 @@ class MeshCoreConnector extends ChangeNotifier {
   final List<ScanResult> _scanResults = [];
   final List<ScanResult> _systemScanResults = [];
   final List<Contact> _contacts = [];
+  bool _contactsFullLogged = false;
   final List<Contact> _discoveredContacts = [];
   final List<Channel> _channels = [];
   final Map<String, List<Message>> _conversations = {};
@@ -5237,6 +5238,7 @@ class MeshCoreConnector extends ChangeNotifier {
     _deviceDisplayName = null;
     _deviceId = null;
     _contacts.clear();
+    _contactsFullLogged = false;
     _customNames.clear(); // per radio: none may outlive the link (#750, T37b)
     _discoveredContacts.clear();
     _conversations.clear();
@@ -5859,11 +5861,14 @@ class MeshCoreConnector extends ChangeNotifier {
     _recoveryDelivered.addAll(_contactSyncDeliveredKeys);
     if (declared != null) _recoveryDeclared = declared;
     if (isContactSyncComplete(declared: declared, received: received)) {
-      final before = _contacts.length;
+      final dropped = _contacts
+          .where((c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex))
+          .toList();
       _contacts.removeWhere(
         (c) => !_contactSyncDeliveredKeys.contains(c.publicKeyHex),
       );
-      final removed = before - _contacts.length;
+      _logContactRemovals('complete sync did not include it', dropped);
+      final removed = dropped.length;
       if (removed > 0) {
         _appDebugLogService?.info(
           'Contact sync complete ($received of $declared): removed $removed '
@@ -5997,7 +6002,11 @@ class MeshCoreConnector extends ChangeNotifier {
     final accounted = _recoveryDelivered.length;
     if (declared != null && accounted >= declared) {
       final gone = Set<String>.of(_recoveryGone);
+      final dropped = _contacts
+          .where((c) => gone.contains(c.publicKeyHex))
+          .toList();
       _contacts.removeWhere((c) => gone.contains(c.publicKeyHex));
+      _logContactRemovals('radio answered not found', dropped);
       _appDebugLogService?.info(
         'Contact recovery complete ($accounted of $declared): removed '
         '${gone.length} contact(s) the radio no longer holds',
@@ -6041,8 +6050,12 @@ class MeshCoreConnector extends ChangeNotifier {
   /// The owner chose the radio's list after a short sync: drop what no sync on
   /// this connection delivered (confirmed gone, or never sent by the radio).
   Future<void> resolveContactSyncUseRadio() async {
-    final removed = contactSyncUndeliveredCount;
+    final dropped = _contacts
+        .where((c) => !_recoveryDelivered.contains(c.publicKeyHex))
+        .toList();
+    final removed = dropped.length;
     _contacts.removeWhere((c) => !_recoveryDelivered.contains(c.publicKeyHex));
+    _logContactRemovals('owner chose the radio list', dropped);
     _contactSyncDecisionPending = false;
     _contactSyncShortfall = null;
     _appDebugLogService?.warn(
@@ -6051,6 +6064,26 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     notifyListeners();
     await _persistContacts();
+  }
+
+  /// One line per contact the app drops or asks the radio to delete, so a
+  /// contact that disappears can be traced to what took it (#1170).
+  void _logContactRemovals(String path, Iterable<Contact> removed) {
+    for (final c in removed) {
+      _appDebugLogService?.warn(
+        'Contact removed ($path): ${_describeContact(c.publicKeyHex, c)}',
+        tag: 'ContactSync',
+      );
+    }
+  }
+
+  String _describeContact(String keyHex, Contact? contact) =>
+      '"${contact?.name ?? 'unknown'}" key ${keyHex.substring(0, 8)}'
+      '${contact?.isFavorite == true ? ', favorite' : ''}, radio $_radioForLog';
+
+  String get _radioForLog {
+    final prefix = AppSettingsService.radioScopePrefix(selfPublicKeyHex);
+    return prefix.isEmpty ? 'unknown' : prefix;
   }
 
   void dismissContactSyncShortfall() {
@@ -6748,9 +6781,13 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> removeContact(Contact contact) async {
+  Future<void> removeContact(
+    Contact contact, {
+    String reason = 'user delete',
+  }) async {
     if (!isConnected) return;
 
+    _logContactRemovals(reason, [contact]);
     _handleDiscovery(
       contact,
       contact.rawPacket ?? Uint8List(0),
@@ -6786,7 +6823,8 @@ class MeshCoreConnector extends ChangeNotifier {
     final index = _contacts.indexWhere((c) => c.publicKeyHex == keyHex);
     if (index < 0) {
       _appDebugLogService?.info(
-        'Radio removed a contact to make room that this app did not hold',
+        'Radio overwrote contact ${_describeContact(keyHex, null)} to make '
+        'room; this app did not hold it',
         tag: 'ContactSync',
       );
       return;
@@ -6800,7 +6838,8 @@ class MeshCoreConnector extends ChangeNotifier {
     );
     unawaited(_persistContacts());
     _appDebugLogService?.warn(
-      'Radio removed contact ${contact.name} to make room',
+      'Radio overwrote contact ${_describeContact(keyHex, contact)} to make '
+      'room; removed here too, messages kept',
       tag: 'ContactSync',
     );
     _contactTableNotice = ContactTableNotice.removed(contact.name);
@@ -9274,10 +9313,16 @@ class MeshCoreConnector extends ChangeNotifier {
         _handleContactDeletedByRadio(frame);
         break;
       case pushCodeContactsFull:
-        _appDebugLogService?.warn(
-          'Radio reports its contact list is full',
-          tag: 'ContactSync',
-        );
+        // The radio sends this for every node it cannot add, so a busy mesh
+        // would flood the log: once per connection is enough. (Gemini)
+        if (!_contactsFullLogged) {
+          _contactsFullLogged = true;
+          _appDebugLogService?.warn(
+            'Radio contact table is full: a new contact was not saved (radio '
+            '$_radioForLog). Repeats on this connection are not logged',
+            tag: 'ContactSync',
+          );
+        }
         _radioContactsFull = true;
         if (_contactTableNotice == null) {
           _contactTableNotice = const ContactTableNotice.full();
@@ -10245,7 +10290,7 @@ class MeshCoreConnector extends ChangeNotifier {
           tag: 'Connector',
         );
         notifyListeners();
-        removeContact(contactTmp);
+        removeContact(contactTmp, reason: "contact has this radio's own key");
         return;
       }
       final contact = getFromDiscovered(contactTmp);
@@ -13002,6 +13047,14 @@ class MeshCoreConnector extends ChangeNotifier {
       if (frame.length > 2) {
         _autoAddMaxHops = reader.readByte();
       }
+      String onOff(bool on) => on ? 'on' : 'off';
+      _appDebugLogService?.info(
+        'Radio $_radioForLog auto-add: overwrite oldest ${onOff(_overwriteOldest)}, chat '
+        '${onOff(_autoAddUsers)}, repeater ${onOff(_autoAddRepeaters)}, room '
+        '${onOff(_autoAddRoomServers)}, sensor ${onOff(_autoAddSensors)}, '
+        'max hops $_autoAddMaxHops',
+        tag: 'ContactSync',
+      );
     } catch (e) {
       appLogger.error('Failed to parse auto-add config: $e', tag: 'Connector');
     }
