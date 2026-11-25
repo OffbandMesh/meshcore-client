@@ -27,7 +27,7 @@
 |---|---|---|---|
 | 1 | Logs leave the app only by Share (mobile), Save As (desktop) or download (web). | `lib/utils/log_export.dart` | The user has to email the file or attach it somewhere. That's the step that loses the log. |
 | 2 | Every frame in and out is written to the log file as raw hex, with no redaction. | `BleDebugLogService.logFrame` writes `frame.map(...toRadixString(16))` for every frame; the owner's Windows log shows `TX CMD_REMOVE_CONTACT 0f 73 60 ...` | Raw frames are what diagnosis runs on (the #1028 reply race was found from them). They also carry passwords and PINs, and today's Share sends those too. |
-| 3 | Some frames carry passwords and PINs. | `meshcore_protocol.dart`: `cmdSendLogin` 26 (repeater and room password), `cmdSetDevicePin` 37; Wi-Fi config sub-codes (#837); CLI text such as `password ...`. Channel keys (`cmdSetChannel` 32, `respCodeChannelInfo` 18) also appear, and stay: they're needed for diagnosis (#1128), and the file is encrypted to the owner. The radio's private key appears in `cmdExportPrivateKey` 23, `respCodePrivateKey` 14 and `cmdImportPrivateKey` 24 (choice 4). | Blanking only passwords and PINs keeps the log fully useful. B1 confirms the full list. |
+| 3 | Some frames carry passwords and PINs. | `meshcore_protocol.dart`: `cmdSendLogin` 26 (repeater and room password), `cmdSetDevicePin` 37; Wi-Fi config sub-codes (#837); CLI text such as `password ...`. Channel keys (`cmdSetChannel` 32, `respCodeChannelInfo` 18) also appear, and stay: they're needed for diagnosis (#1128), and the file is encrypted to the owner. The radio's private key appears in `cmdExportPrivateKey` 23, `respCodePrivateKey` 14 and `cmdImportPrivateKey` 24, and stays too (owner decision, section 9). | Blanking only passwords and PINs keeps the log fully useful. B1 confirms the full list. |
 | 4 | Android exit records (crash and ANR) are already captured and exported. | `AppExitInfoService.traceFiles()` used by `log_export.dart` (#906) | D can offer to send them on the next launch. |
 | 5 | The radio notify relay is public at `https://notify.offband.org/notify`, behind Cloudflare, with a bearer token. | `scripts/notify.py` (`DEFAULT_URL`, `Authorization: Bearer`); live since standards#476 | The intake can ping your radio with no tailnet change and nothing new on offband-prod. |
 | 6 | offband.app is a Cloudflare zone, and I hold a Cloudflare API token. | Pages deploys (`deploy-web.yml`); `CLOUDFLARE_API_TOKEN` | The Worker, its route and the R2 bucket can be set up through the API. Workers and R2 permissions on that token are not yet confirmed. |
@@ -69,7 +69,7 @@ Tasks are 3 to 4 points. Each Epic ends with a verification task and gets one PR
 | Task | Pts |
 |---|---|
 | **B1 · Inventory:** classify every command, response and push code in `meshcore_protocol.dart`, and every Offband sub-code, as carrying a password or PIN (with the byte ranges) or not. A test fails when any code is unclassified, so a new command can't ship unreviewed. | 3 |
-| **B2 · Redactor:** blank password and PIN bytes in logged frames and in CLI text (`password`, `set pin`, Wi-Fi), plus the private key if choice 4 says so. Everything else, channel keys included, is kept byte for byte. Tests cover every redacted code, plus unchanged frames for the rest. | 4 |
+| **B2 · Redactor:** blank password and PIN bytes in logged frames and in CLI text (`password`, `set pin`, Wi-Fi). Everything else, channel keys and the radio's private key included, is kept byte for byte. Tests cover every redacted code, plus unchanged frames for the rest. | 4 |
 | **B3 · Package builder:** all log files, the Android exit traces and a manifest (app version, commit, platform, OS, radio firmware and caps), redacted and zipped. The existing Share/Save goes through it too. | 3 |
 | **B4 · Epic verification** | 1 |
 
@@ -178,9 +178,7 @@ No branch proceeds without confirming its condition, so no fail-open grant is ne
 | 1 | Where do intake issues go? | A private `OffbandMesh/log-intake` repo: user notes and device details stay private, and spam never reaches the public tracker. | The public meshcore-client repo, on board #2. | ⭐ A. You move an intake issue into meshcore-client when it becomes a bug. | |
 | 2 | A frame code this build doesn't know, from newer firmware? | Blank its payload, keep code and length. Safe, loses that frame's detail. | Keep it raw. Full detail, but it might carry a password we haven't classified. | ⭐ A. The next release classifies it. | |
 | 3 | Relay token for the Worker? | A dedicated token, revocable on its own. Needs a small, governed offband-infra change on the relay. | Reuse the existing `NOTIFY_TOKEN`. Nothing changes on offband-prod, but revoking it also cuts off session pings. | ⭐ A | |
-| 4 | The radio's private key, in an export or import frame? | Blank those 64 bytes and keep the rest of the frame. The key lets anyone impersonate that user's node and read their DMs, and its bytes tell a diagnosis nothing. | Keep it. The file is encrypted to you, so only you or someone with your private key could read it. | ⭐ A | |
-
-Owner decision 2026-11-25: channel keys are **not** redacted. Only passwords and PINs are, plus the private key if choice 4 is A.
+Owner decisions 2026-11-25: channel keys and the radio's private key are **not** redacted. A radio key protects over-the-air traffic at a reasonable level, not an identity worth guarding inside a log that is already encrypted to the owner, and either may be needed for diagnosis. Only passwords and PINs are redacted.
 
 ## 10. Carried-in work
 
