@@ -15,6 +15,7 @@ import 'package:meshcore_open/l10n/app_localizations.dart';
 import 'package:meshcore_open/models/contact.dart';
 import 'package:meshcore_open/screens/prune_contacts_screen.dart';
 import 'package:meshcore_open/widgets/add_contact_by_key_dialog.dart';
+import 'package:meshcore_open/widgets/contact_add_feedback.dart';
 
 const _newKey =
     '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
@@ -183,6 +184,31 @@ void main() {
       expect(conn.removed.map((c) => c.name), ['Oldest', 'Old']);
       expect(conn.added.map((c) => c.name), ['Bob']);
     });
+  });
+
+  // Gemini review: a pasted advert that does not parse returned null, and the
+  // paste closed with no message at all.
+  testWidgets('a pasted contact that does not parse says so', (tester) async {
+    final conn = _FullRadio();
+    await tester.pumpWidget(
+      _app(
+        conn,
+        Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () =>
+                  addContactWithFeedback(context, conn, '', () async => null),
+              child: const Text('paste'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('paste'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid contact data'), findsOneWidget);
+    expect(conn.added, isEmpty);
   });
 
   group('the prune screen', () {
