@@ -48,6 +48,8 @@ String contactRemoveFailureText(
 /// overwrite a contact on its own, so the user chooses first what comes off
 /// the radio, and [add] runs once more after that removal is confirmed.
 /// Cancelling sends nothing. Owner decision 2026-11-24. (#1028)
+///
+/// A null result means the contact data did not parse, and nothing was sent.
 Future<void> addContactWithFeedback(
   BuildContext context,
   MeshCoreConnector connector,
@@ -55,16 +57,24 @@ Future<void> addContactWithFeedback(
   Future<ContactAddResult?> Function() add,
 ) async {
   var result = await add();
-  if (result == null || !context.mounted) return;
+  if (!context.mounted) return;
+  if (result == null) return _showUnparsed(context);
   if (result.outcome == ContactAddOutcome.full) {
     final shown = result.name ?? name;
     if (!await makeRoomForContact(context, connector, shown)) return;
     if (!context.mounted) return;
     result = await add();
-    if (result == null || !context.mounted) return;
+    if (!context.mounted) return;
+    if (result == null) return _showUnparsed(context);
   }
   showContactAddResult(context, result, name);
 }
+
+void _showUnparsed(BuildContext context) => showDismissibleSnackBar(
+  context,
+  content: Text(context.l10n.contacts_invalidAdvertFormat),
+  persist: true,
+);
 
 /// Adds a contact heard on the mesh and reports the outcome.
 Future<void> importDiscoveredContactWithFeedback(
