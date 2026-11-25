@@ -28,7 +28,7 @@
 | 1 | Logs leave the app only by Share (mobile), Save As (desktop) or download (web). | `lib/utils/log_export.dart` | The user has to email the file or attach it somewhere. That's the step that loses the log. |
 | 2 | Every frame in and out is written to the log file as raw hex, with no redaction. | `BleDebugLogService.logFrame` writes `frame.map(...toRadixString(16))` for every frame; the owner's Windows log shows `TX CMD_REMOVE_CONTACT 0f 73 60 ...` | Raw frames are what diagnosis runs on (the #1028 reply race was found from them). They also carry passwords and PINs, and today's Share sends those too. |
 | 3 | Passwords and PINs travel only in frames the app builds and sends. | `meshcore_protocol.dart`: `cmdSendLogin` 26 (repeater and room password), `cmdSetDevicePin` 37; Wi-Fi config sub-codes (#837); CLI text such as `password ...` | Every one of those frames is our own code, so the redactor can cover all of them. A code the app doesn't know can only be an **incoming** frame from newer firmware, and those don't carry the user's passwords. |
-| 4 | Channel keys and the radio's private key also appear in frames. | `cmdSetChannel` 32 and `respCodeChannelInfo` 18 (channel key); `cmdExportPrivateKey` 23, `respCodePrivateKey` 14, `cmdImportPrivateKey` 24 (64-byte Ed25519 private key; the public key is derived from it, `Identity.cpp` `ed25519_derive_pub`) | Channel keys stay, because they're needed for diagnosis (#1128). The private key is partly kept (choice 1). |
+| 4 | Channel keys and the radio's private key also appear in frames. | `cmdSetChannel` 32 and `respCodeChannelInfo` 18 (channel key); `cmdExportPrivateKey` 23, `respCodePrivateKey` 14, `cmdImportPrivateKey` 24 (64-byte Ed25519 private key; the public key is derived from it, `Identity.cpp` `ed25519_derive_pub`) | Channel keys stay, because they're needed for diagnosis (#1128). The private key keeps its first 3 bytes and the rest is blanked (owner decision). |
 | 5 | Android exit records (crash and ANR) are already captured and exported. | `AppExitInfoService.traceFiles()` used by `log_export.dart` (#906) | D can offer to send them on the next launch. |
 | 6 | offband.app is a Cloudflare zone, and I hold a Cloudflare API token. | Pages deploys (`deploy-web.yml`); `CLOUDFLARE_API_TOKEN` | The Worker, its route and the R2 bucket can be set up through the API. Workers and R2 permissions on that token are not yet confirmed. |
 
@@ -36,9 +36,9 @@
 
 **In:**
 - A Cloudflare Worker on `logs.offband.app` and a private R2 bucket. A new private repo, `OffbandMesh/log-intake`, holds the Worker, its tests and the intake issues (owner decision).
-- An alert to you for each upload (choice 2), rate-limited so a burst becomes one alert with a count.
+- An alert to you for each upload (choice 1), rate-limited so a burst becomes one alert with a count.
 - Retention: an upload is deleted 30 days after you've seen it (pulled it, or closed its issue), and never while unseen. Unseen uploads get a weekly reminder.
-- A redactor that blanks passwords and PINs and keeps everything else byte for byte: channel keys, unknown incoming codes, and the private key except as choice 1 says. It also applies to the existing Share/Save.
+- A redactor that blanks passwords and PINs and keeps everything else byte for byte: channel keys, unknown incoming codes, and the first 3 bytes of the private key (the other 61 are blanked). It also applies to the existing Share/Save.
 - Encryption on the device with Offband's public key. HTTPS in transit on top.
 - The Send to Offband screen on every platform (Android, iOS, Windows, macOS, Linux, web), with a consent text, the reference code and Copy.
 - After a crash, an ANR, an unhandled error or an exit while in the foreground: on the next launch, the app offers Send, Not now or Don't ask again. A setting, **off by default**, sends without asking.
@@ -60,7 +60,7 @@ Tasks are 3 to 4 points. Each Epic ends with a verification task and gets one PR
 |---|---|
 | **A1 · Repo, bucket and Worker skeleton:** create the private `OffbandMesh/log-intake`, the private R2 bucket (no public access) and the Worker route on `logs.offband.app`, all through the Cloudflare API. Worker tests run in its CI. | 3 |
 | **A2 · Upload endpoint:** one `POST`. It rejects a body over the size cap (25 MB) or one that doesn't start with the format header, and applies a per-IP rate limit. It stores the body under a random name and returns a reference code (`OB-` plus 5 characters, no look-alike letters). There is no read, list or delete endpoint. Tests cover each rejection. | 4 |
-| **A3 · Intake issue and alert:** open an issue in `log-intake` with the code, platform, app version and the user's optional note, and alert you (choice 2). At most one alert per 10 minutes; a burst becomes one alert with a count. A failure is retried by A4 and never drops the upload. | 3 |
+| **A3 · Intake issue and alert:** open an issue in `log-intake` with the code, platform, app version and the user's optional note, and alert you (choice 1). At most one alert per 10 minutes; a burst becomes one alert with a count. A failure is retried by A4 and never drops the upload. | 3 |
 | **A4 · Retention job:** a daily scheduled run. It deletes an upload 30 days after it was seen, and keeps it if it can't tell. Unseen uploads older than 7 days get a weekly reminder. Tests use an injected clock. | 3 |
 | **A5 · Epic verification:** a live upload from curl returns a code, opens an issue and alerts you. Oversized and junk bodies are refused. | 1 |
 
@@ -69,7 +69,7 @@ Tasks are 3 to 4 points. Each Epic ends with a verification task and gets one PR
 | Task | Pts |
 |---|---|
 | **B1 · Inventory:** classify every frame the app sends, every Offband sub-code and every CLI command as carrying a password or PIN (with the byte ranges) or not. A test fails when any code the app can send is unclassified, so a new command can't ship unreviewed. | 3 |
-| **B2 · Redactor:** blank password and PIN bytes in logged frames and in CLI text (`password`, `set pin`, Wi-Fi). Apply choice 1 to the private key. Everything else is kept byte for byte. Tests cover every redacted code, plus unchanged frames for the rest. | 4 |
+| **B2 · Redactor:** blank password and PIN bytes in logged frames and in CLI text (`password`, `set pin`, Wi-Fi). Keep the private key's first 3 bytes and blank the other 61. Everything else is kept byte for byte. Tests cover every redacted code, plus unchanged frames for the rest. | 4 |
 | **B3 · Package builder:** all log files, the Android exit traces and a manifest (app version, commit, platform, OS, radio firmware and caps), redacted and zipped. The existing Share/Save goes through it too. | 3 |
 | **B4 · Epic verification** | 1 |
 
@@ -176,13 +176,12 @@ An incoming frame code the app doesn't know is kept raw (owner decision). That i
 - Intake issues go to a private `OffbandMesh/log-intake` repo.
 - Incoming frame codes the app doesn't know are kept raw.
 - Channel keys are not redacted.
-- The private key is partly kept rather than fully redacted; the form is choice 1.
+- The radio's private key keeps its first 3 bytes; the other 61 are blanked.
 - The LoRa notify relay is not the alert path.
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | What stays of the radio's private key? | The **radio's public key prefix** (the node ID the mesh uses) plus a **4-byte fingerprint** of the private key (the first 4 bytes of its SHA-256). Tells you which node it is, and whether two logs or two radios carry the same key, without any key bytes. | The **first 3 bytes** of the private key itself. Harmless, but they don't match the node ID or anything else in the logs: the public key is derived from the private key, not contained in it. | ⭐ A | |
-| 2 | How does an upload alert you? | **GitHub:** the intake issue is assigned to you, so GitHub Mobile pushes it to your phone and emails you. Uses the same token as the issue, nothing new to run. | **Email** from the Worker, through Cloudflare Email Routing, to an address you pick, kept apart from other GitHub mail. | ⭐ A | |
+| 1 | How does an upload alert you? | **GitHub:** the intake issue is assigned to you, so GitHub Mobile pushes it to your phone and emails you. Uses the same token as the issue, nothing new to run. | **Email** from the Worker, through Cloudflare Email Routing, to an address you pick, kept apart from other GitHub mail. | ⭐ A | |
 
 ## 10. Carried-in work
 
