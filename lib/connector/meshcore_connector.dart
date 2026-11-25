@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' show AppLifecycleState;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:pointycastle/export.dart';
@@ -17,6 +18,7 @@ import '../models/message.dart';
 import '../models/offband_gps_status.dart';
 import '../models/path_selection.dart';
 import '../models/translation_support.dart';
+import '../helpers/ble_drop_reason.dart';
 import '../helpers/channel_restore_plan.dart';
 import '../helpers/channel_send_timestamp.dart';
 import '../helpers/pending_reactions.dart';
@@ -4115,6 +4117,26 @@ class MeshCoreConnector extends ChangeNotifier {
       _throwIfSuperseded(generation);
       _connectionSubscription = device.connectionState.listen((state) {
         if (state == BluetoothConnectionState.disconnected && isConnected) {
+          final sinceLastRx = DateTime.now().difference(_lastRxTime);
+          final lifecycle = appLifecycleState;
+          // flutter_blue_plus records the reason in its own listener on the
+          // same event; reading after this event is delivered avoids
+          // depending on which listener runs first (#1186).
+          scheduleMicrotask(() {
+            _appDebugLogService?.warn(
+              describeBleDrop(
+                reason: device.disconnectReason,
+                platform: _blePlatformName,
+                platformReportsReason:
+                    PlatformInfo.isIOS ||
+                    PlatformInfo.isMacOS ||
+                    PlatformInfo.isAndroid,
+                sinceLastRx: sinceLastRx,
+                lifecycle: lifecycle,
+              ),
+              tag: 'Connection',
+            );
+          });
           _handleDisconnection();
         }
       });
@@ -5019,6 +5041,20 @@ class MeshCoreConnector extends ChangeNotifier {
   /// connection state, so an abandoned attempt stops before it writes.
   void _throwIfSuperseded(int generation) {
     if (generation != _connectGeneration) throw const _ConnectSuperseded();
+  }
+
+  /// The app's lifecycle state, set from main.dart, so a BLE drop's log line
+  /// can say whether the app was in the background (#1186).
+  AppLifecycleState? appLifecycleState;
+
+  String get _blePlatformName {
+    if (PlatformInfo.isWeb) return 'web';
+    if (PlatformInfo.isIOS) return 'iOS';
+    if (PlatformInfo.isMacOS) return 'macOS';
+    if (PlatformInfo.isAndroid) return 'Android';
+    if (PlatformInfo.isWindows) return 'Windows';
+    if (PlatformInfo.isLinux) return 'Linux';
+    return 'this platform';
   }
 
   void _scheduleReconnect() {
