@@ -202,6 +202,18 @@ void main() async {
     ),
   );
 
+  // On iOS a BLE drop often follows the app going to the background (#1186).
+  // Logging each change lets a drop be lined up against it. The listener
+  // registers itself with WidgetsBinding, which keeps it alive for the life
+  // of the app; it is never disposed.
+  connector.appLifecycleState = WidgetsBinding.instance.lifecycleState;
+  AppLifecycleListener(
+    onStateChange: (state) {
+      connector.appLifecycleState = state;
+      appLogger.info('App lifecycle: ${state.name}', tag: 'Lifecycle');
+    },
+  );
+
   // Report why the previous process died, if it did (#906). Scheduled after the
   // first frame and deliberately not awaited: #334 is the leading hypothesis for
   // the ANRs this exists to diagnose, so the collector must not itself add work
