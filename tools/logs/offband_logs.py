@@ -5,8 +5,9 @@
     python tools/logs/offband_logs.py pull OB-XXXXX
 
 keygen makes the owner's key pair once. The private key goes to
-~/.secrets/offband-log-key and into Bitwarden; without it no upload can ever be
-read. The public key goes into the app.
+C:\Dev\.keys\offband-log-key (with the owner's other keys; OFFBAND_LOG_KEY
+overrides the path) and into Bitwarden; without it no upload can ever be read.
+The public key goes into the app.
 
 list shows uploads not pulled yet. pull downloads an upload, decrypts it,
 unpacks it into debug_logs/OB-XXXXX/, labels its intake issue `seen` (which
@@ -46,7 +47,7 @@ INFO = b"offband-log-v1"
 INTAKE_REPO = "OffbandMesh/log-intake"
 BUCKET = "offband-log-intake"
 SEEN_LABEL = "seen"
-KEY_PATH = Path.home() / ".secrets" / "offband-log-key"
+KEY_PATH = Path(os.environ.get("OFFBAND_LOG_KEY", r"C:\Dev\.keys\offband-log-key"))
 OUT_ROOT = Path(__file__).resolve().parents[2] / "debug_logs"
 CODE = re.compile(r"^OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$")
 OBJECT = re.compile(r"`(uploads/(OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5})-[0-9a-f-]{36}\.bin)`")
