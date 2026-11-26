@@ -333,6 +333,15 @@ const List<StorageSurface> storageSurfaces = [
     owner: 'lib/services/app_exit_info_service.dart',
   ),
   StorageSurface(
+    'run_marker_v1',
+    verdict: ScopingVerdict.globalOnPurpose,
+    reason:
+        'whether the last run of the app was on screen and hit an unhandled '
+        'error, so the next launch can offer to send logs (#1213). A property '
+        'of the app process, not of a radio',
+    owner: 'lib/services/failure_monitor.dart',
+  ),
+  StorageSurface(
     '__msgrows_migrated',
     verdict: ScopingVerdict.globalOnPurpose,
     reason:
