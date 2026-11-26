@@ -59,6 +59,8 @@ Contact _makeContact({
   required Uint8List publicKey,
   int pathLength = -1,
   List<int> path = const [],
+  int? pathOverride,
+  List<int>? pathOverrideBytes,
 }) {
   return Contact(
     publicKey: publicKey,
@@ -66,6 +68,10 @@ Contact _makeContact({
     type: 1,
     pathLength: pathLength,
     path: Uint8List.fromList(path),
+    pathOverride: pathOverride,
+    pathOverrideBytes: pathOverrideBytes == null
+        ? null
+        : Uint8List.fromList(pathOverrideBytes),
     lastSeen: DateTime.now(),
   );
 }
@@ -943,4 +949,270 @@ void main() {
       },
     );
   });
+
+  group('the client does not write the radio\'s path on a send (#1198)', () {
+    // The radio owns the path: it learns one from a path-return and persists
+    // it. Re-asserting a client-side snapshot before every attempt overwrote
+    // that, including a fresher route the radio had just learned.
+
+    test('a send down a stored path issues no setContactPath at all', () async {
+      final retryService = MessageRetryService();
+      final contact = _makeContact(
+        publicKey: recipientKey,
+        pathLength: 2,
+        path: const [0x10, 0x20],
+      );
+      final setCalls = <int>[];
+      final clearCalls = <String>[];
+
+      retryService.initialize(
+        RetryServiceConfig(
+          sendMessage: (_, _, _, _) async {},
+          addMessage: (_, _) {},
+          updateMessage: (_) {},
+          setContactPath: (_, bytes, hops) => setCalls.add(hops),
+          clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
+        ),
+      );
+
+      await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        setCalls,
+        isEmpty,
+        reason:
+            'the radio already holds this path; writing it back on a send '
+            'can only overwrite something fresher',
+      );
+      expect(
+        clearCalls,
+        isEmpty,
+        reason: 'a live stored path must not be cleared either',
+      );
+
+      retryService.dispose();
+    });
+
+    test('a flood-mode contact still clears, because that is a per-send '
+        'routing decision the radio cannot make for us', () async {
+      final retryService = MessageRetryService();
+      // pathLength < 0 is flood mode.
+      final contact = _makeContact(publicKey: recipientKey, pathLength: -1);
+      final setCalls = <int>[];
+      final clearCalls = <String>[];
+
+      retryService.initialize(
+        RetryServiceConfig(
+          sendMessage: (_, _, _, _) async {},
+          addMessage: (_, _) {},
+          updateMessage: (_) {},
+          setContactPath: (_, bytes, hops) => setCalls.add(hops),
+          clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
+        ),
+      );
+
+      await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        clearCalls.length,
+        equals(1),
+        reason: 'clearing is how the mesh re-learns a route; it must survive',
+      );
+      expect(setCalls, isEmpty);
+
+      retryService.dispose();
+    });
+  });
+
+  group(
+    'the flood fallback is part of sending a DM, not a preference (#1223)',
+    () {
+      // R1: the fallback was gated on `autoRouteRotationEnabled`, which shipped
+      // false, so the one recovery the protocol offers was unreachable out of
+      // the box. R4: a path override suppressed it as well. Both gates are gone.
+      // Nothing below wires an AppSettingsService, which is the point: there is
+      // no longer a setting to consult.
+
+      test('the retry-path selector is consulted on a plain send, with no '
+          'settings service wired at all', () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 2,
+          path: const [0x10, 0x20],
+        );
+        final selectorCalls = <int>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            selectRetryPath: (_, attemptIndex, _, _) {
+              selectorCalls.add(attemptIndex);
+              return null;
+            },
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          selectorCalls,
+          equals([0]),
+          reason:
+              'with the flag gone the selector runs on every attempt; before '
+              'this change a missing or default-off setting skipped it entirely',
+        );
+
+        retryService.dispose();
+      });
+
+      test(
+        'a zero-hop override no longer counts as an override, so it does not '
+        'suppress the selector either',
+        () async {
+          final retryService = MessageRetryService();
+          // pathOverride == 0 was "Direct". R2 retires it.
+          final contact = _makeContact(
+            publicKey: recipientKey,
+            pathLength: 2,
+            path: const [0x10, 0x20],
+            pathOverride: 0,
+            pathOverrideBytes: const [],
+          );
+          final selectorCalls = <int>[];
+
+          retryService.initialize(
+            RetryServiceConfig(
+              sendMessage: (_, _, _, _) async {},
+              addMessage: (_, _) {},
+              updateMessage: (_) {},
+              selectRetryPath: (_, attemptIndex, _, _) {
+                selectorCalls.add(attemptIndex);
+                return null;
+              },
+            ),
+          );
+
+          await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+
+          expect(
+            selectorCalls,
+            equals([0]),
+            reason: 'a retired mode must not keep acting like a pinned route',
+          );
+
+          retryService.dispose();
+        },
+      );
+
+      test('with no path history wired, a forced-flood contact still clears, '
+          'and a stored-path contact on its first attempt does not', () async {
+        final retryService = MessageRetryService();
+        final clearCalls = <String>[];
+        final setCalls = <int>[];
+
+        // selectRetryPath is deliberately absent: the fallback must not depend
+        // on the path-history service existing.
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            setContactPath: (_, _, hops) => setCalls.add(hops),
+            clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(
+          contact: _makeContact(
+            publicKey: recipientKey,
+            pathLength: 2,
+            path: const [0x10, 0x20],
+          ),
+          text: 'stored path',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          clearCalls,
+          isEmpty,
+          reason: 'a live stored path is not cleared on the first attempt',
+        );
+
+        await retryService.sendMessageWithRetry(
+          contact: _makeContact(publicKey: _makeKey(0x77), pathLength: -1),
+          text: 'forced flood',
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          clearCalls.length,
+          equals(1),
+          reason: 'clearing the stored path is the only way to request flood',
+        );
+        expect(setCalls, isEmpty);
+
+        retryService.dispose();
+      });
+
+      test('a manual path override floods on the final attempt instead of '
+          'failing on a route that is not working', () async {
+        final retryService = MessageRetryService()..setMaxRetries(2);
+        // A multi-hop route the user picked by hand in path management.
+        final contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 2,
+          path: const [0x10, 0x20],
+          pathOverride: 2,
+          pathOverrideBytes: const [0x10, 0x20],
+        );
+        final clearCalls = <String>[];
+        final setCalls = <int>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            setContactPath: (_, _, hops) => setCalls.add(hops),
+            clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(
+          clearCalls,
+          isEmpty,
+          reason: 'the chosen route gets the ordinary attempts, untouched',
+        );
+
+        // Radio confirms the send and arms a 1 ms delivery timeout, so the
+        // retry runs without a real ACK. maxRetries of 2 makes attempt 1 final.
+        retryService.updateMessageFromSent(0x1234, 1);
+        await Future<void>.delayed(const Duration(milliseconds: 1400));
+
+        expect(
+          clearCalls.length,
+          equals(1),
+          reason:
+              'the final attempt floods even for an override: flooding is how '
+              'the mesh teaches the radio a route, and a pinned path that is '
+              'not delivering must not be allowed to suppress it',
+        );
+        expect(
+          setCalls,
+          isEmpty,
+          reason: 'and it still never writes a path to the radio (#1198)',
+        );
+
+        retryService.dispose();
+      });
+    },
+  );
 }

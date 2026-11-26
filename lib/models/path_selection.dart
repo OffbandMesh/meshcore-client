@@ -43,8 +43,13 @@ PathSelection resolvePathSelection(
   int hopsFor(List<int> bytes) =>
       width > 0 ? bytes.length ~/ width : bytes.length;
 
-  if (contact.pathOverride != null) {
-    if (contact.pathOverride! < 0) {
+  // A zero-hop override was the retired "Direct" mode (#1223 R2). Treat it as
+  // no override so a value that predates the removal falls through to the
+  // radio's own path instead of pinning a route the radio would pick anyway.
+  final int? override = contact.pathOverride == 0 ? null : contact.pathOverride;
+
+  if (override != null) {
+    if (override < 0) {
       return const PathSelection(pathBytes: [], hopCount: -1, useFlood: true);
     }
     final bytes = contact.pathOverrideBytes ?? Uint8List(0);

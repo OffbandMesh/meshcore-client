@@ -24,10 +24,14 @@ extension ContactLocalization on Contact {
   }
 
   String pathLabel(AppLocalizations l10n) {
-    if (pathOverride != null) {
-      if (pathOverride! < 0) return l10n.chat_floodForced;
-      if (pathOverride == 0) return l10n.chat_directForced;
-      return l10n.chat_hopsForced(pathOverride!);
+    // A zero-hop override was the retired "Direct" mode (#1223 R2). It is not
+    // an override any more, so the label describes the radio's own path rather
+    // than claiming a forced route that nothing enforces.
+    final int? override = pathOverride == 0 ? null : pathOverride;
+
+    if (override != null) {
+      if (override < 0) return l10n.chat_floodForced;
+      return l10n.chat_hopsForced(override);
     }
     if (pathLength < 0) return l10n.channelPath_floodPath;
     if (pathLength == 0) return l10n.chat_direct;

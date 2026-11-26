@@ -170,7 +170,12 @@ class ContactStore {
       path: (!isLegacyPathRecord && json['path'] != null)
           ? Uint8List.fromList(base64Decode(json['path'] as String))
           : Uint8List(0),
-      pathOverride: json['pathOverride'] as int?,
+      // A stored zero-hop override is the retired "Direct" mode and reads as
+      // Auto now, so nobody is stranded in a mode the UI no longer offers.
+      // Rewritten on the next save. (#1223 R2)
+      pathOverride: (json['pathOverride'] as int?) == 0
+          ? null
+          : json['pathOverride'] as int?,
       pathOverrideBytes: json['pathOverrideBytes'] != null
           ? Uint8List.fromList(
               base64Decode(json['pathOverrideBytes'] as String),
