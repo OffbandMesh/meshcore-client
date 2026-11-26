@@ -54,13 +54,18 @@ class LogPackage {
 
     for (final log in logFiles.reversed) {
       if (!await log.exists()) continue;
-      final text = utf8.decode(await log.readAsBytes(), allowMalformed: true);
-      final redacted = const LineSplitter()
-          .convert(text)
-          .map(redactor.line)
-          .join('\n');
       final out = File('${dir.path}$sep${_name(log)}');
-      await out.writeAsString('$redacted\n');
+      final sink = out.openWrite();
+      try {
+        await log
+            .openRead()
+            .transform(const Utf8Decoder(allowMalformed: true))
+            .transform(const LineSplitter())
+            .map(redactor.line)
+            .forEach(sink.writeln);
+      } finally {
+        await sink.close();
+      }
       written.add(out);
     }
     if (traceFiles.isNotEmpty) {
@@ -111,6 +116,28 @@ class LogPackage {
     'files': files,
   };
 
+  /// The web package (#1211): there are no log files on web, so the in-memory
+  /// log [text] goes in as one file, through the same redactor.
+  static Uint8List textPackageZip(
+    String text, {
+    MeshCoreConnector? radio,
+    DateTime Function() now = DateTime.now,
+  }) {
+    const logName = 'offband-log.txt';
+    final redactor = LogRedactor();
+    final redacted = const LineSplitter()
+        .convert(text)
+        .map(redactor.line)
+        .join('\n');
+    final manifest = const JsonEncoder.withIndent('  ').convert(
+      manifestFor(radio: radio, createdAt: now(), files: const [logName]),
+    );
+    final archive = Archive()
+      ..addFile(ArchiveFile.string(manifestName, manifest))
+      ..addFile(ArchiveFile.string(logName, '$redacted\n'));
+    return ZipEncoder().encodeBytes(archive);
+  }
+
   /// Every file, at its path inside the package, in one zip.
   Future<Uint8List> zip() async {
     final archive = Archive();
@@ -138,15 +165,16 @@ class LogPackage {
   /// removed straight after sending.
   static Future<Directory> _freshTempDir() async {
     final temp = await getTemporaryDirectory();
-    await for (final old in temp.list()) {
-      if (old is Directory && _name(old).startsWith(_tempPrefix)) {
-        await old.delete(recursive: true).catchError((_) => old);
-      }
+    final parent = await Directory(
+      '${temp.path}${Platform.pathSeparator}$_tempParent',
+    ).create();
+    await for (final old in parent.list()) {
+      await old.delete(recursive: true).catchError((_) => old);
     }
-    return temp.createTemp(_tempPrefix);
+    return parent.createTemp('package-');
   }
 
-  static const _tempPrefix = 'offband-logs-';
+  static const _tempParent = 'offband-log-packages';
 
   static String _name(FileSystemEntity f) =>
       f.uri.pathSegments.lastWhere((s) => s.isNotEmpty);

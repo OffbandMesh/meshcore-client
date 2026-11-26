@@ -85,6 +85,25 @@ void main() {
     expect(r.line(redacted), redacted);
   });
 
+  test('the web package zips the in-memory log, redacted', () {
+    final text = [
+      _frameLine('TX', 'CMD_SEND_LOGIN', buildSendLoginFrame(_peer, 'hunter2')),
+      '[12:00:00.000] [INFO] [App] connected',
+    ].join('\n');
+    final zip = ZipDecoder().decodeBytes(LogPackage.textPackageZip(text));
+    expect(zip.files.map((f) => f.name), [
+      LogPackage.manifestName,
+      'offband-log.txt',
+    ]);
+    final log = utf8.decode(zip.files[1].content as List<int>);
+    expect(log, isNot(contains(_hex(latin1.encode('hunter2')))));
+    expect(log, contains('[App] connected'));
+    final manifest =
+        jsonDecode(utf8.decode(zip.files[0].content as List<int>))
+            as Map<String, dynamic>;
+    expect(manifest['files'], ['offband-log.txt']);
+  });
+
   test('the manifest names the files, and the zip holds them all', () async {
     final log = await write('offband.log', ['one']);
     final trace = await write('anr-1.txt', ['trace']);
