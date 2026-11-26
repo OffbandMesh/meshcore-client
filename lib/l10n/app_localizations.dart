@@ -3916,6 +3916,114 @@ abstract class AppLocalizations {
   /// **'No BLE activity yet'**
   String get debugLog_noBleActivity;
 
+  /// No description provided for @sendLogs_title.
+  ///
+  /// In en, this message translates to:
+  /// **'Send logs to Offband'**
+  String get sendLogs_title;
+
+  /// No description provided for @sendLogs_consent.
+  ///
+  /// In en, this message translates to:
+  /// **'This sends the app\'s logs to Offband so we can look into a problem. They include your messages and the radio traffic, with passwords and PINs removed. They are encrypted on this device, only Offband can read them, and they are deleted 30 days after we review them.'**
+  String get sendLogs_consent;
+
+  /// No description provided for @sendLogs_noteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What happened? (optional)'**
+  String get sendLogs_noteLabel;
+
+  /// No description provided for @sendLogs_preparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Gathering the logs'**
+  String get sendLogs_preparing;
+
+  /// No description provided for @sendLogs_size.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} to send'**
+  String sendLogs_size(String size);
+
+  /// No description provided for @sendLogs_send.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get sendLogs_send;
+
+  /// No description provided for @sendLogs_sending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get sendLogs_sending;
+
+  /// No description provided for @sendLogs_sentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent. If you report the problem, mention this code so we can find your logs.'**
+  String get sendLogs_sentBody;
+
+  /// No description provided for @sendLogs_copyCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy code'**
+  String get sendLogs_copyCode;
+
+  /// No description provided for @sendLogs_codeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Code copied'**
+  String get sendLogs_codeCopied;
+
+  /// No description provided for @sendLogs_retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get sendLogs_retry;
+
+  /// No description provided for @sendLogs_failedNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach Offband. Check the connection and try again.'**
+  String get sendLogs_failedNetwork;
+
+  /// No description provided for @sendLogs_failedTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The logs are too large to send. Clear the logs, make the problem happen again, then send.'**
+  String get sendLogs_failedTooLarge;
+
+  /// No description provided for @sendLogs_failedRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many sends from this network. Wait a minute and try again.'**
+  String get sendLogs_failedRateLimited;
+
+  /// No description provided for @sendLogs_failedRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband refused the upload. Update the app and try again.'**
+  String get sendLogs_failedRefused;
+
+  /// No description provided for @sendLogs_failedServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband couldn\'t store the logs right now. Try again later.'**
+  String get sendLogs_failedServer;
+
+  /// No description provided for @sendLogs_failedPrepare.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t gather the logs.'**
+  String get sendLogs_failedPrepare;
+
+  /// No description provided for @sendLogs_noLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no logs to send yet.'**
+  String get sendLogs_noLogs;
+
   /// No description provided for @debugFrame_length.
   ///
   /// In en, this message translates to:

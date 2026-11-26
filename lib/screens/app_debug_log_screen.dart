@@ -7,6 +7,7 @@ import '../services/app_debug_log_service.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/log_export.dart';
+import 'send_logs_screen.dart';
 
 class AppDebugLogScreen extends StatelessWidget {
   const AppDebugLogScreen({super.key});
@@ -27,6 +28,14 @@ class AppDebugLogScreen extends StatelessWidget {
                 tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
                 onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => LogExport.appLogText(entries),
+                ),
+              ),
+              IconButton(
+                tooltip: context.l10n.sendLogs_title,
+                icon: const Icon(Icons.cloud_upload_outlined),
+                onPressed: () => SendLogsScreen.open(
                   context,
                   webContent: () => LogExport.appLogText(entries),
                 ),

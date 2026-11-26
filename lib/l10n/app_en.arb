@@ -1275,6 +1275,31 @@
   "debugLog_frames": "Frames",
   "debugLog_rawLogRx": "Raw Log-RX",
   "debugLog_noBleActivity": "No BLE activity yet",
+  "sendLogs_title": "Send logs to Offband",
+  "sendLogs_consent": "This sends the app's logs to Offband so we can look into a problem. They include your messages and the radio traffic, with passwords and PINs removed. They are encrypted on this device, only Offband can read them, and they are deleted 30 days after we review them.",
+  "sendLogs_noteLabel": "What happened? (optional)",
+  "sendLogs_preparing": "Gathering the logs",
+  "sendLogs_size": "{size} to send",
+  "@sendLogs_size": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "sendLogs_send": "Send",
+  "sendLogs_sending": "Sending",
+  "sendLogs_sentBody": "Sent. If you report the problem, mention this code so we can find your logs.",
+  "sendLogs_copyCode": "Copy code",
+  "sendLogs_codeCopied": "Code copied",
+  "sendLogs_retry": "Retry",
+  "sendLogs_failedNetwork": "Couldn't reach Offband. Check the connection and try again.",
+  "sendLogs_failedTooLarge": "The logs are too large to send. Clear the logs, make the problem happen again, then send.",
+  "sendLogs_failedRateLimited": "Too many sends from this network. Wait a minute and try again.",
+  "sendLogs_failedRefused": "Offband refused the upload. Update the app and try again.",
+  "sendLogs_failedServer": "Offband couldn't store the logs right now. Try again later.",
+  "sendLogs_failedPrepare": "Couldn't gather the logs.",
+  "sendLogs_noLogs": "There are no logs to send yet.",
   "debugFrame_length": "Frame Length: {count} bytes",
   "@debugFrame_length": {
     "placeholders": {

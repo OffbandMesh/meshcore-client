@@ -2245,6 +2245,69 @@ class AppLocalizationsPl extends AppLocalizations {
   String get debugLog_noBleActivity => 'Brak aktywności BLE.';
 
   @override
+  String get sendLogs_title => 'Send logs to Offband';
+
+  @override
+  String get sendLogs_consent =>
+      'This sends the app\'s logs to Offband so we can look into a problem. They include your messages and the radio traffic, with passwords and PINs removed. They are encrypted on this device, only Offband can read them, and they are deleted 30 days after we review them.';
+
+  @override
+  String get sendLogs_noteLabel => 'What happened? (optional)';
+
+  @override
+  String get sendLogs_preparing => 'Gathering the logs';
+
+  @override
+  String sendLogs_size(String size) {
+    return '$size to send';
+  }
+
+  @override
+  String get sendLogs_send => 'Send';
+
+  @override
+  String get sendLogs_sending => 'Sending';
+
+  @override
+  String get sendLogs_sentBody =>
+      'Sent. If you report the problem, mention this code so we can find your logs.';
+
+  @override
+  String get sendLogs_copyCode => 'Copy code';
+
+  @override
+  String get sendLogs_codeCopied => 'Code copied';
+
+  @override
+  String get sendLogs_retry => 'Retry';
+
+  @override
+  String get sendLogs_failedNetwork =>
+      'Couldn\'t reach Offband. Check the connection and try again.';
+
+  @override
+  String get sendLogs_failedTooLarge =>
+      'The logs are too large to send. Clear the logs, make the problem happen again, then send.';
+
+  @override
+  String get sendLogs_failedRateLimited =>
+      'Too many sends from this network. Wait a minute and try again.';
+
+  @override
+  String get sendLogs_failedRefused =>
+      'Offband refused the upload. Update the app and try again.';
+
+  @override
+  String get sendLogs_failedServer =>
+      'Offband couldn\'t store the logs right now. Try again later.';
+
+  @override
+  String get sendLogs_failedPrepare => 'Couldn\'t gather the logs.';
+
+  @override
+  String get sendLogs_noLogs => 'There are no logs to send yet.';
+
+  @override
   String debugFrame_length(int count) {
     return 'Długość ramy: $count bajtów';
   }
