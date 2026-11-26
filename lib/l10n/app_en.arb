@@ -1304,6 +1304,24 @@
   "sendLogs_failedServer": "Offband couldn't store the logs right now. Try again later.",
   "sendLogs_failedPrepare": "Couldn't gather the logs.",
   "sendLogs_noLogs": "There are no logs to send yet.",
+  "failureOffer_crashed": "Offband crashed last time.",
+  "failureOffer_anr": "Offband stopped responding last time.",
+  "failureOffer_exited": "Offband closed unexpectedly last time.",
+  "failureOffer_body": "Send the logs to Offband so we can find out why?",
+  "failureOffer_notNow": "Not now",
+  "failureOffer_dontAsk": "Don't ask again",
+  "failureOffer_autoSent": "Crash logs sent to Offband as {code}",
+  "@failureOffer_autoSent": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "failureOffer_settingSaveFailed": "Couldn't save the setting. Please try again.",
+  "failureOffer_askSetting": "Offer to send logs after a crash",
+  "failureOffer_autoSetting": "Send crash logs automatically",
+  "failureOffer_autoSettingSubtitle": "Off unless you turn it on. Logs are encrypted so only Offband can read them.",
   "debugFrame_length": "Frame Length: {count} bytes",
   "@debugFrame_length": {
     "placeholders": {
