@@ -5,6 +5,7 @@ import '../models/path_selection.dart';
 import '../connector/meshcore_connector.dart';
 import '../connector/meshcore_protocol.dart';
 import '../utils/app_logger.dart';
+import '../utils/log_redactor.dart';
 import 'command_correlation.dart';
 
 /// A repeater reply that arrived with no command waiting to receive it.
@@ -264,10 +265,10 @@ class RepeaterCommandService {
     if (expired != null) {
       final commandText = redactUnmatchedReplyText
           ? '(withheld)'
-          : '"${expired.command}"';
+          : '"${LogRedactor.cliCommandText(expired.command)}"';
       final payloadText = redactUnmatchedReplyText
           ? '${responsePayload.length} chars, text withheld'
-          : responsePayload;
+          : LogRedactor.cliReplyText(expired.command, responsePayload);
       appLogger.warn(
         'Late reply to $commandText from $repeaterKey arrived '
         '${sinceTimeout!.inMilliseconds}ms after its window closed: '
@@ -277,7 +278,7 @@ class RepeaterCommandService {
     } else {
       final payloadText = redactUnmatchedReplyText
           ? '${responsePayload.length} chars, text withheld'
-          : responsePayload;
+          : LogRedactor.cliReplyText(null, responsePayload);
       appLogger.warn(
         'Reply from $repeaterKey matched no pending or recently expired '
         'command (prefix: ${prefix ?? 'none'}): $payloadText',
