@@ -28,6 +28,7 @@ const _pathProvider = MethodChannel('plugins.flutter.io/path_provider');
 const _share = MethodChannel('dev.fluttercommunity.plus/share');
 
 late Directory _supportDir;
+late Directory _tempDir;
 
 /// Every share the app asked the OS for, as the paths it handed over.
 final List<List<String>> _shared = [];
@@ -110,12 +111,14 @@ void main() {
 
   setUpAll(() async {
     _supportDir = Directory.systemTemp.createTempSync('offband_693_');
+    _tempDir = Directory.systemTemp.createTempSync('offband_693_tmp_');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_pathProvider, (call) async {
       if (call.method == 'getApplicationSupportDirectory') {
         return _supportDir.path;
       }
+      if (call.method == 'getTemporaryDirectory') return _tempDir.path;
       return null;
     });
     messenger.setMockMethodCallHandler(_share, (call) async {
@@ -131,6 +134,7 @@ void main() {
   tearDownAll(() async {
     await FileLogService.instance.dispose();
     if (_supportDir.existsSync()) _supportDir.deleteSync(recursive: true);
+    if (_tempDir.existsSync()) _tempDir.deleteSync(recursive: true);
   });
 
   setUp(() async {
@@ -211,7 +215,7 @@ void main() {
   });
 
   group('Share logs with no radio', () {
-    testWidgets('hands the on-disk log file to the share sheet', (
+    testWidgets('hands the on-disk log, redacted, to the share sheet', (
       tester,
     ) async {
       const marker = 'issue-693 marker line';
@@ -228,12 +232,16 @@ void main() {
       );
 
       expect(_shared.length, sharesBefore + 1);
-      final logDir = FileLogService.instance.logDir!.path;
       final handedOver = _shared.last;
-      expect(handedOver, isNotEmpty);
-      expect(handedOver.first, startsWith(logDir));
+      expect(handedOver.first, endsWith('manifest.json'));
+      // The share carries the log package's redacted copies (#1192), never
+      // the files in the log folder themselves.
+      final logDir = FileLogService.instance.logDir!.path;
+      expect(handedOver.where((p) => p.startsWith(logDir)), isEmpty);
+      final logs = handedOver.where((p) => p.endsWith('.log')).toList();
+      expect(logs, isNotEmpty);
       final text = await tester.runAsync(
-        () => File(handedOver.first).readAsString(),
+        () async => [for (final p in logs) await File(p).readAsString()].join(),
       );
       expect(text, contains(marker));
       expect(find.text(l10n.debugLog_logUnavailable), findsNothing);

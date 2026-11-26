@@ -372,6 +372,9 @@ const List<StorageSurface> storageSurfaces = [
 /// justified, instead of a new key slipping through because nobody looked.
 const Map<String, String> nonStorageConstants = {
   'offband_store': 'the drift database FILE name, not a key within it',
+  'traces':
+      'the folder inside a log package that holds Android exit traces '
+      '(LogPackage, #1192). A path in a temp folder, not a key',
   '__all__':
       'the sentinel value for "all groups" in the contacts filter '
       '(UiViewStateService). A filter VALUE, not a key, and not persisted '
