@@ -375,6 +375,9 @@ const Map<String, String> nonStorageConstants = {
   'traces':
       'the folder inside a log package that holds Android exit traces '
       '(LogPackage, #1192). A path in a temp folder, not a key',
+  'bfe27e2ee77e7c80d4aa9b546e3f870f979df2a5943a3fe9178d0a733883e742':
+      "Offband's public log key (offbandLogPublicKeyHex, #1216), hex. "
+      'Sealed into each upload, never stored',
   '__all__':
       'the sentinel value for "all groups" in the contacts filter '
       '(UiViewStateService). A filter VALUE, not a key, and not persisted '
