@@ -22,6 +22,7 @@ import 'services/notification_service.dart';
 import 'services/ble_debug_log_service.dart';
 import 'services/app_debug_log_service.dart';
 import 'services/app_exit_info_service.dart';
+import 'services/failure_monitor.dart';
 import 'services/file_log_service.dart';
 import 'services/background_service.dart';
 import 'services/map_tile_cache_service.dart';
@@ -40,6 +41,7 @@ import 'storage/cross_radio_copy_cleanup.dart';
 import 'storage/drift/blob_store.dart';
 import 'widgets/contact_sync_shortfall_banner.dart';
 import 'widgets/factory_reset_banner.dart';
+import 'widgets/failure_report_banner.dart';
 import 'widgets/storage_unavailable_banner.dart';
 import 'storage/prefs_manager.dart';
 import 'utils/app_logger.dart';
@@ -52,6 +54,10 @@ void main() async {
 
   // Initialize SharedPreferences cache
   await PrefsManager.initialize();
+
+  // Note how the last run ended and start this run's marker (#1213), early,
+  // so an error during the rest of startup is caught too.
+  FailureMonitor.instance.start();
 
   // Probe the storage layer up front (#385). If the database can't open, e.g.
   // the native sqlite library fails to load, every read/write silently fails
@@ -271,6 +277,10 @@ Mirror and credit: https://github.com/OffbandMesh/config-profiles#credit
   });
 }
 
+final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> _messengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 class MeshCoreApp extends StatelessWidget {
   final StorageHealthService storageHealth;
   final MeshCoreConnector connector;
@@ -335,6 +345,8 @@ class MeshCoreApp extends StatelessWidget {
         builder: (context, settingsService, child) {
           return MaterialApp(
             title: 'Offband MeshCore',
+            navigatorKey: _navigatorKey,
+            scaffoldMessengerKey: _messengerKey,
             debugShowCheckedModeBanner: false,
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -390,7 +402,12 @@ class MeshCoreApp extends StatelessWidget {
                               child: FactoryResetBanner(
                                 status: connector.factoryResetStatus,
                                 onDismiss: connector.dismissFactoryResetStatus,
-                                child: child ?? const SizedBox.shrink(),
+                                child: FailureReportBanner(
+                                  monitor: FailureMonitor.instance,
+                                  navigatorKey: _navigatorKey,
+                                  messengerKey: _messengerKey,
+                                  child: child ?? const SizedBox.shrink(),
+                                ),
                               ),
                             ),
                       ),

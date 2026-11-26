@@ -2309,6 +2309,44 @@ class AppLocalizationsPt extends AppLocalizations {
   String get sendLogs_noLogs => 'There are no logs to send yet.';
 
   @override
+  String get failureOffer_crashed => 'Offband crashed last time.';
+
+  @override
+  String get failureOffer_anr => 'Offband stopped responding last time.';
+
+  @override
+  String get failureOffer_exited => 'Offband closed unexpectedly last time.';
+
+  @override
+  String get failureOffer_body =>
+      'Send the logs to Offband so we can find out why?';
+
+  @override
+  String get failureOffer_notNow => 'Not now';
+
+  @override
+  String get failureOffer_dontAsk => 'Don\'t ask again';
+
+  @override
+  String failureOffer_autoSent(String code) {
+    return 'Crash logs sent to Offband as $code';
+  }
+
+  @override
+  String get failureOffer_settingSaveFailed =>
+      'Couldn\'t save the setting. Please try again.';
+
+  @override
+  String get failureOffer_askSetting => 'Offer to send logs after a crash';
+
+  @override
+  String get failureOffer_autoSetting => 'Send crash logs automatically';
+
+  @override
+  String get failureOffer_autoSettingSubtitle =>
+      'Off unless you turn it on. Logs are encrypted so only Offband can read them.';
+
+  @override
   String debugFrame_length(int count) {
     return 'Comprimento do Quadro: $count bytes';
   }

@@ -140,6 +140,13 @@ class AppSettings {
   final String? languageOverride; // null = system default
   final bool appDebugLogEnabled;
 
+  /// After a crash, an ANR or an unexpected exit, offer to send the logs on
+  /// the next launch (#1214). "Don't ask again" turns it off.
+  final bool crashLogsAsk;
+
+  /// Send those logs without asking. Off unless the user turns it on (#1214).
+  final bool crashLogsAutoSend;
+
   /// Owner-only Experimental settings section, revealed by a 7-tap gesture on
   /// the version row (#509). Not a security boundary, just keeps advanced/
   /// me-centric toggles out of the default UI. Persists across restarts.
@@ -229,6 +236,8 @@ class AppSettings {
     this.themeMode = 'system',
     this.languageOverride,
     this.appDebugLogEnabled = false,
+    this.crashLogsAsk = true,
+    this.crashLogsAutoSend = false,
     this.experimentalUnlocked = false,
     this.coreScopeObserverCountEnabled = false,
     Map<String, String>? batteryChemistryByDeviceId,
@@ -300,6 +309,8 @@ class AppSettings {
       'theme_mode': themeMode,
       'language_override': languageOverride,
       'app_debug_log_enabled': appDebugLogEnabled,
+      'crash_logs_ask': crashLogsAsk,
+      'crash_logs_auto_send': crashLogsAutoSend,
       'experimental_unlocked': experimentalUnlocked,
       'corescope_observer_count_enabled': coreScopeObserverCountEnabled,
       'battery_chemistry_by_device_id': batteryChemistryByDeviceId,
@@ -406,6 +417,8 @@ class AppSettings {
       themeMode: json['theme_mode'] as String? ?? 'system',
       languageOverride: json['language_override'] as String?,
       appDebugLogEnabled: json['app_debug_log_enabled'] as bool? ?? false,
+      crashLogsAsk: json['crash_logs_ask'] as bool? ?? true,
+      crashLogsAutoSend: json['crash_logs_auto_send'] as bool? ?? false,
       experimentalUnlocked: json['experimental_unlocked'] as bool? ?? false,
       coreScopeObserverCountEnabled:
           json['corescope_observer_count_enabled'] as bool? ?? false,
@@ -539,6 +552,8 @@ class AppSettings {
     String? themeMode,
     Object? languageOverride = _unset,
     bool? appDebugLogEnabled,
+    bool? crashLogsAsk,
+    bool? crashLogsAutoSend,
     bool? experimentalUnlocked,
     bool? coreScopeObserverCountEnabled,
     Map<String, String>? batteryChemistryByDeviceId,
@@ -602,6 +617,8 @@ class AppSettings {
           ? this.languageOverride
           : languageOverride as String?,
       appDebugLogEnabled: appDebugLogEnabled ?? this.appDebugLogEnabled,
+      crashLogsAsk: crashLogsAsk ?? this.crashLogsAsk,
+      crashLogsAutoSend: crashLogsAutoSend ?? this.crashLogsAutoSend,
       experimentalUnlocked: experimentalUnlocked ?? this.experimentalUnlocked,
       coreScopeObserverCountEnabled:
           coreScopeObserverCountEnabled ?? this.coreScopeObserverCountEnabled,
