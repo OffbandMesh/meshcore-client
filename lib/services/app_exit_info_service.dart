@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../storage/prefs_manager.dart';
+import 'failure_monitor.dart';
 import 'file_log_service.dart';
 
 /// One `ApplicationExitInfo` record, as the platform channel delivers it.
@@ -419,6 +420,10 @@ class AppExitInfoService {
       backfillTraceCap: backfillTraceCap,
     );
     if (selection.records.isEmpty) return;
+    FailureMonitor.instance.recordExitReasons(
+      selection.records.map((r) => r.reasonName),
+      backfill: selection.backfill,
+    );
 
     var tracesWritten = 0;
     for (final record in selection.records) {
