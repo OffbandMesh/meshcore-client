@@ -231,13 +231,15 @@ class _ChatScreenState extends State<ChatScreen> {
             builder: (context, connector, _) {
               final contact = _resolveContact(connector);
               final isFloodMode = contact.pathOverride == -1;
-
-              final isDirectMode = contact.pathOverride == 0;
-              final activeMode = isFloodMode
-                  ? 'flood'
-                  : isDirectMode
-                  ? 'direct'
-                  : 'auto';
+              // "Direct" (a forced zero-hop path) is gone. It bought no
+              // reachability: a DM is matched on the destination hash with no
+              // check of route type or path position, so a node in range hears
+              // the transmission whatever path the packet carries, and Auto
+              // already settles on zero hops for a real neighbour because the
+              // path return comes back with a length of 0. What it did buy was
+              // a sticky mode that suppressed the flood fallback and failed
+              // silently once the contact moved out of range. (#1223 R2)
+              final activeMode = isFloodMode ? 'flood' : 'auto';
 
               return PopupMenuButton<String>(
                 icon: Icon(isFloodMode ? Icons.waves : Icons.route),
@@ -245,12 +247,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 onSelected: (mode) async {
                   if (mode == 'flood') {
                     await connector.setPathOverride(contact, pathLen: -1);
-                  } else if (mode == 'direct') {
-                    await connector.setPathOverride(
-                      contact,
-                      pathLen: 0,
-                      pathBytes: Uint8List(0),
-                    );
                   } else {
                     await connector.setPathOverride(contact, pathLen: null);
                   }
@@ -272,29 +268,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           context.l10n.chat_autoUseSavedPath,
                           style: TextStyle(
                             fontWeight: activeMode == 'auto'
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'direct',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.near_me,
-                          size: 20,
-                          color: activeMode == 'direct'
-                              ? Theme.of(context).primaryColor
-                              : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          context.l10n.chat_direct,
-                          style: TextStyle(
-                            fontWeight: activeMode == 'direct'
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                           ),
@@ -1340,7 +1313,6 @@ class _ChatScreenState extends State<ChatScreen> {
     // Check if user has set a path override
     if (contact.pathOverride != null) {
       if (contact.pathOverride! < 0) return context.l10n.chat_floodForced;
-      if (contact.pathOverride == 0) return context.l10n.chat_directForced;
       return context.l10n.chat_hopsForced(contact.pathOverride!);
     }
 

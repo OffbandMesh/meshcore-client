@@ -224,30 +224,6 @@ class MessageSettingsView extends StatelessWidget {
             ),
           ),
           SwitchListTile(
-            secondary: const Icon(Icons.refresh_outlined),
-            title: Text(context.l10n.appSettings_clearPathOnMaxRetry),
-            subtitle: Text(
-              context.l10n.appSettings_clearPathOnMaxRetrySubtitle,
-            ),
-            value: settingsService.settings.clearPathOnMaxRetry,
-            onChanged: (value) {
-              persistSetting(
-                context,
-                () => settingsService.setClearPathOnMaxRetry(value),
-              );
-              showDismissibleSnackBar(
-                context,
-                content: Text(
-                  value
-                      ? context.l10n.appSettings_pathsWillBeCleared
-                      : context.l10n.appSettings_pathsWillNotBeCleared,
-                ),
-                duration: const Duration(seconds: 2),
-              );
-            },
-          ),
-          const Divider(height: 1),
-          SwitchListTile(
             secondary: const Icon(Icons.vertical_align_top),
             title: Text(context.l10n.appSettings_jumpToOldestUnread),
             subtitle: Text(context.l10n.appSettings_jumpToOldestUnreadSubtitle),
@@ -257,152 +233,124 @@ class MessageSettingsView extends StatelessWidget {
               () => settingsService.setJumpToOldestUnread(value),
             ),
           ),
+          // The route-weight and retry sliders are no longer behind a toggle.
+          // They were gated on `autoRouteRotationEnabled`, which defaulted off,
+          // so "Max Message Retries" governed every send while being invisible
+          // and uneditable unless that toggle happened to be on (#1223 R1).
           const Divider(height: 1),
-          SwitchListTile(
-            secondary: const Icon(Icons.alt_route),
-            title: Text(context.l10n.appSettings_autoRouteRotation),
-            subtitle: Text(context.l10n.appSettings_autoRouteRotationSubtitle),
-            value: settingsService.settings.autoRouteRotationEnabled,
-            onChanged: (value) {
-              persistSetting(
-                context,
-                () => settingsService.setAutoRouteRotationEnabled(value),
-              );
-              showDismissibleSnackBar(
-                context,
-                content: Text(
-                  value
-                      ? context.l10n.appSettings_autoRouteRotationEnabled
-                      : context.l10n.appSettings_autoRouteRotationDisabled,
+          ListTile(
+            title: Text(context.l10n.appSettings_maxRouteWeight),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.appSettings_maxRouteWeightSubtitle),
+                Slider(
+                  value: settingsService.settings.maxRouteWeight,
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  label: settingsService.settings.maxRouteWeight
+                      .round()
+                      .toString(),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setMaxRouteWeight(value),
+                  ),
                 ),
-                duration: const Duration(seconds: 2),
-              );
-            },
+              ],
+            ),
           ),
-          if (settingsService.settings.autoRouteRotationEnabled) ...[
-            const Divider(height: 1),
-            ListTile(
-              title: Text(context.l10n.appSettings_maxRouteWeight),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.appSettings_maxRouteWeightSubtitle),
-                  Slider(
-                    value: settingsService.settings.maxRouteWeight,
-                    min: 1,
-                    max: 10,
-                    divisions: 9,
-                    label: settingsService.settings.maxRouteWeight
-                        .round()
-                        .toString(),
-                    onChanged: (value) => persistSetting(
-                      context,
-                      () => settingsService.setMaxRouteWeight(value),
-                    ),
+          const Divider(height: 1),
+          ListTile(
+            title: Text(context.l10n.appSettings_initialRouteWeight),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.appSettings_initialRouteWeightSubtitle),
+                Slider(
+                  value: settingsService.settings.initialRouteWeight,
+                  min: 0.5,
+                  max: 5.0,
+                  divisions: 9,
+                  label: settingsService.settings.initialRouteWeight
+                      .toStringAsFixed(1),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setInitialRouteWeight(value),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            ListTile(
-              title: Text(context.l10n.appSettings_initialRouteWeight),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.appSettings_initialRouteWeightSubtitle),
-                  Slider(
-                    value: settingsService.settings.initialRouteWeight,
-                    min: 0.5,
-                    max: 5.0,
-                    divisions: 9,
-                    label: settingsService.settings.initialRouteWeight
-                        .toStringAsFixed(1),
-                    onChanged: (value) => persistSetting(
-                      context,
-                      () => settingsService.setInitialRouteWeight(value),
-                    ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            title: Text(context.l10n.appSettings_routeWeightSuccessIncrement),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.appSettings_routeWeightSuccessIncrementSubtitle,
+                ),
+                Slider(
+                  value: settingsService.settings.routeWeightSuccessIncrement,
+                  min: 0.1,
+                  max: 2.0,
+                  divisions: 19,
+                  label: settingsService.settings.routeWeightSuccessIncrement
+                      .toStringAsFixed(1),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setRouteWeightSuccessIncrement(value),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            ListTile(
-              title: Text(context.l10n.appSettings_routeWeightSuccessIncrement),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context
-                        .l10n
-                        .appSettings_routeWeightSuccessIncrementSubtitle,
+          ),
+          const Divider(height: 1),
+          ListTile(
+            title: Text(context.l10n.appSettings_routeWeightFailureDecrement),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.appSettings_routeWeightFailureDecrementSubtitle,
+                ),
+                Slider(
+                  value: settingsService.settings.routeWeightFailureDecrement,
+                  min: 0.1,
+                  max: 2.0,
+                  divisions: 19,
+                  label: settingsService.settings.routeWeightFailureDecrement
+                      .toStringAsFixed(1),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setRouteWeightFailureDecrement(value),
                   ),
-                  Slider(
-                    value: settingsService.settings.routeWeightSuccessIncrement,
-                    min: 0.1,
-                    max: 2.0,
-                    divisions: 19,
-                    label: settingsService.settings.routeWeightSuccessIncrement
-                        .toStringAsFixed(1),
-                    onChanged: (value) => persistSetting(
-                      context,
-                      () =>
-                          settingsService.setRouteWeightSuccessIncrement(value),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            ListTile(
-              title: Text(context.l10n.appSettings_routeWeightFailureDecrement),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context
-                        .l10n
-                        .appSettings_routeWeightFailureDecrementSubtitle,
+          ),
+          const Divider(height: 1),
+          ListTile(
+            title: Text(context.l10n.appSettings_maxMessageRetries),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.appSettings_maxMessageRetriesSubtitle),
+                Slider(
+                  value: settingsService.settings.maxMessageRetries.toDouble(),
+                  min: 2,
+                  max: 10,
+                  divisions: 8,
+                  label: settingsService.settings.maxMessageRetries.toString(),
+                  onChanged: (value) => persistSetting(
+                    context,
+                    () => settingsService.setMaxMessageRetries(value.toInt()),
                   ),
-                  Slider(
-                    value: settingsService.settings.routeWeightFailureDecrement,
-                    min: 0.1,
-                    max: 2.0,
-                    divisions: 19,
-                    label: settingsService.settings.routeWeightFailureDecrement
-                        .toStringAsFixed(1),
-                    onChanged: (value) => persistSetting(
-                      context,
-                      () =>
-                          settingsService.setRouteWeightFailureDecrement(value),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            ListTile(
-              title: Text(context.l10n.appSettings_maxMessageRetries),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.appSettings_maxMessageRetriesSubtitle),
-                  Slider(
-                    value: settingsService.settings.maxMessageRetries
-                        .toDouble(),
-                    min: 2,
-                    max: 10,
-                    divisions: 8,
-                    label: settingsService.settings.maxMessageRetries
-                        .toString(),
-                    onChanged: (value) => persistSetting(
-                      context,
-                      () => settingsService.setMaxMessageRetries(value.toInt()),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );

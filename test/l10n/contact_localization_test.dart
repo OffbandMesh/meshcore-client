@@ -57,8 +57,22 @@ void main() {
       expect(_contact(pathOverride: -1).pathLabel(l10n), 'Flood (forced)');
     });
 
-    test('override == 0 -> direct (forced)', () {
-      expect(_contact(pathOverride: 0).pathLabel(l10n), 'Direct (forced)');
+    // "Direct" is gone (#1223 R2). A stored zero-hop override is no longer an
+    // override, so the label must describe the radio's own path instead of
+    // claiming a forced route that nothing enforces.
+    test('override == 0 is not an override, it describes the device path', () {
+      expect(
+        _contact(pathLength: 0, pathOverride: 0).pathLabel(l10n),
+        'Direct',
+      );
+      expect(
+        _contact(pathLength: 3, pathOverride: 0).pathLabel(l10n),
+        '3 hops',
+      );
+      expect(
+        _contact(pathLength: -1, pathOverride: 0).pathLabel(l10n),
+        'Flood',
+      );
     });
 
     test('override > 0 -> hops (forced)', () {

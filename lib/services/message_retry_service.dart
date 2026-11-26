@@ -218,15 +218,37 @@ class MessageRetryService extends ChangeNotifier {
     _sendNextForContact(contactKey);
   }
 
+  static const PathSelection _floodSelection = PathSelection(
+    pathBytes: [],
+    hopCount: -1,
+    useFlood: true,
+  );
+
+  /// The path for this attempt, or null to let the contact's own resolution
+  /// stand.
+  ///
+  /// The final attempt always floods. Clearing the stored path and flooding is
+  /// the only recovery the wire protocol offers, because there is no per-send
+  /// routing field: the radio routes a DM direct whenever it holds a path, and
+  /// flood is how the mesh teaches it a new one. That makes the fallback part
+  /// of sending a DM rather than a preference, so it is no longer behind
+  /// `autoRouteRotationEnabled` (R1), and a path override no longer suppresses
+  /// it (R4). An override still picks the route for every earlier attempt.
+  /// (#1198/#1223)
   PathSelection? _selectPathForAttempt(Message message, Contact contact) {
     final config = _config;
     if (config == null) return null;
-    final autoRotationEnabled =
-        config.appSettingsService?.settings.autoRouteRotationEnabled == true;
-    if (!autoRotationEnabled ||
-        contact.pathOverride != null ||
-        config.selectRetryPath == null) {
-      return null;
+
+    final bool isFinalAttempt =
+        maxRetries <= 0 || message.retryCount >= maxRetries - 1;
+
+    // A zero-hop override is the retired "Direct" mode and is not an override
+    // any more (#1223 R2), so it must not suppress path rotation either.
+    final bool hasOverride =
+        contact.pathOverride != null && contact.pathOverride != 0;
+
+    if (hasOverride || config.selectRetryPath == null) {
+      return isFinalAttempt ? _floodSelection : null;
     }
 
     final recentSelections = List<PathSelection>.from(
@@ -280,27 +302,28 @@ class MessageRetryService extends ChangeNotifier {
     // Re-read after potential schedule update
     final effectiveMessage = _pendingMessages[messageId] ?? message;
 
-    // Sync path settings with device before sending
-    if (config.setContactPath != null && config.clearContactPath != null) {
+    // The radio owns the path. It learns one from a path-return and persists
+    // it (firmware BaseChatMesh::onContactPathRecv, DataStore writes out_path),
+    // so the client has no business writing a path back to it on a retry. The
+    // path this send was created with is a snapshot: re-asserting it before
+    // every attempt overwrote whatever the radio had, including a fresher
+    // route it had just learned, and guaranteed the clear below never ran.
+    //
+    // A user's path override is still pushed to the radio, but at the moment
+    // they choose it: `setPathOverride()` calls `setContactPath()` itself.
+    // Re-sending it on every attempt added nothing.
+    //
+    // Clearing is kept: it is a per-send routing decision the radio cannot
+    // make for us, because the wire protocol has no per-send routing field.
+    // Clearing a dead path is how the mesh re-learns one. (#1198/#1223)
+    if (config.clearContactPath != null) {
       final bool useFlood = currentSelection != null
           ? currentSelection.useFlood
           : (effectiveMessage.pathLength != null &&
                 effectiveMessage.pathLength! < 0);
-      final List<int> pathBytes = currentSelection != null
-          ? currentSelection.pathBytes
-          : effectiveMessage.pathBytes;
-      final int hopCount = currentSelection != null
-          ? currentSelection.hopCount
-          : (effectiveMessage.pathLength ?? 0);
 
       if (useFlood) {
         await config.clearContactPath!(contact);
-      } else if (effectiveMessage.pathLength != null) {
-        await config.setContactPath!(
-          contact,
-          Uint8List.fromList(pathBytes),
-          hopCount,
-        );
       }
     }
 
@@ -675,11 +698,11 @@ class MessageRetryService extends ChangeNotifier {
       final failedMessage = message.copyWith(status: MessageStatus.failed);
       _pendingMessages[messageId] = failedMessage;
 
-      if (config?.appSettingsService?.settings.clearPathOnMaxRetry == true &&
-          config?.clearContactPath != null) {
-        config!.clearContactPath!(contact);
-      }
-
+      // No path clear here. The final attempt itself floods, which already
+      // cleared the stored path and gave the mesh its chance to teach the radio
+      // a new one. Clearing again after the fact could only ever have helped
+      // the NEXT message, which is why `clearPathOnMaxRetry` is retired (R3).
+      // (#1223)
       _recordPathResultFromMessage(
         contact.publicKeyHex,
         message,
