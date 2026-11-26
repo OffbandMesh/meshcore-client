@@ -577,7 +577,7 @@ void main() {
             addMessage: (_, message) => addedMessage = message,
             updateMessage: (_) {},
             clearContactPath: (_) {},
-            setContactPath: (_, _, _) {},
+            setContactPath: (_, _, _, {hashWidth = 1}) {},
             selectRetryPath: (_, _, _, _) => null,
           ),
         );
@@ -611,7 +611,7 @@ void main() {
           addMessage: (_, message) => addedMessage = message,
           updateMessage: (_) {},
           clearContactPath: (_) {},
-          setContactPath: (_, _, _) {},
+          setContactPath: (_, _, _, {hashWidth = 1}) {},
         ),
       );
 
@@ -682,7 +682,7 @@ void main() {
             addMessage: (_, _) {},
             updateMessage: updates.add,
             clearContactPath: (_) {},
-            setContactPath: (_, _, _) {},
+            setContactPath: (_, _, _, {hashWidth = 1}) {},
           ),
         );
 
@@ -970,7 +970,8 @@ void main() {
           sendMessage: (_, _, _, _) async {},
           addMessage: (_, _) {},
           updateMessage: (_) {},
-          setContactPath: (_, bytes, hops) => setCalls.add(hops),
+          setContactPath: (_, bytes, hops, {hashWidth = 1}) =>
+              setCalls.add(hops),
           clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
         ),
       );
@@ -1007,7 +1008,8 @@ void main() {
           sendMessage: (_, _, _, _) async {},
           addMessage: (_, _) {},
           updateMessage: (_) {},
-          setContactPath: (_, bytes, hops) => setCalls.add(hops),
+          setContactPath: (_, bytes, hops, {hashWidth = 1}) =>
+              setCalls.add(hops),
           clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
         ),
       );
@@ -1124,7 +1126,7 @@ void main() {
             sendMessage: (_, _, _, _) async {},
             addMessage: (_, _) {},
             updateMessage: (_) {},
-            setContactPath: (_, _, hops) => setCalls.add(hops),
+            setContactPath: (_, _, hops, {hashWidth = 1}) => setCalls.add(hops),
             clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
           ),
         );
@@ -1178,7 +1180,7 @@ void main() {
             sendMessage: (_, _, _, _) async {},
             addMessage: (_, _) {},
             updateMessage: (_) {},
-            setContactPath: (_, _, hops) => setCalls.add(hops),
+            setContactPath: (_, _, hops, {hashWidth = 1}) => setCalls.add(hops),
             clearContactPath: (c) => clearCalls.add(c.publicKeyHex),
           ),
         );
@@ -1190,6 +1192,13 @@ void main() {
           clearCalls,
           isEmpty,
           reason: 'the chosen route gets the ordinary attempts, untouched',
+        );
+        expect(
+          setCalls,
+          equals([2]),
+          reason:
+              'the pinned route is written once at the start of the send, '
+              'because a previous send may have cleared it (#1223 R4)',
         );
 
         // Radio confirms the send and arms a 1 ms delivery timeout, so the
@@ -1207,8 +1216,54 @@ void main() {
         );
         expect(
           setCalls,
-          isEmpty,
-          reason: 'and it still never writes a path to the radio (#1198)',
+          equals([2]),
+          reason:
+              'and the retry writes nothing: one write per send, never one '
+              'per attempt (#1198)',
+        );
+
+        retryService.dispose();
+      });
+
+      test('a pinned route is re-established once per send, at the width it '
+          'was captured at', () async {
+        final retryService = MessageRetryService();
+        // A 2-byte-wide route. Written at width 1 it would read as four
+        // 1-byte hops and route to the wrong nodes (#279).
+        final contact = Contact(
+          publicKey: recipientKey,
+          receivedName: 'Test',
+          type: 1,
+          pathLength: 2,
+          pathHashWidth: 2,
+          path: Uint8List.fromList(const [0x10, 0x11, 0x20, 0x21]),
+          pathOverride: 2,
+          pathOverrideBytes: Uint8List.fromList(const [0x10, 0x11, 0x20, 0x21]),
+          lastSeen: DateTime.now(),
+        );
+        final writes = <({int hops, int width, int bytes})>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            setContactPath: (_, bytes, hops, {hashWidth = 1}) =>
+                writes.add((hops: hops, width: hashWidth, bytes: bytes.length)),
+            clearContactPath: (_) {},
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'one');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(writes.length, equals(1), reason: 'exactly one write per send');
+        expect(
+          writes.single,
+          equals((hops: 2, width: 2, bytes: 4)),
+          reason:
+              'two hops of two bytes each. Dropping the width is how a '
+              'multi-byte route gets re-read as twice as many hops (#279)',
         );
 
         retryService.dispose();
