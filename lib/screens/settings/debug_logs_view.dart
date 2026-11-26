@@ -8,6 +8,7 @@ import '../../services/app_settings_service.dart';
 import '../../utils/log_export.dart';
 import '../app_debug_log_screen.dart';
 import '../ble_debug_log_screen.dart';
+import '../send_logs_screen.dart';
 
 /// The radio-independent rows of the Debug pane: share the log, the app debug
 /// logging switch, and the two log viewers.
@@ -29,6 +30,18 @@ class DebugLogTiles extends StatelessWidget {
           leading: Icon(LogExport.icon),
           title: Text(LogExport.tooltip(context)),
           onTap: () => LogExport.shareLogs(
+            context,
+            webContent: () => LogExport.appLogText(
+              context.read<AppDebugLogService>().entries.reversed,
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.cloud_upload_outlined),
+          title: Text(l10n.sendLogs_title),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => SendLogsScreen.open(
             context,
             webContent: () => LogExport.appLogText(
               context.read<AppDebugLogService>().entries.reversed,
