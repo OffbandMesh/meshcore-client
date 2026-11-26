@@ -7,6 +7,7 @@ import '../connector/meshcore_protocol.dart';
 import '../widgets/adaptive_app_bar_title.dart';
 import '../helpers/snack_bar_builder.dart';
 import '../utils/log_export.dart';
+import 'send_logs_screen.dart';
 
 enum _BleLogView { frames, rawLogRx }
 
@@ -38,6 +39,19 @@ class _BleDebugLogScreenState extends State<BleDebugLogScreen> {
                 tooltip: LogExport.tooltip(context),
                 icon: Icon(LogExport.icon),
                 onPressed: () => LogExport.shareLogs(
+                  context,
+                  webContent: () => entries
+                      .map(
+                        (entry) =>
+                            '${entry.description}\n${entry.hexPreview}\n',
+                      )
+                      .join('\n'),
+                ),
+              ),
+              IconButton(
+                tooltip: context.l10n.sendLogs_title,
+                icon: const Icon(Icons.cloud_upload_outlined),
+                onPressed: () => SendLogsScreen.open(
                   context,
                   webContent: () => entries
                       .map(
