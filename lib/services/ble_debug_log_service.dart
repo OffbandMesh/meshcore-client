@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import '../connector/meshcore_protocol.dart';
+import '../utils/log_redactor.dart';
 import 'file_log_service.dart';
 
 class BleDebugLogEntry {
@@ -46,14 +47,16 @@ class BleDebugLogService extends ChangeNotifier {
   static const int maxEntries = 500;
   final List<BleDebugLogEntry> _entries = [];
   final List<BleRawLogRxEntry> _rawLogRxEntries = [];
+  final LogRedactor _redactor = LogRedactor();
   bool _notifyScheduled = false;
 
   List<BleDebugLogEntry> get entries => List.unmodifiable(_entries);
   List<BleRawLogRxEntry> get rawLogRxEntries =>
       List.unmodifiable(_rawLogRxEntries);
 
-  void logFrame(Uint8List frame, {required bool outgoing, String? note}) {
-    if (frame.isEmpty) return;
+  void logFrame(Uint8List raw, {required bool outgoing, String? note}) {
+    if (raw.isEmpty) return;
+    final frame = _redactor.frame(raw, outgoing: outgoing);
     final code = frame[0];
     final description = _describeFrame(code, frame, outgoing, note);
     FileLogService.instance.write(
@@ -65,7 +68,7 @@ class BleDebugLogService extends ChangeNotifier {
         timestamp: DateTime.now(),
         outgoing: outgoing,
         description: description,
-        payload: Uint8List.fromList(frame),
+        payload: frame,
       ),
     );
 
