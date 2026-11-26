@@ -95,7 +95,7 @@ Tasks are 3 to 4 points. Each Epic ends with a verification task and gets one PR
 
 | Task | Pts |
 |---|---|
-| **E1 · Keys:** `offband_logs.py keygen` writes the private key to `~/.secrets/` and prints the public key, which goes into the app. You store the private key in Bitwarden. Without it, no upload can ever be read again. | 2 |
+| **E1 · Keys:** `offband_logs.py keygen` writes the private key to `C:\Dev\.keys\` with the owner's other keys and prints the public key, which goes into the app. You store the private key in Bitwarden. Without it, no upload can ever be read again. | 2 |
 | **E2 · list / pull:** `list` shows unseen uploads. `pull OB-XXXXX` downloads with an R2 read token, decrypts, unpacks into `debug_logs/OB-XXXXX/`, marks the upload seen (which starts the 30-day clock) and comments on its issue. A failed decrypt marks nothing. Tests use C1's vectors. | 4 |
 | **E3 · Epic verification:** pull the upload from C5. | 1 |
 

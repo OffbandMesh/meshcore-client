@@ -55,10 +55,7 @@ Data types to select, each with **Purpose: App Functionality** and **Used for tr
 | Diagnostics | Crash Data |
 | Diagnostics | Other Diagnostic Data |
 
-**Linked to the user: one call for the owner.** There is no account and no device identifier in the package. The log does contain the user's own node name and its public key, and a node name is often a call sign. Apple counts data as linked when it is tied to the user's identity "via their account, device, or other details".
-
-- **A: Not linked.** There's no account, and Offband never ties a log to a person. This is a shorter label, but it rests on reading "other details" narrowly.
-- **B: Linked** ⭐ (recommended). The node name and key can name the user, so this is the reading that can't be called wrong later. It costs a longer label.
+**Linked to the user: Yes** for all four types (owner decision 2026-11-26, option B). There is no account, but the log contains the user's own node name and its public key, and a node name is often a call sign. Apple counts data as linked when it is tied to the user's identity "via their account, device, or other details", so "linked" is the reading that can't be called wrong later.
 
 ## Before entering
 
