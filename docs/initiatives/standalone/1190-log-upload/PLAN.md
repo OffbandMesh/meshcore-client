@@ -178,10 +178,11 @@ An incoming frame code the app doesn't know is kept raw (owner decision). That i
 - Channel keys are not redacted.
 - The radio's private key keeps its first 3 bytes; the other 61 are blanked.
 - The LoRa notify relay is not the alert path.
+- Alert path: **A**, the intake issue is assigned to the owner. GitHub's push and email cover the alert (owner, 2026-11-25).
 
 | # | Question | Option A | Option B | Rec. | Your choice |
 |---|---|---|---|---|---|
-| 1 | How does an upload alert you? | **GitHub:** the intake issue is assigned to you, so GitHub Mobile pushes it to your phone and emails you. Uses the same token as the issue, nothing new to run. | **Email** from the Worker, through Cloudflare Email Routing, to an address you pick, kept apart from other GitHub mail. | ⭐ A | |
+| 1 | How does an upload alert you? | **GitHub:** the intake issue is assigned to you, so GitHub Mobile pushes it to your phone and emails you. Uses the same token as the issue, nothing new to run. | **Email** from the Worker, through Cloudflare Email Routing, to an address you pick, kept apart from other GitHub mail. | ⭐ A | **A** |
 
 ## 10. Carried-in work
 
