@@ -3,12 +3,14 @@ import 'dart:io' show File;
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../connector/meshcore_connector.dart';
 import '../l10n/l10n.dart';
 import '../services/app_debug_log_service.dart';
-import '../services/app_exit_info_service.dart';
 import '../services/file_log_service.dart';
+import '../services/log_package.dart';
 import 'app_logger.dart';
 import 'log_web_download.dart';
 
@@ -86,6 +88,7 @@ class LogExport {
     // possibly-deactivated widget after the await.
     final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
+    final radio = context.read<MeshCoreConnector>();
     final present = <File>[];
     try {
       // On mobile, take every log file rather than just the active one, and
@@ -94,6 +97,10 @@ class LogExport {
       // can rotate into `.1.log` before the user exports, which would hand
       // over a trace with its metadata line missing. Desktop keeps its
       // single-file Save As: there are no exit records off Android.
+      //
+      // Either way the files go through the log package (#1192), so what
+      // leaves the app has its passwords and PINs removed, including lines
+      // written by builds before the redactor.
       final List<File> logs;
       if (_isMobile) {
         logs = await FileLogService.instance.flushAndGetAllFiles();
@@ -101,16 +108,16 @@ class LogExport {
         final active = await FileLogService.instance.flushAndGetActiveFile();
         logs = active == null ? const <File>[] : <File>[active];
       }
-      final candidates = <File>[
-        ...logs,
-        if (_isMobile) ...await AppExitInfoService.traceFiles(),
-      ];
-      // Last-moment existence check. Rotation renames files underneath us and
-      // a trace can be pruned, so a path collected a moment ago may already be
-      // gone; handing a missing path to the share sheet fails the whole export
-      // rather than one attachment.
-      for (final f in candidates) {
-        if (await f.exists()) present.add(f);
+      final package = await LogPackage.build(
+        radio: radio,
+        logs: logs,
+        traces: _isMobile ? null : const <File>[],
+      );
+      final hasLog = package.files.length > 1;
+      if (hasLog) {
+        present.addAll(
+          _isMobile ? package.files : package.files.skip(1).take(1),
+        );
       }
     } catch (e) {
       appLogger.error('Collecting log files failed: $e', tag: 'LogExport');
