@@ -245,6 +245,12 @@ class AppSettingsService extends ChangeNotifier {
     await updateSettings(_settings.copyWith(languageOverride: value));
   }
 
+  Future<void> setCrashLogsAsk(bool value) =>
+      updateSettings(_settings.copyWith(crashLogsAsk: value));
+
+  Future<void> setCrashLogsAutoSend(bool value) =>
+      updateSettings(_settings.copyWith(crashLogsAutoSend: value));
+
   Future<void> setAppDebugLogEnabled(bool value) async {
     await updateSettings(_settings.copyWith(appDebugLogEnabled: value));
     // Update the global logger

@@ -19,6 +19,23 @@ import '../send_logs_screen.dart';
 class DebugLogTiles extends StatelessWidget {
   const DebugLogTiles({super.key});
 
+  /// A setting that did not save says so until dismissed.
+  static Future<void> _save(
+    BuildContext context,
+    Future<void> Function() write,
+  ) async {
+    try {
+      await write();
+    } catch (_) {
+      if (!context.mounted) return;
+      showDismissibleSnackBar(
+        context,
+        content: Text(context.l10n.failureOffer_settingSaveFailed),
+        persist: true,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -47,6 +64,23 @@ class DebugLogTiles extends StatelessWidget {
               context.read<AppDebugLogService>().entries.reversed,
             ),
           ),
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          secondary: const Icon(Icons.report_outlined),
+          title: Text(l10n.failureOffer_askSetting),
+          value: settingsService.settings.crashLogsAsk,
+          onChanged: (value) =>
+              _save(context, () => settingsService.setCrashLogsAsk(value)),
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          secondary: const Icon(Icons.cloud_sync_outlined),
+          title: Text(l10n.failureOffer_autoSetting),
+          subtitle: Text(l10n.failureOffer_autoSettingSubtitle),
+          value: settingsService.settings.crashLogsAutoSend,
+          onChanged: (value) =>
+              _save(context, () => settingsService.setCrashLogsAutoSend(value)),
         ),
         const Divider(height: 1),
         SwitchListTile(

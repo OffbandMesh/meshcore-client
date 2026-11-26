@@ -4048,6 +4048,72 @@ abstract class AppLocalizations {
   /// **'There are no logs to send yet.'**
   String get sendLogs_noLogs;
 
+  /// No description provided for @failureOffer_crashed.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband crashed last time.'**
+  String get failureOffer_crashed;
+
+  /// No description provided for @failureOffer_anr.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband stopped responding last time.'**
+  String get failureOffer_anr;
+
+  /// No description provided for @failureOffer_exited.
+  ///
+  /// In en, this message translates to:
+  /// **'Offband closed unexpectedly last time.'**
+  String get failureOffer_exited;
+
+  /// No description provided for @failureOffer_body.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the logs to Offband so we can find out why?'**
+  String get failureOffer_body;
+
+  /// No description provided for @failureOffer_notNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get failureOffer_notNow;
+
+  /// No description provided for @failureOffer_dontAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t ask again'**
+  String get failureOffer_dontAsk;
+
+  /// No description provided for @failureOffer_autoSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Crash logs sent to Offband as {code}'**
+  String failureOffer_autoSent(String code);
+
+  /// No description provided for @failureOffer_settingSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the setting. Please try again.'**
+  String get failureOffer_settingSaveFailed;
+
+  /// No description provided for @failureOffer_askSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer to send logs after a crash'**
+  String get failureOffer_askSetting;
+
+  /// No description provided for @failureOffer_autoSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Send crash logs automatically'**
+  String get failureOffer_autoSetting;
+
+  /// No description provided for @failureOffer_autoSettingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Off unless you turn it on. Logs are encrypted so only Offband can read them.'**
+  String get failureOffer_autoSettingSubtitle;
+
   /// No description provided for @debugFrame_length.
   ///
   /// In en, this message translates to:
