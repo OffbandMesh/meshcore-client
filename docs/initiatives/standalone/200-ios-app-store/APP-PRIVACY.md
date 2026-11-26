@@ -1,5 +1,7 @@
 # App Store privacy answers
 
+> **Superseded when Send to Offband ships (#1190).** From that release, the app collects data the user chooses to send, and the answers are in `../1190-log-upload/STORE-DISCLOSURES.md`. The answers below hold only for releases without it.
+
 What to enter under **App Privacy** in App Store Connect (Feature #200, task C2). These are Offband's answers read against Apple's definitions, not legal advice. Apple's published label is the developer's own statement, so if the app's network use changes, this page and the label change with it.
 
 ## Apple's definitions
