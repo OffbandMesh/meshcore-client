@@ -81,6 +81,13 @@ jobs:
         if: needs.classify.outputs.docs_only != 'true'
         run: python3 -m unittest discover -s tools/play -v
 
+      - name: Log pull tool tests (#1195)
+        if: needs.classify.outputs.docs_only != 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/logs-venv"
+          "$RUNNER_TEMP/logs-venv/bin/pip" install --quiet cryptography==46.0.7 pytest==9.0.2
+          "$RUNNER_TEMP/logs-venv/bin/python" -m pytest tools/logs -q
+
       - name: Set up Flutter
         if: needs.classify.outputs.docs_only != 'true'
         uses: subosito/flutter-action@v2
