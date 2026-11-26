@@ -68,6 +68,7 @@ dependencies:
   share_plus: ^12.0.1
   file_selector: ^1.0.3  # Native Save As dialog for log export on desktop (#433)
   archive: ^4.0.9  # Zips the log package for Send to Offband (#1192)
+  cryptography: ^2.9.0  # X25519 + HKDF + AES-GCM for the log envelope (#1208)
   build_pipe: ^0.3.1
   material_symbols_icons: ^4.2906.0
   web: ^1.1.1
