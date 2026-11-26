@@ -208,7 +208,10 @@ class Contact {
   }
 
   Uint8List get pathBytesForDisplay {
-    if (pathOverride != null) {
+    // A zero-hop override was the retired "Direct" mode and no longer pins
+    // anything, so show the radio's own path rather than an empty route
+    // (#1223 R2).
+    if (pathOverride != null && pathOverride != 0) {
       if (pathOverride! < 0) return Uint8List(0);
       return pathOverrideBytes ?? Uint8List(0);
     }

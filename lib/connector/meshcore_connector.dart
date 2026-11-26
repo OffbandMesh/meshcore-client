@@ -6424,6 +6424,16 @@ class MeshCoreConnector extends ChangeNotifier {
     int? pathLen,
     Uint8List? pathBytes,
   }) async {
+    // A forced zero-hop path is Auto. It was the "Direct" mode, and picking a
+    // zero-hop route out of path management is the same thing by another door:
+    // it pins nothing the radio would not already do, while suppressing the
+    // flood fallback and going quiet when the contact moves out of range
+    // (#1223 R2). Normalising here closes every entry point at once.
+    if (pathLen == 0 && (pathBytes == null || pathBytes.isEmpty)) {
+      pathLen = null;
+      pathBytes = null;
+    }
+
     appLogger.info(
       'setPathOverride called for ${contact.name}: pathLen=$pathLen, bytesLen=${pathBytes?.length ?? 0}',
       tag: 'Connector',
@@ -6482,20 +6492,16 @@ class MeshCoreConnector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Used by the repeater, room and telemetry command surfaces, not by DMs.
+  ///
+  /// Path-history rotation is deliberately NOT applied here. It was reachable
+  /// only through `autoRouteRotationEnabled`, which defaulted off and is now
+  /// gone (#1223 R1): dropping the gate without dropping the branch would have
+  /// silently switched these command sends over to rotated paths, which is a
+  /// behaviour change on a surface nobody reviewed. These sends resolve from
+  /// the contact alone, exactly as they did with the flag off.
   Future<PathSelection> preparePathForContactSend(Contact contact) async {
-    PathSelection? autoSelection;
-    final autoRotationEnabled =
-        _appSettingsService?.settings.autoRouteRotationEnabled == true;
-    if (autoRotationEnabled && contact.pathOverride == null) {
-      final maxRetries = _appSettingsService?.settings.maxMessageRetries ?? 5;
-      autoSelection = _selectAutoPathForAttempt(
-        contact.publicKeyHex,
-        attemptIndex: 0,
-        maxRetries: maxRetries,
-      );
-    }
-
-    final resolved = resolvePathSelection(contact, selection: autoSelection);
+    final resolved = resolvePathSelection(contact);
 
     if (resolved.useFlood) {
       await clearContactPath(contact);

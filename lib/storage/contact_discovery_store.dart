@@ -90,7 +90,10 @@ class ContactDiscoveryStore {
       path: json['path'] != null
           ? Uint8List.fromList(base64Decode(json['path'] as String))
           : Uint8List(0),
-      pathOverride: json['pathOverride'] as int?,
+      // See contact_store: a stored zero-hop override reads as Auto (#1223 R2).
+      pathOverride: (json['pathOverride'] as int?) == 0
+          ? null
+          : json['pathOverride'] as int?,
       pathOverrideBytes: json['pathOverrideBytes'] != null
           ? Uint8List.fromList(
               base64Decode(json['pathOverrideBytes'] as String),

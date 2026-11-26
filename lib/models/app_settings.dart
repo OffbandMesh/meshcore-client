@@ -107,7 +107,6 @@ class Cyr2LatProfile {
 class AppSettings {
   static const Object _unset = Object();
 
-  final bool clearPathOnMaxRetry;
   final bool mapShowRepeaters;
   final bool mapShowChatNodes;
   final bool mapShowOtherNodes;
@@ -130,7 +129,6 @@ class AppSettings {
   final bool notifyOnNewMessage;
   final bool notifyOnNewChannelMessage;
   final bool notifyOnNewAdvert;
-  final bool autoRouteRotationEnabled;
   final double maxRouteWeight;
   final double initialRouteWeight;
   final double routeWeightSuccessIncrement;
@@ -206,7 +204,6 @@ class AppSettings {
   }
 
   AppSettings({
-    this.clearPathOnMaxRetry = false,
     this.mapShowRepeaters = true,
     this.mapShowChatNodes = true,
     this.mapShowOtherNodes = true,
@@ -227,7 +224,6 @@ class AppSettings {
     this.notifyOnNewMessage = true,
     this.notifyOnNewChannelMessage = true,
     this.notifyOnNewAdvert = true,
-    this.autoRouteRotationEnabled = false,
     this.maxRouteWeight = 5.0,
     this.initialRouteWeight = 3.0,
     this.routeWeightSuccessIncrement = 0.5,
@@ -279,7 +275,6 @@ class AppSettings {
 
   Map<String, dynamic> toJson() {
     return {
-      'clear_path_on_max_retry': clearPathOnMaxRetry,
       'map_show_repeaters': mapShowRepeaters,
       'map_show_chat_nodes': mapShowChatNodes,
       'map_show_other_nodes': mapShowOtherNodes,
@@ -300,7 +295,6 @@ class AppSettings {
       'notify_on_new_message': notifyOnNewMessage,
       'notify_on_new_channel_message': notifyOnNewChannelMessage,
       'notify_on_new_advert': notifyOnNewAdvert,
-      'auto_route_rotation_enabled': autoRouteRotationEnabled,
       'max_route_weight': maxRouteWeight,
       'initial_route_weight': initialRouteWeight,
       'route_weight_success_increment': routeWeightSuccessIncrement,
@@ -378,7 +372,6 @@ class AppSettings {
     }
 
     return AppSettings(
-      clearPathOnMaxRetry: json['clear_path_on_max_retry'] as bool? ?? false,
       mapShowRepeaters: json['map_show_repeaters'] as bool? ?? true,
       mapShowChatNodes: json['map_show_chat_nodes'] as bool? ?? true,
       mapShowOtherNodes: json['map_show_other_nodes'] as bool? ?? true,
@@ -404,8 +397,6 @@ class AppSettings {
       notifyOnNewChannelMessage:
           json['notify_on_new_channel_message'] as bool? ?? true,
       notifyOnNewAdvert: json['notify_on_new_advert'] as bool? ?? true,
-      autoRouteRotationEnabled:
-          json['auto_route_rotation_enabled'] as bool? ?? false,
       maxRouteWeight: (json['max_route_weight'] as num?)?.toDouble() ?? 5.0,
       initialRouteWeight:
           (json['initial_route_weight'] as num?)?.toDouble() ?? 3.0,
@@ -522,7 +513,6 @@ class AppSettings {
   }
 
   AppSettings copyWith({
-    bool? clearPathOnMaxRetry,
     bool? mapShowRepeaters,
     bool? mapShowChatNodes,
     bool? mapShowOtherNodes,
@@ -543,7 +533,6 @@ class AppSettings {
     bool? notifyOnNewMessage,
     bool? notifyOnNewChannelMessage,
     bool? notifyOnNewAdvert,
-    bool? autoRouteRotationEnabled,
     double? maxRouteWeight,
     double? initialRouteWeight,
     double? routeWeightSuccessIncrement,
@@ -578,7 +567,6 @@ class AppSettings {
     String? selectedCyr2latProfileId,
   }) {
     return AppSettings(
-      clearPathOnMaxRetry: clearPathOnMaxRetry ?? this.clearPathOnMaxRetry,
       mapShowRepeaters: mapShowRepeaters ?? this.mapShowRepeaters,
       mapShowChatNodes: mapShowChatNodes ?? this.mapShowChatNodes,
       mapShowOtherNodes: mapShowOtherNodes ?? this.mapShowOtherNodes,
@@ -603,8 +591,6 @@ class AppSettings {
       notifyOnNewChannelMessage:
           notifyOnNewChannelMessage ?? this.notifyOnNewChannelMessage,
       notifyOnNewAdvert: notifyOnNewAdvert ?? this.notifyOnNewAdvert,
-      autoRouteRotationEnabled:
-          autoRouteRotationEnabled ?? this.autoRouteRotationEnabled,
       maxRouteWeight: maxRouteWeight ?? this.maxRouteWeight,
       initialRouteWeight: initialRouteWeight ?? this.initialRouteWeight,
       routeWeightSuccessIncrement:

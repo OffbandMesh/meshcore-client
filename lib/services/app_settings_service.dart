@@ -125,10 +125,6 @@ class AppSettingsService extends ChangeNotifier {
         .join(' ');
   }
 
-  Future<void> setClearPathOnMaxRetry(bool value) async {
-    await updateSettings(_settings.copyWith(clearPathOnMaxRetry: value));
-  }
-
   Future<void> setMapShowRepeaters(bool value) async {
     await updateSettings(_settings.copyWith(mapShowRepeaters: value));
   }
@@ -207,10 +203,6 @@ class AppSettingsService extends ChangeNotifier {
 
   Future<void> setNotifyOnNewAdvert(bool value) async {
     await updateSettings(_settings.copyWith(notifyOnNewAdvert: value));
-  }
-
-  Future<void> setAutoRouteRotationEnabled(bool value) async {
-    await updateSettings(_settings.copyWith(autoRouteRotationEnabled: value));
   }
 
   Future<void> setMaxRouteWeight(double value) async {
