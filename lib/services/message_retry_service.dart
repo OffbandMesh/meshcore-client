@@ -38,7 +38,11 @@ class RetryServiceConfig {
   final void Function(String, Message) addMessage;
   final void Function(Message) updateMessage;
   final Function(Contact)? clearContactPath;
-  final Function(Contact, Uint8List, int)? setContactPath;
+
+  /// Carries `hashWidth` because a route's bytes are meaningless without the
+  /// width they were captured at: a 2-byte route written at width 1 reads as
+  /// twice as many 1-byte hops and routes to the wrong nodes (#279).
+  final Function(Contact, Uint8List, int, {int hashWidth})? setContactPath;
   final int Function(int pathLength, int messageBytes, {String? contactKey})?
   calculateTimeout;
   final Uint8List? Function()? getSelfPublicKey;
@@ -309,21 +313,38 @@ class MessageRetryService extends ChangeNotifier {
     // every attempt overwrote whatever the radio had, including a fresher
     // route it had just learned, and guaranteed the clear below never ran.
     //
-    // A user's path override is still pushed to the radio, but at the moment
-    // they choose it: `setPathOverride()` calls `setContactPath()` itself.
-    // Re-sending it on every attempt added nothing.
-    //
     // Clearing is kept: it is a per-send routing decision the radio cannot
     // make for us, because the wire protocol has no per-send routing field.
     // Clearing a dead path is how the mesh re-learns one. (#1198/#1223)
-    if (config.clearContactPath != null) {
-      final bool useFlood = currentSelection != null
-          ? currentSelection.useFlood
-          : (effectiveMessage.pathLength != null &&
-                effectiveMessage.pathLength! < 0);
+    final bool useFlood = currentSelection != null
+        ? currentSelection.useFlood
+        : (effectiveMessage.pathLength != null &&
+              effectiveMessage.pathLength! < 0);
 
-      if (useFlood) {
+    if (useFlood) {
+      if (config.clearContactPath != null) {
         await config.clearContactPath!(contact);
+      }
+    } else if (message.retryCount == 0 && (contact.pathOverride ?? 0) > 0) {
+      // One write per send, and only for a route the user chose by hand.
+      //
+      // This is not the defect above. That was a client-side snapshot of a
+      // path the RADIO had learned, re-asserted before every attempt, which
+      // could overwrite a fresher route the radio had just picked up off the
+      // air. This is the user's own explicit choice, written once, at the
+      // start of a send, and it has to be written because the previous send's
+      // final attempt may have cleared it: the fallback floods, and flooding
+      // means clearing the stored path. Without this a pinned route stops
+      // being honoured after one bad send while the UI still claims it, which
+      // is the silent failure that got "Direct" removed. (#1223 R4)
+      final resolved = resolvePathSelection(contact);
+      if (config.setContactPath != null && resolved.pathBytes.isNotEmpty) {
+        await config.setContactPath!(
+          contact,
+          Uint8List.fromList(resolved.pathBytes),
+          resolved.hopCount,
+          hashWidth: resolved.hashWidth,
+        );
       }
     }
 
