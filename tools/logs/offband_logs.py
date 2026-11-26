@@ -1,4 +1,4 @@
-"""Pull, decrypt and unpack Send to Offband uploads (#1195).
+r"""Pull, decrypt and unpack Send to Offband uploads (#1195).
 
     python tools/logs/offband_logs.py keygen
     python tools/logs/offband_logs.py list
