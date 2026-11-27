@@ -47,6 +47,8 @@ enum _Phase { preparing, empty, prepareFailed, ready, sending, failed, sent }
 
 class _SendLogsScreenState extends State<SendLogsScreen> {
   final _note = TextEditingController();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
   late final LogUploader _uploader = widget.uploader ?? LogUploader();
   _Phase _phase = _Phase.preparing;
   Uint8List? _zip;
@@ -63,7 +65,16 @@ class _SendLogsScreenState extends State<SendLogsScreen> {
   @override
   void dispose() {
     _note.dispose();
+    _name.dispose();
+    _email.dispose();
     super.dispose();
+  }
+
+  static final _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  bool get _emailInvalid {
+    final email = _email.text.trim();
+    return email.isNotEmpty && !_emailShape.hasMatch(email);
   }
 
   Future<void> _prepare(MeshCoreConnector radio) async {
@@ -96,10 +107,10 @@ class _SendLogsScreenState extends State<SendLogsScreen> {
 
   Future<void> _send() async {
     final zip = _zip;
-    if (zip == null) return;
+    if (zip == null || _emailInvalid) return;
     setState(() => _phase = _Phase.sending);
     final result = await _uploader.send(
-      zip,
+      LogPackage.withSender(zip, name: _name.text, email: _email.text),
       platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
       appVersion: appLogger.appVersion,
       note: _note.text,
@@ -182,8 +193,33 @@ class _SendLogsScreenState extends State<SendLogsScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            TextField(
+              controller: _name,
+              enabled: canSend,
+              maxLength: 100,
+              decoration: InputDecoration(
+                labelText: l10n.sendLogs_nameLabel,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _email,
+              enabled: canSend,
+              maxLength: 254,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: l10n.sendLogs_emailLabel,
+                errorText: _emailInvalid ? l10n.sendLogs_emailInvalid : null,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            Text(l10n.sendLogs_contactNote, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: canSend ? _send : null,
+              onPressed: canSend && !_emailInvalid ? _send : null,
               icon: const Icon(Icons.cloud_upload_outlined),
               label: Text(
                 _phase == _Phase.failed

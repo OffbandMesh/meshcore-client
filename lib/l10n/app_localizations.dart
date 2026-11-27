@@ -3934,6 +3934,30 @@ abstract class AppLocalizations {
   /// **'What happened? (optional)'**
   String get sendLogs_noteLabel;
 
+  /// No description provided for @sendLogs_nameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name or screen name (optional)'**
+  String get sendLogs_nameLabel;
+
+  /// No description provided for @sendLogs_emailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Email (optional)'**
+  String get sendLogs_emailLabel;
+
+  /// No description provided for @sendLogs_emailInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'That doesn\'t look like an email address. Fix it or leave it empty.'**
+  String get sendLogs_emailInvalid;
+
+  /// No description provided for @sendLogs_contactNote.
+  ///
+  /// In en, this message translates to:
+  /// **'If you leave these empty, we can\'t reach you to give you an update. Anything you enter is encrypted with the logs and used only to follow up on this report.'**
+  String get sendLogs_contactNote;
+
   /// No description provided for @sendLogs_preparing.
   ///
   /// In en, this message translates to:

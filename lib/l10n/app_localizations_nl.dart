@@ -2233,6 +2233,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String get sendLogs_noteLabel => 'What happened? (optional)';
 
   @override
+  String get sendLogs_nameLabel => 'Name or screen name (optional)';
+
+  @override
+  String get sendLogs_emailLabel => 'Email (optional)';
+
+  @override
+  String get sendLogs_emailInvalid =>
+      'That doesn\'t look like an email address. Fix it or leave it empty.';
+
+  @override
+  String get sendLogs_contactNote =>
+      'If you leave these empty, we can\'t reach you to give you an update. Anything you enter is encrypted with the logs and used only to follow up on this report.';
+
+  @override
   String get sendLogs_preparing => 'Gathering the logs';
 
   @override
