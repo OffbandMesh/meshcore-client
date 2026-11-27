@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -27,7 +28,18 @@ class _FakeUploader extends LogUploader {
   }
 }
 
-final _zip = Uint8List.fromList(List.filled(3000, 7));
+// A real package. Random bytes don't compress, so it stays about 3 KB.
+final _zip = ZipEncoder().encodeBytes(
+  Archive()
+    ..addFile(ArchiveFile.string('manifest.json', '{"format": 1}'))
+    ..addFile(
+      ArchiveFile.bytes(
+        'traces/anr-1.txt',
+        Uint8List.fromList(List.generate(3000, (_) => _random.nextInt(256))),
+      ),
+    ),
+);
+final _random = Random(1);
 
 Future<AppLocalizations> _pump(
   WidgetTester tester, {
@@ -59,21 +71,12 @@ Future<void> _tapSend(WidgetTester tester, AppLocalizations l10n) async {
   await tester.pumpAndSettle();
 }
 
-Uint8List _realZip() => ZipEncoder().encodeBytes(
-  Archive()..addFile(ArchiveFile.string('manifest.json', '{"format": 1}')),
-);
-
 void main() {
   testWidgets('name and email are sealed inside the package, not the note', (
     tester,
   ) async {
-    final zip = _realZip();
     final uploader = _FakeUploader([const LogUploadSent('OB-7K2QX')]);
-    final l10n = await _pump(
-      tester,
-      uploader: uploader,
-      zipPackage: (_) async => zip,
-    );
+    final l10n = await _pump(tester, uploader: uploader);
 
     await tester.enterText(
       find.widgetWithText(TextField, l10n.sendLogs_nameLabel),
@@ -88,7 +91,12 @@ void main() {
     final (sent, note) = uploader.sent.single;
     expect(note, isEmpty);
     final files = ZipDecoder().decodeBytes(sent);
-    expect(files.findFile('manifest.json'), isNotNull);
+    final original = ZipDecoder().decodeBytes(_zip);
+    // Every original entry survives the re-zip unchanged.
+    for (final f in original.files) {
+      expect(files.findFile(f.name)?.content, f.content, reason: f.name);
+    }
+    expect(files.files, hasLength(original.files.length + 1));
     final sender = jsonDecode(
       utf8.decode(files.findFile('sender.json')!.content as List<int>),
     );
