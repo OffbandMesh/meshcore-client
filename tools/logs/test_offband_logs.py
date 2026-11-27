@@ -1,5 +1,7 @@
 import io
 import json
+import subprocess
+import urllib.error
 import zipfile
 from pathlib import Path
 
@@ -75,21 +77,26 @@ def test_keygen_writes_once_and_never_overwrites(tmp_path):
     assert path.read_text() == before
 
 
-def sealed_package(tmp_path):
+def sealed_package(tmp_path, extra=None):
     """A real envelope around a real zip, sealed with the Python reference."""
     import make_envelope_vectors as ref
 
     owner = X25519PrivateKey.generate()
-    package = zipped({"manifest.json": b"{}", "offband.log": b"line\n", "traces/anr-1.txt": b"t"})
-    blob = ref.seal(package, ol.public_bytes(owner), X25519PrivateKey.generate(), bytes(12))
+    files = {"manifest.json": b"{}", "offband.log": b"line\n", "traces/anr-1.txt": b"t", **(extra or {})}
+    blob = ref.seal(zipped(files), ol.public_bytes(owner), X25519PrivateKey.generate(), bytes(12))
     return owner, blob
 
+
+# Midday UTC is the same calendar day in every timezone CI or the owner runs in.
+UPLOADED = "2026-11-27T12:00:00Z"
+DAY = "2026-11-27"
 
 ISSUE = {
     "number": 7,
     "title": "OB-7K2QX: android 1.8.0",
     "body": "Stored as `uploads/OB-7K2QX-1b4e28ba-2fa1-11d2-883f-0016d3cca427.bin`",
     "labels": [],
+    "createdAt": UPLOADED,
 }
 
 
@@ -106,8 +113,8 @@ def test_pull_unpacks_and_then_marks_seen(tmp_path):
         out=io.StringIO(),
     )
     assert fetched == ["uploads/OB-7K2QX-1b4e28ba-2fa1-11d2-883f-0016d3cca427.bin"]
-    assert dests == [tmp_path / "OB-7K2QX"]
-    assert (tmp_path / "OB-7K2QX" / "traces" / "anr-1.txt").read_bytes() == b"t"
+    assert dests == [tmp_path / f"{DAY} OB-7K2QX"]
+    assert (dests[0] / "traces" / "anr-1.txt").read_bytes() == b"t"
     assert [n for n, _ in marked] == [7]
     assert "30 days" in marked[0][1]
 
@@ -134,7 +141,71 @@ def test_a_second_pull_does_not_overwrite_the_first(tmp_path):
     kwargs = dict(key=owner, issues=[ISSUE], fetch=lambda k: blob,
                   seen=lambda n, note: None, out_root=tmp_path, out=io.StringIO())
     ol.pull("OB-7K2QX", **kwargs)
-    assert ol.pull("OB-7K2QX", **kwargs) == [tmp_path / "OB-7K2QX-2"]
+    assert ol.pull("OB-7K2QX", **kwargs) == [tmp_path / f"{DAY} OB-7K2QX-2"]
+
+
+def test_the_sender_names_the_folder_and_is_printed(tmp_path):
+    sender = json.dumps({"name": "Pottsytron", "email": "p@example.com"}).encode()
+    owner, blob = sealed_package(tmp_path, {"sender.json": sender})
+    out = io.StringIO()
+    dests = ol.pull("OB-7K2QX", key=owner, issues=[ISSUE], fetch=lambda k: blob,
+                    seen=lambda n, note: None, out_root=tmp_path, out=out)
+    assert dests == [tmp_path / f"{DAY} OB-7K2QX Pottsytron"]
+    assert json.loads((dests[0] / "sender.json").read_text()) == {"name": "Pottsytron", "email": "p@example.com"}
+    assert "Pottsytron" in out.getvalue() and "p@example.com" in out.getvalue()
+
+
+def test_without_a_sender_it_says_so(tmp_path):
+    owner, blob = sealed_package(tmp_path)
+    out = io.StringIO()
+    ol.pull("OB-7K2QX", key=owner, issues=[ISSUE], fetch=lambda k: blob,
+            seen=lambda n, note: None, out_root=tmp_path, out=out)
+    assert "No contact details" in out.getvalue()
+
+
+@pytest.mark.parametrize("name, folder", [
+    ("../../evil", f"{DAY} OB-7K2QX ....evil"),
+    ('a<b>c:d"e|f?g*h\\i/j', f"{DAY} OB-7K2QX abcdefghij"),
+    ("trailing dots...", f"{DAY} OB-7K2QX trailing dots"),
+    ("...", f"{DAY} OB-7K2QX"),
+    ("x" * 200, f"{DAY} OB-7K2QX " + "x" * 60),
+])
+def test_a_sender_name_cannot_escape_or_break_the_folder(name, folder):
+    assert ol.folder_name("OB-7K2QX", UPLOADED, name) == folder
+
+
+def git(cwd, *args):
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                   cwd=cwd, check=True, capture_output=True)
+
+
+def test_lands_in_the_main_checkout_even_from_a_worktree(tmp_path, monkeypatch):
+    monkeypatch.delenv("OFFBAND_LOG_DIR", raising=False)
+    main = tmp_path / "main"
+    main.mkdir()
+    git(main, "init", "-q")
+    git(main, "commit", "-q", "--allow-empty", "-m", "init")
+    worktree = tmp_path / "wt"
+    git(main, "worktree", "add", "-q", str(worktree))
+
+    root = ol.default_out_root(start=worktree)
+    assert root.resolve() == (main / "debug_logs").resolve()
+    assert worktree.resolve() not in root.resolve().parents
+
+
+def test_offband_log_dir_overrides_the_location(tmp_path, monkeypatch):
+    monkeypatch.setenv("OFFBAND_LOG_DIR", str(tmp_path / "elsewhere"))
+    assert ol.default_out_root() == tmp_path / "elsewhere"
+
+
+def test_a_cloudflare_refusal_says_what_the_token_lacks(monkeypatch):
+    def refuse(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, io.BytesIO(b""))
+
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "x")
+    monkeypatch.setattr(ol.urllib.request, "urlopen", refuse)
+    with pytest.raises(SystemExit, match="R2 read on the offband-log-intake bucket"):
+        ol.cf_get("/accounts")
 
 
 def test_list_leaves_out_uploads_already_seen():
