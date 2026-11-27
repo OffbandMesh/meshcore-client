@@ -1,0 +1,8 @@
+Offband MeshCore 1.8.1
+
+New: send the app's logs to Offband, encrypted, from Settings or after a crash.
+Direct messages flood when their route fails and wait longer for delivery. The Direct path option is gone.
+A contact is kept only when your radio confirms it, a full radio asks before one is removed, and you can prune stale contacts.
+Switching Bluetooth radios no longer mixes up their messages.
+Locations follow the newest advert.
+Sending the same text twice shows two messages.

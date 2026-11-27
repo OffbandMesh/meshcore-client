@@ -2,6 +2,138 @@
 
 All notable changes to Offband Meshcore. Pre-releases are tagged `-beta.N` / `-rc.N`.
 
+## [1.8.1] - 2026-11-27
+
+Contact adds confirmed by the radio, full-radio handling and prune; Bluetooth radio switch no
+longer misfiles channel history; DM flood fallback unconditional with a measured ACK window;
+encrypted log upload to Offband with a crash, ANR and unexpected-exit offer; location follows
+the newest advert; channel repeat matching by exact second; CLI gated on advert tags
+`0x06`/`0x07`. Database schema unchanged (2).
+
+### Upgrade notes
+
+- One-time startup cleanup moves cross-radio channel copies to `held_1163_copy` (copy =
+  identical receive time; original = the radio connected at receipt). Not deleted; undecidable
+  copies left in place (#1163).
+- A stored zero-hop path override normalizes to Auto (in `setPathOverride`, both contact
+  stores on load, path resolution, `pathBytesForDisplay` and labels) (#1223).
+- Installs with no stored `max_message_retries` go from 5 attempts to 3 (#316).
+- `autoRouteRotationEnabled` and `clearPathOnMaxRetry` deleted; their l10n keys are left in
+  the ARB files, inert (#1223).
+- 67 new UI strings, English-only in all 17 other locales; `untranslated.json` regenerated.
+
+### Log upload (#1190)
+
+- Envelope: ephemeral X25519, HKDF-SHA256, AES-256-GCM with the 53-byte header as additional
+  data; Dart output matches Python `cryptography` vectors byte for byte (#1208).
+- Upload client seals to key id `7fbd1b06` and POSTs to `logs.offband.app`; 413, 429,
+  400/411, other statuses, no network and no answer each map to their own reason; a package
+  over 25 MB sealed is refused before sending (#1209).
+- Send to Offband next to Share on both log screens and in Debug settings: consent text,
+  optional note, name and email (sealed in `sender.json`, never in headers), reference code
+  with Copy, persistent failure with Retry of the kept package (#1210). Web zips the in-memory
+  log through the same redactor (#1211).
+- Package builder and redactor: password and PIN bytes blanked in logged frames and CLI text;
+  private key keeps its first 3 bytes; every sendable code classified, unclassified fails a
+  test; Share, Save and Send build the same package (#1204, #1205, #1206).
+- Run marker: unexpected exit when left on screen, OS reclaim when left in background (never
+  offered), unreadable marker asked about; new Android ANR and crash exit records name the
+  failure, backfilled ones ignored; web counts only unhandled errors (#1213).
+- Next-launch banner (Send, Not now, Don't ask again); "Send crash logs automatically" off by
+  default, auto-send failure falls back to the banner (#1214).
+- `tools/logs/offband_logs.py`: `keygen`, `list`, `pull <code>` (download, decrypt, unpack,
+  mark seen, comment on the intake issue); an untrusted upload's paths are bounded (#1195,
+  #1216, #1217).
+- Play Data Safety and App Store privacy answers in
+  `docs/initiatives/standalone/1190-log-upload/STORE-DISCLOSURES.md` (#1220).
+
+### Direct messages
+
+- Final attempt always clears the radio's path (`CMD_RESET_PATH`) and floods, including for a
+  hand-picked override; the override is re-written to the radio only when it changes, keyed
+  on the route. Per-attempt `CMD_ADD_UPDATE_CONTACT` removed. "Direct" removed (#1223,
+  #1222).
+- Attempts numbered from 1 in the UI and the AckHash log line (#1223).
+- DM ACK window floored at 12500 ms (p90 of 24 measured round trips, OB-ZRNBY), radio
+  `est_timeout` used as a floor, clamped to 60 s; default attempts 5 to 3. Floor is on the DM
+  path only; `calculateTimeout` stays unfloored for the CLI budget (#316).
+
+### Contacts
+
+- `addContactByKey`, `importDiscoveredContact`, `importContact` await OK/ERR (5 s) and return
+  `ContactAddResult`; persistent errors; DM refused by the radio fails at once via
+  `failAwaitingSendOnRadioError` (#1028).
+- Full radio detected from sync count, ERR 3, push `0x90`, push `0x8F`; add held behind
+  remove-suggested / prune / cancel; `0x8F` drops the contact to Discovery, messages kept
+  (#1028).
+- Prune stale contacts: 15/30/90 days, favorites never listed, one radio-confirmed removal at
+  a time, stops at first failure (#1182).
+- `sendFrame` registers the reply slot before the transport write (Windows BLE reply race)
+  (#1028).
+- One log line per contact removal on every path, with name, short key, favorite, path and
+  radio; `0x8F`/`0x90` logged; auto-add settings logged at connect (#1170).
+
+### Channels and history
+
+- Every connect on every transport drops the previous radio's message windows, DMs and
+  channel lists; saves write only changed messages (#1163).
+- Slots record the channel key their history loaded under; a confirmed sync reloads a
+  mismatched slot; history loads logged with radio, slot, channel, PSK fingerprint (#1163).
+- Unanswered channel write waits for the re-read before "not confirmed"; Resync on the error
+  and on Channels; Settings > Actions > Delete message history; Clear Chat deletes stored
+  history (#1163).
+- `_isChannelRepeat` requires the same timestamp second instead of a 30 s window (#1183).
+
+### Location
+
+- Radio record wins over stored values; newest advert sets location including none; 0,0
+  unknown at parse; older advert ignored unless the applied one is >1 h ahead; Packet Path
+  shows coordinate age (#1166).
+
+### CLI
+
+- `resolveCliSupport`: stock 1.18+ both on; Offband per advert tag `0x06` (local) / `0x07`
+  (remote); no advert = off. Remote CLI permission switch gated on `0x07`. Local send without
+  `0x06` refused before any frame. No Offband firmware release emits the tags yet (firmware
+  #2213) (#1155).
+
+### Diagnostics
+
+- Every OS-reported BLE drop writes one WARN line: `disconnectReason` (read one microtask
+  after the event), seconds since the last frame, app lifecycle state; "reason not available
+  on <platform>" on Windows, Linux and web. `main.dart` logs lifecycle changes (#1186).
+
+### Apple
+
+- `PRODUCT_NAME` = Offband MeshCore on iOS and macOS; CI asserts both; `isiOSAppOnMac` notice
+  once per version (#1140).
+- macOS entitlement `files.user-selected.read-write` added; CI asserts it on the signed app
+  (#1143).
+
+### CI, tooling, docs
+
+- App manual first pages + Android screenshots; docs-change dispatch to offband-site; Set
+  Region Scope guide, screenshots redacted (#1145, #1148, #1232, #1236).
+- `tools/play/play_release.py` and `play-publish.yml`; AAB provenance attestation in
+  `release-signed.yml` (#1084, #1087, #1088).
+- Fail-first test requirement for code changes (#1173).
+- Release signing reads `OFFBAND_KEY_PROPERTIES` (#1161).
+- Feature plan for log upload (#1190).
+
+### Known issues
+
+- #1121 Phone notifications Off can still notify.
+- #1167 Contacts, including favorites, disappear with overwrite off; removals now logged.
+- #1123 Factory reset leaves stale data for that radio on other devices.
+- #1132 On firmware 1.7.0, boards with a display and no controllable LED still show the LED
+  switch (needs the firmware tags).
+- #1124 `_sendIndicatorSet` never clears its pending-write flag, so a stale read can overwrite
+  a newer change.
+- #1134 Position Reporting Interval reports success when the radio refuses it (T1000-E).
+- #1187 No BLE disconnect reason on Windows, Linux and web.
+- #1066 Two capability reads still use `FIRMWARE_VER_CODE`.
+- #1230 Inbound DM duplicate suppression is untested and its window unsized.
+
 ## [1.8.0] - 2026-11-09
 
 Production successor to 1.7.0. A channels release: message state keyed by channel identity
