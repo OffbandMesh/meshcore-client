@@ -1949,8 +1949,14 @@ class _MessageBubble extends StatelessWidget {
                                   ? const EdgeInsets.symmetric(horizontal: 8)
                                   : EdgeInsets.zero,
                               child: Text(
+                                // `retryCount` is a zero-based attempt index
+                                // and `maxMessageRetries` is a count, so
+                                // printing them together showed the fifth and
+                                // final attempt of five as "4/5", which reads
+                                // as a sixth attempt still to come. The flood
+                                // fallback had already fired by then. (#1223)
                                 context.l10n.chat_retryCount(
-                                  message.retryCount,
+                                  message.retryCount + 1,
                                   context
                                       .read<AppSettingsService>()
                                       .settings
