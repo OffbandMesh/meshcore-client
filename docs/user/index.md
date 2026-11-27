@@ -12,6 +12,7 @@ a node map, radio settings and repeater administration.
 
 - [Install the app and connect your radio](guides/getting-started.md).
 - [Use channels](guides/channels.md).
+- [Set a channel's region scope](guides/region-scope.md).
 - [Message contacts directly](guides/contacts-and-messages.md).
 - [Use the map, path traces and line of sight](guides/map-and-line-of-sight.md).
 - [Set your radio's frequency and presets](guides/radio-settings.md).
