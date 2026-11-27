@@ -54,6 +54,10 @@ BUCKET = "offband-log-intake"
 SEEN_LABEL = "seen"
 KEY_PATH = Path(os.environ.get("OFFBAND_LOG_KEY", r"C:\Dev\.keys\offband-log-key"))
 SENDER_FILE = "sender.json"
+MAX_SENDER_BYTES = 4096
+# Anyone holding the public key can upload, so a package is untrusted; this
+# refuses a zip bomb before anything is written.
+MAX_UNPACKED_BYTES = 1024 * 1024 * 1024
 UNSAFE_IN_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 CODE =re.compile(r"^OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$")
 OBJECT = re.compile(r"`(uploads/(OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5})-[0-9a-f-]{36}\.bin)`")
@@ -100,6 +104,9 @@ def unpack(package: bytes, dest: Path) -> list:
     root = dest.resolve()
     with zipfile.ZipFile(io.BytesIO(package)) as zf:
         members = [m for m in zf.infolist() if not m.is_dir()]
+        total = sum(m.file_size for m in members)
+        if total > MAX_UNPACKED_BYTES:
+            raise ValueError(f"package would unpack to {total} bytes, over the {MAX_UNPACKED_BYTES} limit")
         for m in members:
             target = (root / m.filename).resolve()
             if root != target and root not in target.parents:
@@ -126,13 +133,15 @@ def default_out_root(start: Path = Path(__file__).resolve().parent) -> Path:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError) as e:
         raise SystemExit(f"Could not find the main checkout from {start} ({e}). Set OFFBAND_LOG_DIR.")
+    if not Path(common).is_absolute():
+        raise SystemExit(f"git gave a relative path ({common}); git 2.31+ is needed. Set OFFBAND_LOG_DIR.")
     return Path(common).parent / "debug_logs"
 
 
 def sender_of(package: bytes) -> dict:
     """The optional name and email the sender gave, from sender.json."""
     with zipfile.ZipFile(io.BytesIO(package)) as zf:
-        if SENDER_FILE not in zf.namelist():
+        if SENDER_FILE not in zf.namelist() or zf.getinfo(SENDER_FILE).file_size > MAX_SENDER_BYTES:
             return {}
         try:
             data = json.loads(zf.read(SENDER_FILE))
