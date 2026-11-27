@@ -1304,6 +1304,136 @@ void main() {
         retryService.dispose();
       });
 
+      test('an absurd window from the radio is clamped, so one bad frame '
+          'cannot park the contact\'s queue forever (#316)', () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(publicKey: recipientKey, pathLength: -1);
+        final armed = <int?>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (m) => armed.add(m.estimatedTimeoutMs),
+            clearContactPath: (_) {},
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        // `timeoutMs` is a raw readUInt32LE off the frame with nothing bounding
+        // it. One message is in flight per contact, so an unclamped value here
+        // would wedge every later DM to this contact until an app restart.
+        retryService.updateMessageFromSent(0x1234, 0xFFFFFFFF);
+
+        expect(
+          armed.whereType<int>(),
+          contains(MessageRetryService.maxAckWindowMs),
+          reason: '49 days is not a send timeout',
+        );
+
+        retryService.dispose();
+      });
+
+      test('a mid-flight override change is written to the radio, because the '
+          'radio would otherwise keep transmitting the old pin', () async {
+        // Three attempts, so attempt 1 is an ordinary retry rather than the
+        // final one. At maxRetries 2 the retry IS the final attempt, which
+        // floods and clears instead of writing, and the test would pass for
+        // the wrong reason.
+        final retryService = MessageRetryService()
+          ..setMaxRetries(3)
+          ..setMinAckWindowForTest(1);
+        var contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 2,
+          path: const [0x10, 0x20],
+          pathOverride: 2,
+          pathOverrideBytes: const [0x10, 0x20],
+        );
+        final writes = <String>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            setContactPath: (_, bytes, hops, {hashWidth = 1}) =>
+                writes.add(bytes.join(',')),
+            clearContactPath: (_) {},
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(writes, equals(['16,32']), reason: 'attempt 1 writes the pin');
+
+        // The user picks a different route while the send is still retrying.
+        contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 3,
+          path: const [0x10, 0x20, 0x30],
+          pathOverride: 3,
+          pathOverrideBytes: const [0x10, 0x20, 0x30],
+        );
+        retryService.updatePendingContact(contact);
+
+        retryService.updateMessageFromSent(0x1234, 1);
+        await Future<void>.delayed(const Duration(milliseconds: 1400));
+
+        expect(
+          writes,
+          equals(['16,32', '16,32,48']),
+          reason:
+              'the new pin reaches the radio; gating on attempt 0 left the '
+              'radio sending the old route while this side had already '
+              're-armed its timeout for the new one',
+        );
+
+        retryService.dispose();
+      });
+
+      test('an unchanged pin is not rewritten on a retry, which is the '
+          'per-attempt re-assert #1198 removed', () async {
+        // Three attempts, so the retry below is an ordinary one and genuinely
+        // had the chance to rewrite the pin.
+        final retryService = MessageRetryService()
+          ..setMaxRetries(3)
+          ..setMinAckWindowForTest(1);
+        final contact = _makeContact(
+          publicKey: recipientKey,
+          pathLength: 2,
+          path: const [0x10, 0x20],
+          pathOverride: 2,
+          pathOverrideBytes: const [0x10, 0x20],
+        );
+        final writes = <String>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (_) {},
+            setContactPath: (_, bytes, hops, {hashWidth = 1}) =>
+                writes.add(bytes.join(',')),
+            clearContactPath: (_) {},
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        retryService.updateMessageFromSent(0x1234, 1);
+        await Future<void>.delayed(const Duration(milliseconds: 1400));
+
+        expect(
+          writes,
+          equals(['16,32']),
+          reason: 'written once, not once per attempt',
+        );
+
+        retryService.dispose();
+      });
+
       test('a pinned route is re-established once per send, at the width it '
           'was captured at', () async {
         final retryService = MessageRetryService();
