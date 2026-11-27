@@ -3183,7 +3183,7 @@ class MeshCoreConnector extends ChangeNotifier {
         },
       ),
     );
-    final maxRetries = _appSettingsService?.settings.maxMessageRetries ?? 5;
+    final maxRetries = _appSettingsService?.settings.maxMessageRetries ?? 3;
     _retryService?.setMaxRetries(maxRetries);
   }
 
@@ -10190,6 +10190,12 @@ class MeshCoreConnector extends ChangeNotifier {
 
   /// Calculate timeout for a message based on radio settings and path length.
   /// Returns timeout in milliseconds, considering number of hops.
+  ///
+  /// This is the airtime formula and nothing more. The measured floor on a DM's
+  /// ACK window lives in [MessageRetryService.minAckWindowMs] rather than here,
+  /// because this method also feeds [calculateCliTimeout], and a floor applied
+  /// here added 11.5 s to every repeater CLI command: a surface with its own
+  /// issue, its own budget arithmetic and its own tests (#530/#533). (#316)
   int calculateTimeout({
     required int pathLength,
     int messageBytes = 100,
