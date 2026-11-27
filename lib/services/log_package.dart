@@ -138,6 +138,27 @@ class LogPackage {
     return ZipEncoder().encodeBytes(archive);
   }
 
+  static const String senderName = 'sender.json';
+
+  /// [zip] with `sender.json` added when the sender gave a name or an email
+  /// (#1190). It travels inside the sealed package, never in a header, so the
+  /// intake issue never shows it.
+  static Uint8List withSender(Uint8List zip, {String? name, String? email}) {
+    final sender = {
+      if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+      if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+    };
+    if (sender.isEmpty) return zip;
+    final archive = ZipDecoder().decodeBytes(zip)
+      ..addFile(
+        ArchiveFile.string(
+          senderName,
+          const JsonEncoder.withIndent('  ').convert(sender),
+        ),
+      );
+    return ZipEncoder().encodeBytes(archive);
+  }
+
   /// Every file, at its path inside the package, in one zip.
   Future<Uint8List> zip() async {
     final archive = Archive();
