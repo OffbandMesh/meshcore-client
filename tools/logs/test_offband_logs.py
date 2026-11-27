@@ -193,6 +193,26 @@ def test_lands_in_the_main_checkout_even_from_a_worktree(tmp_path, monkeypatch):
     assert worktree.resolve() not in root.resolve().parents
 
 
+def test_a_relative_git_answer_is_refused(tmp_path, monkeypatch):
+    monkeypatch.delenv("OFFBAND_LOG_DIR", raising=False)
+    monkeypatch.setattr(ol.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=".git\n"))
+    with pytest.raises(SystemExit, match="OFFBAND_LOG_DIR"):
+        ol.default_out_root(start=tmp_path)
+
+
+def test_an_oversized_sender_file_is_ignored():
+    big = json.dumps({"name": "x" * 5000}).encode()
+    assert ol.sender_of(zipped({"sender.json": big})) == {}
+
+
+def test_unpack_refuses_a_zip_bomb_before_writing(tmp_path, monkeypatch):
+    monkeypatch.setattr(ol, "MAX_UNPACKED_BYTES", 10)
+    with pytest.raises(ValueError, match="over the 10 limit"):
+        ol.unpack(zipped({"a.log": b"x" * 11}), tmp_path / "OB-AAAAA")
+    assert not (tmp_path / "OB-AAAAA").exists()
+
+
 def test_offband_log_dir_overrides_the_location(tmp_path, monkeypatch):
     monkeypatch.setenv("OFFBAND_LOG_DIR", str(tmp_path / "elsewhere"))
     assert ol.default_out_root() == tmp_path / "elsewhere"
