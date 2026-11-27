@@ -102,7 +102,30 @@ class MessageRetryService extends ChangeNotifier {
   /// than 12394 ms, not lower. This is a lower bound. (#316)
   static const int minAckWindowMs = 12500;
 
+  /// Ceiling on a single attempt's ACK window.
+  ///
+  /// `timeoutMs` reaches [updateMessageFromSent] as a raw `readUInt32LE` off
+  /// the RESP_CODE_SENT frame, with nothing bounding it. While the local
+  /// computation overwrote that value this did not matter; now that the radio's
+  /// estimate is a floor, a garbage frame could arm a timer days long. One
+  /// message in flight per contact is a queue invariant, so that would wedge
+  /// every later DM to that contact until the app restarted.
+  ///
+  /// 60 s is about four times the longest real round trip in the OB-ZRNBY
+  /// capture (16266 ms), so it cannot clip a legitimate wait. (#316)
+  static const int maxAckWindowMs = 60000;
+
   int _minAckWindowMs = minAckWindowMs;
+
+  /// The path last written to the radio for a message, by message id.
+  ///
+  /// A hand-picked route is pushed once per send, but "once" cannot mean "only
+  /// on attempt 0": the user can change the override between attempts, and
+  /// `updatePendingContact` hands the new one to the retry in flight. Keyed on
+  /// the route itself so a change is written and an unchanged pin is not,
+  /// which is what keeps this from becoming the per-attempt re-assert that
+  /// #1198 removed. (#1223)
+  final Map<String, String> _lastPushedPath = {};
 
   /// Lowers the ACK floor so a test can drive a retry without a 12.5 s
   /// wall-clock wait per attempt. Production never calls this.
@@ -248,6 +271,12 @@ class MessageRetryService extends ChangeNotifier {
             _pendingMessages[messageId] = failed;
             _config?.updateMessage(failed);
           }
+          // This path does not run _cleanupMessage, because the other pending
+          // maps still have to be reachable for a late ACK from an earlier
+          // attempt. `_lastPushedPath` only records what we last told the
+          // radio and ACK matching never reads it, so it is dropped here
+          // rather than left to accumulate. (#1223, review round 2)
+          _lastPushedPath.remove(messageId);
           _onMessageResolved(messageId, contactKey);
         });
         return;
@@ -365,26 +394,39 @@ class MessageRetryService extends ChangeNotifier {
       if (config.clearContactPath != null) {
         await config.clearContactPath!(contact);
       }
-    } else if (message.retryCount == 0 && (contact.pathOverride ?? 0) > 0) {
-      // One write per send, and only for a route the user chose by hand.
+    } else if ((contact.pathOverride ?? 0) > 0) {
+      // A route the user chose by hand, written when it is not already what we
+      // told the radio.
       //
       // This is not the defect above. That was a client-side snapshot of a
       // path the RADIO had learned, re-asserted before every attempt, which
       // could overwrite a fresher route the radio had just picked up off the
-      // air. This is the user's own explicit choice, written once, at the
-      // start of a send, and it has to be written because the previous send's
-      // final attempt may have cleared it: the fallback floods, and flooding
-      // means clearing the stored path. Without this a pinned route stops
-      // being honoured after one bad send while the UI still claims it, which
-      // is the silent failure that got "Direct" removed. (#1223 R4)
+      // air. This is the user's own explicit choice, and it has to be written
+      // at all because the previous send's final attempt may have cleared it:
+      // the fallback floods, and flooding means clearing the stored path.
+      // Without it a pinned route stops being honoured after one bad send
+      // while the UI still claims it, which is the silent failure that got
+      // "Direct" removed. (#1223 R4)
+      //
+      // Keyed on the route rather than on `retryCount == 0`, because the user
+      // can change the override between attempts and `updatePendingContact`
+      // hands the new one to the retry in flight. Gating on attempt 0 left the
+      // radio transmitting the old pin while this side had already re-armed
+      // its timeout and its path-weight bookkeeping for the new one.
       final resolved = resolvePathSelection(contact);
-      if (config.setContactPath != null && resolved.pathBytes.isNotEmpty) {
+      final signature =
+          '${resolved.hopCount}:${resolved.hashWidth}:'
+          '${resolved.pathBytes.join(",")}';
+      if (config.setContactPath != null &&
+          resolved.pathBytes.isNotEmpty &&
+          _lastPushedPath[messageId] != signature) {
         await config.setContactPath!(
           contact,
           Uint8List.fromList(resolved.pathBytes),
           resolved.hopCount,
           hashWidth: resolved.hashWidth,
         );
+        _lastPushedPath[messageId] = signature;
       }
     }
 
@@ -658,8 +700,12 @@ class MessageRetryService extends ChangeNotifier {
       );
       actualTimeout = math.max(timeoutMs, computed);
     }
-    // And never below the measured floor, whichever of the two won.
-    actualTimeout = math.max(actualTimeout, _minAckWindowMs);
+    // Never below the measured floor, and never above the ceiling: the radio's
+    // value is unvalidated, and an absurd one would park this message in the
+    // per-contact queue forever.
+    actualTimeout = math
+        .max(actualTimeout, _minAckWindowMs)
+        .clamp(_minAckWindowMs, maxAckWindowMs);
 
     final updatedMessage = message.copyWith(
       status: MessageStatus.sent,
@@ -707,6 +753,7 @@ class MessageRetryService extends ChangeNotifier {
     _pendingMessages.remove(messageId);
     _pendingContacts.remove(messageId);
     _attemptPathHistory.remove(messageId);
+    _lastPushedPath.remove(messageId);
     _timeoutTimers.remove(messageId);
     _sentConfirmationTimers.remove(messageId)?.cancel();
     _resolvedMessages.remove(messageId);
