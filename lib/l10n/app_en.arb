@@ -1278,6 +1278,10 @@
   "sendLogs_title": "Send logs to Offband",
   "sendLogs_consent": "This sends the app's logs to Offband so we can look into a problem. They include your messages and the radio traffic, with passwords and PINs removed. They are encrypted on this device, only Offband can read them, and they are deleted 30 days after we review them.",
   "sendLogs_noteLabel": "What happened? (optional)",
+  "sendLogs_nameLabel": "Name or screen name (optional)",
+  "sendLogs_emailLabel": "Email (optional)",
+  "sendLogs_emailInvalid": "That doesn't look like an email address. Fix it or leave it empty.",
+  "sendLogs_contactNote": "If you leave these empty, we can't reach you to give you an update. Anything you enter is encrypted with the logs and used only to follow up on this report.",
   "sendLogs_preparing": "Gathering the logs",
   "sendLogs_size": "{size} to send",
   "@sendLogs_size": {
