@@ -14,6 +14,7 @@ Neither store can be set from here. Play has a Data Safety API, but the publishi
 | App version, platform, OS version, radio model and firmware | Manifest, to match the build |
 | Android crash and freeze reports | The crash being reported |
 | The user's optional note | Shown on the report |
+| The user's optional name or screen name, and email | So Offband can follow up with them (owner decision 2026-11-27). Sealed inside the encrypted package, never on the report |
 
 Passwords and PINs are removed before anything is written to the log. The package is encrypted on the device to Offband's key and sent over HTTPS. Sending is the user's choice each time, unless they turn on automatic sending, which is off by default. Deleted 30 days after review, or sooner on request by reference code.
 
@@ -35,8 +36,10 @@ Passwords and PINs are removed before anything is written to the log. The packag
 | Location: Precise location | Yes | No | No | Optional | App functionality |
 | App info and performance: Crash logs | Yes | No | No | Optional | App functionality |
 | App info and performance: Diagnostics | Yes | No | No | Optional | App functionality |
+| Personal info: Name | Yes | No | No | Optional | App functionality |
+| Personal info: Email address | Yes | No | No | Optional | App functionality |
 
-"App functionality" is used because the data is used only to find and fix problems the user reports, not to measure how the app is used. Leave every other data type as not collected.
+"App functionality" is used because the data is used only to find and fix problems the user reports, not to measure how the app is used. Name and email are used only to reply about the user's own report. Check that against Play's purpose list when entering: if Play places replying to a user's report anywhere other than "App functionality", use that purpose for these two rows. Leave every other data type as not collected.
 
 ## App Store: App Privacy
 
@@ -54,8 +57,12 @@ Data types to select, each with **Purpose: App Functionality** and **Used for tr
 | Location | Precise Location |
 | Diagnostics | Crash Data |
 | Diagnostics | Other Diagnostic Data |
+| Contact Info | Name |
+| Contact Info | Email Address |
 
-**Linked to the user: Yes** for all four types (owner decision 2026-11-26, option B). There is no account, but the log contains the user's own node name and its public key, and a node name is often a call sign. Apple counts data as linked when it is tied to the user's identity "via their account, device, or other details", so "linked" is the reading that can't be called wrong later.
+Apple's App Functionality purpose includes customer support, which is what the name and email are for.
+
+**Linked to the user: Yes** for all six types. Name and email identify the user directly. The other four are linked by owner decision (2026-11-26, option B): there is no account, but the log contains the user's own node name and its public key, and a node name is often a call sign. Apple counts data as linked when it is tied to the user's identity "via their account, device, or other details", so "linked" is the reading that can't be called wrong later.
 
 ## Before entering
 
