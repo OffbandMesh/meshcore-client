@@ -678,12 +678,19 @@ class MessageRetryService extends ChangeNotifier {
     final shortText = message.text.length > 20
         ? '${message.text.substring(0, 20)}...'
         : message.text;
+    // Attempts are numbered from 1 in anything a human reads. `retryCount` is a
+    // zero-based index, and printing it raw made the last attempt of five read
+    // as "attempt 4", which reads as a sixth attempt that never came. It also
+    // said "retrying" on the final timeout, when the message is being failed.
+    final bool willRetry = message.retryCount < maxRetries - 1;
     config?.debugLogService?.warn(
-      'Timeout: No ACK received for "$shortText" to ${contact.name} (attempt ${message.retryCount}) → retrying',
+      'Timeout: No ACK received for "$shortText" to ${contact.name} '
+      '(attempt ${message.retryCount + 1} of $maxRetries)'
+      '${willRetry ? ' → retrying' : ' → giving up, marking failed'}',
       tag: 'AckHash',
     );
 
-    if (message.retryCount < maxRetries - 1) {
+    if (willRetry) {
       final backoffMs = 1000 * (1 << message.retryCount);
 
       if (selection != null) {
