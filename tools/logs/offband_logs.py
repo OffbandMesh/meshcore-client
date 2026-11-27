@@ -9,13 +9,17 @@ C:\Dev\.keys\offband-log-key (with the owner's other keys; OFFBAND_LOG_KEY
 overrides the path) and into Bitwarden; without it no upload can ever be read.
 The public key goes into the app.
 
-list shows uploads not pulled yet. pull downloads an upload, decrypts it,
-unpacks it into debug_logs/OB-XXXXX/, labels its intake issue `seen` (which
-starts the 30-day deletion clock) and comments there. If anything fails before
-the files are written, nothing is marked seen.
+list shows uploads not pulled yet. pull downloads an upload, decrypts it and
+unpacks it into the main checkout's debug_logs, in a folder named
+"YYYY-MM-DD OB-XXXXX <sender's name>" (OFFBAND_LOG_DIR overrides the parent
+folder). It is never written inside a worktree, which would lose it when the
+worktree is removed. Then it labels the intake issue `seen` (which starts the
+30-day deletion clock) and comments there. If anything fails before the files
+are written, nothing is marked seen.
 
-Needs CLOUDFLARE_API_TOKEN with R2 read, the `gh` CLI signed in with access to
-OffbandMesh/log-intake, and Python's `cryptography` package.
+Needs CLOUDFLARE_API_TOKEN with R2 read on the offband-log-intake bucket, the
+`gh` CLI signed in with access to OffbandMesh/log-intake, and Python's
+`cryptography` package (pip install --user cryptography).
 """
 import argparse
 import hashlib
@@ -25,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -48,8 +53,9 @@ INTAKE_REPO = "OffbandMesh/log-intake"
 BUCKET = "offband-log-intake"
 SEEN_LABEL = "seen"
 KEY_PATH = Path(os.environ.get("OFFBAND_LOG_KEY", r"C:\Dev\.keys\offband-log-key"))
-OUT_ROOT = Path(__file__).resolve().parents[2] / "debug_logs"
-CODE = re.compile(r"^OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$")
+SENDER_FILE = "sender.json"
+UNSAFE_IN_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+CODE =re.compile(r"^OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$")
 OBJECT = re.compile(r"`(uploads/(OB-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5})-[0-9a-f-]{36}\.bin)`")
 
 
@@ -107,11 +113,49 @@ def unpack(package: bytes, dest: Path) -> list:
     return written
 
 
-def free_dir(root: Path, code: str) -> Path:
-    candidate = root / code
+def default_out_root(start: Path = Path(__file__).resolve().parent) -> Path:
+    """debug_logs in the main checkout, found from git, even when this runs
+    from a worktree. OFFBAND_LOG_DIR overrides it."""
+    override = os.environ.get("OFFBAND_LOG_DIR")
+    if override:
+        return Path(override)
+    try:
+        common = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=start, check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise SystemExit(f"Could not find the main checkout from {start} ({e}). Set OFFBAND_LOG_DIR.")
+    return Path(common).parent / "debug_logs"
+
+
+def sender_of(package: bytes) -> dict:
+    """The optional name and email the sender gave, from sender.json."""
+    with zipfile.ZipFile(io.BytesIO(package)) as zf:
+        if SENDER_FILE not in zf.namelist():
+            return {}
+        try:
+            data = json.loads(zf.read(SENDER_FILE))
+        except ValueError:
+            return {}
+    return {k: str(data[k]) for k in ("name", "email") if isinstance(data, dict) and data.get(k)}
+
+
+def folder_name(code: str, uploaded_at: str, name: str = "") -> str:
+    """The folder for an upload: local date, code, then the sender's name.
+    The name comes from the sender, so anything a folder name cannot hold is
+    dropped."""
+    day = datetime.fromisoformat(uploaded_at.replace("Z", "+00:00")).astimezone()
+    clean = UNSAFE_IN_NAME.sub("", name).strip().rstrip(". ")[:60].strip()
+    base = f"{day:%Y-%m-%d} {code}"
+    return f"{base} {clean}" if clean else base
+
+
+def free_dir(root: Path, name: str) -> Path:
+    candidate = root / name
     n = 2
     while candidate.exists():
-        candidate = root / f"{code}-{n}"
+        candidate = root / f"{name}-{n}"
         n += 1
     return candidate
 
@@ -162,8 +206,16 @@ def cf_get(path: str) -> bytes:
         f"https://api.cloudflare.com/client/v4{path}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    with urllib.request.urlopen(req, timeout=120) as res:
-        return res.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as res:
+            return res.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise SystemExit(
+                f"Cloudflare refused the request (HTTP {e.code}). CLOUDFLARE_API_TOKEN "
+                f"needs R2 read on the {BUCKET} bucket, or it has expired."
+            )
+        raise SystemExit(f"Cloudflare answered HTTP {e.code} for {path}.")
 
 
 def download(object_key: str) -> bytes:
@@ -197,10 +249,11 @@ def unseen(issues: list) -> list:
 
 
 def pull(code: str, *, key=None, issues=None, fetch=download, seen=mark_seen,
-         out_root: Path = OUT_ROOT, out=sys.stdout) -> list:
+         out_root: Path = None, out=sys.stdout) -> list:
     if not CODE.match(code):
         raise SystemExit(f"{code!r} is not a reference code like OB-7K2QX.")
     key = key or load_key()
+    out_root = out_root or default_out_root()
     issues = issues if issues is not None else intake_issues("all", f"{code} in:title")
     targets = []
     for issue in issues:
@@ -208,18 +261,23 @@ def pull(code: str, *, key=None, issues=None, fetch=download, seen=mark_seen,
             continue
         for object_key, object_code in OBJECT.findall(issue["body"] or ""):
             if object_code == code:
-                targets.append((issue["number"], object_key))
+                targets.append((issue, object_key))
     if not targets:
         raise SystemExit(f"No intake issue names a stored upload for {code}.")
 
     pulled = []
-    for number, object_key in targets:
+    for issue, object_key in targets:
         package = open_envelope(fetch(object_key), key)
-        dest = free_dir(out_root, code)
+        sender = sender_of(package)
+        dest = free_dir(out_root, folder_name(code, issue["createdAt"], sender.get("name", "")))
         files = unpack(package, dest)
         when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        seen(number, f"Pulled and decrypted {when}: {len(files)} files. Deleted 30 days from now.")
-        print(f"#{number}: {len(files)} files in {dest}", file=out)
+        seen(issue["number"], f"Pulled and decrypted {when}: {len(files)} files. Deleted 30 days from now.")
+        print(f"#{issue['number']}: {len(files)} files in {dest}", file=out)
+        if sender:
+            print(f"  From: {sender.get('name', '(no name)')}  {sender.get('email', '(no email)')}", file=out)
+        else:
+            print("  No contact details given.", file=out)
         pulled.append(dest)
     return pulled
 
