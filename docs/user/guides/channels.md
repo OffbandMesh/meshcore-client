@@ -65,4 +65,5 @@ settings, **Set Region Scope** and **Clear Chat**.
 
 **Set Region Scope** limits how far your messages in that channel travel: only
 repeaters that allow the chosen region pass them on. It needs repeaters in your
-area that have regions set up.
+area that have regions set up. See
+[Set a channel's region scope](region-scope.md) for the full walkthrough.
