@@ -228,7 +228,7 @@ class AppSettings {
     this.initialRouteWeight = 3.0,
     this.routeWeightSuccessIncrement = 0.5,
     this.routeWeightFailureDecrement = 0.2,
-    this.maxMessageRetries = 5,
+    this.maxMessageRetries = 3,
     this.themeMode = 'system',
     this.languageOverride,
     this.appDebugLogEnabled = false,
@@ -404,7 +404,7 @@ class AppSettings {
           (json['route_weight_success_increment'] as num?)?.toDouble() ?? 0.5,
       routeWeightFailureDecrement:
           (json['route_weight_failure_decrement'] as num?)?.toDouble() ?? 0.2,
-      maxMessageRetries: json['max_message_retries'] as int? ?? 5,
+      maxMessageRetries: json['max_message_retries'] as int? ?? 3,
       themeMode: json['theme_mode'] as String? ?? 'system',
       languageOverride: json['language_override'] as String?,
       appDebugLogEnabled: json['app_debug_log_enabled'] as bool? ?? false,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
@@ -77,11 +78,50 @@ class RetryServiceConfig {
 }
 
 class MessageRetryService extends ChangeNotifier {
+  /// Never wait less than this for a DM's ACK, whatever the formula says.
+  ///
+  /// Measured, not chosen. Upload OB-ZRNBY (2026-11-27) carries 24 completed
+  /// round trips as reported by the radio in `PUSH_CODE_SEND_CONFIRMED`: median
+  /// 6771 ms, 90th percentile 12394 ms, against windows this code armed with a
+  /// median of 4884 ms. Over half of all ACKs were arriving after the attempt
+  /// that earned them had already timed out, and 83 DMs cost 311
+  /// transmissions. The owner ruled the 90th percentile, rounded up.
+  ///
+  /// `calculateTimeout` derives a window from airtime, which is the wrong
+  /// dominant term: on a multi-hop mesh the time goes into repeater forwarding
+  /// delay and `TXT_ACK_DELAY`, not onto the air, so an airtime-derived value
+  /// under-predicts and no coefficient fixes that. This floor is the measured
+  /// reality; the formula still governs anything slower.
+  ///
+  /// The floor lives here, not in `calculateTimeout`, because that method also
+  /// feeds the repeater CLI budget, where a floor added 11.5 s to every command
+  /// (#530/#533).
+  ///
+  /// Those 24 samples exist only for messages that were eventually confirmed,
+  /// so they are conditioned on success: the true 90th percentile is higher
+  /// than 12394 ms, not lower. This is a lower bound. (#316)
+  static const int minAckWindowMs = 12500;
+
+  int _minAckWindowMs = minAckWindowMs;
+
+  /// Lowers the ACK floor so a test can drive a retry without a 12.5 s
+  /// wall-clock wait per attempt. Production never calls this.
+  @visibleForTesting
+  void setMinAckWindowForTest(int ms) => _minAckWindowMs = ms;
+
   static const int maxAckHistorySize = 100;
   // How long to wait for the radio's RESP_CODE_SENT before treating an
   // apparently-sent message as failed so it can't wedge the queue (#395).
   static const int _sentConfirmationTimeoutMs = 8000;
-  int _maxRetries = 5;
+  // Three attempts, not five. With the ACK window raised to the measured 90th
+  // percentile, five attempts spent the same total wait on transmissions that
+  // mostly fired before an answer could arrive: 83 DMs cost 311 of them in
+  // OB-ZRNBY. Three attempts at the wider window give up after about the same
+  // elapsed time as five at the old one, while putting roughly 40% less traffic
+  // on a shared mesh. It also keeps every attempt's ACK hash distinct, since
+  // the firmware masks `attempt & 3` and attempt 4 collided with attempt 0.
+  // (#316)
+  int _maxRetries = 3;
   int get maxRetries => _maxRetries;
 
   final Map<String, Timer> _timeoutTimers = {};
@@ -602,14 +642,24 @@ class MessageRetryService extends ChangeNotifier {
     // Calculate timeout: prefer ML prediction, then device-provided, then physics fallback
     final pathLengthValue = message.pathLength ?? contact.pathLength;
 
+    // The radio's own estimate, carried in RESP_CODE_SENT, is not a second
+    // opinion to be discarded. It is derived from the packet that actually went
+    // on air, which this side only approximates: `calculateTimeout` is handed
+    // `message.text.length`, 7 bytes for "Dm test", where the wire frame was 21
+    // bytes before LoRa framing. Overwriting the radio outright is how a 3252 ms
+    // estimate became a shorter local window and lost an ACK that came back at
+    // 3448 ms. Take whichever is longer. (#316)
     int actualTimeout = timeoutMs;
     if (config.calculateTimeout != null) {
-      actualTimeout = config.calculateTimeout!(
+      final computed = config.calculateTimeout!(
         pathLengthValue,
         message.text.length,
         contactKey: contact.publicKeyHex,
       );
+      actualTimeout = math.max(timeoutMs, computed);
     }
+    // And never below the measured floor, whichever of the two won.
+    actualTimeout = math.max(actualTimeout, _minAckWindowMs);
 
     final updatedMessage = message.copyWith(
       status: MessageStatus.sent,

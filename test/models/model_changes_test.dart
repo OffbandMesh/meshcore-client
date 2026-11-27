@@ -275,7 +275,10 @@ void main() {
       expect(settings.initialRouteWeight, equals(3.0));
       expect(settings.routeWeightSuccessIncrement, equals(0.5));
       expect(settings.routeWeightFailureDecrement, equals(0.2));
-      expect(settings.maxMessageRetries, equals(5));
+      // Three attempts, not five: #316 raised the ACK window to the measured
+      // 90th percentile, so five attempts spent the same total wait on
+      // transmissions that mostly fired before an answer could arrive.
+      expect(settings.maxMessageRetries, equals(3));
     });
 
     test('experimentalUnlocked defaults off and round-trips (#509)', () {
@@ -304,7 +307,7 @@ void main() {
       expect(json['initial_route_weight'], equals(3.0));
       expect(json['route_weight_success_increment'], equals(0.5));
       expect(json['route_weight_failure_decrement'], equals(0.2));
-      expect(json['max_message_retries'], equals(5));
+      expect(json['max_message_retries'], equals(3));
     });
 
     test('fromJson reads all new fields', () {
@@ -333,7 +336,7 @@ void main() {
         expect(settings.initialRouteWeight, equals(3.0));
         expect(settings.routeWeightSuccessIncrement, equals(0.5));
         expect(settings.routeWeightFailureDecrement, equals(0.2));
-        expect(settings.maxMessageRetries, equals(5));
+        expect(settings.maxMessageRetries, equals(3));
       },
     );
 

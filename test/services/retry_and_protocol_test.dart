@@ -1163,7 +1163,11 @@ void main() {
 
       test('a manual path override floods on the final attempt instead of '
           'failing on a route that is not working', () async {
-        final retryService = MessageRetryService()..setMaxRetries(2);
+        final retryService = MessageRetryService()
+          ..setMaxRetries(2)
+          // Without this the 12.5 s ACK floor (#316) would make the retry fire
+          // long after this test finishes waiting.
+          ..setMinAckWindowForTest(1);
         // A multi-hop route the user picked by hand in path management.
         final contact = _makeContact(
           publicKey: recipientKey,
@@ -1220,6 +1224,81 @@ void main() {
           reason:
               'and the retry writes nothing: one write per send, never one '
               'per attempt (#1198)',
+        );
+
+        retryService.dispose();
+      });
+
+      test('the radio\'s own ACK estimate is a floor, not a second opinion '
+          '(#316)', () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(publicKey: recipientKey, pathLength: -1);
+        final armed = <int?>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (m) => armed.add(m.estimatedTimeoutMs),
+            clearContactPath: (_) {},
+            // Stands in for a local computation that comes out SHORTER than the
+            // radio's. Before this change it replaced the radio's number
+            // outright, which is how a 3252 ms estimate became a window too
+            // small for an ACK that returned at 3448 ms.
+            calculateTimeout: (_, _, {String? contactKey}) => 1200,
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        // Above the 12.5 s floor, so this test is about max() and not the floor.
+        retryService.updateMessageFromSent(0x1234, 14000);
+
+        expect(
+          armed.whereType<int>(),
+          contains(14000),
+          reason:
+              'the radio said 14000 ms and the local guess said 1200 ms, so '
+              'the armed window must be 14000 ms',
+        );
+        expect(
+          armed.whereType<int>(),
+          isNot(contains(1200)),
+          reason: 'the shorter local guess must never win',
+        );
+
+        retryService.dispose();
+      });
+
+      test('and the window never drops below the measured floor, whichever '
+          'of the two won (#316)', () async {
+        final retryService = MessageRetryService();
+        final contact = _makeContact(publicKey: recipientKey, pathLength: -1);
+        final armed = <int?>[];
+
+        retryService.initialize(
+          RetryServiceConfig(
+            sendMessage: (_, _, _, _) async {},
+            addMessage: (_, _) {},
+            updateMessage: (m) => armed.add(m.estimatedTimeoutMs),
+            clearContactPath: (_) {},
+            // Both sources small, as they were in the field: the radio reported
+            // 3252 ms and the formula computed about 1300 ms for a flood, while
+            // measured round trips ran from 3115 ms to 16266 ms.
+            calculateTimeout: (_, _, {String? contactKey}) => 1300,
+          ),
+        );
+
+        await retryService.sendMessageWithRetry(contact: contact, text: 'hi');
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        retryService.updateMessageFromSent(0x1234, 3252);
+
+        expect(
+          armed.whereType<int>(),
+          contains(MessageRetryService.minAckWindowMs),
+          reason:
+              'neither 3252 ms nor 1300 ms covers a median round trip of '
+              '6771 ms, so the floor has to win',
         );
 
         retryService.dispose();
