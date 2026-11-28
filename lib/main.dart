@@ -22,6 +22,7 @@ import 'services/notification_service.dart';
 import 'services/ble_debug_log_service.dart';
 import 'services/app_debug_log_service.dart';
 import 'services/app_exit_info_service.dart';
+import 'services/region_scope_banner_service.dart';
 import 'services/failure_monitor.dart';
 import 'services/file_log_service.dart';
 import 'services/background_service.dart';
@@ -352,6 +353,7 @@ class MeshCoreApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: blockService),
         ChangeNotifierProvider.value(value: radioPresetService),
         ChangeNotifierProvider(create: (_) => ObserverConfigService(connector)),
+        ChangeNotifierProvider(create: (_) => RegionScopeBannerService()),
       ],
       child: Consumer<AppSettingsService>(
         builder: (context, settingsService, child) {

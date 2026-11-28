@@ -3874,6 +3874,14 @@
   "setRegionScope_searchRepeaters": "Search repeaters",
   "setRegionScope_pathNote": "You can only discover regions from a repeater you have a stored path to.",
   "setRegionScope_noPath": "No stored path",
+  "setRegionScope_banner": "Messages ride region {name}",
+  "@setRegionScope_banner": {
+    "description": "Banner on a region-scoped channel; tapping it opens Set Region Scope (#1258).",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "setRegionScope_bannerDismiss": "Dismiss",
   "storage_title": "Storage",
   "storage_databaseSize": "Message database: {size}",
   "@storage_databaseSize": {

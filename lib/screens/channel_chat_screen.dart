@@ -30,7 +30,9 @@ import '../models/app_settings.dart';
 import '../services/app_settings_service.dart';
 import '../services/corescope_service.dart';
 import '../services/region_discovery_service.dart';
+import '../services/region_scope_banner_service.dart';
 import '../widgets/channel_region_scope_dialog.dart';
+import '../widgets/region_scope_banner.dart';
 import '../widgets/channel_notify_mode.dart';
 import '../widgets/contact_add_feedback.dart';
 import '../widgets/radio_channel_notify.dart';
@@ -97,6 +99,11 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
   bool _channelSkipNextBottomSnap = false;
   String? _unreadDividerMessageId;
 
+  /// The current channel's region scope name (#1258), null when unscoped or the
+  /// firmware does not support region scope. Loaded on activate and after the
+  /// Set Region Scope dialog.
+  String? _regionScope;
+
   String? _cachedFormatLocale;
   late DateFormat _hmFormat;
   late DateFormat _mdFormat;
@@ -131,6 +138,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
     });
     connector.setActiveChannel(_currentChannel.index);
     _connector = connector;
+    _loadRegionScope();
 
     if (anchor != null && settings.jumpToOldestUnread) {
       _channelSkipNextBottomSnap = true;
@@ -146,6 +154,20 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         );
       });
     }
+  }
+
+  /// Load the current channel's region scope for the banner (#1258). Null when
+  /// the firmware does not support region scope, so the banner stays hidden.
+  Future<void> _loadRegionScope() async {
+    final connector = context.read<MeshCoreConnector>();
+    if (!connector.supportsRegionScope) {
+      if (mounted && _regionScope != null) {
+        setState(() => _regionScope = null);
+      }
+      return;
+    }
+    final scope = await connector.channelRegionScope(_currentChannel.index);
+    if (mounted) setState(() => _regionScope = scope);
   }
 
   // TODO: Reload communities when returning from another screen
@@ -383,6 +405,7 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
       ),
     );
     service.dispose();
+    _loadRegionScope(); // the scope may have changed; refresh the banner (#1258)
   }
 
   /// Switch to another channel picked from the nav panel.
@@ -587,6 +610,18 @@ class _ChannelChatScreenState extends State<ChannelChatScreen> {
         top: false,
         child: Column(
           children: [
+            Consumer<RegionScopeBannerService>(
+              builder: (context, bannerSvc, _) {
+                final scope = _regionScope;
+                final pskHex = _currentChannel.pskHex;
+                final show = scope != null && !bannerSvc.isDismissed(pskHex);
+                return RegionScopeBanner(
+                  regionName: show ? scope : null,
+                  onTap: _openRegionScopeDialog,
+                  onDismiss: () => bannerSvc.dismiss(pskHex),
+                );
+              },
+            ),
             Expanded(
               // A touch outside a text field does not dismiss the keyboard on
               // mobile, and the keyboard hides the bottom bar (#1052).

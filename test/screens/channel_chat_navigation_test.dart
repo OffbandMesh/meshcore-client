@@ -10,6 +10,7 @@ import 'package:meshcore_open/screens/channel_chat_screen.dart';
 import 'package:meshcore_open/services/app_settings_service.dart';
 import 'package:meshcore_open/services/block_service.dart';
 import 'package:meshcore_open/services/chat_text_scale_service.dart';
+import 'package:meshcore_open/services/region_scope_banner_service.dart';
 import 'package:meshcore_open/services/translation_service.dart';
 import 'package:meshcore_open/services/ui_view_state_service.dart';
 import 'package:meshcore_open/storage/drift/blob_store.dart';
@@ -54,6 +55,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => ChatTextScaleService()),
           ChangeNotifierProvider(create: (_) => TranslationService(settings)),
           ChangeNotifierProvider(create: (_) => UiViewStateService()),
+          ChangeNotifierProvider(create: (_) => RegionScopeBannerService()),
         ],
         child: MaterialApp(
           navigatorKey: navKey,
