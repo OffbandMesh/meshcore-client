@@ -149,6 +149,9 @@ class FakePlay(p.Play):
 
     def set_track(self, edit, track, releases):
         self.calls.append(f"set {track}")
+        # Play's own rule, as it refused v1.8.1's promotion (#1250).
+        if len([r for r in releases if r.get("status") == "completed"]) > 1:
+            raise p.Stop("Play refused PUT (400): Only one completed release is allowed.")
         for t in self.edits[edit]["tracks"]:
             if t["track"] == track:
                 t["releases"] = copy.deepcopy(releases)
@@ -418,6 +421,24 @@ class Publishing(Base):
         self.assertNotIn("commit", new)
         self.assertEqual(new[-1], "delete")
         self.assertEqual(self.play.live_tracks, before)
+
+    def test_external_100_replaces_the_track_s_completed_release(self):
+        # The v1.8.1 case (#1250): Closed testing still served 1.5.0-beta.1.
+        self.play.track("alpha")["releases"] = [
+            {"name": "1.5.0-beta.1", "versionCodes": ["66"], "status": "completed"}
+        ]
+        self.assertEqual(self.run_publish(rollout="100"), "published")
+        [release] = self.play.track("alpha")["releases"]
+        self.assertEqual(release["versionCodes"], ["69"])
+        self.assertEqual(release["status"], "completed")
+
+    def test_external_draft_keeps_the_track_s_completed_release(self):
+        self.play.track("alpha")["releases"] = [
+            {"versionCodes": ["66"], "status": "completed"}
+        ]
+        self.run_publish(rollout="draft")
+        statuses = [(r["versionCodes"], r["status"]) for r in self.play.track("alpha")["releases"]]
+        self.assertEqual(statuses, [(["66"], "completed"), (["69"], "draft")])
 
     def test_another_draft_on_the_track_is_kept(self):
         self.play.track("alpha")["releases"] = [

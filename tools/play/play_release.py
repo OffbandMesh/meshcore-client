@@ -290,8 +290,11 @@ def reach(release: dict) -> float:
 def plan_track(track: dict, version_code: int, wanted: dict) -> list | None:
     """The track's new release list, or None when it already serves this.
 
-    Never removes another release. Stops when a different version is mid
-    rollout, or when the request would narrow what the track already serves.
+    A completed release replaces the track's current completed release, as
+    Play Console does on a full rollout: Play allows one completed release per
+    track (#1250). The replaced version stays in the bundle library. Any other
+    release is kept. Stops when a different version is mid rollout, or when
+    the request would narrow what the track already serves.
     """
     code = str(version_code)
     releases = track.get("releases", [])
@@ -319,6 +322,8 @@ def plan_track(track: dict, version_code: int, wanted: dict) -> list | None:
                 f"{track.get('track')} already serves version {code} wider than "
                 "asked: narrowing or halting is done in Console"
             )
+    if wanted["status"] == "completed":
+        others = [r for r in others if r.get("status") != "completed"]
     return others + [wanted]
 
 
