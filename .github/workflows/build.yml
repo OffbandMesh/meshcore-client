@@ -220,6 +220,48 @@ jobs:
         run: echo "docs-only diff; nothing to build"
       - uses: actions/checkout@v4
         if: needs.classify.outputs.docs_only != 'true'
+      # macos-manual.yml needs secrets and can't run on a PR, so its check is
+      # proven here, in a throwaway repo (#1247).
+      - name: "Negative: the manual macOS check builds only the tagged app"
+        if: needs.classify.outputs.docs_only != 'true'
+        run: |
+          set -u
+          CHECK="${GITHUB_WORKSPACE}/.github/scripts/macos-manual-check.sh"
+          R="${RUNNER_TEMP}/macos-check"
+          mkdir -p "${R}"
+          cd "${R}"
+          git init -q
+          git config user.email ci@example.invalid
+          git config user.name ci
+          mkdir -p lib .github docs
+          echo a > lib/a.dart
+          echo c > .github/c.yml
+          echo d > docs/d.md
+          echo v > pubspec.yaml
+          git add -A
+          git commit -qm base
+          git tag v1.2.3
+          bash "${CHECK}" v1.2.3 || { echo "::error::The tagged commit itself was refused."; exit 1; }
+          echo c2 > .github/c.yml
+          echo d2 > docs/d.md
+          git commit -qam ci
+          bash "${CHECK}" v1.2.3 || { echo "::error::A CI and docs change was refused."; exit 1; }
+          for f in lib/a.dart pubspec.yaml; do
+            echo changed > "${f}"
+            git commit -qam app
+            if bash "${CHECK}" v1.2.3 > /dev/null; then
+              echo "::error::A change to ${f} was accepted."
+              exit 1
+            fi
+            git reset -q --hard HEAD~1
+          done
+          for t in 1.2.3 v1.2 main v1.2.3-beta v9.9.9; do
+            if bash "${CHECK}" "${t}" > /dev/null; then
+              echo "::error::Tag '${t}' was accepted."
+              exit 1
+            fi
+          done
+          echo "Accepted only CI and docs changes from a real tag, as required."
       - uses: subosito/flutter-action@v2
         if: needs.classify.outputs.docs_only != 'true'
         with:
