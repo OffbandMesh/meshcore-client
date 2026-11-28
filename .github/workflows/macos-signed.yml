@@ -2,7 +2,8 @@ name: macOS signed build
 
 # Builds the macOS app, signs it with the Developer ID Application identity,
 # notarizes it with Apple and staples the ticket, so it opens on any Mac with
-# no Gatekeeper warning (#1109, epic #1107). Called by release-signed.yml.
+# no Gatekeeper warning (#1109, epic #1107). Called by release-signed.yml, and
+# by macos-manual.yml to attach a build from main to an existing release (#1247).
 #
 # Three jobs, so no Mac runner ever sits waiting on Apple's queue:
 #   1. build-sign-submit (Mac):  build, sign, submit, keep the signed app.

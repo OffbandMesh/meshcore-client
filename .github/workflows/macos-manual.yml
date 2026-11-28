@@ -1,0 +1,74 @@
+name: macOS release (manual)
+
+# Builds, signs and notarizes the macOS app from main and attaches it to an
+# existing release (#1247). For when the release run's macOS lane failed on a
+# bug in our own workflow: a re-run uses the tag's copy of the files, so the
+# fix has to come from main. An Apple-side hold doesn't need this: "Re-run
+# failed jobs" on the release run finishes the same submission.
+#
+# Dispatch from main with the release tag. The check refuses to go on unless
+# only .github/ and docs/ differ from the tag, so the zip is the tagged app.
+#
+# SECURITY: the build is macos-signed.yml, gated by the apple-macos
+# Environment. NEVER add a `pull_request` trigger; see macos-signed.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the macOS zip to, e.g. v1.8.1"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-manual
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Builds only the tagged app
+        env:
+          TAG: ${{ inputs.tag }}
+        run: bash .github/scripts/macos-manual-check.sh "${TAG}"
+      - name: The release exists and has no macOS zip yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          ASSETS="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')" || {
+            echo "::error::There is no release for ${TAG}."
+            exit 1
+          }
+          if printf '%s\n' "${ASSETS}" | grep -qx 'offband-macos.zip'; then
+            echo "::error::The ${TAG} release already has offband-macos.zip. Delete it from the release first if it has to be replaced."
+            exit 1
+          fi
+          echo "Release ${TAG} exists and has no macOS zip."
+
+  macos:
+    needs: check
+    uses: ./.github/workflows/macos-signed.yml
+    secrets: inherit
+
+  attach:
+    needs: [check, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload one asset to the existing release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+      - name: Attach macOS asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release upload "${TAG}" offband-macos.zip --repo "${GITHUB_REPOSITORY}"

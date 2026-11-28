@@ -2,3 +2,23 @@
 *.aab filter=lfs diff=lfs merge=lfs -text
 *.so filter=lfs diff=lfs merge=lfs -text
 *.jar filter=lfs diff=lfs merge=lfs -text
+
+# Generated plugin registrants, pinned to LF (#1238).
+#
+# The Flutter toolchain rewrites these seven files on every `pub get` and
+# every build. On a Windows checkout with core.autocrlf=true they then come
+# back CRLF while the index holds LF, so they show as modified with a
+# zero-byte content diff, and `git rebase` refuses with "cannot rebase: You
+# have unstaged changes" until someone restores them. During PR #1235 that
+# happened three times in one session.
+#
+# Scoped to these paths on purpose. A repo-wide `* text=auto` would
+# renormalize every tracked text file in one commit, colliding with whatever
+# other branches have in flight and changing checkout behaviour for
+# contributors on other platforms. The churn is confined to generated files,
+# so the rule is too.
+linux/flutter/generated_plugin_registrant.*   text eol=lf
+linux/flutter/generated_plugins.cmake         text eol=lf
+macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
+windows/flutter/generated_plugin_registrant.* text eol=lf
+windows/flutter/generated_plugins.cmake       text eol=lf
