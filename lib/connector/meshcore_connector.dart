@@ -9726,6 +9726,10 @@ class MeshCoreConnector extends ChangeNotifier {
     _messageStore.setPublicKeyHex = selfPublicKeyHex;
     _channelOrderStore.setPublicKeyHex = selfPublicKeyHex;
     _channelSettingsStore.setPublicKeyHex = selfPublicKeyHex;
+    // Key Cyr2Lat by the channel's PSK identity so a sync reshuffle can't carry
+    // the setting to the wrong channel. (#1257)
+    _channelSettingsStore.channelPskResolver = (index) =>
+        _findChannelByIndex(index)?.pskHex;
     _channelRegionScopeStore.setPublicKeyHex = selfPublicKeyHex;
     // Key region scope by the channel's PSK identity (not its reusable slot
     // index) so a sync reshuffle can't move a scope to the wrong channel. (#1256)
