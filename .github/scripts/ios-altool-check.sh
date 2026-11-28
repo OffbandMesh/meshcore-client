@@ -10,9 +10,12 @@ mode="${1:?mode}"
 code="${2:?exit code}"
 output="${3:?output file}"
 
+# A pass with warnings is still a pass (#1243): altool 26.40 prints
+# "VERIFY SUCCEEDED with no errors, 1 warning" and "No errors, 1 warnings,
+# validating archive". Any error line is still refused below.
 case "${mode}" in
-  validate) success='VALIDATION SUCCEEDED|No errors validating' ;;
-  upload) success='UPLOAD SUCCEEDED|No errors uploading' ;;
+  validate) success='VALIDATION SUCCEEDED|VERIFY SUCCEEDED|No errors(, [0-9]+ warnings?,)? validating' ;;
+  upload) success='UPLOAD SUCCEEDED|No errors(, [0-9]+ warnings?,)? uploading' ;;
   *)
     echo "::error::Unknown altool mode '${mode}'."
     exit 1
