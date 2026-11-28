@@ -108,11 +108,12 @@ void main() {
     );
   }
 
-  bool wrote(Uint8List frame) => sent.any(
-    (f) =>
-        f.length == frame.length &&
-        Iterable<int>.generate(f.length).every((i) => f[i] == frame[i]),
-  );
+  /// The flags byte of every contact-update frame written. Whole frames can't
+  /// be compared: they carry last_advert_timestamp, "now" in seconds when the
+  /// dialog saves, and a second can tick over before the test builds its own
+  /// expected frame (#1253). Layout: cmd, 32-byte key, type, flags.
+  Set<int> writtenFlags() =>
+      sent.where(isUpdateFrame).map((f) => f[1 + 32 + 1]).toSet();
 
   tearDown(() async {
     BlobStore.clearTestOverride();
@@ -204,8 +205,7 @@ void main() {
 
     await closeAndSave(tester);
 
-    expect(wrote(updateFrame(contact, contactFlagRemoteCliAllowed)), isTrue);
-    expect(wrote(updateFrame(contact, 0)), isFalse);
+    expect(writtenFlags(), {contactFlagRemoteCliAllowed});
   });
 
   testWidgets('switch shown and turned off: saving clears the grant', (
@@ -222,7 +222,6 @@ void main() {
 
     await closeAndSave(tester);
 
-    expect(wrote(updateFrame(contact, 0)), isTrue);
-    expect(wrote(updateFrame(contact, contactFlagRemoteCliAllowed)), isFalse);
+    expect(writtenFlags(), {0});
   });
 }
