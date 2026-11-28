@@ -10282,6 +10282,18 @@ abstract class AppLocalizations {
   /// **'No stored path'**
   String get setRegionScope_noPath;
 
+  /// Banner on a region-scoped channel; tapping it opens Set Region Scope (#1258).
+  ///
+  /// In en, this message translates to:
+  /// **'Messages ride region {name}'**
+  String setRegionScope_banner(String name);
+
+  /// No description provided for @setRegionScope_bannerDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get setRegionScope_bannerDismiss;
+
   /// No description provided for @storage_title.
   ///
   /// In en, this message translates to:

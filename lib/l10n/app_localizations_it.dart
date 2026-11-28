@@ -6177,6 +6177,14 @@ class AppLocalizationsIt extends AppLocalizations {
   String get setRegionScope_noPath => 'No stored path';
 
   @override
+  String setRegionScope_banner(String name) {
+    return 'Messages ride region $name';
+  }
+
+  @override
+  String get setRegionScope_bannerDismiss => 'Dismiss';
+
+  @override
   String get storage_title => 'Storage';
 
   @override
