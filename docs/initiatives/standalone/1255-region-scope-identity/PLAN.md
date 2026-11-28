@@ -44,9 +44,25 @@ One branch, one PR, a commit per child issue (not stacked PRs). TDD throughout.
 - **C. #1258 banner** (P2). Bar at the top of `channel_chat_screen` when scoped: "Messages ride region <name>", tap opens Set Region Scope. Session-dismissible by PSK, returns on fresh open. Widget test: shown-when-scoped, hidden-when-dismissed, tap-opens-dialog. English string committed with `untranslated.json`.
 - **D. #1259 hardware verification** (P2). Reproduce Dot's resync misbind and confirm the fix; confirm banner and Cyr2Lat. Android and Windows. Owner's test gate; the merge waits on it.
 
-## 5. Risks
+## 5. Grant terms
+
+```grant-terms
+{
+  "epic_chain": [1255],
+  "chain": true,
+  "verification": { "mode": "owner" },
+  "merge": { "budget": 1, "basis": "One PR for Epic #1255 with a commit per child (#1256 region scope PSK, #1257 Cyr2Lat, #1258 banner); merged after the owner's hardware verification (#1259)." },
+  "flash": null,
+  "reset": null,
+  "expires_after_hours": 168
+}
+```
+
+`expires_after_hours` basis: three small, same-pattern storage/UI changes plus a hardware session at interactive pace around the owner's day job; 168h is the maximum and beats a re-mint mid-chain. No radio flash or reset, so both keys are null.
+
+## 6. Risks
 - Best-effort migration cannot un-mix a scope that already landed on the wrong channel before the fix; it binds to the current occupant once. Acceptable per the owner; the user can re-set. Data loss is avoided (the value is migrated, not dropped).
 - A write that falls back to the index key would orphan a scope; mirror `channel_message_store` and log it as an error so it is never silent (SAFELANE 6).
 
-## 6. Done when
+## 7. Done when
 Dot's resync keeps each channel's region; Cyr2Lat survives a reshuffle; the banner shows/dismisses/returns and opens the dialog; all on hardware, Android and Windows.
