@@ -178,7 +178,29 @@ jobs:
             echo "::error::A non-zero exit was accepted."
             exit 1
           fi
-          echo "Refused every bad case, as required."
+          # A pass with a warning is still a pass (#1243). This is altool
+          # 26.40.1's real output from the v1.8.1 release run, which the check
+          # refused, so nothing reached TestFlight.
+          {
+            printf '==========================================\n'
+            printf 'VERIFY SUCCEEDED with no errors, 1 warning\n'
+            printf '==========================================\n'
+            printf "WARN: [altool] SDK version issue. This app was built with the iOS 26.5 SDK. Starting April 2027, iOS and iPadOS apps must be built with the iOS 27 SDK or later. (90725)\n"
+            printf "No errors, 1 warnings, validating archive at 'build/ios/ipa/Offband.ipa'.\n"
+          } > "${T}/validate-warning.txt"
+          printf "No errors validating archive at 'build/ios/ipa/Offband.ipa'.\n" > "${T}/validate-ok.txt"
+          printf 'VERIFY FAILED with 1 error\n' > "${T}/validate-failed.txt"
+          printf "No errors, 1 warnings, validating archive\nERROR: partial\n" > "${T}/validate-mixed.txt"
+          for f in validate-warning validate-ok; do
+            bash "${CHECK}" validate 0 "${T}/${f}.txt" || { echo "::error::A clean validation ('${f}') was refused."; exit 1; }
+          done
+          for f in validate-failed validate-mixed silent empty; do
+            if bash "${CHECK}" validate 0 "${T}/${f}.txt" > /dev/null; then
+              echo "::error::Validate with '${f}' output was accepted."
+              exit 1
+            fi
+          done
+          echo "Accepted every pass and refused every bad case, as required."
 
   linux:
     # PINNED, not ubuntu-latest (#929). GitHub moved ubuntu-latest from 24.04
